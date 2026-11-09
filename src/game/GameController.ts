@@ -259,11 +259,16 @@ export class GameController {
     return ui.modal !== null && ui.modal.kind !== "boss_intro";
   }
 
+  /** 2x battle speed unlocks after clearing stage 3; it never changes the simulation, only how many steps run per frame. */
+  get battleSpeedUnlocked(): boolean {
+    return this.profile.progress.bestStage >= 3;
+  }
+
   private simulate(dt: number): void {
     const world = this.world;
     if (!world) return;
-    if (!this.paused && world.phase !== "defeat" && world.phase !== "victory") world.update(dt);
-    else if (!this.paused) world.update(dt); // let death/victory animations finish
+    const steps = this.battleSpeedUnlocked && this.profile.settings.battleSpeed === 2 && world.phase !== "defeat" && world.phase !== "victory" && world.phase !== "boss_intro" ? 2 : 1;
+    if (!this.paused) for (let i = 0; i < steps; i++) world.update(dt);
     this.processEvents(world.drainEvents());
     this.tutorialElapsed += dt;
     this.hudAccum += dt;
@@ -312,8 +317,11 @@ export class GameController {
     for (const e of events) {
       switch (e.type) {
         case "hit":
-          if (e.faction === "enemy") this.sfx(e.crit ? "crit" : e.heavy ? "hit_heavy" : "hit_light", { minInterval: e.crit ? 60 : 45, volume: e.crit ? 0.9 : 0.55, rate: 0.9 + Math.random() * 0.25 });
-          else this.sfx("hit_heavy", { minInterval: 120, volume: 0.6, rate: 0.8 });
+          if (e.faction === "enemy") {
+            this.sfx(e.crit ? "crit" : e.heavy ? "hit_heavy" : "hit_light", { minInterval: e.crit ? 60 : 45, volume: e.crit ? 0.9 : 0.55, rate: 0.9 + Math.random() * 0.25 });
+            // A short impact frame on the warrior's crits gives hits weight without slowing combat.
+            if (e.crit && e.sourceId === this.world?.player.id && !p.settings.reducedEffects) this.loop.addFreeze(0.035);
+          } else this.sfx("hit_heavy", { minInterval: 120, volume: 0.6, rate: 0.8 });
           break;
         case "death":
           if (e.kind === "enemy" || e.kind === "boss") {
@@ -750,6 +758,17 @@ export class GameController {
     if (reward.riftCores) parts.push(`+${reward.riftCores} Rift Core`);
     this.toast(parts.join(", "), "gold");
     this.afterProgression();
+    this.commit();
+  }
+
+  toggleBattleSpeed(): void {
+    this.userGesture();
+    if (!this.battleSpeedUnlocked) {
+      this.toast("Clear stage 3 to unlock 2x speed", "info");
+      return;
+    }
+    this.profile.settings.battleSpeed = this.profile.settings.battleSpeed === 2 ? 1 : 2;
+    this.sfx("ui_tap");
     this.commit();
   }
 

@@ -47,6 +47,34 @@ const ashenVergeWaves = (stage: number): WaveDef[] => {
   return [wave1, wave2, wave3];
 };
 
+const drownedHollowWaves = (stage: number): WaveDef[] => {
+  const s = Math.max(0, stage - 7);
+  const husks = (base: number) => base + Math.min(6, Math.floor(s / 2));
+  return [
+    {
+      spawns: [
+        { enemyId: "drowned_husk", count: husks(5), interval: 1.5, delay: 0.6 },
+        { enemyId: "deepshot", count: 1 + Math.min(2, Math.floor(s / 3)), interval: 3, delay: 4 },
+      ],
+    },
+    {
+      spawns: [
+        { enemyId: "drowned_husk", count: husks(4), interval: 1.3, delay: 0.4 },
+        { enemyId: "deepshot", count: 2 + Math.min(2, Math.floor(s / 3)), interval: 3, delay: 1.5 },
+        { enemyId: "brine_acolyte", count: 1, interval: 4, delay: 6 },
+      ],
+    },
+    {
+      spawns: [
+        { enemyId: "tide_brute", count: 1 + Math.min(3, Math.floor(s / 2)), interval: 3.5, delay: 1 },
+        { enemyId: "drowned_husk", count: husks(4), interval: 1.2, delay: 0.3 },
+        { enemyId: "deepshot", count: 1 + Math.min(2, Math.floor(s / 4)), interval: 3, delay: 8 },
+        { enemyId: "brine_acolyte", count: 1 + Math.min(2, Math.floor(s / 4)), interval: 4, delay: 7 },
+      ],
+    },
+  ];
+};
+
 export const REGIONS: RegionDef[] = [
   {
     id: "ashen_verge",
@@ -57,6 +85,16 @@ export const REGIONS: RegionDef[] = [
     waves: ashenVergeWaves,
     firstStage: 1,
     palette: { sky: 0x0a0d18, fog: 0x3a4460, ground: 0x2e3445, horizon: 0x2a3660, ember: 0xff7a3d },
+  },
+  {
+    id: "drowned_hollow",
+    name: "The Drowned Hollow",
+    subtitle: "Where the second Rift sank",
+    lore: "A valley that filled with a sea no map admits to. The water glows, and things that drowned long ago still stand guard.",
+    bossId: "drowned_warden",
+    waves: drownedHollowWaves,
+    firstStage: 7,
+    palette: { sky: 0x06121a, fog: 0x2a5a66, ground: 0x203a44, horizon: 0x1d4d5a, ember: 0x5fd3c8 },
   },
 ];
 

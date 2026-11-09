@@ -18,7 +18,9 @@ The whole game fits one phone screen with no scrolling:
 - **Ability bar**: AUTO toggle, five ability slots (Arc Slash, Dash, Thunder, Soul Burst, Void Nova) and the Ascendant Fury ultimate.
 - **Panel**: Hero (hold-to-upgrade stats), Summons (collection, deploy, bond, evolve), Gear (six slots, compare, equip, upgrade, salvage), Skills (three branches plus weapon paths), Rift (stage select, bestiary, achievements, journal).
 
-Combat is hybrid: basic attacks are automatic, you choose when to use abilities and when to dodge. AUTO can take over the abilities once the tutorial has taught them.
+Combat is hybrid: basic attacks are automatic, you choose when to use abilities and when to dodge. AUTO can take over the abilities once the tutorial has taught them. Clearing stage 3 unlocks a 2x battle speed toggle in the top bar (it runs more simulation steps per frame, never a different simulation). Stage clears auto-advance after a short countdown unless you choose Replay; this can be turned off in the menu.
+
+Stages 1 to 6 are The Ashen Verge. Stage 7 opens The Drowned Hollow: a new palette, four enemy variants with different stats and essence, and the Drowned Warden, whose sigils also count toward recruiting the Warden.
 
 ## The ECLIPSE summoning system
 

@@ -42,6 +42,7 @@ export function evaluateJournal(profile: Profile): string[] {
   if (profile.progress.bossKills >= 1) unlock("first_boss");
   if (profile.progress.bestStage >= 3) unlock("stage_3");
   if (profile.progress.bestStage >= 5) unlock("stage_5");
+  if (profile.progress.bestStage >= 6) unlock("stage_7");
   if (profile.summons.collection.some((s) => s.defId === "hollow_warden")) unlock("warden_recruited");
   if (profile.progress.evolutions >= 1) unlock("evolution");
   return newly;

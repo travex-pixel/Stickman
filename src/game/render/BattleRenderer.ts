@@ -634,6 +634,9 @@ export class BattleRenderer {
           const sy = this.sy(e.pos.y);
           const glow = summonDef(e.defId).palette.glow;
           this.fx.push({ kind: "ring", x: sx, y: sy, r0: 10, r1: 80 * u, life: 0.5, total: 0.5, color: glow, width: 3, squash: 0.42 });
+          const src = world.entities.get(e.id);
+          const label = src ? { x: this.sx(src.pos.x), y: this.sy(src.pos.y) - 70 * u } : { x: sx, y: sy - 60 * u };
+          this.numbers.spawn(label.x, label.y, e.ability.toUpperCase(), glow, 0.62, true);
           break;
         }
         case "shield": {

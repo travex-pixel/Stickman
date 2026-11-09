@@ -11,17 +11,15 @@ export function playerSpec(path: WeaponPath): RigSpec {
 
 export function enemySpec(defId: string): RigSpec {
   const d = ENEMIES[defId];
-  const pal = d?.palette ?? { body: 0x1c1f2b, accent: 0x5a6378, eye: 0x9fd9ff };
-  switch (defId) {
-    case "husk":
-      return { style: "lean", weapon: "dagger", body: pal.body, accent: pal.accent, eye: pal.eye, height: 92 };
-    case "ashborn_brute":
+  const pal = d?.palette ?? { body: 0x232736, accent: 0x7f8aa6, eye: 0x9fd9ff };
+  switch (d?.archetype) {
+    case "brute":
       return { style: "bulky", weapon: "club", body: pal.body, accent: pal.accent, eye: pal.eye, height: 128, horns: true };
-    case "veilshot":
+    case "ranger":
       return { style: "archer", weapon: "bow", body: pal.body, accent: pal.accent, eye: pal.eye, height: 94, hood: true };
-    case "ember_acolyte":
+    case "arcanist":
       return { style: "robed", weapon: "staff", body: pal.body, accent: pal.accent, eye: pal.eye, height: 100, hood: true, floating: true };
-    case "hollow_warden":
+    case "boss":
       return { style: "warden", weapon: "greatsword", body: pal.body, accent: pal.accent, eye: pal.eye, glow: pal.eye, height: 176, horns: true, cape: true, aura: 44 };
     default:
       return { style: "lean", weapon: "dagger", body: pal.body, accent: pal.accent, eye: pal.eye, height: 92 };

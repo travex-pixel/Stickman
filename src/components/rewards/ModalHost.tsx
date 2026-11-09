@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Icon } from "@/components/ui/Icon";
 import { SummonPortrait } from "@/components/ui/Portrait";
@@ -130,6 +131,17 @@ function PerkChoice({ modal }: { modal: Extract<Modal, { kind: "perk_choice" }> 
 
 export function StageClear({ modal }: { modal: Extract<Modal, { kind: "stage_clear" }> }) {
   const c = useController();
+  const auto = useProfileRef().settings.autoAdvance;
+  const [left, setLeft] = useState(auto ? 6 : -1);
+  useEffect(() => {
+    if (!auto) return;
+    if (left <= 0) {
+      c.advanceStage();
+      return;
+    }
+    const t = setTimeout(() => setLeft((v) => v - 1), 1000);
+    return () => clearTimeout(t);
+  }, [left, auto, c]);
   return (
     <Card>
       <div className="px-4 pt-3 pb-3 text-center flex flex-col gap-1.5 items-center">
@@ -148,9 +160,12 @@ export function StageClear({ modal }: { modal: Extract<Modal, { kind: "stage_cle
           </div>
         )}
         <div className="flex gap-2 w-full mt-1">
-          <button className="btn-ghost flex-1" onClick={() => c.replayStage(modal.stage)} data-testid="replay-stage">Replay</button>
-          <button className="btn-primary flex-1" onClick={() => c.advanceStage()} data-testid="advance-stage">Stage {modal.nextStage} →</button>
+          <button className="btn-ghost flex-1" onClick={() => { setLeft(-1); c.updateSettings({ autoAdvance: false }); c.replayStage(modal.stage); }} data-testid="replay-stage">Replay</button>
+          <button className="btn-primary flex-1" onClick={() => c.advanceStage()} data-testid="advance-stage">
+            Stage {modal.nextStage} →{left > 0 ? ` ${left}` : ""}
+          </button>
         </div>
+        {left > 0 && <div className="text-[9px] text-mist">Advancing automatically. Replay to stay.</div>}
       </div>
     </Card>
   );

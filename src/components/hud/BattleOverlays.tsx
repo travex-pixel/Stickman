@@ -5,6 +5,8 @@ import { Icon } from "@/components/ui/Icon";
 import { useController, useHud, useProfile, useUi } from "@/hooks/useGame";
 import { SUMMONS } from "@/game/data/summons";
 import type { WorldSnapshot } from "@/game/engine/World";
+import { ENEMIES } from "@/game/data/enemies";
+import { regionForStage } from "@/game/data/regions";
 import { currentQuest, isQuestComplete, questProgress } from "@/game/progression/quests";
 import type { SummonCommand } from "@/game/data/ids";
 import { cn } from "@/lib/cn";
@@ -65,7 +67,8 @@ function WaveBanner() {
   const phase = useHud((s) => s?.phase ?? "intro");
   const wave = useHud((s) => s?.wave ?? 0);
   const stage = useHud((s) => s?.stage ?? 1);
-  const label = phase === "boss_intro" ? "THE HOLLOW WARDEN" : phase === "between" ? (wave >= 3 ? "THE WARDEN STIRS" : "WAVE CLEARED") : phase === "intro" ? `STAGE ${stage}` : null;
+  const bossName = ENEMIES[regionForStage(stage).bossId]?.name.toUpperCase() ?? "THE WARDEN";
+  const label = phase === "boss_intro" ? bossName : phase === "between" ? (wave >= 3 ? "THE WARDEN STIRS" : "WAVE CLEARED") : phase === "intro" ? `STAGE ${stage}` : null;
   return (
     <AnimatePresence>
       {label && (

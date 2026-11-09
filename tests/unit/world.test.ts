@@ -202,3 +202,20 @@ describe("defeat", () => {
     expect(ev.some((e) => e.type === "player_defeated")).toBe(true);
   });
 });
+
+describe("second region", () => {
+  it("stage 7 spawns Drowned Hollow enemies and its Warden variant drops sigil essence", () => {
+    const p = createDefaultProfile();
+    p.player.statLevels = { attack: 120, maxHp: 120, attackSpeed: 60, critChance: 30, critDamage: 30, defense: 60 };
+    p.player.level = 20;
+    p.player.autoCast = true;
+    const w = new World({ stage: 7, loadout: buildLoadout(p), seed: 4 });
+    const ev: GameEvent[] = [];
+    step(w, 240, ev);
+    const spawned = new Set(ev.filter((e) => e.type === "spawn").map((e) => (e.type === "spawn" ? e.defId : "")));
+    expect(spawned.has("drowned_husk")).toBe(true);
+    expect(ev.some((e) => e.type === "boss_intro" && e.defId === "drowned_warden")).toBe(true);
+    const bossEssence = ev.find((e) => e.type === "essence_available" && e.isBoss);
+    expect(bossEssence && bossEssence.type === "essence_available" ? bossEssence.summonId : "").toBe("hollow_warden");
+  });
+});

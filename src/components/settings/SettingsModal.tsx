@@ -24,6 +24,7 @@ export function SettingsModal() {
       <div className="px-4 pb-4 flex flex-col gap-3">
         <Slider label="Music" value={s.music} onChange={(v) => c.updateSettings({ music: v })} />
         <Slider label="Effects" value={s.sfx} onChange={(v) => c.updateSettings({ sfx: v })} />
+        <Toggle label="Advance to the next stage automatically" value={s.autoAdvance} onChange={(v) => c.updateSettings({ autoAdvance: v })} />
         <Toggle label="Reduced visual effects" value={s.reducedEffects} onChange={(v) => c.updateSettings({ reducedEffects: v })} />
         <Toggle label="Diagnostics overlay" value={s.diagnostics} onChange={(v) => c.updateSettings({ diagnostics: v })} />
         {s.diagnostics && (

@@ -6,6 +6,7 @@ import { useController, useProfileRef } from "@/hooks/useGame";
 import type { UpgradeableStat } from "@/game/data/ids";
 import { STAT_LABEL } from "@/game/data/equipment";
 import { combatPower, computePlayerStats, isStatUnlocked, statUnlockRule, statUpgradeCost, STAT_UPGRADE_CAP } from "@/game/progression/stats";
+import type { Profile } from "@/game/progression/profile";
 import { fmt, fmtStat } from "@/lib/format";
 import { cn } from "@/lib/cn";
 
@@ -37,21 +38,27 @@ export default function HeroPanel() {
       </div>
       <div className="grid grid-cols-2 grid-rows-3 gap-1.5 flex-1 min-h-0">
         {STATS.map((s) => (
-          <StatCard key={s.key} stat={s.key} icon={s.icon} value={fmtStat(s.key, stats[s.key])} level={profile.player.statLevels[s.key]} gold={profile.player.gold} unlocked={isStatUnlocked(profile, s.key)} onUpgrade={() => c.upgradeStat(s.key).ok} />
+          <StatCard key={s.key} stat={s.key} icon={s.icon} value={fmtStat(s.key, stats[s.key])} next={fmtStat(s.key, previewNext(profile, s.key)[s.key])} level={profile.player.statLevels[s.key]} gold={profile.player.gold} unlocked={isStatUnlocked(profile, s.key)} onUpgrade={() => c.upgradeStat(s.key).ok} />
         ))}
       </div>
     </div>
   );
 }
 
-function StatCard({ stat, icon, value, level, gold, unlocked, onUpgrade }: { stat: UpgradeableStat; icon: IconName; value: string; level: number; gold: number; unlocked: boolean; onUpgrade: () => boolean }) {
+/** Derived stats after one more level of `stat`, so the card can show what the hold will buy. */
+function previewNext(profile: Profile, stat: UpgradeableStat) {
+  const clone: Profile = { ...profile, player: { ...profile.player, statLevels: { ...profile.player.statLevels, [stat]: profile.player.statLevels[stat] + 1 } } };
+  return computePlayerStats(clone);
+}
+
+function StatCard({ stat, icon, value, next, level, gold, unlocked, onUpgrade }: { stat: UpgradeableStat; icon: IconName; value: string; next: string; level: number; gold: number; unlocked: boolean; onUpgrade: () => boolean }) {
   const cost = statUpgradeCost(stat, level);
   const capped = level >= STAT_UPGRADE_CAP[stat];
   const affordable = gold >= cost;
   const rule = statUnlockRule(stat);
   if (!unlocked && rule) {
     return (
-      <div className="card flex items-center gap-2 px-2 py-1 opacity-70 min-h-0">
+      <div className="card flex items-center gap-2 px-2 py-1 opacity-70 min-h-0 min-w-0 overflow-hidden">
         <Icon name="lock" size={16} className="text-mist shrink-0" />
         <div className="leading-tight min-w-0">
           <div className="text-[11px] font-semibold text-mist truncate">{STAT_LABEL[stat]}</div>
@@ -61,18 +68,19 @@ function StatCard({ stat, icon, value, level, gold, unlocked, onUpgrade }: { sta
     );
   }
   return (
-    <div className={cn("card flex items-center gap-1.5 pl-2 pr-1.5 py-1 min-h-0", affordable && !capped && "card-active")} data-testid={`stat-card-${stat}`}>
+    <div className={cn("card flex items-center gap-1.5 pl-2 pr-1.5 py-1 min-h-0 min-w-0 overflow-hidden", affordable && !capped && "card-active")} data-testid={`stat-card-${stat}`}>
       <div className="flex flex-col leading-tight min-w-0 flex-1">
         <div className="flex items-center gap-1 text-mist">
           <Icon name={icon} size={12} className="text-cyan shrink-0" />
           <span className="text-[10px] font-semibold truncate">{STAT_LABEL[stat]}</span>
         </div>
-        <div className="flex items-baseline gap-1">
-          <span className="text-[14px] font-bold text-bone tabular-nums" data-testid={`stat-value-${stat}`}>{value}</span>
-          <span className="text-[9px] text-mist">Lv {level}</span>
+        <div className="flex items-baseline gap-1 min-w-0">
+          <span className="text-[14px] font-bold text-bone tabular-nums truncate" data-testid={`stat-value-${stat}`}>{value}</span>
+          {!capped && <span className="text-[9px] text-soul tabular-nums truncate shrink">› {next}</span>}
+          <span className="text-[9px] text-mist shrink-0">Lv {level}</span>
         </div>
       </div>
-      <HoldButton onRepeat={onUpgrade} disabled={capped || !affordable} className="h-[40px] w-[58px] shrink-0" guide={stat === "attack" ? "upgrade-attack" : undefined} testId={`upgrade-${stat}`} label={`Upgrade ${STAT_LABEL[stat]} for ${cost} gold`}>
+      <HoldButton onRepeat={onUpgrade} disabled={capped || !affordable} className="h-[40px] w-[56px] shrink-0" guide={stat === "attack" ? "upgrade-attack" : undefined} testId={`upgrade-${stat}`} label={`Upgrade ${STAT_LABEL[stat]} for ${cost} gold`}>
         {capped ? (
           <span className="text-[10px] font-bold text-mist">MAX</span>
         ) : (

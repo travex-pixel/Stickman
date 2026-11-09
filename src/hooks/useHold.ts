@@ -48,6 +48,18 @@ export function useHold(action: () => boolean, enabled = true) {
     [enabled, tick],
   );
 
+  // With pointer capture the element keeps receiving events after the finger slides off it,
+  // so we cancel explicitly when the pointer leaves the element's box.
+  const move = useCallback(
+    (e: React.PointerEvent) => {
+      if (!holding.current) return;
+      const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      const margin = 10;
+      if (e.clientX < r.left - margin || e.clientX > r.right + margin || e.clientY < r.top - margin || e.clientY > r.bottom + margin) stop();
+    },
+    [stop],
+  );
+
   useEffect(() => stop, [stop]);
 
   return {
@@ -57,6 +69,7 @@ export function useHold(action: () => boolean, enabled = true) {
       onPointerUp: stop,
       onPointerCancel: stop,
       onPointerLeave: stop,
+      onPointerMove: move,
       onContextMenu: (e: React.SyntheticEvent) => e.preventDefault(),
     },
   };

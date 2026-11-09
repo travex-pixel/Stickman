@@ -18,6 +18,6 @@ import { newInstanceId } from "@/game/summons/recruitment";
   for (const stage of [2, 3, 4]) rows.push(`upgraded+2sum s${stage}: ${JSON.stringify(simulateRun(p, stage, 7, 300, "active"))}`);
   const p2 = profileWithUpgrades({ attack: 20, maxHp: 18, defense: 8, attackSpeed: 4 }, { level: 7 });
   p2.summons.collection.push(...p.summons.collection.map((s) => ({ ...s, level: 6, bond: 5 })));
-  for (const stage of [3, 5, 7]) rows.push(`strong+2sum s${stage}: ${JSON.stringify(simulateRun(p2, stage, 9, 300, "active"))}`);
+  for (const stage of [3, 5, 7, 9]) rows.push(`strong+2sum s${stage}: ${JSON.stringify(simulateRun(p2, stage, 9, 300, "active"))}`);
   console.log(rows.join("\n"));
 });

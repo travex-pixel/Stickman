@@ -139,6 +139,8 @@ export function sanitizeProfile(raw: unknown): { profile: Profile; repaired: boo
       sfx: numF(st.sfx, def.settings.sfx),
       reducedEffects: st.reducedEffects === true,
       diagnostics: st.diagnostics === true,
+      battleSpeed: st.battleSpeed === 2 ? 2 : 1,
+      autoAdvance: st.autoAdvance !== false,
     },
   };
   // Deployed summons cannot exceed what the save could legitimately hold.

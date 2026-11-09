@@ -74,7 +74,7 @@ export interface Profile {
     evolutions: number;
   };
   tutorial: { completed: string[]; finished: boolean };
-  settings: { music: number; sfx: number; reducedEffects: boolean; diagnostics: boolean };
+  settings: { music: number; sfx: number; reducedEffects: boolean; diagnostics: boolean; battleSpeed: 1 | 2; autoAdvance: boolean };
 }
 
 export const PROFILE_VERSION = 2;
@@ -114,6 +114,6 @@ export function createDefaultProfile(now = Date.now()): Profile {
       evolutions: 0,
     },
     tutorial: { completed: [], finished: false },
-    settings: { music: 0.6, sfx: 0.8, reducedEffects: false, diagnostics: false },
+    settings: { music: 0.6, sfx: 0.8, reducedEffects: false, diagnostics: false, battleSpeed: 1, autoAdvance: true },
   };
 }

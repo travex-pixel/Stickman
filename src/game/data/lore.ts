@@ -3,7 +3,7 @@ export interface JournalEntry {
   title: string;
   body: string;
   /** Condition key used by the progression system to unlock this entry. */
-  unlock: "start" | "first_kill" | "first_summon" | "first_boss" | "stage_3" | "stage_5" | "warden_recruited" | "evolution";
+  unlock: "start" | "first_kill" | "first_summon" | "first_boss" | "stage_3" | "stage_5" | "stage_7" | "warden_recruited" | "evolution";
 }
 
 export const JOURNAL: JournalEntry[] = [
@@ -42,6 +42,12 @@ export const JOURNAL: JournalEntry[] = [
     title: "Ascend",
     body: "Each essence you take makes the next one easier to hold. You begin to understand: this ability is not a gift. It is a direction. Up, through the fractures, toward whatever opened them.",
     unlock: "stage_5",
+  },
+  {
+    id: "j_hollow",
+    title: "The Drowned Hollow",
+    body: "Past the Verge the ground falls away into water that glows from beneath. The second Rift sank here, and took its Warden with it. The husks that wade out to meet you have been holding their breath for a very long time.",
+    unlock: "stage_7",
   },
   {
     id: "j_oath",

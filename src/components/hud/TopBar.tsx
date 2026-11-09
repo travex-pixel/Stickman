@@ -18,6 +18,9 @@ export function TopBar() {
   const stage = useHud((s) => s?.stage ?? 1);
   const wave = useHud((s) => s?.wave ?? 0);
   const phase = useHud((s) => s?.phase ?? "intro");
+  const bestStage = useProfile((p) => p.progress.bestStage);
+  const speed = useProfile((p) => p.settings.battleSpeed);
+  const speedUnlocked = bestStage >= 3;
   const xpFrac = Math.min(1, xp / xpForLevel(level));
   const accent = weaponPathDef(path)?.color ?? "#4ee6ff";
   return (
@@ -31,11 +34,20 @@ export function TopBar() {
           </div>
         </div>
       </div>
-      <div className="flex-1 flex items-center justify-center gap-1.5 min-w-0">
+      <div className="flex-1 flex items-center justify-center gap-1 min-w-0 overflow-hidden">
         <Stat icon="coin" value={fmt(gold)} color="text-gold" testId="gold" />
         <Stat icon="essence" value={fmt(essence)} color="text-soul" testId="essence" />
         {cores > 0 && <Stat icon="core" value={fmt(cores)} color="text-violet" testId="cores" />}
       </div>
+      <button
+        className={`h-7 px-1.5 rounded-md border text-[10px] font-black tabular-nums ${speedUnlocked && speed === 2 ? "border-cyan/70 bg-cyan/15 text-cyan" : "border-white/10 bg-white/5 text-mist"}`}
+        onClick={() => c.toggleBattleSpeed()}
+        aria-label={speedUnlocked ? `Battle speed ${speed}x` : "Battle speed, unlocks after stage 3"}
+        data-testid="speed-toggle"
+        style={{ opacity: speedUnlocked ? 1 : 0.45 }}
+      >
+        {speedUnlocked ? `${speed}×` : <Icon name="lock" size={11} />}
+      </button>
       <div className="flex flex-col items-end leading-none">
         <span className="font-display text-[11px] tracking-widest text-bone">STAGE {stage}</span>
         <div className="flex items-center gap-1 mt-1" aria-label="Wave progress">
