@@ -70,17 +70,17 @@ function StatCard({ stat, icon, value, next, level, gold, unlocked, onUpgrade }:
   return (
     <div className={cn("card flex items-center gap-1.5 pl-2 pr-1.5 py-1 min-h-0 min-w-0 overflow-hidden", affordable && !capped && "card-active")} data-testid={`stat-card-${stat}`}>
       <div className="flex flex-col leading-tight min-w-0 flex-1">
-        <div className="flex items-center gap-1 text-mist">
+        <div className="flex items-center gap-1 text-mist min-w-0">
           <Icon name={icon} size={12} className="text-cyan shrink-0" />
           <span className="text-[10px] font-semibold truncate">{STAT_LABEL[stat]}</span>
+          <span className="ml-auto text-[9px] text-mist shrink-0">Lv {level}</span>
         </div>
         <div className="flex items-baseline gap-1 min-w-0">
-          <span className="text-[14px] font-bold text-bone tabular-nums truncate" data-testid={`stat-value-${stat}`}>{value}</span>
-          {!capped && <span className="text-[9px] text-soul tabular-nums truncate shrink">› {next}</span>}
-          <span className="text-[9px] text-mist shrink-0">Lv {level}</span>
+          <span className="text-[14px] font-bold text-bone tabular-nums shrink-0" data-testid={`stat-value-${stat}`}>{value}</span>
+          {!capped && <span className="text-[9px] text-soul tabular-nums truncate hidden min-[360px]:inline">› {next}</span>}
         </div>
       </div>
-      <HoldButton onRepeat={onUpgrade} disabled={capped || !affordable} className="h-[40px] w-[56px] shrink-0" guide={stat === "attack" ? "upgrade-attack" : undefined} testId={`upgrade-${stat}`} label={`Upgrade ${STAT_LABEL[stat]} for ${cost} gold`}>
+      <HoldButton onRepeat={onUpgrade} disabled={capped || !affordable} className="h-[40px] w-[52px] min-[360px]:w-[56px] shrink-0" guide={stat === "attack" ? "upgrade-attack" : undefined} testId={`upgrade-${stat}`} label={`Upgrade ${STAT_LABEL[stat]} for ${cost} gold`}>
         {capped ? (
           <span className="text-[10px] font-bold text-mist">MAX</span>
         ) : (

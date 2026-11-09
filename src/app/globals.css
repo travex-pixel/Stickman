@@ -50,6 +50,7 @@ body {
   overflow: hidden;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   padding-top: var(--sat);
   padding-bottom: var(--sab);
   padding-left: var(--sal);

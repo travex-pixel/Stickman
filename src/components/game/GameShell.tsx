@@ -56,7 +56,7 @@ export default function GameShell() {
     <GameContext.Provider value={controller}>
       <div id="app-shell" data-testid="app-shell" onPointerDownCapture={() => controller.userGesture()}>
         <TopBar />
-        <main className="relative min-h-0 grid" style={{ gridTemplateRows: "minmax(0,1fr) auto clamp(190px, 36dvh, 310px)" }}>
+        <main className="relative min-h-0 min-w-0 grid" style={{ gridTemplateRows: "minmax(0,1fr) auto clamp(190px, 36dvh, 310px)", gridTemplateColumns: "minmax(0,1fr)" }}>
           <Battlefield />
           <AbilityBar />
           <PanelHost />

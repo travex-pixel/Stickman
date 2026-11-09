@@ -145,7 +145,7 @@ function SummonStrip() {
         {COMMANDS.map((cmd) => (
           <button
             key={cmd.id}
-            className={cn("flex items-center gap-1 rounded-md px-1.5 py-1 text-[9px] font-bold border", command === cmd.id ? "bg-cyan/20 border-cyan/70 text-cyan" : "bg-black/50 border-white/10 text-mist")}
+            className={cn("flex items-center gap-0.5 rounded-md px-1 py-1 text-[9px] font-bold border", command === cmd.id ? "bg-cyan/20 border-cyan/70 text-cyan" : "bg-black/50 border-white/10 text-mist")}
             onClick={() => c.setCommand(cmd.id)}
             data-guide={`command-${cmd.id}`}
             data-testid={`command-${cmd.id}`}

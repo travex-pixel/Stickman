@@ -20,9 +20,9 @@ export function AbilityBar() {
   const ultUnlocked = ABILITIES[ULTIMATE_ID].unlockLevel <= level;
   const ultReady = ultUnlocked && energy >= ULTIMATE_ENERGY_COST && !ultActive;
   return (
-    <div className="relative z-20 flex items-stretch gap-1.5 px-2 pb-1.5 pt-1 h-[74px]" data-testid="ability-bar">
+    <div className="relative z-20 flex items-stretch gap-1 px-1.5 pb-1.5 pt-1 h-[74px] min-w-0 w-full overflow-hidden" data-testid="ability-bar">
       <button
-        className={cn("ability-btn w-[46px] flex flex-col items-center justify-center gap-0.5 text-[9px] font-bold", autoCast ? "text-cyan" : "text-mist")}
+        className={cn("ability-btn w-[42px] shrink-0 flex flex-col items-center justify-center gap-0.5 text-[9px] font-bold", autoCast ? "text-cyan" : "text-mist")}
         data-ready={autoCast}
         onClick={() => c.toggleAutoCast()}
         aria-pressed={autoCast}
@@ -35,7 +35,7 @@ export function AbilityBar() {
         <span>AUTO</span>
         <span className="text-[8px] opacity-80">{autoCast ? "ON" : "OFF"}</span>
       </button>
-      <div className="flex-1 grid grid-cols-5 gap-1.5">
+      <div className="flex-1 min-w-0 grid grid-cols-5 gap-1">
         {ABILITY_SLOTS.map((id) => {
           const def = ABILITIES[id];
           const unlocked = def.unlockLevel <= level;
@@ -47,7 +47,7 @@ export function AbilityBar() {
           return (
             <button
               key={id}
-              className={cn("ability-btn flex flex-col items-center justify-center gap-0.5", ready ? "text-bone" : "text-mist")}
+              className={cn("ability-btn min-w-0 flex flex-col items-center justify-center gap-0.5", ready ? "text-bone" : "text-mist")}
               data-ready={ready}
               data-guide={isDodge ? "ability-dodge" : `ability-${id}`}
               data-testid={`ability-${id}`}
@@ -59,7 +59,7 @@ export function AbilityBar() {
               {unlocked ? (
                 <>
                   <Icon name={ICONS[id]} size={20} />
-                  <span className="text-[9px] font-semibold text-bone/90">{def.short}</span>
+                  <span className="text-[9px] font-semibold text-bone/90 truncate max-w-full px-0.5">{def.short}</span>
                   {cd > 0 && <span className="absolute top-1 right-1.5 text-[9px] font-bold tabular-nums text-bone">{cd < 10 ? cd.toFixed(1) : Math.ceil(cd)}</span>}
                   <div className="ability-cd" style={{ height: `${frac * 100}%` }} />
                 </>
@@ -74,7 +74,7 @@ export function AbilityBar() {
         })}
       </div>
       <button
-        className={cn("ability-btn w-[56px] flex flex-col items-center justify-center gap-0.5", ultReady ? "text-gold" : "text-mist")}
+        className={cn("ability-btn w-[50px] shrink-0 flex flex-col items-center justify-center gap-0.5", ultReady ? "text-gold" : "text-mist")}
         data-ready={ultReady}
         data-testid="ability-ultimate"
         onClick={() => c.castAbility(ULTIMATE_ID)}
