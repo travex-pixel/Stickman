@@ -1,0 +1,11 @@
+{
+  "name": "ASCEND",
+  "short_name": "ASCEND",
+  "description": "A dark-fantasy action RPG. Claim the essence of your enemies and build an army.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#07080f",
+  "theme_color": "#07080f",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}

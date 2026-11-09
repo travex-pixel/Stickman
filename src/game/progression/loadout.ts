@@ -1,0 +1,55 @@
+import type { AbilityId, SummonCommand, WeaponPath } from "../data/ids";
+import type { CombatStats } from "../entities/types";
+import type { Profile } from "./profile";
+import { ABILITIES, ABILITY_SLOTS, ULTIMATE_ID } from "../data/abilities";
+import { computeModifiers, computePlayerStats, type PlayerModifiers } from "./stats";
+import { summonStats } from "../summons/progression";
+import { summonDef } from "../data/summons";
+
+export interface DeployedSummonLoadout {
+  instanceId: string;
+  defId: string;
+  level: number;
+  stats: CombatStats;
+}
+
+/** Everything the simulation needs to know about the player; derived from the profile, never mutated by the world. */
+export interface PlayerLoadout {
+  stats: CombatStats;
+  abilities: AbilityId[];
+  ultimateUnlocked: boolean;
+  weaponPath: WeaponPath;
+  mods: PlayerModifiers;
+  summons: DeployedSummonLoadout[];
+  command: SummonCommand;
+  autoCast: boolean;
+  level: number;
+  /** True once the player owns any summon; the first-essence guarantee stops applying. */
+  hasSummons: boolean;
+}
+
+export function buildLoadout(profile: Profile): PlayerLoadout {
+  const mods = computeModifiers(profile);
+  const deployed = profile.summons.collection.filter((s) => s.deployed).slice(0, mods.deploySlots);
+  return {
+    stats: computePlayerStats(profile),
+    abilities: ABILITY_SLOTS.filter((id) => ABILITIES[id].unlockLevel <= profile.player.level),
+    ultimateUnlocked: ABILITIES[ULTIMATE_ID].unlockLevel <= profile.player.level,
+    weaponPath: profile.player.weaponPath,
+    mods,
+    summons: deployed.map((s) => ({
+      instanceId: s.instanceId,
+      defId: s.defId,
+      level: s.level,
+      stats: summonStats(s, { damageMult: mods.summonDamageMult, defenseMult: mods.summonDefenseMult, hpMult: mods.summonHpMult }),
+    })),
+    command: profile.summons.command,
+    autoCast: profile.player.autoCast,
+    level: profile.player.level,
+    hasSummons: profile.summons.collection.length > 0,
+  };
+}
+
+export function summonRole(defId: string) {
+  return summonDef(defId).role;
+}
