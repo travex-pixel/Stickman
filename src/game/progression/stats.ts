@@ -3,6 +3,11 @@ import type { CombatStats } from "../entities/types";
 import type { EquipmentItem, Profile } from "./profile";
 import { SKILLS } from "../data/skills";
 import { PERKS } from "../data/perks";
+import { codexBonus } from "../summons/extraction";
+
+/** Each Hunter rank multiplies core stats. Rank is earned in Rank Trials, not bought. */
+export const RANK_STAT_STEP = 0.08;
+export const RANK_LABELS = ["E", "D", "C", "B", "A", "S"] as const;
 
 export const BASE_PLAYER_STATS: CombatStats = {
   maxHp: 170,
@@ -75,6 +80,8 @@ export interface PlayerModifiers {
   lifeOnKill: number;
   goldFind: number;
   essenceChanceMult: number;
+  /** Flat bonus to ARISE success chance. */
+  extractionBonus: number;
   summonXpMult: number;
   deploySlots: number;
   synergies: Set<"arc_pull" | "thunder_mark" | "nova_opening" | "soul_mend">;
@@ -110,6 +117,7 @@ export function computeModifiers(profile: Profile): PlayerModifiers {
     lifeOnKill: 0,
     goldFind: 1,
     essenceChanceMult: 1,
+    extractionBonus: 0,
     summonXpMult: 1,
     deploySlots: 2,
     synergies: new Set(),
@@ -142,6 +150,7 @@ export function computeModifiers(profile: Profile): PlayerModifiers {
         break;
       case "essenceChance":
         m.essenceChanceMult += e.pct;
+        m.extractionBonus += 0.08;
         break;
       case "summonXp":
         m.summonXpMult += e.pct;
@@ -187,6 +196,8 @@ export function computeModifiers(profile: Profile): PlayerModifiers {
     }
   }
   if (profile.summons.collection.some((s) => s.deployed && s.defId === "hollow_warden")) m.summonDefenseMult += 0.15;
+  if (profile.player.rank >= 2) m.deploySlots += 1;
+  if (profile.player.rank >= 5) m.deploySlots += 1;
   return m;
 }
 
@@ -235,6 +246,11 @@ export function computePlayerStats(profile: Profile): CombatStats {
     if (perk?.effect.kind === "stat") addPct(perk.effect.stat, perk.effect.pct * stacks);
   }
   for (const [k, v] of Object.entries(weaponPathBonuses(profile.player.weaponPath)) as [StatKey, number][]) addPct(k, v);
+  const codex = codexBonus(profile);
+  for (const [k, v] of Object.entries(codex) as [StatKey, number][]) if (v) addPct(k, v);
+  const rankMult = 1 + profile.player.rank * RANK_STAT_STEP;
+  addPct("attack", rankMult - 1);
+  addPct("maxHp", rankMult - 1);
 
   for (const [k, v] of Object.entries(pct) as [StatKey, number][]) {
     if (k === "critChance") s.critChance += v;

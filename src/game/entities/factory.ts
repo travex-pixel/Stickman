@@ -2,7 +2,8 @@ import type { Combatant } from "./types";
 import type { Vec2 } from "../engine/math";
 import type { EnemyDef } from "../data/enemies";
 import type { DeployedSummonLoadout, PlayerLoadout } from "../progression/loadout";
-import type { SummonCommand } from "../data/ids";
+import type { EliteAffix, SummonCommand } from "../data/ids";
+import { ELITES } from "../data/elites";
 import { summonDef } from "../data/summons";
 
 function baseCombatant(id: number, pos: Vec2): Omit<Combatant, "kind" | "faction" | "defId" | "name" | "stats" | "hp" | "radius" | "scale" | "level"> {
@@ -75,8 +76,12 @@ export function createEnemy(id: number, def: EnemyDef, pos: Vec2, scale: { hp: n
       eligible,
       tier,
       repositionTimer: 0,
-      preferredDistance: def.archetype === "ranger" ? 200 : def.archetype === "arcanist" ? 170 : 0,
+      preferredDistance: def.archetype === "ranger" ? 200 : def.archetype === "arcanist" ? 170 : def.archetype === "summoner" ? 210 : 0,
       chargeDir: -1,
+      elite: null,
+      minion: false,
+      ownerId: -1,
+      callTimer: 3.5,
     },
   };
 }
@@ -103,6 +108,23 @@ export function createSummon(id: number, s: DeployedSummonLoadout, pos: Vec2, co
       hitCounter: 0,
       lastTargetId: -1,
       sameTargetTime: 0,
+      expiresAt: Infinity,
+      temporary: false,
     },
   };
+}
+
+/** Applies an elite affix in place: tougher, deadlier, bigger, and marked by colour. */
+export function makeElite(e: Combatant, affix: EliteAffix): void {
+  const d = ELITES[affix];
+  if (!e.enemy) return;
+  e.enemy.elite = affix;
+  e.stats.maxHp = Math.round(e.stats.maxHp * d.hp);
+  e.hp = e.stats.maxHp;
+  e.stats.attack = Math.round(e.stats.attack * d.attack * 10) / 10;
+  e.stats.defense = Math.round(e.stats.defense * d.defense + (d.defense > 1 ? 4 : 0));
+  e.stats.moveSpeed *= d.speed;
+  e.stats.attackSpeed *= affix === "hasted" ? 1.4 : 1;
+  e.scale *= 1.14;
+  e.radius = Math.round(e.radius * 1.12);
 }

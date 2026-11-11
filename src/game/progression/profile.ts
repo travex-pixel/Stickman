@@ -47,6 +47,8 @@ export interface Profile {
     perks: Record<string, number>;
     pendingPerkChoices: number;
     autoCast: boolean;
+    /** Hunter rank: 0 = E, 1 = D, 2 = C, 3 = B, 4 = A, 5 = S. */
+    rank: number;
   };
   equipment: {
     equipped: Partial<Record<EquipSlot, string>>;
@@ -59,6 +61,9 @@ export interface Profile {
     wardenSigils: number;
     firstSummonSeen: boolean;
     totalClaimed: number;
+    /** Failed extraction attempts per species since the last success. */
+    pity: Record<string, number>;
+    totalAttempts: number;
   };
   progress: {
     currentStage: number;
@@ -78,7 +83,7 @@ export interface Profile {
   settings: { music: number; sfx: number; reducedEffects: boolean; diagnostics: boolean; battleSpeed: 1 | 2; autoAdvance: boolean };
 }
 
-export const PROFILE_VERSION = 3;
+export const PROFILE_VERSION = 4;
 
 export function createDefaultProfile(now = Date.now()): Profile {
   return {
@@ -97,10 +102,11 @@ export function createDefaultProfile(now = Date.now()): Profile {
       perks: {},
       pendingPerkChoices: 0,
       autoCast: false,
+      rank: 0,
     },
     equipment: { equipped: {}, inventory: [] },
     skills: { unlocked: [] },
-    summons: { collection: [], command: "follow", wardenSigils: 0, firstSummonSeen: false, totalClaimed: 0 },
+    summons: { collection: [], command: "follow", wardenSigils: 0, firstSummonSeen: false, totalClaimed: 0, pity: {}, totalAttempts: 0 },
     progress: {
       currentStage: 1,
       bestStage: 0,

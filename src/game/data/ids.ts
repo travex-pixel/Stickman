@@ -1,10 +1,10 @@
 export type Rarity = "common" | "uncommon" | "rare" | "epic" | "legendary";
 export const RARITY_ORDER: Rarity[] = ["common", "uncommon", "rare", "epic", "legendary"];
 
-export type SummonRole = "vanguard" | "reaper" | "ranger" | "arcanist" | "sentinel" | "sovereign";
+export type SummonRole = "vanguard" | "reaper" | "ranger" | "arcanist" | "sentinel" | "caller" | "sovereign";
 export type SummonCommand = "follow" | "aggressive" | "guard";
 
-export type EnemyArchetype = "grunt" | "brute" | "ranger" | "arcanist" | "boss";
+export type EnemyArchetype = "grunt" | "brute" | "ranger" | "arcanist" | "shieldbearer" | "summoner" | "boss";
 
 export type Element = "physical" | "lightning" | "fire" | "void" | "soul";
 
@@ -33,3 +33,5 @@ export type EquipSlot = "weapon" | "helm" | "chest" | "gloves" | "boots" | "reli
 export const EQUIP_SLOTS: EquipSlot[] = ["weapon", "helm", "chest", "gloves", "boots", "relic"];
 
 export type PanelId = "hero" | "summons" | "gear" | "skills" | "rift";
+
+export type EliteAffix = "brutal" | "armored" | "hasted" | "vampiric";

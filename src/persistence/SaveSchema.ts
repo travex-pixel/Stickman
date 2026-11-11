@@ -110,6 +110,7 @@ export function sanitizeProfile(raw: unknown): { profile: Profile; repaired: boo
       perks,
       pendingPerkChoices: num(p.pendingPerkChoices, 0, 0, 10),
       autoCast: p.autoCast === true,
+      rank: num(p.rank, 0, 0, 5),
     },
     equipment: { equipped, inventory },
     skills: { unlocked: Array.isArray(sk.unlocked) ? sk.unlocked.filter((id): id is string => isStr(id) && SKILLS.some((n) => n.id === id)) : [] },
@@ -119,6 +120,8 @@ export function sanitizeProfile(raw: unknown): { profile: Profile; repaired: boo
       wardenSigils: num(sm.wardenSigils, 0, 0, 3),
       firstSummonSeen: sm.firstSummonSeen === true,
       totalClaimed: num(sm.totalClaimed, 0),
+      pity: isObj(sm.pity) ? Object.fromEntries(Object.entries(sm.pity).filter(([k, v]) => SUMMONS[k] && isNum(v) && v >= 0).map(([k, v]) => [k, Math.min(20, Math.floor(v as number))])) : {},
+      totalAttempts: num(sm.totalAttempts, 0),
     },
     progress: {
       currentStage: num(pr.currentStage, 1, 1, 9999),

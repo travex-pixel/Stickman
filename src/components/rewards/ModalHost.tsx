@@ -7,7 +7,8 @@ import { SummonPortrait } from "@/components/ui/Portrait";
 import { useController, useProfileRef, useUi } from "@/hooks/useGame";
 import type { Modal } from "@/game/GameController";
 import { itemName } from "@/game/GameController";
-import { ROLE_INFO, summonDef, WARDEN_SIGILS_REQUIRED } from "@/game/data/summons";
+import { ROLE_INFO, summonDef, type SummonDef } from "@/game/data/summons";
+import { STAT_LABEL } from "@/game/data/equipment";
 import { JOURNAL } from "@/game/data/lore";
 import { WEAPON_PATHS } from "@/game/progression/weaponPaths";
 import { fmt, fmtDuration } from "@/lib/format";
@@ -62,13 +63,19 @@ function SummonReveal({ modal }: { modal: Extract<Modal, { kind: "summon_reveal"
   if (!modal.cinematicDone) {
     return (
       <div className="pointer-events-none absolute inset-x-0 bottom-[30%] flex flex-col items-center text-center" data-testid="summon-cinematic">
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: [0, 1, 1, 0.7] }} transition={{ duration: modal.first ? 4 : 1.4 }} className="font-display text-[11px] tracking-[0.4em] text-jade-2">
-          {modal.first ? "SOMETHING ANSWERS" : "ESSENCE CLAIMED"}
+        <motion.div
+          initial={{ opacity: 0, scale: 1.6, letterSpacing: "0.8em" }}
+          animate={{ opacity: [0, 0, 1, 1], scale: [1.6, 1.6, 1, 1], letterSpacing: ["0.8em", "0.8em", "0.32em", "0.32em"] }}
+          transition={{ duration: modal.first ? 3.2 : 0.9, times: [0, modal.first ? 0.55 : 0.1, modal.first ? 0.75 : 0.5, 1], ease: "easeOut" }}
+          className="font-display text-[34px] text-[#e4dcff]"
+          style={{ textShadow: "0 0 24px rgba(143,124,255,0.75), 0 2px 0 rgba(0,0,0,0.6)" }}
+        >
+          ARISE
         </motion.div>
       </div>
     );
   }
-  const title = o.kind === "new" ? (modal.first ? "Your first companion has answered." : "A new companion joins you.") : o.kind === "sigil" ? "The Warden resists." : "Kindred essence absorbed.";
+  const title = o.kind === "new" ? (modal.first ? "Your first shadow has answered." : "A new shadow joins your army.") : "Kindred shadow absorbed.";
   return (
     <Card className="pointer-events-auto">
       <div className="absolute inset-0 pointer-events-none" style={{ background: `radial-gradient(60% 50% at 50% 30%, rgba(125,240,200,0.14), transparent)` }} />
@@ -81,17 +88,17 @@ function SummonReveal({ modal }: { modal: Extract<Modal, { kind: "summon_reveal"
         <div className="text-[11px] italic text-mist">{def.title}</div>
         <p className="text-[12px] text-ivory/90 leading-snug">{title}</p>
         {o.kind === "new" && (
+          <div className="text-[11px] text-gold-2 font-semibold" data-testid="codex-gain">
+            Codex: +{fmtCodex(def.owned)} permanently
+          </div>
+        )}
+        {o.kind === "new" && (
           <div className="w-full text-left card p-2 text-[10px] leading-snug">
             <div><span className="text-gold-2 font-semibold">{def.active.name}</span> — {def.active.description}</div>
             <div className="mt-1"><span className="text-jade-2 font-semibold">{def.passive.name}</span> — {def.passive.description}</div>
           </div>
         )}
         {o.kind === "duplicate" && <div className="text-[11px] text-jade-2">+{o.essenceGained} Essence · +{o.shardsGained} shard toward evolution</div>}
-        {o.kind === "sigil" && (
-          <div className="text-[11px] text-gold">
-            Warden Sigil {o.sigils}/{WARDEN_SIGILS_REQUIRED}. Break it {WARDEN_SIGILS_REQUIRED - (o.sigils ?? 0)} more time{WARDEN_SIGILS_REQUIRED - (o.sigils ?? 0) === 1 ? "" : "s"} and it will kneel.
-          </div>
-        )}
         <button className="btn-primary w-full mt-1" onClick={() => c.finishSummonReveal()} data-testid="summon-reveal-continue">
           {o.kind === "new" && modal.first ? "Meet your companion" : "Continue"}
         </button>
@@ -253,4 +260,8 @@ function Journal() {
       </div>
     </Card>
   );
+}
+
+export function fmtCodex(o: SummonDef["owned"]): string {
+  return o.stat === "critChance" ? `${(o.pct * 100).toFixed(0)}% ${STAT_LABEL[o.stat]}` : `${Math.round(o.pct * 100)}% ${STAT_LABEL[o.stat]}`;
 }

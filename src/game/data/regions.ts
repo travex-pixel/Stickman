@@ -1,5 +1,9 @@
+import type { EliteAffix } from "./ids";
+
 export interface WaveSpawn {
   enemyId: string;
+  /** Forces the first enemy of this group to be an elite (used for mini-bosses). */
+  elite?: EliteAffix;
   count: number;
   /** Seconds between spawns inside this group. */
   interval: number;
@@ -23,6 +27,13 @@ export interface RegionDef {
   palette: { sky: number; fog: number; ground: number; horizon: number; ember: number };
 }
 
+/**
+ * The Ashen Verge teaches one idea per stage:
+ *  1 auto-combat, ranged pressure and a heavy brute
+ *  2 shieldbearers (hit them from behind or with abilities)
+ *  3 summoners (kill the caller before the adds swarm you)
+ *  4+ an elite mini-boss closes wave 3
+ */
 const ashenVergeWaves = (stage: number): WaveDef[] => {
   const s = Math.max(0, stage - 1);
   const early = stage <= 2;
@@ -34,13 +45,15 @@ const ashenVergeWaves = (stage: number): WaveDef[] => {
     spawns: [
       { enemyId: "husk", count: husks(3), interval: early ? 2.2 : 1.4, delay: 0.5 },
       { enemyId: "veilshot", count: 2 + Math.min(2, Math.floor(s / 3)), interval: 3.2, delay: early ? 3.5 : 1.5 },
+      ...(stage >= 2 ? [{ enemyId: "bastion_husk", count: 1 + Math.min(2, Math.floor(s / 3)), interval: 4, delay: 2 }] : []),
     ],
   };
   const wave3: WaveDef = {
     spawns: [
-      { enemyId: "ashborn_brute", count: 1 + Math.min(2, Math.floor(s / 3)), interval: 4, delay: early ? 5 : 1 },
+      { enemyId: "ashborn_brute", count: 1 + Math.min(2, Math.floor(s / 3)), interval: 4, delay: early ? 5 : 1, elite: stage >= 4 ? (["brutal", "armored", "hasted", "vampiric"] as const)[stage % 4] : undefined },
       { enemyId: "husk", count: husks(3), interval: early ? 2.4 : 1.3, delay: 0.3 },
       { enemyId: "veilshot", count: 1 + Math.min(1, Math.floor(s / 4)), interval: 3, delay: 10 },
+      ...(stage >= 3 ? [{ enemyId: "rift_caller", count: 1 + Math.min(1, Math.floor(s / 5)), interval: 6, delay: 4 }] : []),
       ...(stage >= 3 ? [{ enemyId: "ember_acolyte", count: 1 + Math.min(1, Math.floor(s / 6)), interval: 4, delay: 8 }] : []),
     ],
   };
@@ -62,11 +75,13 @@ const drownedHollowWaves = (stage: number): WaveDef[] => {
         { enemyId: "drowned_husk", count: husks(4), interval: 1.3, delay: 0.4 },
         { enemyId: "deepshot", count: 2 + Math.min(2, Math.floor(s / 3)), interval: 3, delay: 1.5 },
         { enemyId: "brine_acolyte", count: 1, interval: 4, delay: 6 },
+        { enemyId: "bastion_husk", count: 2 + Math.min(2, Math.floor(s / 3)), interval: 3, delay: 3 },
       ],
     },
     {
       spawns: [
-        { enemyId: "tide_brute", count: 1 + Math.min(3, Math.floor(s / 2)), interval: 3.5, delay: 1 },
+        { enemyId: "tide_brute", count: 1 + Math.min(3, Math.floor(s / 2)), interval: 3.5, delay: 1, elite: (["armored", "vampiric", "brutal", "hasted"] as const)[stage % 4] },
+        { enemyId: "rift_caller", count: 1 + Math.min(2, Math.floor(s / 3)), interval: 5, delay: 5 },
         { enemyId: "drowned_husk", count: husks(4), interval: 1.2, delay: 0.3 },
         { enemyId: "deepshot", count: 1 + Math.min(2, Math.floor(s / 4)), interval: 3, delay: 8 },
         { enemyId: "brine_acolyte", count: 1 + Math.min(2, Math.floor(s / 4)), interval: 4, delay: 7 },

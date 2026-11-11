@@ -1,5 +1,5 @@
 import type { Vec2 } from "../engine/math";
-import type { AbilityId, EnemyArchetype, SummonCommand, SummonRole } from "../data/ids";
+import type { AbilityId, EliteAffix, EnemyArchetype, SummonCommand, SummonRole } from "../data/ids";
 
 export type Faction = "ally" | "enemy";
 export type EntityKind = "player" | "summon" | "enemy" | "boss";
@@ -38,6 +38,9 @@ export interface SummonState {
   hitCounter: number;
   lastTargetId: number;
   sameTargetTime: number;
+  /** Shades called by a Rift Caller expire; permanent shadows have Infinity. */
+  expiresAt: number;
+  temporary: boolean;
 }
 
 export interface EnemyState {
@@ -49,6 +52,12 @@ export interface EnemyState {
   repositionTimer: number;
   preferredDistance: number;
   chargeDir: 1 | -1;
+  elite: EliteAffix | null;
+  /** Summoned by another enemy: worth little and never extractable. */
+  minion: boolean;
+  ownerId: number;
+  /** Seconds until a summoner may call again. */
+  callTimer: number;
 }
 
 export interface BossState {
@@ -125,6 +134,9 @@ export interface EssenceOrb {
   total: number;
   claimed: boolean;
   isBoss: boolean;
+  elite: boolean;
+  /** Extraction attempts left. Bosses allow three. */
+  attempts: number;
 }
 
 export interface Telegraph {

@@ -8,6 +8,8 @@ import type { WorldSnapshot } from "@/game/engine/World";
 import { ENEMIES } from "@/game/data/enemies";
 import { regionForStage } from "@/game/data/regions";
 import { currentQuest, isQuestComplete, questProgress } from "@/game/progression/quests";
+import { extractionChance } from "@/game/summons/extraction";
+import { computeModifiers } from "@/game/progression/stats";
 import type { SummonCommand } from "@/game/data/ids";
 import { cn } from "@/lib/cn";
 import { fmt } from "@/lib/format";
@@ -87,14 +89,19 @@ function WaveBanner() {
 function EssencePrompts() {
   const c = useController();
   const orbs = useHud((s) => s?.orbs ?? EMPTY_ORBS);
+  const profile = useProfile((p) => p);
+  const bonus = computeModifiers(profile).extractionBonus;
+  const firstEver = !profile.summons.firstSummonSeen;
   const view = c.view;
   return (
     <AnimatePresence>
       {orbs.map((o, i) => {
         const def = SUMMONS[o.summonId];
         const left = Math.min(view.width - 60, Math.max(60, o.x * view.scale));
-        const top = Math.max(40, view.offsetY + o.y * view.depthScale - 78);
+        const top = Math.max(40, view.offsetY + o.y * view.depthScale - 84);
         const frac = o.remaining / o.total;
+        const chance = firstEver ? 1 : extractionChance(profile, o.summonId, { elite: o.elite, bonus });
+        const tone = o.isBoss ? "gold" : o.elite ? "gold" : "violet";
         return (
           <motion.button
             key={o.id}
@@ -107,13 +114,22 @@ function EssencePrompts() {
             onClick={() => c.claimEssence(o.id)}
             data-guide={i === 0 ? "claim-essence" : undefined}
             data-testid="claim-essence"
-            aria-label={`Claim essence of ${def?.name ?? "creature"}`}
+            aria-label={`Arise ${def?.name ?? "shadow"}, ${Math.round(chance * 100)} percent`}
           >
-            <span className={cn("font-display px-3 py-1 rounded-full text-[10px] tracking-[0.2em] border shadow-lg", o.isBoss ? "bg-[#2a2210] border-gold/70 text-gold-2" : "bg-[#0f1d1a] border-jade/70 text-jade-2")}>
-              CLAIM
+            <span
+              className={cn(
+                "flex items-baseline gap-1.5 px-3 py-1 rounded-full border shadow-[0_6px_16px_rgba(0,0,0,0.5)]",
+                tone === "gold" ? "bg-[#231c0d] border-gold/70 text-gold-2" : "bg-[#17142c] border-[#8f7cff]/70 text-[#d4caff]",
+              )}
+            >
+              <span className="font-display text-[12px] tracking-[0.24em]">ARISE</span>
+              <span className="text-[10px] font-extrabold tabular-nums opacity-90">{Math.round(chance * 100)}%</span>
             </span>
-            <span className="h-[3px] w-9 rounded-full bg-black/60 overflow-hidden">
-              <span className="block h-full rounded-full" style={{ width: `${frac * 100}%`, background: o.isBoss ? "#e9d39a" : "#9ee3c9" }} />
+            <span className="flex items-center gap-1">
+              {o.isBoss && Array.from({ length: 3 }, (_, k) => <span key={k} className="h-1.5 w-1.5 rotate-45" style={{ background: k < o.attempts ? "#e9c97a" : "rgba(235,228,211,0.18)" }} />)}
+              <span className="h-[3px] w-9 rounded-full bg-black/60 overflow-hidden">
+                <span className="block h-full rounded-full" style={{ width: `${frac * 100}%`, background: tone === "gold" ? "#e9d39a" : "#a99cff" }} />
+              </span>
             </span>
           </motion.button>
         );

@@ -5,7 +5,10 @@ import { Icon } from "@/components/ui/Icon";
 import { HoldButton } from "@/components/ui/HoldButton";
 import { SummonPortrait } from "@/components/ui/Portrait";
 import { useController, useProfileRef, useUi } from "@/hooks/useGame";
-import { ROLE_INFO, summonDef, WARDEN_SIGILS_REQUIRED } from "@/game/data/summons";
+import { collectibleSummons, ROLE_INFO, summonDef } from "@/game/data/summons";
+import { codexBonus, ownedSpecies } from "@/game/summons/extraction";
+import { fmtCodex } from "@/components/rewards/ModalHost";
+import { STAT_LABEL } from "@/game/data/equipment";
 import { computeModifiers } from "@/game/progression/stats";
 import { bondCost, BOND_CAP, checkEvolution, summonPower, summonStats } from "@/game/summons/progression";
 import { summonXpForLevel, SUMMON_LEVEL_CAP } from "@/game/progression/xp";
@@ -28,21 +31,24 @@ export default function SummonsPanel() {
   if (collection.length === 0) {
     return (
       <div className="flex flex-col h-full items-center justify-center gap-2 px-6 text-center">
-        <Icon name="summons" size={28} className="text-jade-2" />
-        <div className="font-display text-[13px] tracking-[0.2em] text-ivory">ECLIPSE</div>
-        <p className="text-[11px] text-mist leading-snug">When an enemy marked with a soul light falls, its essence lingers. Claim it, and it will fight for you.</p>
-        {profile.summons.wardenSigils > 0 && <p className="text-[10px] text-gold">Warden Sigils {profile.summons.wardenSigils}/{WARDEN_SIGILS_REQUIRED}</p>}
+        <Icon name="summons" size={28} className="text-[#a99cff]" />
+        <div className="font-display text-[15px] tracking-[0.2em] text-ivory">The Shadow Army</div>
+        <p className="text-[11px] text-mist leading-snug">Enemies marked with a pale light leave their shadow when they fall. Tap ARISE before it fades and it will fight for you forever.</p>
       </div>
     );
   }
 
   return (
     <div className="flex flex-col h-full min-h-0 px-2 pt-1.5 pb-1.5 gap-1.5">
-      <div className="flex items-center justify-between px-1">
-        <span className="caps">COMPANIONS</span>
-        <span className="text-[10px] text-mist">
+      <div className="flex items-center justify-between px-1 gap-2">
+        <span className="caps whitespace-nowrap">
+          Army <span className="text-parch">{ownedSpecies(profile).filter((id) => !summonDef(id).hidden).length}/{collectibleSummons().length}</span>
+        </span>
+        <span className="text-[10px] text-gold-2 truncate" title="Shadow Codex: permanent bonuses from every shadow you have raised">
+          {codexSummary(profile)}
+        </span>
+        <span className="text-[10px] text-mist whitespace-nowrap">
           Deployed <span className="text-jade-2 font-bold" data-testid="deploy-count">{deployedCount}/{slots}</span>
-          {profile.summons.wardenSigils > 0 && !collection.some((s) => s.defId === "hollow_warden") && <span className="ml-2 text-gold">Sigils {profile.summons.wardenSigils}/{WARDEN_SIGILS_REQUIRED}</span>}
         </span>
       </div>
       <div className="flex gap-1.5 overflow-x-auto no-scrollbar shrink-0" style={{ touchAction: "pan-x" }}>
@@ -108,6 +114,7 @@ function SummonDetail({ inst, slots }: { inst: ReturnType<typeof useProfileRef>[
         <div className="text-[9px] leading-snug text-ivory/85 line-clamp-2">
           <span className="text-gold-2 font-semibold">{def.active.name}.</span> {def.active.description}
         </div>
+        <div className="text-[9px] text-gold/90">Codex +{fmtCodex(def.owned)}</div>
         <div className="mt-auto flex items-center gap-1.5">
           <HoldButton onRepeat={() => c.upgradeBond(inst.instanceId)} disabled={!canBond} className="flex-1 h-[34px]" testId="bond-upgrade" label={`Strengthen bond for ${cost} essence`}>
             <span className="flex flex-col items-center leading-none">
@@ -137,4 +144,10 @@ function Mini({ icon, v }: { icon: "heart" | "sword" | "shield" | "speed"; v: st
       <span className="text-ivory font-semibold tabular-nums">{v}</span>
     </span>
   );
+}
+
+function codexSummary(profile: ReturnType<typeof useProfileRef>): string {
+  const b = codexBonus(profile);
+  const parts = (Object.entries(b) as [keyof typeof b, number][]).filter(([, v]) => v > 0).map(([k, v]) => `+${Math.round(v * 100)}% ${STAT_LABEL[k].replace("Critical ", "Crit ")}`);
+  return parts.length ? `Codex ${parts.slice(0, 2).join(" · ")}${parts.length > 2 ? " …" : ""}` : "";
 }

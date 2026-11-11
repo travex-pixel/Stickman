@@ -5,7 +5,8 @@ import { ARENA } from "../engine/World";
 import type { GameEvent } from "../engine/events";
 import type { Combatant } from "../entities/types";
 import { Rig } from "./rigs/Rig";
-import { enemySpec, playerSpec, summonSpec } from "./rigs/specs";
+import { eliteSpec, enemySpec, playerSpec, summonSpec } from "./rigs/specs";
+import { ELITES } from "../data/elites";
 import { ParticleSystem } from "./Particles";
 import { DamageNumbers } from "./DamageNumbers";
 import { Background } from "./Background";
@@ -269,6 +270,7 @@ export class BattleRenderer {
       v.rig.root.position.set(sx, sy);
       v.rig.root.scale.set(ds);
       v.rig.root.zIndex = y;
+      if (e.summon?.temporary) v.rig.root.alpha = Math.min(v.rig.root.alpha, 0.72);
       v.rig.shadow.position.set(sx, sy + 1);
       v.rig.shadow.scale.set(ds, ds * 0.9);
       v.rig.shadow.zIndex = -1000 + y;
@@ -295,7 +297,9 @@ export class BattleRenderer {
   }
 
   private createView(e: Combatant): EntityView {
-    const spec = e.kind === "player" ? playerSpec(this.world?.loadout.weaponPath ?? "none") : e.kind === "summon" ? summonSpec(e.defId) : enemySpec(e.defId);
+    let spec = e.kind === "player" ? playerSpec(this.world?.loadout.weaponPath ?? "none") : e.kind === "summon" ? summonSpec(e.defId) : enemySpec(e.defId);
+    const affix = e.enemy?.elite;
+    if (affix) spec = eliteSpec(spec, ELITES[affix].color);
     const rig = new Rig(spec);
     this.entityLayer.addChild(rig.shadow);
     this.entityLayer.addChild(rig.root);
@@ -324,6 +328,10 @@ export class BattleRenderer {
       const sf = clamp(e.shield / e.stats.maxHp, 0, 1);
       bar.roundRect(sx - w / 2, top - 3, w * sf, 2, 1).fill(0xe9c97a);
     }
+    if (e.enemy?.elite) {
+      const c = ELITES[e.enemy.elite].color;
+      bar.poly([sx - w / 2 - 9, top + h / 2, sx - w / 2 - 5, top - 2, sx - w / 2 - 1, top + h / 2, sx - w / 2 - 5, top + h + 2]).fill(c);
+    }
     if (e.enemy?.eligible && e.faction === "enemy") {
       // A faint soul mark above eligible enemies hints at the claim to come.
       bar.circle(sx + w / 2 + 6, top + h / 2, 3).fill({ color: 0x8fe0c4, alpha: 0.6 + Math.sin(this.time * 6) * 0.3 });
@@ -348,7 +356,7 @@ export class BattleRenderer {
         } else {
           const s = new Sprite(softCircle());
           s.anchor.set(0.5);
-          s.tint = p.kind === "ember" ? 0xe0954f : p.kind === "warden_bolt" ? 0xa9d0e6 : 0xffffff;
+          s.tint = p.kind === "ember" ? 0xe0954f : p.kind === "warden_bolt" ? 0xa9d0e6 : p.kind === "shard" ? 0xb59cf0 : 0xffffff;
           s.blendMode = "add";
           s.scale.set(p.kind === "warden_bolt" ? 0.55 : 0.4);
           c.addChild(s);
@@ -388,11 +396,11 @@ export class BattleRenderer {
         const c = new Container();
         const ringS = new Sprite(ring());
         ringS.anchor.set(0.5);
-        ringS.tint = o.isBoss ? 0xe9c56f : 0x8fe0c4;
+        ringS.tint = o.isBoss || o.elite ? 0xe9c56f : 0xa99cff;
         ringS.blendMode = "add";
         const core = new Sprite(softCircle());
         core.anchor.set(0.5);
-        core.tint = o.isBoss ? 0xe9c97a : 0x8fe0c4;
+        core.tint = o.isBoss || o.elite ? 0xe9c97a : 0xc2b6ff;
         core.blendMode = "add";
         c.addChild(ringS, core);
         this.orbLayer.addChild(c);
@@ -411,7 +419,7 @@ export class BattleRenderer {
       v.ring.rotation += dt;
       v.ring.alpha = 0.5 + frac * 0.5;
       if (!this.reduced && Math.random() < dt * 10) {
-        this.particles.emit({ x: sx, y: sy, count: 1, texture: softCircle(), color: o.isBoss ? 0xe9c97a : 0x8fe0c4, speed: [6, 22], angle: [-Math.PI * 0.8, -Math.PI * 0.2], life: [0.6, 1.1], scale: [0.1, 0.25], alpha: 0.8 });
+        this.particles.emit({ x: sx, y: sy, count: 1, texture: softCircle(), color: o.isBoss || o.elite ? 0xe9c97a : 0xa99cff, speed: [6, 22], angle: [-Math.PI * 0.8, -Math.PI * 0.2], life: [0.6, 1.1], scale: [0.1, 0.25], alpha: 0.8 });
       }
     }
     for (const [id, v] of this.orbs) {
@@ -606,8 +614,8 @@ export class BattleRenderer {
         case "essence_available": {
           const sx = this.sx(e.pos.x);
           const sy = this.sy(e.pos.y) - 28 * u;
-          this.fx.push({ kind: "ring", x: sx, y: this.sy(e.pos.y), r0: 4, r1: 60 * u, life: 0.8, total: 0.8, color: e.isBoss ? 0xe9c56f : 0x8fe0c4, width: 3, squash: 0.42 });
-          this.particles.emit({ x: sx, y: sy, count: 18, texture: softCircle(), color: e.isBoss ? 0xe9c97a : 0x8fe0c4, speed: [20, 80], life: [0.6, 1.2], scale: [0.2, 0.5], endScale: 0, alpha: 0.9 });
+          this.fx.push({ kind: "ring", x: sx, y: this.sy(e.pos.y), r0: 4, r1: 60 * u, life: 0.8, total: 0.8, color: e.isBoss ? 0xe9c56f : 0xa99cff, width: 3, squash: 0.42 });
+          this.particles.emit({ x: sx, y: sy, count: 18, texture: softCircle(), color: e.isBoss ? 0xe9c97a : 0xa99cff, speed: [20, 80], life: [0.6, 1.2], scale: [0.2, 0.5], endScale: 0, alpha: 0.9 });
           break;
         }
         case "projectile_hit": {
@@ -663,6 +671,38 @@ export class BattleRenderer {
         }
         case "boss_intro": {
           this.flash(0x7f9fd0, 0.35);
+          break;
+        }
+        case "blocked": {
+          const t = world.entities.get(e.id);
+          if (!t) break;
+          const sx = this.sx(t.pos.x) + t.facing * 14 * u;
+          const sy = this.sy(t.pos.y) - 46 * u * FIGURE_SCALE;
+          if (Math.random() < 0.5) this.numbers.spawn(sx, sy, "Blocked", 0xb8b2a4, 0.5, false);
+          this.particles.emit({ x: sx, y: sy + 10, count: 4, texture: spark(), color: 0xe8e2d4, speed: [60, 140], angle: t.facing === 1 ? [-0.6, 0.6] : [Math.PI - 0.6, Math.PI + 0.6], life: [0.1, 0.22], scale: [0.3, 0.6], endScale: 0.1 });
+          break;
+        }
+        case "guard_break": {
+          const t = world.entities.get(e.id);
+          if (!t) break;
+          const sx = this.sx(t.pos.x);
+          const sy = this.sy(t.pos.y) - 50 * u * FIGURE_SCALE;
+          this.numbers.spawn(sx, sy - 10, "Guard broken", 0xe9c97a, 0.72, true);
+          this.particles.emit({ x: sx, y: sy + 10, count: 18, texture: shard(), color: 0xd8d0bc, speed: [80, 260], life: [0.3, 0.7], scale: [0.3, 0.7], endScale: 0, gravity: 300, additive: false, spin: 10 });
+          this.shake(6);
+          break;
+        }
+        case "elite_spawn": {
+          const sx = this.sx(e.pos.x);
+          const sy = this.sy(e.pos.y);
+          const c = ELITES[e.affix as keyof typeof ELITES]?.color ?? 0xe9c97a;
+          this.fx.push({ kind: "ring", x: sx, y: sy, r0: 8, r1: 70 * u, life: 0.7, total: 0.7, color: c, width: 3, squash: 0.42 });
+          break;
+        }
+        case "minion_called": {
+          const sx = this.sx(e.pos.x);
+          const sy = this.sy(e.pos.y) - 60 * u;
+          this.particles.emit({ x: sx, y: sy, count: 16, texture: softCircle(), color: 0xb59cf0, speed: [30, 120], life: [0.4, 0.8], scale: [0.2, 0.5], endScale: 0 });
           break;
         }
         case "boss_phase": {
@@ -756,6 +796,18 @@ export class BattleRenderer {
     this.fx.push({ kind: "beam", x: sx, y: sy, life: 0.7, total: 0.7, color: 0xe9c97a, height: this.height });
     this.particles.emit({ x: sx, y: sy - 40 * u, count: this.reduced ? 15 : 40, texture: softCircle(), color: 0xe9c97a, speed: [30, 160], angle: [-Math.PI, 0], life: [0.6, 1.3], scale: [0.25, 0.6], endScale: 0, alpha: 0.95 });
     this.flash(0xe9c97a, 0.18);
+  }
+
+  /** The shadow tries to rise, flickers, and tears apart. */
+  playExtractionFail(pos: { x: number; y: number }): void {
+    const u = this.unit();
+    const sx = this.sx(pos.x);
+    const sy = this.sy(pos.y);
+    this.particles.emit({ x: sx, y: sy - 10 * u, count: 26, texture: softCircle(), color: 0x8f7cff, speed: [10, 50], angle: [-Math.PI * 0.9, -Math.PI * 0.1], life: [0.4, 0.8], scale: [0.25, 0.55], endScale: 0, alpha: 0.9 });
+    this.particles.emit({ x: sx, y: sy - 40 * u, count: 22, texture: shard(), color: 0x2a2840, speed: [60, 200], life: [0.4, 0.9], scale: [0.25, 0.6], endScale: 0, gravity: 260, additive: false, spin: 8, alpha: 0.95 });
+    this.fx.push({ kind: "ring", x: sx, y: sy, r0: 70 * u, r1: 6, life: 0.45, total: 0.45, color: 0x8f7cff, width: 3, squash: 0.42 });
+    this.numbers.spawn(sx, sy - 70 * u, "Resisted", 0xb59cf0, 0.75, true);
+    this.shake(4);
   }
 
   // ---------------------------------------------------------------------

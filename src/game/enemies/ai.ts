@@ -27,12 +27,26 @@ export function updateEnemyAi(world: World, e: Combatant, dt: number): void {
     world.stop(e);
     return;
   }
+  if (e.state === "cast" && def.archetype === "summoner") {
+    world.stop(e);
+    e.state = "cast";
+    if (e.stateTime >= e.stateDuration) finishCall(world, e);
+    return;
+  }
   if (e.state === "windup" || e.state === "attack" || e.state === "recover") {
     world.progressAttack(e);
     return;
   }
   const d = dist(e.pos, target.pos);
   switch (def.archetype) {
+    case "shieldbearer":
+      // Slow, deliberate, always turning its shield to face the threat.
+      e.facing = target.pos.x >= e.pos.x ? 1 : -1;
+      meleeBehaviour(world, e, target, d, def.windup, 0.12, 0.35);
+      break;
+    case "summoner":
+      summonerBehaviour(world, e, target, d, dt, def.windup);
+      break;
     case "grunt":
       meleeBehaviour(world, e, target, d, def.windup, 0.1, 0.25);
       break;
@@ -48,6 +62,44 @@ export function updateEnemyAi(world: World, e: Combatant, dt: number): void {
     default:
       meleeBehaviour(world, e, target, d, def.windup, 0.1, 0.25);
   }
+}
+
+const MAX_MINIONS = 4;
+
+function summonerBehaviour(world: World, e: Combatant, target: Combatant, d: number, dt: number, windup: number): void {
+  const es = e.enemy;
+  if (!es) return;
+  es.callTimer -= dt;
+  let minions = 0;
+  for (const m of world.entities.values()) if (!m.dead && m.enemy?.ownerId === e.id) minions++;
+  if (es.callTimer <= 0 && minions < MAX_MINIONS) {
+    es.callTimer = 7;
+    world.stop(e);
+    world.setState(e, "cast", windup);
+    // Telegraph where the dead will rise, so the player can read it and act.
+    const pts = callPoints(e);
+    for (const p of pts) world.addTelegraph(p, 26, windup, "circle", 1, 0, 0xb48cff);
+    (e as Combatant & { _callPts?: { x: number; y: number }[] })._callPts = pts;
+    return;
+  }
+  rangedBehaviour(world, e, target, d, dt, windup * 0.6, "shard");
+}
+
+function callPoints(e: Combatant): { x: number; y: number }[] {
+  const dir = e.facing;
+  return [
+    { x: Math.max(ARENA.minX + 10, Math.min(ARENA.maxX - 10, e.pos.x + dir * 50)), y: Math.max(ARENA.minY, e.pos.y - 32) },
+    { x: Math.max(ARENA.minX + 10, Math.min(ARENA.maxX - 10, e.pos.x + dir * 50)), y: Math.min(ARENA.maxY, e.pos.y + 32) },
+  ];
+}
+
+function finishCall(world: World, e: Combatant): void {
+  const ext = e as Combatant & { _callPts?: { x: number; y: number }[] };
+  const pts = ext._callPts ?? callPoints(e);
+  ext._callPts = undefined;
+  for (const p of pts) world.spawnEnemy(world.stage >= 7 ? "drowned_husk" : "husk", { pos: p, minion: true, ownerId: e.id });
+  world.events.push({ type: "minion_called", id: e.id, pos: { ...e.pos } });
+  world.setState(e, "recover", 0.5);
 }
 
 function tauntTarget(world: World, e: Combatant): Combatant | null {
@@ -86,7 +138,7 @@ function bruteBehaviour(world: World, e: Combatant, target: Combatant, d: number
   }
 }
 
-function rangedBehaviour(world: World, e: Combatant, target: Combatant, d: number, dt: number, windup: number, kind: "arrow" | "ember"): void {
+function rangedBehaviour(world: World, e: Combatant, target: Combatant, d: number, dt: number, windup: number, kind: "arrow" | "ember" | "shard"): void {
   const es = e.enemy;
   if (!es) return;
   es.repositionTimer -= dt;
@@ -124,6 +176,8 @@ function rangedBehaviour(world: World, e: Combatant, target: Combatant, d: numbe
         p.radius = 12;
         world.addTelegraph(aim, 34, 0.9, "circle", 1, 0, 0xff7a3d);
         setTimeoutSim(world, 0.9, () => world.addHazard(aim, 34, 3, e.stats.attack * 0.5, "enemy", e.id, "fire"));
+      } else if (kind === "shard") {
+        world.spawnProjectile(e, aim, 400, "shard", 0.8);
       } else {
         world.spawnProjectile(e, aim, 520, "arrow", 1);
       }

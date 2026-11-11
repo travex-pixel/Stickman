@@ -34,7 +34,13 @@ export type GameEvent =
   | { type: "freeze"; duration: number }
   | { type: "ultimate_ready" }
   | { type: "hazard"; pos: Vec2; radius: number; kind: "fire" | "void"; duration: number }
-  | { type: "shield"; id: number; pos: Vec2 };
+  | { type: "shield"; id: number; pos: Vec2 }
+  | { type: "blocked"; id: number; pos: Vec2 }
+  | { type: "guard_break"; id: number; pos: Vec2 }
+  | { type: "elite_spawn"; id: number; affix: string; defId: string; pos: Vec2 }
+  | { type: "minion_called"; id: number; pos: Vec2 }
+  | { type: "extract_fail"; orbId: number; pos: Vec2; attemptsLeft: number }
+  | { type: "kill_streak"; count: number };
 
 export class EventQueue {
   private items: GameEvent[] = [];

@@ -219,3 +219,98 @@ describe("second region", () => {
     expect(bossEssence && bossEssence.type === "essence_available" ? bossEssence.summonId : "").toBe("hollow_warden");
   });
 });
+
+describe("enemy mechanics", () => {
+  it("shieldbearers block frontal hits but abilities break the guard", () => {
+    const w = freshWorld(2, 5);
+    const sb = w.spawnEnemy("bastion_husk", { pos: { x: w.player.pos.x + 40, y: w.player.pos.y } });
+    sb.facing = -1; // facing the warrior
+    expect(w.blockFactor(sb, w.player.pos.x, false)).toBeLessThan(0.5);
+    expect(w.blockFactor(sb, w.player.pos.x + 200, false)).toBe(1); // from behind
+    expect(w.blockFactor(sb, w.player.pos.x, true)).toBeGreaterThan(1); // heavy breaks the guard
+    expect(sb.statuses.some((s) => s.kind === "opening")).toBe(true);
+    expect(w.blockFactor(sb, w.player.pos.x, false)).toBe(1); // guard is open
+  });
+  it("summoners call minions that are never extractable", () => {
+    const w = freshWorld(3, 9);
+    w.player.stats = { ...w.player.stats, maxHp: 1e6 };
+    w.player.hp = 1e6;
+    const caller = w.spawnEnemy("rift_caller", { pos: { x: 500, y: 80 } });
+    step(w, 8);
+    const minions = Array.from(w.entities.values()).filter((e) => e.enemy?.ownerId === caller.id);
+    expect(minions.length).toBeGreaterThan(0);
+    for (const m of minions) {
+      expect(m.enemy?.minion).toBe(true);
+      expect(m.enemy?.eligible).toBe(false);
+    }
+  });
+  it("elites are tougher, always leave a shadow and pay triple", () => {
+    const w = freshWorld(4, 3);
+    const normal = w.spawnEnemy("husk", { elite: null, pos: { x: 500, y: 40 } });
+    const elite = w.spawnEnemy("husk", { elite: "armored", pos: { x: 520, y: 60 } });
+    expect(elite.stats.maxHp).toBeGreaterThan(normal.stats.maxHp * 1.4);
+    expect(elite.enemy?.eligible).toBe(true);
+    w.drainEvents();
+    w.kill(normal, w.player.id);
+    w.kill(elite, w.player.id);
+    const golds = w.drainEvents().filter((e) => e.type === "gold").map((e) => (e.type === "gold" ? e.amount : 0));
+    expect(golds[1]!).toBeGreaterThan(golds[0]! * 2);
+    expect(w.orbs.some((o) => o.elite)).toBe(true);
+  });
+  it("armored elites ignore knockback", () => {
+    const w = freshWorld(4, 3);
+    const elite = w.spawnEnemy("husk", { elite: "armored", pos: { x: 500, y: 60 } });
+    w.applyKnockback(elite, w.player.pos, 400);
+    expect(elite.knockback.x).toBe(0);
+  });
+  it("vampiric elites heal from their hits", () => {
+    const w = freshWorld(4, 3);
+    const v = w.spawnEnemy("husk", { elite: "vampiric", pos: { x: w.player.pos.x + 30, y: w.player.pos.y } });
+    v.hp = v.stats.maxHp * 0.5;
+    const before = v.hp;
+    w.dealDamage(v, w.player, 1, "physical", false);
+    expect(v.hp).toBeGreaterThan(before);
+  });
+  it("bosses allow three extraction attempts", () => {
+    const w = freshWorld(1, 2);
+    const boss = w.spawnEnemy("hollow_warden", { pos: { x: 500, y: 80 } });
+    boss.kind = "boss";
+    w.kill(boss, w.player.id);
+    const orb = w.orbs.find((o) => o.isBoss)!;
+    expect(orb.attempts).toBe(3);
+    expect(w.failExtraction(orb.id)).toBe(2);
+    expect(w.failExtraction(orb.id)).toBe(1);
+    expect(w.failExtraction(orb.id)).toBe(0);
+    expect(w.peekOrb(orb.id)).toBeUndefined();
+  });
+});
+
+describe("shadow army", () => {
+  it("a Rift Caller musters temporary shades that expire and are not recalled by loadout changes", () => {
+    const p = createDefaultProfile();
+    claimEssence(p, "rift_caller");
+    p.summons.collection[0]!.deployed = true;
+    p.summons.command = "aggressive";
+    const w = new World({ stage: 1, loadout: buildLoadout(p), seed: 8 });
+    const ev: GameEvent[] = [];
+    step(w, 14, ev);
+    expect(ev.some((e) => e.type === "summon_ability" && e.ability === "Muster")).toBe(true);
+    const shades = () => Array.from(w.entities.values()).filter((e) => e.summon?.temporary && !e.dead);
+    w.setLoadout(buildLoadout(p));
+    if (shades().length > 0) {
+      step(w, 10);
+      // all shades from the first muster have expired by now; any present are from a new muster
+      for (const s of shades()) expect(s.summon!.expiresAt).toBeGreaterThan(w.time - 0.1);
+    }
+    expect(w.snapshot().summons.every((s) => s.defId !== "shade")).toBe(true);
+  });
+  it("a Bastion shields the warrior when enemies close in", () => {
+    const p = createDefaultProfile();
+    claimEssence(p, "bastion");
+    p.summons.collection[0]!.deployed = true;
+    const w = new World({ stage: 1, loadout: buildLoadout(p), seed: 8 });
+    const ev: GameEvent[] = [];
+    step(w, 25, ev);
+    expect(ev.some((e) => e.type === "summon_ability" && e.ability === "Aegis")).toBe(true);
+  });
+});

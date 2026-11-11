@@ -35,6 +35,10 @@ export interface SummonDef {
   passive: SummonAbilityDef;
   evolution?: SummonEvolutionDef;
   evolvedFrom?: string;
+  /** Shadow Codex: a permanent bonus for ever having owned this shadow, deployed or not. */
+  owned: { stat: "attack" | "maxHp" | "defense" | "critChance" | "critDamage" | "attackSpeed"; pct: number };
+  /** Hidden shadows (temporary minions) never appear in the collection. */
+  hidden?: boolean;
   palette: { body: number; accent: number; eye: number; glow: number };
   scale: number;
   /** Radius of the evolved aura ring, 0 for none. */
@@ -57,6 +61,7 @@ export const SUMMONS: Record<string, SummonDef> = {
     palette: { body: 0x1f2538, accent: 0x9fd9ff, eye: 0x4ee6ff, glow: 0x4ee6ff },
     scale: 0.92,
     aura: 0,
+    owned: { stat: "attack", pct: 0.04 },
   },
   gravewalker: {
     id: "gravewalker",
@@ -73,6 +78,7 @@ export const SUMMONS: Record<string, SummonDef> = {
     palette: { body: 0x1c1626, accent: 0xff4d6d, eye: 0xff2a4d, glow: 0xff2a4d },
     scale: 1.0,
     aura: 26,
+    owned: { stat: "critDamage", pct: 0.12 },
   },
   ashborn_bulwark: {
     id: "ashborn_bulwark",
@@ -88,6 +94,7 @@ export const SUMMONS: Record<string, SummonDef> = {
     palette: { body: 0x3a2622, accent: 0xff7a3d, eye: 0xffb347, glow: 0xff7a3d },
     scale: 1.3,
     aura: 0,
+    owned: { stat: "maxHp", pct: 0.06 },
   },
   veilshot: {
     id: "veilshot",
@@ -103,6 +110,7 @@ export const SUMMONS: Record<string, SummonDef> = {
     palette: { body: 0x262a48, accent: 0xb48cff, eye: 0xc89bff, glow: 0x9b6bff },
     scale: 0.95,
     aura: 0,
+    owned: { stat: "critChance", pct: 0.02 },
   },
   ember_acolyte: {
     id: "ember_acolyte",
@@ -118,6 +126,7 @@ export const SUMMONS: Record<string, SummonDef> = {
     palette: { body: 0x332039, accent: 0xff9b3d, eye: 0xffe08a, glow: 0xff7a3d },
     scale: 1.0,
     aura: 0,
+    owned: { stat: "attack", pct: 0.06 },
   },
   hollow_warden: {
     id: "hollow_warden",
@@ -133,6 +142,56 @@ export const SUMMONS: Record<string, SummonDef> = {
     palette: { body: 0x1d2446, accent: 0x3a8fff, eye: 0x7cf6ff, glow: 0x3a8fff },
     scale: 1.7,
     aura: 40,
+    owned: { stat: "attack", pct: 0.1 },
+  },
+  bastion: {
+    id: "bastion",
+    name: "Bastion",
+    title: "The Gate That Held",
+    role: "sentinel",
+    rarity: "uncommon",
+    lore: "It held the gate for three days. It will hold the line for you for longer.",
+    base: { hp: 200, attack: 8, attackSpeed: 0.75, defense: 7, moveSpeed: 95, range: 48, radius: 18 },
+    growth: 0.12,
+    active: { name: "Aegis", description: "Shields the warrior for 18% of their max health and slows nearby enemies.", cooldown: 11 },
+    passive: { name: "Shield Wall", description: "Blocks 60% of damage from the front.", cooldown: 0 },
+    palette: { body: 0x23234a, accent: 0x8f7cff, eye: 0xc2b6ff, glow: 0x8f7cff },
+    scale: 1.05,
+    aura: 0,
+    owned: { stat: "defense", pct: 0.1 },
+  },
+  rift_caller: {
+    id: "rift_caller",
+    name: "Rift Caller",
+    title: "Voice of the Army",
+    role: "caller",
+    rarity: "rare",
+    lore: "Once it called the dead against you. Now it calls them for you, and they come gladly.",
+    base: { hp: 80, attack: 9, attackSpeed: 0.55, defense: 1, moveSpeed: 80, range: 200, radius: 16 },
+    growth: 0.12,
+    active: { name: "Muster", description: "Calls two shades that fight for 9 seconds. Shades grow with the Caller's level.", cooldown: 10 },
+    passive: { name: "Chorus", description: "Each living shade grants allies 4% attack.", cooldown: 0 },
+    palette: { body: 0x23234a, accent: 0x8f7cff, eye: 0xc2b6ff, glow: 0x8f7cff },
+    scale: 1.0,
+    aura: 0,
+    owned: { stat: "attack", pct: 0.05 },
+  },
+  shade: {
+    id: "shade",
+    name: "Shade",
+    title: "Called Shadow",
+    role: "reaper",
+    rarity: "common",
+    lore: "A borrowed soldier. It will not stay.",
+    base: { hp: 40, attack: 6, attackSpeed: 1.2, defense: 0, moveSpeed: 135, range: 42, radius: 14 },
+    growth: 0.1,
+    active: { name: "-", description: "-", cooldown: 99 },
+    passive: { name: "-", description: "-", cooldown: 0 },
+    palette: { body: 0x23234a, accent: 0x8f7cff, eye: 0xc2b6ff, glow: 0x8f7cff },
+    scale: 0.85,
+    aura: 0,
+    owned: { stat: "attack", pct: 0 },
+    hidden: true,
   },
 };
 
@@ -147,8 +206,14 @@ export const ROLE_INFO: Record<SummonRole, { label: string; blurb: string }> = {
   reaper: { label: "Reaper", blurb: "Fast melee. Hunts down weakened enemies." },
   ranger: { label: "Ranger", blurb: "Ranged damage. Marks dangerous targets." },
   arcanist: { label: "Arcanist", blurb: "Area magic. Burns groups of enemies." },
-  sentinel: { label: "Sentinel", blurb: "Defensive support." },
+  sentinel: { label: "Sentinel", blurb: "Guards the warrior. Blocks from the front." },
+  caller: { label: "Caller", blurb: "Grows your army mid-fight with shades." },
   sovereign: { label: "Sovereign", blurb: "A rare power that bends the field." },
 };
 
+/** @deprecated Sigils were replaced by ARISE extraction with pity. Kept so old saves load. */
 export const WARDEN_SIGILS_REQUIRED = 3;
+
+export function collectibleSummons(): SummonDef[] {
+  return Object.values(SUMMONS).filter((s) => !s.hidden);
+}

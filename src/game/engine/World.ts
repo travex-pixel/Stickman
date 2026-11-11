@@ -2,7 +2,10 @@ import { Rng } from "./rng";
 import { EventQueue, type GameEvent } from "./events";
 import { clamp, dist, type Vec2 } from "./math";
 import type { Combatant, EssenceOrb, GroundHazard, Projectile, Telegraph, Faction, ActionState } from "../entities/types";
-import { createPlayer, createEnemy, createSummon } from "../entities/factory";
+import { createPlayer, createEnemy, createSummon, makeElite } from "../entities/factory";
+import { ELITES, ELITE_IDS, ELITE_REWARD_MULT, eliteChance } from "../data/elites";
+import type { EliteAffix } from "../data/ids";
+import { BOSS_ATTEMPTS } from "../summons/extraction";
 import type { PlayerLoadout, DeployedSummonLoadout } from "../progression/loadout";
 import type { AbilityId, SummonCommand, Element } from "../data/ids";
 import { ABILITIES, ULTIMATE_ENERGY_COST, ULTIMATE_ID } from "../data/abilities";
@@ -37,7 +40,7 @@ export interface WorldSnapshot {
   dodgeCooldownMax: number;
   enemiesAlive: number;
   boss: { hp: number; maxHp: number; phase: number; name: string } | null;
-  orbs: { id: number; summonId: string; x: number; y: number; remaining: number; total: number; isBoss: boolean }[];
+  orbs: { id: number; summonId: string; x: number; y: number; remaining: number; total: number; isBoss: boolean; elite: boolean; attempts: number }[];
   summons: { id: number; instanceId: string; defId: string; hp: number; maxHp: number; alive: boolean; abilityCooldown: number }[];
   command: SummonCommand;
   autoCast: boolean;
@@ -56,7 +59,7 @@ export interface WorldOptions {
 
 interface WaveRunner {
   def: WaveDef;
-  spawnQueue: { enemyId: string; at: number }[];
+  spawnQueue: { enemyId: string; at: number; elite?: EliteAffix }[];
   elapsed: number;
 }
 
@@ -86,6 +89,8 @@ export class World {
   dodgeCooldown = 0;
   ultimate: { active: boolean; timer: number; strikes: number; nextStrike: number } = { active: false, timer: 0, strikes: 0, nextStrike: 0 };
   pendingLoot: LootDrop[] = [];
+  /** Game-mode reward multiplier on enemy gold (the Gold Vault sets this). */
+  modeGoldMult = 1;
   private nextId = 1;
   private waveRunner: WaveRunner | null = null;
   private bossId = -1;
@@ -150,6 +155,7 @@ export class World {
       }
     }
     for (const ent of this.summonEntities()) {
+      if (ent.summon?.temporary) continue;
       if (!loadout.summons.some((s) => s.instanceId === ent.summon?.instanceId)) this.recallSummon(ent.summon!.instanceId);
     }
     this.setCommand(loadout.command);
@@ -222,6 +228,36 @@ export class World {
     return orb;
   }
 
+  peekOrb(orbId: number): EssenceOrb | undefined {
+    return this.orbs.find((o) => o.id === orbId && !o.claimed);
+  }
+
+  /** A failed ARISE: the shadow resists. Bosses keep their remaining attempts. */
+  failExtraction(orbId: number): number {
+    const orb = this.peekOrb(orbId);
+    if (!orb) return 0;
+    orb.attempts -= 1;
+    this.events.push({ type: "extract_fail", orbId, pos: { ...orb.pos }, attemptsLeft: Math.max(0, orb.attempts) });
+    if (orb.attempts <= 0) orb.claimed = true;
+    return Math.max(0, orb.attempts);
+  }
+
+  /** Temporary shades called by a Rift Caller: weaker copies that fight for a few seconds. */
+  spawnShade(caller: Combatant, pos: Vec2, lifetime: number): Combatant {
+    const level = caller.level;
+    const stats = { ...caller.stats, maxHp: Math.round(caller.stats.maxHp * 0.55), attack: Math.round(caller.stats.attack * 0.6 * 10) / 10, attackSpeed: 1.2, range: 42, moveSpeed: 135, defense: 0 };
+    const ent = createSummon(this.allocId(), { instanceId: `shade_${this.nextId}`, defId: "shade", level, stats }, pos, this.loadout.command);
+    if (ent.summon) {
+      ent.summon.temporary = true;
+      ent.summon.expiresAt = this.time + lifetime;
+    }
+    ent.state = "emerge";
+    ent.stateDuration = 0.4;
+    this.entities.set(ent.id, ent);
+    this.events.push({ type: "summon_deployed", id: ent.id, defId: "shade", pos: { ...pos } });
+    return ent;
+  }
+
   // ---------------------------------------------------------------------
   // Queries
   // ---------------------------------------------------------------------
@@ -267,9 +303,9 @@ export class World {
       dodgeCooldownMax: cdMax.shadow_dash,
       enemiesAlive: this.enemies().length,
       boss: boss && !boss.dead ? { hp: boss.hp, maxHp: boss.stats.maxHp, phase: boss.boss?.phase ?? 1, name: boss.name } : null,
-      orbs: this.orbs.filter((o) => !o.claimed).map((o) => ({ id: o.id, summonId: o.summonId, x: o.pos.x, y: o.pos.y, remaining: o.remaining, total: o.total, isBoss: o.isBoss })),
+      orbs: this.orbs.filter((o) => !o.claimed).map((o) => ({ id: o.id, summonId: o.summonId, x: o.pos.x, y: o.pos.y, remaining: o.remaining, total: o.total, isBoss: o.isBoss, elite: o.elite, attempts: o.attempts })),
       summons: Array.from(this.entities.values())
-        .filter((e) => e.kind === "summon")
+        .filter((e) => e.kind === "summon" && !e.summon?.temporary)
         .map((e) => ({ id: e.id, instanceId: e.summon?.instanceId ?? "", defId: e.defId, hp: e.hp, maxHp: e.stats.maxHp, alive: !e.dead, abilityCooldown: e.summon?.abilityCooldown ?? 0 })),
       command: this.loadout.command,
       autoCast: this.loadout.autoCast,
@@ -396,9 +432,9 @@ export class World {
     this.wave = n;
     const def = this.regionWaves[n - 1] ?? this.regionWaves[this.regionWaves.length - 1];
     if (!def) return;
-    const queue: { enemyId: string; at: number }[] = [];
+    const queue: { enemyId: string; at: number; elite?: EliteAffix }[] = [];
     for (const group of def.spawns) {
-      for (let i = 0; i < group.count; i++) queue.push({ enemyId: group.enemyId, at: group.delay + i * group.interval });
+      for (let i = 0; i < group.count; i++) queue.push({ enemyId: group.enemyId, at: group.delay + i * group.interval, elite: i === 0 ? group.elite : undefined });
     }
     queue.sort((a, b) => a.at - b.at);
     this.waveRunner = { def, spawnQueue: queue, elapsed: 0 };
@@ -411,8 +447,8 @@ export class World {
     if (!r) return;
     r.elapsed += rawDt;
     while (r.spawnQueue.length > 0 && (r.spawnQueue[0] as { at: number }).at <= r.elapsed) {
-      const next = r.spawnQueue.shift() as { enemyId: string; at: number };
-      this.spawnEnemy(next.enemyId);
+      const next = r.spawnQueue.shift() as { enemyId: string; at: number; elite?: EliteAffix };
+      this.spawnEnemy(next.enemyId, { elite: next.elite });
     }
   }
 
@@ -433,20 +469,30 @@ export class World {
     this.events.push({ type: "spawn", id: boss.id, kind: "boss", defId: def.id, pos: { ...boss.pos } });
   }
 
-  spawnEnemy(enemyId: string): Combatant {
+  spawnEnemy(enemyId: string, opts: { pos?: Vec2; elite?: EliteAffix | null; minion?: boolean; ownerId?: number } = {}): Combatant {
     const def = enemyDef(enemyId);
     const scale = stageScale(this.stage);
     const fromLeft = this.stage >= 2 && this.rng.chance(0.25);
-    const x = fromLeft ? ARENA.minX - 30 : ARENA.maxX + 30;
-    const y = this.rng.range(ARENA.minY + 10, ARENA.maxY - 10);
+    const x = opts.pos?.x ?? (fromLeft ? ARENA.minX - 30 : ARENA.maxX + 30);
+    const y = opts.pos?.y ?? this.rng.range(ARENA.minY + 10, ARENA.maxY - 10);
     const firstEver = def.essenceSummonId !== undefined && this.stage === 1 && this.wave === 1 && enemyId === "husk" && !this.guaranteedEssenceGiven && this.loadout.summons.length === 0 && !this.loadout.hasSummons;
     if (firstEver) this.guaranteedEssenceGiven = true;
+    const elite = opts.minion ? null : (opts.elite ?? (this.rng.chance(eliteChance(this.stage, this.wave)) ? this.rng.pick(ELITE_IDS) : null));
     const eligibleChance = def.essenceChance * this.loadout.mods.essenceChanceMult;
-    const eligible = def.essenceSummonId !== undefined && (firstEver || this.rng.chance(eligibleChance));
+    // Elites always leave a shadow behind: they are the encounters worth hoping for.
+    const eligible = !opts.minion && def.essenceSummonId !== undefined && (firstEver || elite !== null || this.rng.chance(eligibleChance));
     const e = createEnemy(this.allocId(), def, { x, y }, scale, this.stage, eligible);
-    e.facing = fromLeft ? 1 : -1;
+    if (opts.minion && e.enemy) {
+      e.enemy.minion = true;
+      e.enemy.ownerId = opts.ownerId ?? -1;
+      e.stats.maxHp = Math.round(e.stats.maxHp * 0.6);
+      e.hp = e.stats.maxHp;
+    }
+    if (elite) makeElite(e, elite);
+    e.facing = opts.pos ? (this.player.pos.x >= x ? 1 : -1) : fromLeft ? 1 : -1;
     this.entities.set(e.id, e);
     this.events.push({ type: "spawn", id: e.id, kind: "enemy", defId: def.id, pos: { ...e.pos } });
+    if (elite) this.events.push({ type: "elite_spawn", id: e.id, affix: elite, defId: def.id, pos: { ...e.pos } });
     return e;
   }
 
@@ -673,13 +719,47 @@ export class World {
     if (hasStatus(target, "invuln")) return null;
     let bonus = bonusMult;
     if (hasStatus(target, "mark") && source.faction === "ally") bonus *= 1 + statusValue(target, "mark");
+    if (source.faction === "ally") bonus *= 1 + 0.04 * this.shadeCount();
+    const block = this.blockFactor(target, source.pos.x, heavy);
+    bonus *= block;
     const res = computeDamage(
       { attack: source.stats.attack, power, critChance: source.stats.critChance, critDamage: source.stats.critDamage, targetDefense: target.stats.defense, bonusMultiplier: bonus },
       this.rng,
     );
     this.applyRawDamage(target, res.amount, element, source.id, res.crit, heavy);
     if (source.kind === "player" && res.crit) this.gainEnergy(3);
+    const affix = source.enemy?.elite;
+    if (affix && ELITES[affix].lifesteal > 0 && !source.dead) {
+      const heal = res.amount * ELITES[affix].lifesteal;
+      source.hp = Math.min(source.stats.maxHp, source.hp + heal);
+      this.events.push({ type: "heal", targetId: source.id, amount: Math.round(heal), pos: { ...source.pos } });
+    }
     return res;
+  }
+
+  /**
+   * Shieldbearers (and the player's Bastion) block most damage from the front.
+   * Heavy blows break the guard and leave it open for a few seconds.
+   */
+  blockFactor(target: Combatant, fromX: number, heavy: boolean): number {
+    const shielded = target.enemy?.archetype === "shieldbearer" || target.summon?.role === "sentinel";
+    if (!shielded || target.dead || hasStatus(target, "opening") || target.state === "stagger") return 1;
+    const fromFront = (fromX - target.pos.x) * target.facing > -4;
+    if (!fromFront) return 1;
+    if (heavy && target.faction === "enemy") {
+      addStatus(target, { kind: "opening", remaining: 3.5, value: 0.25, sourceId: -1 });
+      this.setState(target, "stagger", 0.6);
+      this.events.push({ type: "guard_break", id: target.id, pos: { ...target.pos } });
+      return 1.25;
+    }
+    this.events.push({ type: "blocked", id: target.id, pos: { ...target.pos } });
+    return target.faction === "enemy" ? 0.2 : 0.4;
+  }
+
+  shadeCount(): number {
+    let n = 0;
+    for (const e of this.entities.values()) if (e.summon?.temporary && !e.dead) n++;
+    return n;
   }
 
   applyRawDamage(target: Combatant, amount: number, element: Element, sourceId: number, crit: boolean, heavy = false): void {
@@ -725,8 +805,10 @@ export class World {
   private onEnemyKilled(e: Combatant, killerId: number): void {
     const def = enemyDef(e.defId);
     const scale = stageScale(this.stage);
-    const gold = Math.round(def.gold * scale.reward * this.loadout.mods.goldFind * this.rng.range(0.85, 1.15));
-    const xp = Math.round(def.xp * scale.reward);
+    const eliteMult = e.enemy?.elite ? ELITE_REWARD_MULT : 1;
+    const minionMult = e.enemy?.minion ? 0.25 : 1;
+    const gold = Math.round(def.gold * scale.reward * this.loadout.mods.goldFind * this.rng.range(0.85, 1.15) * eliteMult * minionMult * this.modeGoldMult);
+    const xp = Math.round(def.xp * scale.reward * eliteMult * minionMult);
     this.events.push({ type: "gold", amount: gold, pos: { ...e.pos } });
     this.events.push({ type: "xp", amount: xp, pos: { ...e.pos } });
     this.gainEnergy(killerId === this.player.id ? 10 : 4);
@@ -742,13 +824,13 @@ export class World {
       const item = generateItem(this.rng, this.stage, rollRarity(this.rng, this.stage, true));
       this.pendingLoot.push({ item });
       this.events.push({ type: "loot", pos: { ...e.pos } });
-    } else if (this.rng.chance(0.09)) {
+    } else if (this.rng.chance(e.enemy?.elite ? 0.45 : e.enemy?.minion ? 0.02 : 0.09)) {
       const item = generateItem(this.rng, this.stage, rollRarity(this.rng, this.stage, false));
       this.pendingLoot.push({ item });
       this.events.push({ type: "loot", pos: { ...e.pos } });
     }
     if (e.enemy?.eligible && def.essenceSummonId) {
-      const orb: EssenceOrb = { id: this.allocId(), summonId: def.essenceSummonId, enemyDefId: def.id, pos: { ...e.pos }, remaining: isBoss ? 30 : 14, total: isBoss ? 30 : 14, claimed: false, isBoss };
+      const orb: EssenceOrb = { id: this.allocId(), summonId: def.essenceSummonId, enemyDefId: def.id, pos: { ...e.pos }, remaining: isBoss ? 30 : 14, total: isBoss ? 30 : 14, claimed: false, isBoss, elite: !!e.enemy?.elite, attempts: isBoss ? BOSS_ATTEMPTS : 1 };
       this.orbs.push(orb);
       this.events.push({ type: "essence_available", orbId: orb.id, summonId: orb.summonId, pos: { ...orb.pos }, isBoss });
     }
@@ -796,6 +878,8 @@ export class World {
 
   applyKnockback(target: Combatant, from: Vec2, strength: number): void {
     if (target.kind === "boss") strength *= 0.25;
+    if (target.enemy?.elite && ELITES[target.enemy.elite].knockbackImmune) return;
+    if (target.enemy?.archetype === "shieldbearer" && !hasStatus(target, "opening")) strength *= 0.3;
     const dx = target.pos.x - from.x;
     const dy = target.pos.y - from.y;
     const len = Math.hypot(dx, dy) || 1;
@@ -844,6 +928,8 @@ export class World {
         }
       }
     }
+    // Separation can nudge bodies past the edge; the arena bounds always win.
+    for (const e of list) e.pos.y = clamp(e.pos.y, ARENA.minY, ARENA.maxY);
   }
 
   private updateProjectiles(dt: number): void {
@@ -861,7 +947,8 @@ export class World {
           p.hitIds.push(e.id);
           const owner = this.entities.get(p.ownerId);
           if (hasStatus(e, "invuln")) continue;
-          const dmg = Math.max(1, Math.round(p.damage * Math.max(0.15, 30 / (30 + e.stats.defense))));
+          const fromX = p.pos.x - Math.sign(p.vel.x || 1) * 30;
+          const dmg = Math.max(1, Math.round(p.damage * Math.max(0.15, 30 / (30 + e.stats.defense)) * this.blockFactor(e, fromX, false)));
           this.applyRawDamage(e, dmg, p.kind === "ember" ? "fire" : p.kind === "warden_bolt" ? "void" : "physical", owner?.id ?? -1, p.crit, p.kind === "warden_bolt");
           if (p.kind === "ember") addStatus(e, { kind: "burn", remaining: 2.5, value: p.damage * 0.25, sourceId: p.ownerId });
           this.events.push({ type: "projectile_hit", id: p.id, pos: { ...p.pos }, kind: p.kind });
@@ -920,11 +1007,18 @@ export class World {
   }
 
   private cleanup(dt: number): void {
+    for (const e of this.entities.values()) {
+      if (e.summon?.temporary && !e.dead && this.time >= e.summon.expiresAt) this.kill(e, -1);
+    }
     for (const [id, e] of this.entities) {
       if (!e.dead) continue;
       e.deathTime += dt;
       if (e.kind === "player") continue;
       if (e.kind === "summon") {
+        if (e.summon?.temporary) {
+          if (e.deathTime > 0.8) this.entities.delete(id);
+          continue;
+        }
         // Summons return after a short while, weakened but present. Companions are permanent.
         if (e.deathTime > 9) {
           e.dead = false;

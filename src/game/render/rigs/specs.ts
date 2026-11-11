@@ -20,6 +20,11 @@ export function playerSpec(path: WeaponPath): RigSpec {
   return { style: "warrior", weapon: path === "voidfang" ? "twin" : "sword", body: 0xebe5d8, accent, eye: accent, glow: accent, height: 104, cape: true, finish: "ivory" };
 }
 
+/** Elites keep their archetype silhouette but burn with the affix colour. */
+export function eliteSpec(spec: RigSpec, color: number): RigSpec {
+  return { ...spec, eye: color, glow: color, aura: Math.max(spec.aura ?? 0, 30) };
+}
+
 export function enemySpec(defId: string): RigSpec {
   const d = ENEMIES[defId];
   const eye = d?.palette.eye ?? 0xe8c98a;
@@ -32,6 +37,10 @@ export function enemySpec(defId: string): RigSpec {
       return { ...base, style: "archer", weapon: "bow", height: 96, hood: true };
     case "arcanist":
       return { ...base, style: "robed", weapon: "staff", height: 102, hood: true, floating: true };
+    case "shieldbearer":
+      return { ...base, style: "lean", weapon: "tower", height: 100 };
+    case "summoner":
+      return { ...base, style: "robed", weapon: "staff", height: 106, hood: true, floating: true, cape: true };
     case "boss":
       return { ...base, style: "warden", weapon: "greatsword", glow: eye, height: 178, horns: true, cape: true, aura: 46 };
     default:
@@ -54,6 +63,10 @@ export function summonSpec(defId: string): RigSpec {
       return { ...base, style: "robed", weapon: "staff", height: 102, hood: true, floating: true };
     case "sovereign":
       return { ...base, style: "warden", weapon: "greatsword", height: 162, horns: true, cape: true, aura: 40 };
+    case "sentinel":
+      return { ...base, style: "warrior", weapon: "tower", height: 104 };
+    case "caller":
+      return { ...base, style: "robed", weapon: "staff", height: 104, hood: true, floating: true, cape: true };
     default:
       return { ...base, style: "reaper", weapon: defId === "gravewalker" ? "twin" : "dagger", height: defId === "gravewalker" ? 100 : 94, cape: defId === "gravewalker", aura: d?.aura ?? 0 };
   }

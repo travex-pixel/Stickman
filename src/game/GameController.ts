@@ -14,8 +14,10 @@ import { claimQuest as doClaimQuest, currentQuest, isQuestComplete } from "./pro
 import { evaluateAchievements, evaluateJournal } from "./progression/achievements";
 import { computeModifiers } from "./progression/stats";
 import { claimEssence as doClaimEssence, setDeployed, type ClaimOutcome } from "./summons/recruitment";
+import { resolveExtraction } from "./summons/extraction";
 import { bondCost, BOND_CAP, checkEvolution, evolveSummon, grantSummonXp } from "./summons/progression";
 import { enemyDef } from "./data/enemies";
+import { ELITES } from "./data/elites";
 import { stageScale } from "./data/regions";
 import { EQUIPMENT_LEVEL_CAP, equipmentUpgradeCost, salvageValue } from "./economy/loot";
 import { INVENTORY_CAP } from "./data/equipment";
@@ -119,6 +121,7 @@ export class GameController {
   private pageHideHandler = () => void this.save.flush();
   private booted = false;
   private cinematicTimer: ReturnType<typeof setTimeout> | null = null;
+  private seenAffixes = new Set<string>();
 
   constructor() {
     this.loop = new GameLoop(FIXED_DT, (dt) => this.simulate(dt), (alpha, dtReal) => this.render(alpha, dtReal));
@@ -400,6 +403,23 @@ export class GameController {
         case "loot":
           this.sfx("equip", { volume: 0.4 });
           break;
+        case "elite_spawn": {
+          const d = ELITES[e.affix as keyof typeof ELITES];
+          if (!d) break;
+          const name = `${d.name} ${enemyDef(e.defId).name}`;
+          if (!this.seenAffixes.has(e.affix)) {
+            this.seenAffixes.add(e.affix);
+            this.toast(`Elite: ${name}. ${d.blurb}`, "warn");
+          } else this.toast(`Elite: ${name}`, "warn");
+          this.sfx("boss_intro", { volume: 0.35, rate: 1.8, minInterval: 800 });
+          break;
+        }
+        case "guard_break":
+          this.sfx("hit_heavy", { volume: 0.9, rate: 0.7, minInterval: 120 });
+          break;
+        case "blocked":
+          this.sfx("equip", { volume: 0.25, rate: 1.6, minInterval: 160 });
+          break;
         case "ultimate_ready":
           this.sfx("quest", { volume: 0.5, rate: 0.8 });
           this.toast("Ascendant Fury is ready", "level");
@@ -553,26 +573,46 @@ export class GameController {
     this.commit();
   }
 
+  /**
+   * ARISE. Rolls against the chance shown on the button. The very first extraction always
+   * succeeds so every new player gets their first shadow; after that, pity softens bad luck.
+   */
   claimEssence(orbId: number): void {
     this.userGesture();
     const world = this.world;
     if (!world) return;
-    const orb = world.claimEssence(orbId);
-    if (!orb) return;
+    const peek = world.peekOrb(orbId);
+    if (!peek) return;
     const p = this.profile;
     const first = !p.summons.firstSummonSeen;
+    p.summons.totalAttempts += 1;
+    const roll = first ? 0 : this.rng.next();
+    const result = resolveExtraction(p, peek.summonId, roll, { elite: peek.elite, bonus: computeModifiers(p).extractionBonus });
+    if (!result.success) {
+      const left = world.failExtraction(orbId);
+      this.sfx("enemy_death", { volume: 0.8, rate: 0.55 });
+      this.renderer?.playExtractionFail(peek.pos);
+      const pity = p.summons.pity[peek.summonId] ?? 0;
+      this.toast(left > 0 ? `The shadow resists. ${left} attempt${left > 1 ? "s" : ""} left.` : `The shadow resists. +${result.essenceOnFail} essence, next attempt +${Math.round(pity * 12)}%`, "warn");
+      this.afterProgression();
+      this.commit();
+      return;
+    }
+    const orb = world.claimEssence(orbId);
+    if (!orb) return;
     const outcome = doClaimEssence(p, orb.summonId);
     if (outcome.kind === "new") p.summons.firstSummonSeen = true;
+    const big = outcome.kind === "new" && (first || summonDef(orb.summonId).rarity === "legendary" || summonDef(orb.summonId).rarity === "epic");
     const modal: Modal = { kind: "summon_reveal", outcome, summonId: orb.summonId, first: first && outcome.kind === "new", cinematicDone: false };
-    this.sfx(first ? "summon_first" : "summon_claim", { volume: 1 });
-    this.renderer?.playSummonCinematic(orb.summonId, orb.pos, first && outcome.kind === "new");
+    this.sfx(big ? "summon_first" : "summon_claim", { volume: 1 });
+    this.renderer?.playSummonCinematic(orb.summonId, orb.pos, big);
     this.uiStore.update((u) => ({ ...u, modal, newBadges: { ...u.newBadges, summons: true }, selectedSummon: outcome.instance?.instanceId ?? u.selectedSummon }));
     if (this.cinematicTimer) clearTimeout(this.cinematicTimer);
-    const duration = first && outcome.kind === "new" ? 4600 : 1500;
+    // Spectacle scales with significance: first and rare shadows get the full rite, duplicates are quick.
+    const duration = big ? 4600 : outcome.kind === "new" ? 1700 : 1100;
     this.cinematicTimer = setTimeout(() => {
       this.uiStore.update((u) => (u.modal?.kind === "summon_reveal" ? { ...u, modal: { ...u.modal, cinematicDone: true } } : u));
     }, duration);
-    if (outcome.kind === "sigil") this.toast(`Warden Sigil ${outcome.sigils}/3`, "essence");
     if (outcome.kind === "duplicate") this.toast(`+${outcome.essenceGained} Essence, +1 shard`, "essence");
     this.completeTutorialIf("summon");
     this.afterProgression();

@@ -4,7 +4,7 @@ import { darken, lighten } from "../colors";
 import { clamp, easeOutCubic, lerp } from "../../engine/math";
 
 export type BodyStyle = "warrior" | "lean" | "bulky" | "robed" | "archer" | "warden" | "reaper";
-export type WeaponType = "sword" | "greatsword" | "dagger" | "bow" | "staff" | "scythe" | "club" | "mace_shield" | "twin" | "none";
+export type WeaponType = "sword" | "greatsword" | "dagger" | "bow" | "staff" | "scythe" | "club" | "mace_shield" | "twin" | "tower" | "none";
 
 export interface RigSpec {
   style: BodyStyle;
@@ -281,13 +281,23 @@ export class Rig {
         g.moveTo(0, -62 * u).quadraticCurveTo(28 * u, -70 * u, 34 * u, -44 * u).stroke({ width: 1.2 * u, color: accent, alpha: 0.9 });
         this.weaponGlow.moveTo(0, -62 * u).quadraticCurveTo(28 * u, -70 * u, 34 * u, -44 * u).stroke({ width: 6 * u, color: accent, alpha: 0.3 });
         break;
-      case "club":
-        g.rect(-2.5 * u, -40 * u, 5 * u, 44 * u).fill(0x3a2a22);
-        g.roundRect(-8 * u, -56 * u, 16 * u, 22 * u, 4 * u).fill(0x4a332a);
-        g.circle(-5 * u, -50 * u, 1.6 * u).fill(accent);
-        g.circle(4 * u, -42 * u, 1.6 * u).fill(accent);
-        g.circle(1 * u, -37 * u, 1.4 * u).fill(accent);
+      case "club": {
+        // A bone-and-stone maul, in the same ink as its bearer, studded with embers.
+        const wood = lighten(s.body, 0.08);
+        g.rect(-2.5 * u, -40 * u, 5 * u, 44 * u).fill(wood);
+        g.poly([-9 * u, -36 * u, -7 * u, -60 * u, 7 * u, -62 * u, 10 * u, -38 * u]).fill(lighten(s.body, 0.14));
+        for (const [x, y] of [[-5, -54], [4, -47], [0, -41], [6, -57]] as const) g.circle(x * u, y * u, 1.5 * u).fill({ color: s.eye, alpha: 0.9 });
         break;
+      }
+      case "tower": {
+        // A door-sized shield carried on the front arm: the silhouette says "hit me from behind".
+        const sh = lighten(s.body, s.finish === "ink" ? 0.1 : 0.08);
+        g.roundRect(-4 * u, -34 * u, 15 * u, 44 * u, 3 * u).fill(sh);
+        g.rect(1 * u, -30 * u, 2 * u, 36 * u).fill({ color: s.eye, alpha: 0.35 });
+        g.circle(4 * u, -12 * u, 2.6 * u).fill({ color: s.eye, alpha: 0.8 });
+        this.weaponGlow.roundRect(-6 * u, -36 * u, 19 * u, 48 * u, 4 * u).fill({ color: s.glow ?? s.eye, alpha: 0.25 });
+        break;
+      }
       case "mace_shield": {
         // Flanged mace: a haft and a ring of blades, readable as a silhouette.
         g.rect(-2 * u, -40 * u, 4 * u, 44 * u).fill(steelDark);

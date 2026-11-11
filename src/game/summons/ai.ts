@@ -36,7 +36,7 @@ export function updateSummonAi(world: World, s: Combatant, dt: number): void {
 
   const player = world.player;
   const engageRadius = sum.command === "aggressive" ? Infinity : sum.command === "guard" ? 150 : 200;
-  const anchor = sum.command === "guard" ? guardAnchor(world, s) : player.pos;
+  const anchor = sum.command === "guard" || sum.role === "sentinel" ? guardAnchor(world, s) : player.pos;
 
   let target: Combatant | null = null;
   const enemiesNearAnchor = hostilesWithin({ pos: anchor, faction: "ally" }, world.entities.values(), engageRadius);
@@ -71,7 +71,7 @@ export function updateSummonAi(world: World, s: Combatant, dt: number): void {
   }
 
   const d = dist(s.pos, target.pos);
-  const isRanged = sum.role === "ranger" || sum.role === "arcanist";
+  const isRanged = sum.role === "ranger" || sum.role === "arcanist" || sum.role === "caller";
   if (isRanged) {
     const preferred = s.stats.range * 0.75;
     if (d < preferred * 0.45) {
@@ -92,6 +92,8 @@ export function updateSummonAi(world: World, s: Combatant, dt: number): void {
         if (sum.role === "ranger") {
           const p = world.spawnProjectile(s, { x: t.pos.x, y: t.pos.y }, 640, "arrow", 1);
           p.pierce = s.defId === "veilshot" ? 0 : 1;
+        } else if (sum.role === "caller") {
+          world.spawnProjectile(s, { x: t.pos.x, y: t.pos.y }, 420, "shard", 0.9);
         } else {
           world.spawnProjectile(s, { x: t.pos.x, y: t.pos.y }, 330, "ember", 1, 1);
         }
@@ -171,6 +173,27 @@ function tryActive(world: World, s: Combatant, target: Combatant, nearby: Combat
       world.addTelegraph(target.pos, 60, 0.5, "circle", 1, 0, 0xff9b3d);
       world.addHazard({ ...target.pos }, 60, 5, s.stats.attack * 0.8, "ally", s.id, "fire");
       world.events.push({ type: "summon_ability", id: s.id, defId: s.defId, ability: "Cinder Bloom", pos: { ...target.pos } });
+      world.setState(s, "cast", 0.6);
+      return true;
+    }
+    case "bastion": {
+      const p = world.player;
+      const threatened = hostilesWithin(p, world.entities.values(), 140).length;
+      if (threatened < 1 && p.hp / p.stats.maxHp > 0.6) return false;
+      addStatus(p, { kind: "shield", remaining: 6, value: Math.round(p.stats.maxHp * 0.18), sourceId: s.id });
+      for (const e of hostilesWithin(s, world.entities.values(), 120)) addStatus(e, { kind: "slow", remaining: 2.5, value: 0.35, sourceId: s.id });
+      world.events.push({ type: "summon_ability", id: s.id, defId: s.defId, ability: "Aegis", pos: { ...s.pos } });
+      world.events.push({ type: "shield", id: p.id, pos: { ...p.pos } });
+      world.setState(s, "cast", 0.45);
+      return true;
+    }
+    case "rift_caller": {
+      const lifetime = 9;
+      for (const dy of [-26, 26]) {
+        const pos = { x: Math.max(ARENA.minX, Math.min(ARENA.maxX, s.pos.x + s.facing * 30)), y: clamp(s.pos.y + dy, ARENA.minY, ARENA.maxY) };
+        world.spawnShade(s, pos, lifetime);
+      }
+      world.events.push({ type: "summon_ability", id: s.id, defId: s.defId, ability: "Muster", pos: { ...s.pos } });
       world.setState(s, "cast", 0.6);
       return true;
     }

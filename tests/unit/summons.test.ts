@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { createDefaultProfile } from "@/game/progression/profile";
 import { claimEssence, canDeploy, deployedSummons, setDeployed } from "@/game/summons/recruitment";
 import { bondCost, checkEvolution, evolveSummon, grantSummonXp, summonStats } from "@/game/summons/progression";
-import { WARDEN_SIGILS_REQUIRED } from "@/game/data/summons";
 import { buildLoadout } from "@/game/progression/loadout";
 
 describe("recruitment", () => {
@@ -17,17 +16,19 @@ describe("recruitment", () => {
     expect(p.player.essence).toBe(15);
     expect(p.summons.totalClaimed).toBe(2);
   });
-  it("the Warden requires three sigils", () => {
+  it("the Warden is recruited like any other shadow once extraction succeeds", () => {
     const p = createDefaultProfile();
-    for (let i = 1; i < WARDEN_SIGILS_REQUIRED; i++) {
-      const r = claimEssence(p, "hollow_warden");
-      expect(r.kind).toBe("sigil");
-      expect(r.sigils).toBe(i);
-    }
-    const final = claimEssence(p, "hollow_warden");
-    expect(final.kind).toBe("new");
-    expect(final.recruitedWarden).toBe(true);
+    const r = claimEssence(p, "hollow_warden");
+    expect(r.kind).toBe("new");
     expect(p.summons.collection.some((s) => s.defId === "hollow_warden")).toBe(true);
+  });
+  it("a duplicate of an evolved species feeds the evolved instance", () => {
+    const p = createDefaultProfile();
+    claimEssence(p, "husk_blade");
+    p.summons.collection[0]!.defId = "gravewalker";
+    const r = claimEssence(p, "husk_blade");
+    expect(r.kind).toBe("duplicate");
+    expect(p.summons.collection).toHaveLength(1);
   });
 });
 
