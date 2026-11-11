@@ -13,9 +13,10 @@ describe.skipIf(!run)("economy simulator", () => {
     const out: string[] = [];
     for (const seed of seeds) {
       const t0 = Date.now();
-      const sim = new Sim({ seed, maxMinutes: Number(process.env.MAXMIN ?? 300), bind: process.env.BIND !== "0", pushAfterCycles: 2, winsNeeded: 2, wallMinutes: Number(process.env.WALL ?? 60), stopAfterGate: Number(process.env.STOPGATE ?? 45), trials: true });
+      const sim = new Sim({ seed, maxMinutes: Number(process.env.MAXMIN ?? 300), bind: process.env.BIND !== "0", pushAfterCycles: 2, winsNeeded: 2, wallMinutes: Number(process.env.WALL ?? 60), stopAfterGate: Number(process.env.STOPGATE ?? 45), trials: true, ascendAfterWaitMin: process.env.ASCEND_AFTER ? Number(process.env.ASCEND_AFTER) : undefined });
       sim.run();
       out.push(`=== seed ${seed} (${((Date.now() - t0) / 1000).toFixed(0)}s wall) end ${sim.min.toFixed(1)}m lvl ${sim.p.player.level} best ${sim.p.progress.bestStage} cores ${sim.p.player.riftCores} stats ${JSON.stringify(sim.p.player.statLevels)}`);
+      for (const a of sim.ascensions) out.push(`ascension at ${a.min.toFixed(1)}m from stage ${a.from}: aether ${a.total}`);
       for (const g of sim.gates) out.push(fmtGate(g).replace(/forecasts.*/, ""));
     }
     console.log(out.join("\n"));

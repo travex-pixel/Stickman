@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Icon } from "@/components/ui/Icon";
 import { SummonPortrait } from "@/components/ui/Portrait";
@@ -17,6 +17,7 @@ import { fmt, fmtDuration } from "@/lib/format";
 import { bossForStage } from "@/game/data/regions";
 import { affordableUpgrades } from "@/game/progression/readiness";
 import { nextMilestone } from "@/game/progression/milestones";
+import { AETHER_GOLD, AETHER_POWER, ASCEND_MIN_STAGE, aetherFor, canAscend, romanAscension } from "@/game/progression/ascension";
 import { DAILY_BONUS, objectiveDef, objectivePayout } from "@/game/progression/objectives";
 import { cn } from "@/lib/cn";
 import { SettingsModal } from "@/components/settings/SettingsModal";
@@ -55,6 +56,8 @@ function ModalBody({ modal }: { modal: Modal }) {
       return <Journal />;
     case "objectives":
       return <Objectives />;
+    case "ascend":
+      return <AscendSheet />;
     case "rank_up":
       return <RankUp modal={modal} />;
     case "technique":
@@ -515,5 +518,97 @@ function Objectives() {
         </button>
       </div>
     </Card>
+  );
+}
+
+function AscendSheet() {
+  const c = useController();
+  const profile = useProfileRef();
+  const a = profile.ascension;
+  const can = canAscend(profile);
+  const gain = aetherFor(profile.progress.bestStage);
+  const after = a.aether + gain;
+  const pct = (n: number) => Math.round(n * AETHER_POWER * 100);
+  return (
+    <Card>
+      <div className="px-4 pt-4 pb-3 flex flex-col gap-2" data-testid="ascend-sheet">
+        <div className="text-center">
+          <div className="caps text-gold-2">{a.count > 0 ? `Ascension ${romanAscension(a.count)}` : "Ascension"}</div>
+          <div className="font-display text-[20px] text-ivory leading-tight">Begin the climb anew</div>
+          <p className="text-[11px] text-mist leading-snug mt-1">The Rift lets the worthy start again, stronger. Each point of Aether is +{Math.round(AETHER_POWER * 100)}% Attack and Health and +{Math.round(AETHER_GOLD * 100)}% gold, forever.</p>
+        </div>
+        <div className="grid grid-cols-3 gap-1 text-center">
+          {[
+            ["Aether now", `${a.aether}`],
+            ["This ascension", can ? `+${gain}` : "–"],
+            ["Power after", `+${pct(can ? after : a.aether)}%`],
+          ].map(([k, v]) => (
+            <div key={k} className="rounded-md bg-white/[0.04] border border-white/8 py-1.5 leading-none">
+              <div className="text-[9px] uppercase tracking-[0.1em] text-mist">{k}</div>
+              <div className="text-[15px] font-bold text-gold-2 mt-1 tabular-nums">{v}</div>
+            </div>
+          ))}
+        </div>
+        <div className="grid grid-cols-2 gap-2 text-[11px] leading-snug">
+          <div className="rounded-md border border-crimson/40 bg-crimson/5 px-2 py-1.5">
+            <div className="caps !text-[9px] !text-crimson-2 mb-0.5">Starts over</div>
+            <div className="text-parch">Campaign stage, gold, stat levels</div>
+          </div>
+          <div className="rounded-md border border-jade/40 bg-jade/5 px-2 py-1.5">
+            <div className="caps !text-[9px] !text-jade-2 mb-0.5">You keep</div>
+            <div className="text-parch">Shadows, gear, level, skills, techniques, perks, rank, Codex</div>
+          </div>
+        </div>
+        {!can && <p className="text-[11px] text-mist text-center">Reach stage {ASCEND_MIN_STAGE} to ascend. Deeper stages grant more Aether.</p>}
+        <div className="flex gap-2 mt-1">
+          <button className="btn-ghost flex-1 !py-2" onClick={() => c.closeModal()} data-testid="ascend-later">
+            Not yet
+          </button>
+          <HoldConfirm disabled={!can} onConfirm={() => c.confirmAscend()} label={`Hold to ascend (+${gain})`} />
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+/** A deliberate action: hold for a moment to confirm, release to cancel. */
+function HoldConfirm({ disabled, onConfirm, label }: { disabled: boolean; onConfirm: () => void; label: string }) {
+  const [t0, setT0] = useState<number | null>(null);
+  const [progress, setProgress] = useState(0);
+  const HOLD_MS = 900;
+  useEffect(() => {
+    if (t0 === null) return;
+    let raf = 0;
+    const tick = () => {
+      const p = Math.min(1, (performance.now() - t0) / HOLD_MS);
+      setProgress(p);
+      if (p >= 1) {
+        setT0(null);
+        setProgress(0);
+        onConfirm();
+        return;
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [t0, onConfirm]);
+  const stop = () => {
+    setT0(null);
+    setProgress(0);
+  };
+  return (
+    <button
+      className="btn-primary flex-[1.4] !py-2 relative overflow-hidden"
+      disabled={disabled}
+      onPointerDown={() => !disabled && setT0(performance.now())}
+      onPointerUp={stop}
+      onPointerLeave={stop}
+      onPointerCancel={stop}
+      data-testid="ascend-confirm"
+    >
+      <span className="absolute inset-y-0 left-0 bg-white/30" style={{ width: `${progress * 100}%` }} />
+      <span className="relative">{label}</span>
+    </button>
   );
 }

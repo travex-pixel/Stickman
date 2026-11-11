@@ -128,3 +128,26 @@ test.describe("robustness", () => {
     await expect(page.getByTestId("upgrade-attack")).toBeVisible();
   });
 });
+
+test.describe("ascension", () => {
+  test("holding Ascend restarts the climb for Aether and keeps the army", async ({ page }) => {
+    await waitForGame(page);
+    await game(page, "c => { const p = c.profile; p.tutorial.finished = true; p.progress.bestStage = 24; p.progress.currentStage = 25; p.player.gold = 5000; p.player.statLevels.attack = 60; c['commit'](); }");
+    await page.getByTestId("tab-hero").click();
+    await page.getByTestId("ascend-badge").click();
+    await expect(page.getByTestId("ascend-sheet")).toBeVisible();
+    // A tap is not enough: ascending needs a deliberate hold.
+    await page.getByTestId("ascend-confirm").click();
+    expect(await game<number>(page, "c => c.profile.ascension.count")).toBe(0);
+    const box = (await page.getByTestId("ascend-confirm").boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.waitForTimeout(1400);
+    await page.mouse.up();
+    await expect.poll(() => game<number>(page, "c => c.profile.ascension.count")).toBe(1);
+    expect(await game<number>(page, "c => c.profile.ascension.aether")).toBeGreaterThan(0);
+    expect(await game<number>(page, "c => c.profile.progress.bestStage")).toBe(0);
+    expect(await game<number>(page, "c => c.profile.player.statLevels.attack")).toBe(1);
+    expect(await game<number>(page, "c => c.world.stage")).toBe(1);
+  });
+});

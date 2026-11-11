@@ -24,6 +24,7 @@ import { REPEAT_BOSS_CORE_CHANCE, shadowXpShare, skillPointsBetween } from "@/ga
 import { resolveBossDefeat, resolveBossVictory, resolveCycle, resolveFarmingDefeat, clampFarmStage } from "@/game/progression/campaign";
 import { forecastBoss } from "@/game/progression/readiness";
 import { learnTechniques } from "@/game/progression/techniques";
+import { ascend, canAscend } from "@/game/progression/ascension";
 
 const SKILL_ORDER = ["c1", "p1", "s1", "c2", "p2", "s2", "c3", "p3", "c4", "s3", "p4", "s4", "c5", "p5", "s5"];
 
@@ -75,6 +76,8 @@ export interface SimOpts {
   wallMinutes: number;
   /** Stop after this gate is won. */
   stopAfterGate?: number;
+  /** Ascend when stuck at a gate this many minutes (and ascension is open). */
+  ascendAfterWaitMin?: number;
   /** Do rank trials when available. */
   trials: boolean;
   log?: boolean;
@@ -97,6 +100,7 @@ export class Sim {
   timeline: { min: number; stage: number; gold: number; c: Counters }[] = [];
   nextTl = 0;
 
+  ascensions: { min: number; from: number; total: number }[] = [];
   constructor(public o: SimOpts, profile?: Profile) {
     this.p = profile ?? createDefaultProfile(0);
     this.p.player.autoCast = true;
@@ -480,6 +484,16 @@ export class Sim {
                 this.lastForecastSig = "";
                 continue;
               }
+            }
+          }
+          if (o.ascendAfterWaitMin !== undefined && this.min - gateRec.reachMin > o.ascendAfterWaitMin && canAscend(p)) {
+            const r = ascend(p);
+            if (r) {
+              this.log(`ASCENSION ${r.count} from stage ${r.fromStage}: +${r.gained} aether (total ${r.total})`);
+              this.ascensions.push({ min: this.min, from: r.fromStage, total: r.total });
+              gateRec = null;
+              this.startFarm(1);
+              continue;
             }
           }
           if (this.min - gateRec.reachMin > o.wallMinutes) {

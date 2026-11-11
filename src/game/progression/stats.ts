@@ -7,6 +7,7 @@ import { codexBonus } from "../summons/extraction";
 import { TECHNIQUE_OWNED_ATTACK } from "../data/abilities";
 import type { GearEffectId } from "../data/gearEffects";
 import { GEAR_SETS, setCounts } from "../data/gearSets";
+import { aetherGoldMult, aetherPowerMult } from "./ascension";
 
 /** Each Ascendant rank multiplies core stats. Rank is earned in Rank Trials, not bought. */
 export const RANK_STAT_STEP = 0.08;
@@ -217,6 +218,7 @@ export function computeModifiers(profile: Profile): PlayerModifiers {
     m.extractionBonus += 0.05;
   }
   if (m.gearEffects.has("tempest")) m.cooldownMult *= 0.85;
+  m.goldFind *= aetherGoldMult(profile);
   if (profile.player.rank >= 2) m.deploySlots += 1;
   if (profile.player.rank >= 5) m.deploySlots += 1;
   return m;
@@ -246,6 +248,10 @@ export function computePlayerStats(profile: Profile): CombatStats {
   s.defense += STAT_UPGRADE_STEP.defense * (lv.defense - 1);
   s.attack *= milestoneMult(lv.attack);
   s.maxHp *= milestoneMult(lv.maxHp);
+  // Aether from past ascensions: permanent, compounding with everything else.
+  const aether = aetherPowerMult(profile);
+  s.attack *= aether;
+  s.maxHp *= aether;
 
   // Warrior level: steady compounding power.
   const levelMult = 1 + (profile.player.level - 1) * 0.045;

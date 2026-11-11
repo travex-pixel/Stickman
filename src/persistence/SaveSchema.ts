@@ -151,6 +151,10 @@ export function sanitizeProfile(raw: unknown): { profile: Profile; repaired: boo
       bossLosses: num(pr.bossLosses, 0),
     },
     objectives: sanitizeObjectives(raw.objectives),
+    ascension: (() => {
+      const a = isObj(raw.ascension) ? raw.ascension : {};
+      return { count: num(a.count, 0, 0, 9999), aether: num(a.aether, 0, 0, 1e7), bestEver: num(a.bestEver, 0, 0, 9999) };
+    })(),
     modes: {
       keyDay: isStr(md.keyDay) ? md.keyDay : "",
       keys: { vault: num(mk.vault, 3, 0, 3), rift: num(mk.rift, 3, 0, 3), crypt: num(mk.crypt, 3, 0, 3) },

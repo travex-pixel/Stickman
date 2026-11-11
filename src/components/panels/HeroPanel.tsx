@@ -5,6 +5,7 @@ import { HoldButton } from "@/components/ui/HoldButton";
 import { useController, useProfileRef } from "@/hooks/useGame";
 import type { UpgradeableStat } from "@/game/data/ids";
 import { STAT_LABEL } from "@/game/data/equipment";
+import { aetherFor, canAscend, romanAscension } from "@/game/progression/ascension";
 
 /** Card titles are narrow on phones: short names that never truncate. */
 const SHORT_LABEL: Partial<Record<string, string>> = { attackSpeed: "Atk Speed", critChance: "Crit Rate", critDamage: "Crit Dmg" };
@@ -37,7 +38,10 @@ export default function HeroPanel() {
           <span className="font-display text-[12px] tracking-[0.2em] text-mist">POWER</span>
           <span className="font-display text-[18px] text-gold-2 text-glow-gold tabular-nums" data-testid="combat-power">{fmt(power)}</span>
         </div>
-        <RankBadge />
+        <div className="flex items-center gap-1.5">
+          <AscendBadge />
+          <RankBadge />
+        </div>
       </div>
       <div className="grid grid-cols-2 grid-rows-3 gap-1.5 flex-1 min-h-0">
         {STATS.map((s) => (
@@ -128,6 +132,27 @@ function RankBadge() {
         <span className="block caps !text-[10px]">Rank</span>
         <span className={cn("block font-semibold", ready ? "text-gold-2" : "text-mist")}>{step ? (ready ? "Trial ready" : `Trial at Lv ${step.level}`) : "Apex"}</span>
       </span>
+    </button>
+  );
+}
+
+/** Ascension: shown once it is available (or has been used), with what an ascension would grant. */
+function AscendBadge() {
+  const c = useController();
+  const profile = useProfileRef();
+  const can = canAscend(profile);
+  const a = profile.ascension;
+  if (!can && a.count === 0) return null;
+  const gain = aetherFor(profile.progress.bestStage);
+  return (
+    <button
+      className={cn("h-[34px] flex flex-col items-center justify-center rounded-lg border px-2 leading-none", can ? "border-gold/70 bg-gold/10" : "border-white/10 bg-black/20")}
+      onClick={() => c.openAscension()}
+      data-testid="ascend-badge"
+      aria-label={can ? `Ascend for ${gain} Aether` : `Aether ${a.aether}`}
+    >
+      <span className="caps !text-[9px] text-gold-2">{a.count > 0 ? `Ascension ${romanAscension(a.count)}` : "Ascend"}</span>
+      <span className="text-[11px] font-bold text-ivory tabular-nums mt-0.5">{can ? `+${gain} ✦` : `${a.aether} ✦`}</span>
     </button>
   );
 }

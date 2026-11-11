@@ -44,6 +44,7 @@ import { ABILITIES } from "./data/abilities";
 import { bossForStage, regionForStage } from "./data/regions";
 import { clampFarmStage, frontierStage, normalizeCampaign, resolveBossDefeat, resolveBossVictory, resolveCycle, resolveFarmingDefeat } from "./progression/campaign";
 import { bossFightStepper, readinessTips, summarizeForecast, FORECAST_SEEDS, type BossForecast, type FightResult, type ReadinessTip } from "./progression/readiness";
+import { ascend as doAscend, romanAscension } from "./progression/ascension";
 import { claimObjective as doClaimObjective, objectiveDef, recordObjective, refreshObjectives, type ObjectiveCounter } from "./progression/objectives";
 import { fmt } from "@/lib/format";
 
@@ -79,6 +80,7 @@ export type Modal =
   | { kind: "weapon_path" }
   | { kind: "journal" }
   | { kind: "objectives" }
+  | { kind: "ascend" }
   | { kind: "boss_intro"; defId: string }
   | { kind: "technique"; id: AbilityId }
   | { kind: "mode_result"; mode: ModeId; title: string; subtitle: string; lines: { label: string; value: string; tone?: "gold" | "jade" | "violet" }[]; success: boolean; record?: boolean; items?: EquipmentItem[] }
@@ -1706,6 +1708,41 @@ export class GameController {
   openSettings(): void {
     this.userGesture();
     this.uiStore.update((u) => ({ ...u, modal: { kind: "settings" } }));
+  }
+
+  openAscension(): void {
+    this.userGesture();
+    this.uiStore.update((u) => ({ ...u, modal: { kind: "ascend" } }));
+  }
+
+  /**
+   * Ascend: the climb starts over for permanent Aether. Only from farming, never mid-fight or
+   * while the warrior is down. Saved at once.
+   */
+  confirmAscend(): boolean {
+    this.userGesture();
+    const world = this.world;
+    if (!world?.farming || world.player.dead || this.pending) {
+      this.toast("Ascend from the campaign, between fights", "warn");
+      return false;
+    }
+    const res = doAscend(this.profile);
+    if (!res) {
+      this.sfx("error", { volume: 0.3 });
+      return false;
+    }
+    this.forecast = null;
+    this.forecastStore.set(null);
+    this.closeModal();
+    this.startRun(1, "campaign");
+    this.sfx("summon_first", { volume: 0.9, rate: 0.9 });
+    this.renderer?.flash(0xe9c97a, 0.55);
+    this.renderer?.levelUpBurst();
+    this.toast(`Ascension ${romanAscension(res.count)}: +${res.gained} Aether. Your power carries into every climb.`, "level");
+    this.refreshLoadout();
+    this.commit();
+    void this.save.flush();
+    return true;
   }
 
   openObjectives(): void {

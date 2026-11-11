@@ -90,6 +90,15 @@ export const MIGRATIONS: Migration[] = [
       };
     },
   },
+  {
+    // Ascension: restart the climb for permanent Aether.
+    from: 9,
+    to: 10,
+    migrate: (raw) => {
+      const progress = (raw.progress as Record<string, unknown> | undefined) ?? {};
+      return { ...raw, version: 10, ascension: { count: 0, aether: 0, bestEver: typeof progress.bestStage === "number" ? progress.bestStage : 0 } };
+    },
+  },
 ];
 
 export function runMigrations(raw: Record<string, unknown>, targetVersion: number): { raw: Record<string, unknown>; migrated: boolean } {
