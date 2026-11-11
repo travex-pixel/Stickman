@@ -35,7 +35,7 @@ export interface SummonDef {
   passive: SummonAbilityDef;
   evolution?: SummonEvolutionDef;
   evolvedFrom?: string;
-  /** Shadow Codex: a permanent bonus for ever having owned this shadow, deployed or not. */
+  /** Oath Codex: a permanent bonus for ever having owned this shadow, deployed or not. */
   owned: { stat: "attack" | "maxHp" | "defense" | "critChance" | "critDamage" | "attackSpeed"; pct: number };
   /** Hidden shadows (temporary minions) never appear in the collection. */
   hidden?: boolean;
@@ -58,7 +58,7 @@ export const SUMMONS: Record<string, SummonDef> = {
     active: { name: "Culling Step", description: "Dashes to an enemy below 30% health and strikes for 250% damage.", cooldown: 6 },
     passive: { name: "Fast Hands", description: "Attack speed increases by 20% while fighting the same target.", cooldown: 0 },
     evolution: { toId: "gravewalker", requiredLevel: 8, requiredStars: 2, requiredRiftCores: 1 },
-    palette: { body: 0x1f2538, accent: 0x9fd9ff, eye: 0x4ee6ff, glow: 0x4ee6ff },
+    palette: { body: 0x4a5160, accent: 0xd9b26a, eye: 0xf0d9a8, glow: 0xe9c97a },
     scale: 0.92,
     aura: 0,
     owned: { stat: "attack", pct: 0.04 },
@@ -75,7 +75,7 @@ export const SUMMONS: Record<string, SummonDef> = {
     active: { name: "Death Mark", description: "Dashes through an enemy below 40% health for 350% damage. If it kills, the cooldown resets.", cooldown: 5 },
     passive: { name: "Twin Blades", description: "Every third strike hits twice.", cooldown: 0 },
     evolvedFrom: "husk_blade",
-    palette: { body: 0x1c1626, accent: 0xff4d6d, eye: 0xff2a4d, glow: 0xff2a4d },
+    palette: { body: 0x4a5160, accent: 0xd9b26a, eye: 0xf0d9a8, glow: 0xe9c97a },
     scale: 1.0,
     aura: 26,
     owned: { stat: "critDamage", pct: 0.12 },
@@ -91,7 +91,7 @@ export const SUMMONS: Record<string, SummonDef> = {
     growth: 0.12,
     active: { name: "Ember Taunt", description: "Forces nearby enemies to attack it and gains a shield for 30% of its max health.", cooldown: 9 },
     passive: { name: "Bulwark", description: "Enemies that strike it are slowed by 25% for 2 seconds.", cooldown: 0 },
-    palette: { body: 0x3a2622, accent: 0xff7a3d, eye: 0xffb347, glow: 0xff7a3d },
+    palette: { body: 0x4a5160, accent: 0xd9b26a, eye: 0xf0d9a8, glow: 0xe9c97a },
     scale: 1.3,
     aura: 0,
     owned: { stat: "maxHp", pct: 0.06 },
@@ -107,7 +107,7 @@ export const SUMMONS: Record<string, SummonDef> = {
     growth: 0.11,
     active: { name: "Piercing Mark", description: "Marks the most dangerous enemy. Marked enemies take 20% more damage and attract Thunder Strike chains.", cooldown: 8 },
     passive: { name: "Keen Eye", description: "Critical chance increased by 15%.", cooldown: 0 },
-    palette: { body: 0x262a48, accent: 0xb48cff, eye: 0xc89bff, glow: 0x9b6bff },
+    palette: { body: 0x4a5160, accent: 0xd9b26a, eye: 0xf0d9a8, glow: 0xe9c97a },
     scale: 0.95,
     aura: 0,
     owned: { stat: "critChance", pct: 0.02 },
@@ -123,7 +123,7 @@ export const SUMMONS: Record<string, SummonDef> = {
     growth: 0.12,
     active: { name: "Cinder Bloom", description: "Ignites the ground beneath a group of enemies, burning them for 5 seconds.", cooldown: 10 },
     passive: { name: "Low Flame", description: "Basic attacks splash to enemies near the target for 40% damage.", cooldown: 0 },
-    palette: { body: 0x332039, accent: 0xff9b3d, eye: 0xffe08a, glow: 0xff7a3d },
+    palette: { body: 0x4a5160, accent: 0xd9b26a, eye: 0xf0d9a8, glow: 0xe9c97a },
     scale: 1.0,
     aura: 0,
     owned: { stat: "attack", pct: 0.06 },
@@ -139,7 +139,7 @@ export const SUMMONS: Record<string, SummonDef> = {
     growth: 0.14,
     active: { name: "Rift Verdict", description: "Slams the ground, dealing 300% damage in a wide arc and knocking enemies away.", cooldown: 12 },
     passive: { name: "Warden's Presence", description: "Deployed allies take 15% less damage.", cooldown: 0 },
-    palette: { body: 0x1d2446, accent: 0x3a8fff, eye: 0x7cf6ff, glow: 0x3a8fff },
+    palette: { body: 0x4a5160, accent: 0xd9b26a, eye: 0xf0d9a8, glow: 0xe9c97a },
     scale: 1.7,
     aura: 40,
     owned: { stat: "attack", pct: 0.1 },
@@ -155,7 +155,7 @@ export const SUMMONS: Record<string, SummonDef> = {
     growth: 0.12,
     active: { name: "Aegis", description: "Shields the warrior for 18% of their max health and slows nearby enemies.", cooldown: 11 },
     passive: { name: "Shield Wall", description: "Blocks 60% of damage from the front.", cooldown: 0 },
-    palette: { body: 0x23234a, accent: 0x8f7cff, eye: 0xc2b6ff, glow: 0x8f7cff },
+    palette: { body: 0x4a5160, accent: 0xd9b26a, eye: 0xf0d9a8, glow: 0xe9c97a },
     scale: 1.05,
     aura: 0,
     owned: { stat: "defense", pct: 0.1 },
@@ -171,7 +171,7 @@ export const SUMMONS: Record<string, SummonDef> = {
     growth: 0.12,
     active: { name: "Muster", description: "Calls two shades that fight for 9 seconds. Shades grow with the Caller's level.", cooldown: 10 },
     passive: { name: "Chorus", description: "Each living shade grants allies 4% attack.", cooldown: 0 },
-    palette: { body: 0x23234a, accent: 0x8f7cff, eye: 0xc2b6ff, glow: 0x8f7cff },
+    palette: { body: 0x4a5160, accent: 0xd9b26a, eye: 0xf0d9a8, glow: 0xe9c97a },
     scale: 1.0,
     aura: 0,
     owned: { stat: "attack", pct: 0.05 },
@@ -187,7 +187,7 @@ export const SUMMONS: Record<string, SummonDef> = {
     growth: 0.1,
     active: { name: "-", description: "-", cooldown: 99 },
     passive: { name: "-", description: "-", cooldown: 0 },
-    palette: { body: 0x23234a, accent: 0x8f7cff, eye: 0xc2b6ff, glow: 0x8f7cff },
+    palette: { body: 0x4a5160, accent: 0xd9b26a, eye: 0xf0d9a8, glow: 0xe9c97a },
     scale: 0.85,
     aura: 0,
     owned: { stat: "attack", pct: 0 },
@@ -211,7 +211,7 @@ export const ROLE_INFO: Record<SummonRole, { label: string; blurb: string }> = {
   sovereign: { label: "Sovereign", blurb: "A rare power that bends the field." },
 };
 
-/** @deprecated Sigils were replaced by ARISE extraction with pity. Kept so old saves load. */
+/** @deprecated Sigils were replaced by BIND extraction with pity. Kept so old saves load. */
 export const WARDEN_SIGILS_REQUIRED = 3;
 
 export function collectibleSummons(): SummonDef[] {

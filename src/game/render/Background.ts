@@ -1,4 +1,4 @@
-import { Container, Sprite, Texture } from "pixi.js";
+import { Container, Graphics, Sprite, Texture } from "pixi.js";
 import type { RegionDef } from "../data/regions";
 import { softCircle } from "./textures";
 
@@ -137,17 +137,6 @@ function paintSky(sc: Scene, w: number, h: number, groundTop: number, seed: numb
     const y = groundTop * (0.1 + r() * 0.65);
     blob(ctx, r() * w, y, w * (0.3 + r() * 0.4), groundTop * (0.05 + r() * 0.08), i % 2 ? "rgba(255,245,225,0.10)" : "rgba(20,24,32,0.10)");
   }
-  // The Rift: a hairline fracture, quiet and cold.
-  const rx = w * 0.64;
-  ctx.strokeStyle = "rgba(220, 235, 245, 0.35)";
-  ctx.lineWidth = 1.2;
-  ctx.beginPath();
-  ctx.moveTo(rx, 0);
-  ctx.lineTo(rx - w * 0.025, groundTop * 0.22);
-  ctx.lineTo(rx + w * 0.012, groundTop * 0.38);
-  ctx.lineTo(rx - w * 0.008, groundTop * 0.5);
-  ctx.stroke();
-  blob(ctx, rx - w * 0.01, groundTop * 0.25, w * 0.05, groundTop * 0.25, "rgba(200, 225, 240, 0.10)");
   grain(ctx, w, groundTop, r, 0.05);
   return c;
 }
@@ -254,12 +243,14 @@ function paintGround(sc: Scene, w: number, h: number, groundTop: number, seed: n
   ctx.fillStyle = g;
   ctx.fillRect(0, groundTop, w, h - groundTop);
   // Soft horizon haze line where ground meets sky.
-  const haze = ctx.createLinearGradient(0, groundTop - 8, 0, groundTop + 26);
+  // A feathered haze where ground meets sky, rather than a hard band.
+  const haze = ctx.createLinearGradient(0, groundTop - 30, 0, groundTop + 60);
   haze.addColorStop(0, sc.horizon + "00");
-  haze.addColorStop(0.4, sc.horizon + "99");
+  haze.addColorStop(0.35, sc.horizon + "88");
+  haze.addColorStop(0.55, sc.horizon + "55");
   haze.addColorStop(1, sc.horizon + "00");
   ctx.fillStyle = haze;
-  ctx.fillRect(0, groundTop - 8, w, 34);
+  ctx.fillRect(0, groundTop - 30, w, 90);
   // Pigment pooling: the uneven blooms of a wet wash drying.
   for (let i = 0; i < 26; i++) {
     const y = groundTop + r() * (h - groundTop);
@@ -357,6 +348,9 @@ export class Background {
   private mid = new Sprite();
   private ground = new Sprite();
   private vignette = new Sprite();
+  /** The Rift: the game's signature mark, a gold fissure in the sky that breathes slowly. */
+  private fissure = new Graphics();
+  private fissureGlow = new Graphics();
   private fogLayers: Sprite[] = [];
   private motes: { s: Sprite; vx: number; vy: number; life: number; total: number }[] = [];
   private textures: Texture[] = [];
@@ -372,7 +366,8 @@ export class Background {
   constructor(region: RegionDef) {
     this.region = region;
     this.scene = SCENES[region.id] ?? (SCENES.ashen_verge as Scene);
-    this.container.addChild(this.sky, this.far, this.mid);
+    this.container.addChild(this.sky, this.fissureGlow, this.fissure, this.far, this.mid);
+    this.fissureGlow.blendMode = "add";
     for (let i = 0; i < 3; i++) {
       const s = new Sprite(softCircle());
       s.anchor.set(0.5);
@@ -429,6 +424,7 @@ export class Background {
     make(paintVignette(sc, W, H, GT), this.vignette);
     this.far.x = -width * 0.03;
     this.mid.x = -width * 0.03;
+    this.paintFissure(width, groundTop);
     this.fogLayers.forEach((s, i) => {
       s.width = width * (0.9 + i * 0.25);
       s.height = (height - groundTop) * 0.5;
@@ -437,8 +433,41 @@ export class Background {
     });
   }
 
+  private paintFissure(width: number, groundTop: number): void {
+    const r = rng(7);
+    const x0 = width * 0.63;
+    const pts: [number, number][] = [[x0, -4]];
+    let x = x0;
+    let y = -4;
+    while (y < groundTop * 0.55) {
+      y += groundTop * (0.05 + r() * 0.06);
+      x += (r() - 0.55) * width * 0.04;
+      pts.push([x, y]);
+    }
+    const path = (g: Graphics) => {
+      g.moveTo(pts[0]![0], pts[0]![1]);
+      for (const [px, py] of pts.slice(1)) g.lineTo(px, py);
+    };
+    this.fissure.clear();
+    path(this.fissure);
+    this.fissure.stroke({ width: 1.6, color: 0xfff1cc, alpha: 0.9, cap: "round", join: "round" });
+    // Two short branches.
+    const b = pts[2] ?? pts[1]!;
+    this.fissure.moveTo(b[0], b[1]).lineTo(b[0] + width * 0.03, b[1] + groundTop * 0.06).stroke({ width: 1, color: 0xfff1cc, alpha: 0.7 });
+    const c = pts[4] ?? pts[pts.length - 1]!;
+    this.fissure.moveTo(c[0], c[1]).lineTo(c[0] - width * 0.025, c[1] + groundTop * 0.05).stroke({ width: 1, color: 0xfff1cc, alpha: 0.6 });
+    this.fissureGlow.clear();
+    path(this.fissureGlow);
+    this.fissureGlow.stroke({ width: 9, color: 0xe9c97a, alpha: 0.18, cap: "round", join: "round" });
+    path(this.fissureGlow);
+    this.fissureGlow.stroke({ width: 22, color: 0xe9c97a, alpha: 0.06, cap: "round", join: "round" });
+  }
+
   update(dt: number): void {
     this.time += dt;
+    const breath = 0.5 + 0.5 * Math.sin(this.time * 0.9);
+    this.fissureGlow.alpha = 0.55 + breath * 0.45;
+    this.fissure.alpha = 0.75 + breath * 0.25;
     this.fogLayers.forEach((s, i) => {
       s.x += (5 + i * 3) * dt * (i % 2 === 0 ? 1 : -1);
       if (s.x > this.width + s.width / 2) s.x = -s.width / 2;

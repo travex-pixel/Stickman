@@ -46,7 +46,7 @@ export function TopBar() {
         )}
       </div>
       <button
-        className={`h-7 w-7 shrink-0 flex items-center justify-center rounded-md border text-[10px] font-extrabold tabular-nums ${speedUnlocked && speed === 2 ? "border-gold/70 bg-gold/15 text-gold-2" : "border-white/10 bg-white/5 text-mist"}`}
+        className={`h-9 w-9 shrink-0 flex items-center justify-center rounded-lg border text-[11px] font-extrabold tabular-nums ${speedUnlocked && speed === 2 ? "border-gold/70 bg-gold/15 text-gold-2" : "border-white/10 bg-white/5 text-mist"}`}
         onClick={() => c.toggleBattleSpeed()}
         aria-label={speedUnlocked ? `Battle speed ${speed}x` : "Battle speed, unlocks after stage 3"}
         data-testid="speed-toggle"
@@ -63,7 +63,7 @@ export function TopBar() {
           <Icon name="skull" size={12} className={phase === "boss" || phase === "boss_intro" ? "text-crimson-2" : "text-mist"} />
         </div>
       </div>
-      <button className="h-7 w-7 shrink-0 flex items-center justify-center rounded-md border border-white/10 bg-white/5 text-parch" onClick={() => c.openSettings()} aria-label="Menu" data-testid="menu-button">
+      <button className="h-9 w-9 shrink-0 flex items-center justify-center rounded-lg border border-white/10 bg-white/5 text-parch" onClick={() => c.openSettings()} aria-label="Menu" data-testid="menu-button">
         <Icon name="menu" size={15} />
       </button>
     </header>

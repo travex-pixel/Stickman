@@ -38,7 +38,7 @@ export const SKILLS: SkillNode[] = [
   { id: "p5", branch: "power", tier: 5, name: "Relentless", description: "Ability cooldowns reduced by 12%.", cost: 3, requires: "p4", effect: { kind: "cooldown", pct: 0.12 } },
   // SOUL
   { id: "s1", branch: "soul", tier: 1, name: "Veil Step", description: "Dodge cooldown reduced by 20%.", cost: 1, effect: { kind: "dodgeCooldown", pct: 0.2 } },
-  { id: "s2", branch: "soul", tier: 2, name: "Hungering Rift", description: "Shadows linger 35% more often and ARISE succeeds 8% more.", cost: 1, requires: "s1", effect: { kind: "essenceChance", pct: 0.35 } },
+  { id: "s2", branch: "soul", tier: 2, name: "Hungering Rift", description: "Oaths linger 35% more often and BIND succeeds 8% more.", cost: 1, requires: "s1", effect: { kind: "essenceChance", pct: 0.35 } },
   { id: "s3", branch: "soul", tier: 3, name: "Shared Mending", description: "Soul Burst also heals deployed summons for 25% of their health.", cost: 2, requires: "s2", effect: { kind: "synergy", id: "soul_mend" } },
   { id: "s4", branch: "soul", tier: 4, name: "Ascendant Flow", description: "Ultimate energy gains +40%.", cost: 2, requires: "s3", effect: { kind: "ultimateGain", pct: 0.4 } },
   { id: "s5", branch: "soul", tier: 5, name: "Iron Soul", description: "+20% max health and +15% defence.", cost: 3, requires: "s4", effect: { kind: "stat", stat: "maxHp", pct: 0.2 } },

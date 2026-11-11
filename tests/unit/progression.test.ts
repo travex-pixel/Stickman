@@ -68,17 +68,18 @@ describe("stat upgrades", () => {
   it("costs rise with level", () => {
     expect(statUpgradeCost("attack", 10)).toBeGreaterThan(statUpgradeCost("attack", 1));
   });
-  it("hold repeat accelerates from ~380ms to ~55ms and never below", () => {
+  it("hold repeat starts deliberate, accelerates to a 70ms floor and never below", () => {
     expect(holdRepeatDelay(0)).toBe(0);
-    expect(holdRepeatDelay(1)).toBe(380);
+    expect(holdRepeatDelay(1)).toBe(400);
+    expect(holdRepeatDelay(3)).toBe(400);
     let prev = holdRepeatDelay(1);
-    for (let i = 2; i < 30; i++) {
+    for (let i = 2; i < 40; i++) {
       const d = holdRepeatDelay(i);
       expect(d).toBeLessThanOrEqual(prev);
-      expect(d).toBeGreaterThanOrEqual(55);
+      expect(d).toBeGreaterThanOrEqual(70);
       prev = d;
     }
-    expect(holdRepeatDelay(40)).toBe(55);
+    expect(holdRepeatDelay(50)).toBe(70);
   });
   it("a hold loop that drains gold stops without overspending", () => {
     const p = createDefaultProfile();

@@ -110,7 +110,7 @@ export class Rig {
 
     // Shadow-army glow: a soft pool of light under summons, ring for evolved and legendary forms.
     if (finish === "shadow") {
-      this.aura.ellipse(0, 0, 22 * u, 7 * u).fill({ color: s.glow ?? s.eye, alpha: 0.16 });
+      this.aura.ellipse(0, 0, 22 * u, 7 * u).fill({ color: s.glow ?? s.eye, alpha: 0.12 });
     }
     if (s.aura && s.aura > 0) {
       this.aura.ellipse(0, 0, s.aura * u * 1.1, s.aura * u * 0.36).stroke({ width: 1.6 * u, color: s.glow ?? s.accent, alpha: 0.5 });
@@ -120,14 +120,21 @@ export class Rig {
     this.root.addChild(this.body);
     this.body.addChild(this.hips);
 
-    const limb = (len: number, w: number, color: number, taper = 0.82) =>
-      new Graphics()
+    // The Oathbound carry a thin gold edge so they read against both the ink horde and the ground.
+    const edge = finish === "shadow" ? { width: 1.1 * u, color: s.accent, alpha: 0.55 } : null;
+    const limb = (len: number, w: number, color: number, taper = 0.82) => {
+      const g = new Graphics();
+      if (edge) {
+        g.poly([-w / 2, 0, w / 2, 0, (w / 2) * taper, len, (-w / 2) * taper, len]).stroke(edge);
+      }
+      return g
         .poly([-w / 2, 0, w / 2, 0, (w / 2) * taper, len, (-w / 2) * taper, len])
         .fill(color)
         .circle(0, 0, w / 2)
         .fill(color)
         .circle(0, len, (w / 2) * taper)
         .fill(color);
+    };
 
     const leg = (side: { upper: Container; lower: Container }, x: number, color: number) => {
       side.upper.addChild(limb(upperLeg, limbW * 1.05, color));
@@ -170,6 +177,14 @@ export class Rig {
         torsoG.rect(-torsoW * 0.36, -torsoH * 0.16, torsoW * 0.72, 2.2 * u).fill(s.accent);
         torsoG.poly([-torsoW * 0.46, -torsoH * 0.92, -torsoW * 0.32, -torsoH * 0.98, torsoW * 0.4, -torsoH * 0.2, torsoW * 0.26, -torsoH * 0.14]).fill({ color: s.accent, alpha: 0.85 });
       }
+    }
+    if (edge) {
+      // Trace the torso once more as an outline for the Oathbound's gilt edge.
+      const outline = new Graphics();
+      if (style === "robed") outline.poly([-torsoW * 0.5, -torsoH, torsoW * 0.5, -torsoH, torsoW * 1.05, torsoH * 0.95, -torsoW * 1.05, torsoH * 0.95]).stroke(edge);
+      else if (bulky) outline.poly([-torsoW * 0.62, -torsoH, torsoW * 0.62, -torsoH, torsoW * 0.38, 0, -torsoW * 0.38, 0]).stroke(edge);
+      else outline.poly([-torsoW * 0.5, -torsoH, torsoW * 0.5, -torsoH, torsoW * 0.32, 0, -torsoW * 0.32, 0]).stroke(edge);
+      this.torso.addChild(outline);
     }
     if (s.cape) this.torso.addChild(this.cape);
     this.torso.addChild(torsoG);

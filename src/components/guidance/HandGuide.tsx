@@ -52,9 +52,11 @@ export function HandGuide() {
   }, [guide, panel, modal, c]);
 
   const [visible, setVisible] = useState(false);
+  // Battlefield cards (defeat, stage clear, mode results) leave the panels usable, so the guide may point past them.
+  const blocking = modal !== null && modal.kind !== "defeat" && modal.kind !== "stage_clear" && modal.kind !== "mode_result";
   useEffect(() => {
-    setVisible(Boolean(guide && rect && !modal));
-  }, [guide, rect, modal]);
+    setVisible(Boolean(guide && rect && !blocking));
+  }, [guide, rect, blocking]);
 
   if (!guide || !rect) return null;
   const vw = typeof window !== "undefined" ? window.innerWidth : 390;
@@ -76,7 +78,7 @@ export function HandGuide() {
   const duration = guide.gesture === "hold" ? 1.6 : guide.gesture === "tap" ? 0.9 : 1.4;
 
   return (
-    <AnimatePresence>
+    <AnimatePresence mode="wait">
       {visible && (
         <motion.div key={guide.target} className="pointer-events-none fixed inset-0 z-[60]" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }} data-testid="hand-guide" data-target={guide.target}>
           <div className="guide-pulse" style={{ left: rect.x - 6, top: rect.y - 6, width: rect.w + 12, height: rect.h + 12 }} />

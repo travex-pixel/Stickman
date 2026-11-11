@@ -25,7 +25,7 @@ Read from epicstickman.wiki.gg (Heros, Summoning, Activities, Shop, Asher pages)
 - **Weaknesses** the community itself names: heavy pay-to-win, ad-gated summons, real-time timer
   walls on research.
 
-What ASCEND takes: collection value (the Shadow Codex), gated stat unlocks, resource-specific
+What ASCEND takes: collection value (the Oath Codex), gated stat unlocks, resource-specific
 modes (Gold Vault, Essence Rift), a readable pale-hero-versus-ink-enemies battlefield.
 What ASCEND rejects: pay-to-win, ads, timers that gate progress, and summoning by currency.
 Shadows are earned in combat, which ties the collection directly to the fighting.

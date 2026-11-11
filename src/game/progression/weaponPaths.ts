@@ -31,8 +31,8 @@ export const WEAPON_PATHS: WeaponPathDef[] = [
     name: "Voidfang",
     tagline: "Precision. Burst. Execution.",
     description: "+30% critical damage. Enemies below 18% health are executed instantly by your basic attacks.",
-    color: "#9b6bff",
-    colorHex: 0x9b6bff,
+    color: "#d95a66",
+    colorHex: 0xd95a66,
   },
 ];
 

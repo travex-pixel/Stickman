@@ -12,7 +12,7 @@ import { unlockSkill as doUnlockSkill } from "./progression/skills";
 import { offerPerks, takePerk as doTakePerk } from "./progression/perks";
 import { claimQuest as doClaimQuest, currentQuest, isQuestComplete } from "./progression/quests";
 import { evaluateAchievements, evaluateJournal } from "./progression/achievements";
-import { computeModifiers } from "./progression/stats";
+import { computeModifiers, isStatUnlocked, statUpgradeCost } from "./progression/stats";
 import { claimEssence as doClaimEssence, setDeployed, type ClaimOutcome } from "./summons/recruitment";
 import { resolveExtraction } from "./summons/extraction";
 import { bondCost, BOND_CAP, canStarUp, checkEvolution, evolveSummon, grantSummonXp, starCost, starUp } from "./summons/progression";
@@ -31,7 +31,7 @@ import { computeOfflineReward, type OfflineReward } from "@/persistence/OfflineR
 import { AudioManager } from "./audio/AudioManager";
 import type { SfxName } from "./audio/synth";
 import type { PerkDef } from "./data/perks";
-import { TUTORIAL_STEPS, nextTutorialStep, type TutorialStep, type TutorialStepId } from "./tutorial";
+import { TUTORIAL_STEPS, type TutorialStep, type TutorialStepId } from "./tutorial";
 import type { BattleRenderer } from "./render/BattleRenderer";
 import { summonDef } from "./data/summons";
 import { WEAPON_PATHS } from "./progression/weaponPaths";
@@ -457,13 +457,17 @@ export class GameController {
         case "cast":
           if (e.id === this.world?.player.id) {
             p.progress.abilityCasts += 1;
+            if (e.ability !== "shadow_dash") this.completeTutorialIf("ability");
             dirty = true;
             this.sfx(castSfx(e.ability), { volume: e.ability === "ascendant_fury" ? 1 : 0.8, minInterval: 150 });
             if (e.ability === "ascendant_fury") this.renderer?.flash(0xffd36b, 0.35);
           }
           break;
         case "dodge":
-          if (e.id === this.world?.player.id) this.sfx("dodge", { volume: 0.6 });
+          if (e.id === this.world?.player.id) {
+            this.sfx("dodge", { volume: 0.6 });
+            this.completeTutorialIf("dodge");
+          }
           break;
         case "attack_swing":
           if (e.kind === "player") this.sfx("arc_slash", { volume: 0.12, minInterval: 90, rate: 1.4 + Math.random() * 0.3 });
@@ -494,7 +498,10 @@ export class GameController {
         case "player_defeated":
           this.sfx("boss_intro", { volume: 0.6, rate: 1.6 });
           if (e.mode === "endless") this.onEndlessOver(e.wave);
-          else if (e.mode === "campaign") this.enqueueModal({ kind: "defeat", stage: e.stage, wave: e.wave });
+          else if (e.mode === "campaign") {
+            this.coachUpgrade = true;
+            this.enqueueModal({ kind: "defeat", stage: e.stage, wave: e.wave });
+          }
           else this.enqueueModal({ kind: "mode_result", mode: e.mode as ModeId, title: "You fell", subtitle: MODES[e.mode as ModeId].name, lines: [{ label: "Kills", value: `${this.run.kills}` }, { label: "Gold kept", value: `${this.run.gold}` }], success: false });
           break;
         case "loot":
@@ -583,6 +590,11 @@ export class GameController {
 
   private afterProgression(): void {
     const p = this.profile;
+    const ui = this.uiStore.get();
+    if (ui.panel !== "hero" && !ui.newBadges.hero) {
+      const affordable = (["attack", "maxHp", "defense", "attackSpeed", "critChance", "critDamage"] as const).some((st) => isStatUnlocked(p, st) && statUpgradeCost(st, p.player.statLevels[st]) <= p.player.gold);
+      if (affordable) this.uiStore.update((u) => ({ ...u, newBadges: { ...u.newBadges, hero: true } }));
+    }
     const newAch = evaluateAchievements(p);
     for (const id of newAch) this.toast(`Achievement: ${id.replace(/_/g, " ")}`, "level");
     const newJournal = evaluateJournal(p);
@@ -664,7 +676,7 @@ export class GameController {
       return;
     }
     if (mode === "rift") {
-      this.enqueueModal({ kind: "mode_result", mode, title: "Rift sealed", subtitle: `${wave} waves`, lines: [{ label: "Essence", value: `+${this.run.kills * RIFT_ESSENCE_PER_KILL}`, tone: "jade" }, { label: "Shadows raised", value: `${this.run.raised}`, tone: "violet" }, { label: "Gold", value: `+${this.run.gold}`, tone: "gold" }], success: true });
+      this.enqueueModal({ kind: "mode_result", mode, title: "Rift sealed", subtitle: `${wave} waves`, lines: [{ label: "Essence", value: `+${this.run.kills * RIFT_ESSENCE_PER_KILL}`, tone: "jade" }, { label: "Oaths bound", value: `${this.run.raised}` }, { label: "Gold", value: `+${this.run.gold}`, tone: "gold" }], success: true });
     }
   }
 
@@ -738,7 +750,7 @@ export class GameController {
   }
 
   /**
-   * ARISE. Rolls against the chance shown on the button. The very first extraction always
+   * BIND. Rolls against the chance shown on the button. The very first extraction always
    * succeeds so every new player gets their first shadow; after that, pity softens bad luck.
    */
   claimEssence(orbId: number): void {
@@ -757,7 +769,7 @@ export class GameController {
       this.sfx("enemy_death", { volume: 0.8, rate: 0.55 });
       this.renderer?.playExtractionFail(peek.pos);
       const pity = p.summons.pity[peek.summonId] ?? 0;
-      this.toast(left > 0 ? `The shadow resists. ${left} attempt${left > 1 ? "s" : ""} left.` : `The shadow resists. +${result.essenceOnFail} essence, next attempt +${Math.round(pity * 12)}%`, "warn");
+      this.toast(left > 0 ? `The oath is refused. ${left} attempt${left > 1 ? "s" : ""} left.` : `The oath is refused. +${result.essenceOnFail} essence, next attempt +${Math.round(pity * 12)}%`, "warn");
       this.afterProgression();
       this.commit();
       return;
@@ -810,6 +822,7 @@ export class GameController {
   upgradeStat(stat: UpgradeableStat): UpgradeAttempt {
     const res = doUpgradeStat(this.profile, stat);
     if (res.ok) {
+      this.coachUpgrade = false;
       this.sfx("upgrade", { volume: 0.5, minInterval: 30, rate: 0.95 + Math.random() * 0.15 });
       this.refreshLoadout();
       this.completeTutorialIf("upgrade");
@@ -1163,8 +1176,8 @@ export class GameController {
 
   toast(text: string, tone: Toast["tone"] = "info"): void {
     const id = ++this.toastId;
-    this.uiStore.update((u) => ({ ...u, toasts: [...u.toasts.slice(-1), { id, text, tone }] }));
-    setTimeout(() => this.uiStore.update((u) => ({ ...u, toasts: u.toasts.filter((t) => t.id !== id) })), 2600);
+    this.uiStore.update((u) => ({ ...u, toasts: [{ id, text, tone }] }));
+    setTimeout(() => this.uiStore.update((u) => ({ ...u, toasts: u.toasts.filter((t) => t.id !== id) })), 2200);
   }
 
   private sfx(name: SfxName, opts?: { volume?: number; rate?: number; minInterval?: number }): void {
@@ -1175,6 +1188,15 @@ export class GameController {
   // Tutorial director
   // ---------------------------------------------------------------------
 
+  /** Set after a campaign defeat: guide the player to spend gold on Health until they do. */
+  private coachUpgrade = false;
+  private dodgeSlowUntil = 0;
+
+  /**
+   * The tutorial director. Steps complete whenever the player performs the action, in any order.
+   * Each tick it shows the first step that is ready (a waiting BIND always wins), otherwise a
+   * contextual hint: a claimable reward, or after a defeat, where to spend gold.
+   */
   private updateTutorial(snap: WorldSnapshot): void {
     const p = this.profile;
     const ui = this.uiStore.get();
@@ -1184,56 +1206,64 @@ export class GameController {
     for (const e of world.enemies()) {
       if (e.state === "windup" && e.pendingTargetId === world.player.id) this.enemyWindupNearPlayer = true;
     }
-    if (p.tutorial.finished) {
-      // Post-tutorial contextual guidance: point at a claimable quest reward once in a while.
-      const q = currentQuest(p);
-      const guide = q && isQuestComplete(p, q) && ui.modal === null ? { target: "quest-claim", label: "Claim reward", gesture: "tap" as const } : null;
-      if ((guide?.target ?? null) !== (ui.guide?.target ?? null)) this.uiStore.update((u) => ({ ...u, guide, tutorialStep: null }));
-      return;
-    }
-    const step = nextTutorialStep(p);
-    if (!step) {
-      p.tutorial.finished = true;
-      this.toast("You know the way. Ascend.", "level");
-      this.uiStore.update((u) => ({ ...u, guide: null, tutorialStep: null }));
-      this.commit();
+    // The dodge lesson slows the fight so the player can read the wind-up and react.
+    world.tutorialSlow = performance.now() < this.dodgeSlowUntil;
+    const setGuide = (guide: UiState["guide"], stepId: TutorialStepId | null) => {
+      if ((guide?.target ?? null) !== (ui.guide?.target ?? null) || (guide?.label ?? null) !== (ui.guide?.label ?? null) || ui.tutorialStep !== stepId) {
+        this.uiStore.update((u) => ({ ...u, guide, tutorialStep: stepId }));
+      }
+    };
+    if (ui.modal !== null && ui.modal.kind !== "defeat") {
+      if (ui.guide) setGuide(null, ui.tutorialStep);
       return;
     }
     const ctx = { profile: p, snapshot: snap, elapsed: this.tutorialElapsed, panel: ui.panel, enemyWindupNearPlayer: this.enemyWindupNearPlayer };
-    const active = ui.tutorialStep === step.id;
-    if (!active) {
-      if (ui.modal !== null) return;
-      if (!step.ready(ctx)) {
-        if (ui.guide) this.uiStore.update((u) => ({ ...u, guide: null }));
+    if (!p.tutorial.finished) {
+      const remaining = TUTORIAL_STEPS.filter((st) => !p.tutorial.completed.includes(st.id));
+      if (remaining.length === 0) {
+        p.tutorial.finished = true;
+        this.toast("You know the way. Ascend.", "level");
+        setGuide(null, null);
+        this.commit();
         return;
       }
-      this.tutorialElapsed = 0;
-      this.tutorialSubstep = 0;
-      this.uiStore.update((u) => ({ ...u, tutorialStep: step.id, guide: this.guideFor(step, 0) }));
-      return;
-    }
-    if (step.autoComplete && step.autoComplete(ctx)) {
-      this.completeTutorialIf(step.id);
-      return;
-    }
-    // Advance sub-steps when the player reaches the right panel.
-    const sub = step.targets[this.tutorialSubstep];
-    if (sub?.panel && ui.panel === sub.panel && this.tutorialSubstep < step.targets.length - 1) {
-      this.tutorialSubstep += 1;
-      this.uiStore.update((u) => ({ ...u, guide: this.guideFor(step, this.tutorialSubstep) }));
-    } else if (sub?.panel && ui.panel !== sub.panel && this.tutorialSubstep > 0) {
-      this.tutorialSubstep = 0;
-      this.uiStore.update((u) => ({ ...u, guide: this.guideFor(step, 0) }));
-    }
-    // Hide the guide while a modal is open, bring it back afterwards.
-    if (ui.modal !== null && ui.guide) this.uiStore.update((u) => ({ ...u, guide: null }));
-    else if (ui.modal === null && !ui.guide) this.uiStore.update((u) => ({ ...u, guide: this.guideFor(step, this.tutorialSubstep) }));
-    // Steps whose precondition evaporated (orb expired, enemies died) step aside so the game never stalls.
-    if ((step.id === "summon" || step.id === "dodge" || step.id === "ability" || step.id === "command") && !step.ready(ctx) && !(step.id === "ability" && (snap.cooldowns.arc_slash ?? 0) > 0)) {
-      if (step.id === "dodge" || step.id === "summon" || step.id === "command") {
-        this.uiStore.update((u) => ({ ...u, tutorialStep: null, guide: null }));
+      const current = remaining.find((st) => st.id === ui.tutorialStep);
+      const summon = remaining.find((st) => st.id === "summon" && st.ready(ctx));
+      // Keep the active step on screen briefly even if its trigger passes (a wind-up ends, say).
+      const holdActive = current && (current.ready(ctx) || this.tutorialElapsed < (current.id === "dodge" ? 2.5 : 0.5));
+      const step = summon ?? (holdActive ? current : remaining.find((st) => st.ready(ctx)));
+      if (step) {
+        if (step.id !== ui.tutorialStep) {
+          this.tutorialElapsed = 0;
+          this.tutorialSubstep = 0;
+          if (step.id === "dodge") this.dodgeSlowUntil = performance.now() + 2500;
+        }
+        if (step.autoComplete && step.autoComplete(ctx)) {
+          this.completeTutorialIf(step.id);
+          return;
+        }
+        const sub = step.targets[this.tutorialSubstep];
+        if (sub?.panel && ui.panel === sub.panel && this.tutorialSubstep < step.targets.length - 1) this.tutorialSubstep += 1;
+        else if (sub?.panel && ui.panel !== sub.panel && this.tutorialSubstep > 0) this.tutorialSubstep = 0;
+        setGuide(this.guideFor(step, this.tutorialSubstep), step.id);
+        return;
       }
     }
+    setGuide(this.contextualGuide(ui.panel), null);
+  }
+
+  /** Hints outside the scripted steps: rewards to collect, and gold to spend after a loss. */
+  private contextualGuide(panel: string): UiState["guide"] {
+    const p = this.profile;
+    const q = currentQuest(p);
+    if (q && isQuestComplete(p, q)) return { target: "quest-claim", label: "Claim reward", gesture: "tap" };
+    if (this.coachUpgrade) {
+      const stat = statUpgradeCost("maxHp", p.player.statLevels.maxHp) <= p.player.gold ? "maxHp" : statUpgradeCost("attack", p.player.statLevels.attack) <= p.player.gold ? "attack" : null;
+      if (!stat) return null;
+      if (panel !== "hero") return { target: "tab-hero", label: "Spend your gold", gesture: "tap" };
+      return { target: `upgrade-${stat}`, label: stat === "maxHp" ? "Hold to raise Health" : "Hold to raise Attack", gesture: "hold" };
+    }
+    return null;
   }
 
   private guideFor(step: TutorialStep, sub: number): UiState["guide"] {
@@ -1242,12 +1272,12 @@ export class GameController {
     return { target: t.target, label: t.label, gesture: t.gesture };
   }
 
+  /** Marks a lesson learned the moment the player does the thing, whether or not it was being taught. */
   private completeTutorialIf(id: TutorialStepId): void {
     const p = this.profile;
     if (p.tutorial.finished || p.tutorial.completed.includes(id)) return;
-    const ui = this.uiStore.get();
-    if (ui.tutorialStep !== id && !["summon", "deploy", "command", "gear", "upgrade"].includes(id)) return;
     p.tutorial.completed.push(id);
+    if (id === "dodge") this.dodgeSlowUntil = 0;
     this.tutorialSubstep = 0;
     this.tutorialElapsed = 0;
     this.sfx("quest", { volume: 0.5, rate: 1.2 });

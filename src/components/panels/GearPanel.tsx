@@ -69,8 +69,8 @@ export default function GearPanel() {
             {bag.slice(page * PAGE, page * PAGE + PAGE).map((item) => (
               <button key={item.uid} className={cn("card h-[34px] flex items-center justify-center relative", `border-rarity-${item.rarity}`, selectedUid === item.uid && "card-active")} onClick={() => c.selectItem(item.uid)} aria-label={templateName(item)} data-testid="bag-item">
                 <Icon name={SLOT_ICON[item.slot]} size={15} className={`rarity-${item.rarity}`} />
-                <span className="absolute bottom-0 right-1 text-[8px] text-mist">+{item.level}</span>
-                {item.effect && <span className="absolute top-0.5 left-1 text-[9px] text-gold-2">✦</span>}
+                <span className="absolute bottom-0 right-1 text-[10px] text-mist">+{item.level}</span>
+                {item.effect && <span className="absolute top-0.5 left-1 text-[10px] text-gold-2">✦</span>}
               </button>
             ))}
           </div>
@@ -98,7 +98,7 @@ function ItemDetail({ item, equippedUid, inv, gold }: { item: EquipmentItem; equ
     <div className={cn("card flex-1 min-h-0 p-1.5 flex flex-col gap-1", `border-rarity-${item.rarity}`)} data-testid="item-detail">
       <div className="flex items-baseline justify-between gap-1 leading-tight">
         <span className={cn("text-[11px] font-bold truncate", `rarity-${item.rarity}`)}>{templateName(item)}</span>
-        <span className="text-[9px] text-mist shrink-0">{SLOT_LABEL[item.slot]} +{item.level}</span>
+        <span className="text-[10px] text-mist shrink-0">{SLOT_LABEL[item.slot]} +{item.level}</span>
       </div>
       <div className="flex flex-wrap gap-x-2 gap-y-0.5 text-[10px]">
         {(Object.entries(totals) as [keyof typeof STAT_LABEL, number][]).map(([k, v]) => {
@@ -124,7 +124,7 @@ function ItemDetail({ item, equippedUid, inv, gold }: { item: EquipmentItem; equ
           <span className="font-display text-[12px] text-gold-2">{GEAR_EFFECTS[item.effect].name}.</span> <span className="text-ivory/85">{GEAR_EFFECTS[item.effect].description}</span>
         </div>
       )}
-      {template && <div className="text-[9px] italic text-mist truncate">{template.flavour}</div>}
+      {template && <div className="text-[10px] italic text-mist truncate">{template.flavour}</div>}
       <div className="mt-auto flex items-center gap-1">
         {!isEquipped ? (
           <button className="btn-primary flex-1 !py-1.5 text-[11px]" onClick={() => c.equipItem(item.uid)} data-guide="equip-item" data-testid="equip-button">
@@ -137,7 +137,7 @@ function ItemDetail({ item, equippedUid, inv, gold }: { item: EquipmentItem; equ
         )}
         <HoldButton onRepeat={() => c.upgradeItem(item.uid)} disabled={capped || gold < cost} className="h-[32px] px-2" testId="item-upgrade" label={`Upgrade item for ${cost} gold`}>
           <span className="flex flex-col items-center leading-none">
-            <span className="caps text-gold-2 !text-[8px]">Hold</span>
+            <span className="caps text-gold-2 !text-[10px]">Hold</span>
             <span className={cn("flex items-center gap-0.5 text-[10px] font-bold", gold >= cost ? "text-gold" : "text-crimson-2")}>
               <Icon name="coin" size={10} />
               {capped ? "MAX" : fmt(cost)}

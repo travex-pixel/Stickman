@@ -15,11 +15,11 @@ export function SummonPortrait({ defId, size = 56, enemy = false }: { defId: str
   const isEnemy = enemy || (!s && !!e);
   const role: Role = (s?.role as Role) ?? (e?.archetype === "brute" ? "vanguard" : e?.archetype === "ranger" ? "ranger" : e?.archetype === "arcanist" ? "arcanist" : e?.archetype === "shieldbearer" ? "sentinel" : e?.archetype === "summoner" ? "caller" : e?.archetype === "boss" ? "sovereign" : "reaper");
   const legendary = s?.rarity === "legendary";
-  const body = isEnemy ? "#17171d" : "#262650";
-  const rim = isEnemy ? "#3a3a44" : "#4a4790";
-  const eye = isEnemy ? hex(e?.palette.eye ?? 0xe8c98a) : legendary ? "#f0d48a" : "#c2b6ff";
-  const glow = isEnemy ? hex(e?.palette.eye ?? 0xe8c98a) : "#8f7cff";
-  const bg = isEnemy ? "#1d1b1a" : "#141530";
+  const body = isEnemy ? "#17171d" : legendary ? "#404657" : "#4a5160";
+  const rim = isEnemy ? "#3a3a44" : "#8a7a55";
+  const eye = isEnemy ? hex(e?.palette.eye ?? 0xe8c98a) : legendary ? "#fff0c2" : "#f0d9a8";
+  const glow = isEnemy ? hex(e?.palette.eye ?? 0xe8c98a) : "#e9c97a";
+  const bg = isEnemy ? "#1d1b1a" : "#1c1914";
   const id = `pg-${defId}-${isEnemy ? "e" : "s"}`;
   return (
     <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden="true">
@@ -76,8 +76,8 @@ export function SummonPortrait({ defId, size = 56, enemy = false }: { defId: str
           <path d="M16 64 C18 46 24 38 32 38 C40 38 46 46 48 64 Z" />
           <circle cx="32" cy="25" r="10" />
           <path d="M24 21 L14 12 L28 18 Z" />
-          <path d="M48 8 L52 46" stroke={isEnemy ? "#3a3a40" : "#5b5f86"} strokeWidth="2.5" strokeLinecap="round" />
-          {defId === "gravewalker" && <path d="M16 10 L12 46" stroke="#5b5f86" strokeWidth="2.5" strokeLinecap="round" />}
+          <path d="M48 8 L52 46" stroke={isEnemy ? "#3a3a40" : "#b9ad92"} strokeWidth="2.5" strokeLinecap="round" />
+          {defId === "gravewalker" && <path d="M16 10 L12 46" stroke="#b9ad92" strokeWidth="2.5" strokeLinecap="round" />}
         </g>
       )}
       {/* Eyes are the brightest marks on the card. */}

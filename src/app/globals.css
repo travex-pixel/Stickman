@@ -6,13 +6,13 @@
    crimson for threat. Painterly grain, soft bevels, no neon.
 --------------------------------------------------------------------------- */
 @theme {
-  --color-ink: #0d1016;
-  --color-ink-2: #141922;
-  --color-ink-3: #1c2330;
-  --color-ink-4: #26303f;
+  --color-ink: #110f0c;
+  --color-ink-2: #1a1713;
+  --color-ink-3: #241f19;
+  --color-ink-4: #2f2920;
   --color-ivory: #ebe4d3;
   --color-parch: #cfc6b1;
-  --color-mist: #8f8a7c;
+  --color-mist: #958c7b;
   --color-gold: #cfa95e;
   --color-gold-2: #e9d39a;
   --color-gold-3: #8e6f33;
@@ -72,7 +72,7 @@ body {
   padding-bottom: var(--sab);
   padding-left: var(--sal);
   padding-right: var(--sar);
-  background: radial-gradient(130% 70% at 50% -10%, #1a2130 0%, var(--color-ink) 55%);
+  background: radial-gradient(130% 70% at 50% -10%, #2a241b 0%, var(--color-ink) 55%);
 }
 
 /* Paper grain over everything: the "painted" feel at near-zero cost. */
@@ -102,22 +102,22 @@ button {
 }
 
 .caps {
-  font-size: 9px;
-  letter-spacing: 0.22em;
+  font-size: 10px;
+  letter-spacing: 0.2em;
   text-transform: uppercase;
   color: var(--color-mist);
 }
 
 /* Surfaces ---------------------------------------------------------------- */
 .panel-surface {
-  background: linear-gradient(180deg, #171d28 0%, #121721 100%);
+  background: linear-gradient(180deg, #1c1813 0%, #15120e 100%);
   border-top: 1px solid var(--hairline);
   box-shadow: inset 0 1px 0 var(--bevel-top);
 }
 
 .card {
   position: relative;
-  background: linear-gradient(180deg, #212936 0%, #181e29 100%);
+  background: linear-gradient(180deg, #27211a 0%, #1d1914 100%);
   border: 1px solid var(--hairline-soft);
   border-radius: 10px;
   box-shadow: inset 0 1px 0 var(--bevel-top), 0 1px 0 rgba(0, 0, 0, 0.35);
@@ -129,7 +129,7 @@ button {
 }
 
 .card-locked {
-  background: linear-gradient(180deg, #171c25 0%, #131821 100%);
+  background: linear-gradient(180deg, #1a1611 0%, #16130f 100%);
   border-style: dashed;
 }
 
@@ -146,7 +146,7 @@ button {
   position: relative;
   overflow: hidden;
   border-radius: 12px;
-  background: radial-gradient(120% 90% at 50% 0%, #2a3344 0%, #161c27 70%);
+  background: radial-gradient(120% 90% at 50% 0%, #332b21 0%, #1a1611 72%);
   border: 1px solid rgba(235, 228, 211, 0.1);
   box-shadow: inset 0 1px 0 var(--bevel-top), 0 4px 10px rgba(0, 0, 0, 0.45);
   transition: transform 90ms ease, border-color 160ms ease;
@@ -170,8 +170,65 @@ button {
   pointer-events: none;
 }
 
+/* Ability medallions on the battlefield */
+.medal {
+  position: relative;
+  width: 50px;
+  height: 50px;
+  flex: 0 1 50px;
+  min-width: 40px;
+  border-radius: 999px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: radial-gradient(circle at 50% 30%, #3a3124 0%, #1c1813 62%, #120f0b 100%);
+  border: 1.5px solid rgba(235, 228, 211, 0.16);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 4px 10px rgba(0, 0, 0, 0.55);
+  transition: transform 90ms ease, border-color 160ms ease;
+}
+.medal:active {
+  transform: scale(0.92);
+}
+.medal[data-ready="true"] {
+  border-color: rgba(207, 169, 94, 0.85);
+  box-shadow: inset 0 0 0 2px rgba(17, 15, 12, 0.9), inset 0 0 0 3px rgba(233, 211, 154, 0.25), 0 4px 12px rgba(0, 0, 0, 0.6);
+}
+.medal-sm {
+  width: 44px;
+  height: 44px;
+  flex-basis: 44px;
+}
+.medal-lg {
+  width: 60px;
+  height: 60px;
+  flex-basis: 60px;
+}
+.medal-locked {
+  background: rgba(17, 15, 12, 0.6);
+  border-style: dashed;
+  border-color: rgba(235, 228, 211, 0.14);
+  box-shadow: none;
+}
+.medal-sweep {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: conic-gradient(rgba(8, 7, 5, 0.82) var(--cd, 0%), transparent 0);
+  pointer-events: none;
+}
+.medal-fill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(0deg, rgba(207, 169, 94, 0.38), rgba(207, 169, 94, 0.12));
+  pointer-events: none;
+}
+
 .ability-btn.ability-locked {
-  background: rgba(13, 16, 22, 0.55);
+  background: rgba(17, 15, 12, 0.55);
   border: 1px dashed rgba(235, 228, 211, 0.1);
   box-shadow: none;
   opacity: 0.7;
@@ -189,7 +246,7 @@ button {
   position: relative;
   overflow: hidden;
   border-radius: 9px;
-  background: linear-gradient(180deg, #2b3446 0%, #1a2130 100%);
+  background: linear-gradient(180deg, #3a3022 0%, #241d15 100%);
   border: 1px solid rgba(207, 169, 94, 0.45);
   box-shadow: inset 0 1px 0 rgba(233, 211, 154, 0.14), 0 2px 6px rgba(0, 0, 0, 0.45);
   transition: transform 80ms ease;
@@ -295,7 +352,7 @@ button {
   height: 6px;
   border-radius: 50%;
   background: var(--color-gold-2);
-  box-shadow: 0 0 0 2px rgba(13, 16, 22, 0.9);
+  box-shadow: 0 0 0 2px rgba(17, 15, 12, 0.9);
 }
 
 /* Chips and bars ----------------------------------------------------------- */
@@ -339,7 +396,7 @@ button {
 }
 
 .modal-card {
-  background: linear-gradient(180deg, #1d2432 0%, #121720 100%);
+  background: linear-gradient(180deg, #241f18 0%, #14110d 100%);
   border: 1px solid var(--hairline);
   border-radius: 16px;
   box-shadow: inset 0 1px 0 rgba(233, 211, 154, 0.12), 0 24px 60px rgba(0, 0, 0, 0.65);

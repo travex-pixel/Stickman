@@ -43,7 +43,7 @@ function RunOutcome() {
   const modal = useUi((u) => u.modal);
   if (!modal || (modal.kind !== "defeat" && modal.kind !== "stage_clear" && modal.kind !== "mode_result")) return null;
   return (
-    <div className="absolute inset-0 z-30 flex items-center justify-center p-3" data-testid={`modal-${modal.kind}`} role="dialog" aria-modal="false">
+    <div className="absolute inset-0 z-30 flex items-center justify-center p-3 pb-6" data-testid={`modal-${modal.kind}`} role="dialog" aria-modal="false">
       <div className="absolute inset-0 bg-ink/60" />
       <AnimatePresence>{modal.kind === "defeat" ? <Defeat modal={modal} /> : modal.kind === "mode_result" ? <ModeResult modal={modal} /> : <StageClear modal={modal} />}</AnimatePresence>
     </div>
@@ -64,7 +64,7 @@ function ModeHud() {
     <div className={cn("absolute left-1/2 -translate-x-1/2 z-10 flex items-center gap-2 rounded-full bg-ink/80 border border-gold/40 pl-3 pr-1 py-0.5", hasBoss ? "top-10" : "top-1.5")} data-testid="mode-hud">
       <span className="font-display text-[11px] tracking-[0.14em] text-gold-2 whitespace-nowrap">{MODES[mode].name}</span>
       <span className={cn("text-[11px] font-extrabold tabular-nums", timeLeft !== null && timeLeft < 10 ? "text-crimson-2" : "text-ivory")}>{status}</span>
-      <button className="text-[9px] font-bold text-mist px-2 py-1 rounded-full border border-white/10" onClick={() => c.returnToCampaign()} data-testid="mode-leave">
+      <button className="text-[10px] font-bold text-mist px-2 py-1 rounded-full border border-white/10" onClick={() => c.returnToCampaign()} data-testid="mode-leave">
         Leave
       </button>
     </div>
@@ -80,7 +80,7 @@ function PerkChip() {
     <motion.button
       initial={{ opacity: 0, y: -6 }}
       animate={{ opacity: 1, y: 0 }}
-      className="absolute left-2 bottom-2 z-20 flex items-center gap-1.5 rounded-full border border-gold/70 bg-[#231c0d]/95 pl-2.5 pr-3 py-1 shadow-[0_6px_16px_rgba(0,0,0,0.5)]"
+      className="absolute left-2 bottom-[84px] z-20 flex items-center gap-1.5 rounded-full border border-gold/70 bg-[#231c0d]/95 pl-2.5 pr-3 py-1 shadow-[0_6px_16px_rgba(0,0,0,0.5)]"
       onClick={() => c.openPerkChoice()}
       data-testid="perk-chip"
       aria-label="Choose an ascension perk"
@@ -110,7 +110,7 @@ function ChainCounter() {
       >
         {chain}
       </motion.span>
-      <span className={cn("caps !text-[8px]", hot ? "!text-gold" : "")}>Chain</span>
+      <span className={cn("caps !text-[10px]", hot ? "!text-gold" : "")}>Chain</span>
     </div>
   );
 }
@@ -162,15 +162,24 @@ function EssencePrompts() {
   const bonus = computeModifiers(profile).extractionBonus;
   const firstEver = !profile.summons.firstSummonSeen;
   const view = c.view;
+  // Stack pills that would overlap so each one is its own clear target.
+  const placed: { left: number; top: number }[] = [];
+  const positions = orbs.map((o) => {
+    const left = Math.min(view.width - 60, Math.max(60, o.x * view.scale));
+    let top = Math.max(40, view.offsetY + o.y * view.depthScale - 84);
+    for (let guard = 0; guard < 6 && placed.some((q) => Math.abs(q.left - left) < 104 && Math.abs(q.top - top) < 46); guard++) top -= 48;
+    const pos = { left, top: Math.max(30, top) };
+    placed.push(pos);
+    return pos;
+  });
   return (
     <AnimatePresence>
       {orbs.map((o, i) => {
         const def = SUMMONS[o.summonId];
-        const left = Math.min(view.width - 60, Math.max(60, o.x * view.scale));
-        const top = Math.max(40, view.offsetY + o.y * view.depthScale - 84);
+        const { left, top } = positions[i]!;
         const frac = o.remaining / o.total;
         const chance = firstEver ? 1 : extractionChance(profile, o.summonId, { elite: o.elite, bonus });
-        const tone = o.isBoss ? "gold" : o.elite ? "gold" : "violet";
+        const tone = o.isBoss || o.elite ? "gold" : "ivory";
         return (
           <motion.button
             key={o.id}
@@ -183,21 +192,21 @@ function EssencePrompts() {
             onClick={() => c.claimEssence(o.id)}
             data-guide={i === 0 ? "claim-essence" : undefined}
             data-testid="claim-essence"
-            aria-label={`Arise ${def?.name ?? "shadow"}, ${Math.round(chance * 100)} percent`}
+            aria-label={`Bind ${def?.name ?? "foe"}, ${Math.round(chance * 100)} percent`}
           >
             <span
               className={cn(
-                "flex items-baseline gap-1.5 px-3 py-1 rounded-full border shadow-[0_6px_16px_rgba(0,0,0,0.5)]",
-                tone === "gold" ? "bg-[#231c0d] border-gold/70 text-gold-2" : "bg-[#17142c] border-[#8f7cff]/70 text-[#d4caff]",
+                "flex items-baseline gap-1.5 px-3.5 py-2 rounded-full border shadow-[0_6px_16px_rgba(0,0,0,0.5)]",
+                tone === "gold" ? "bg-[#231c0d] border-gold/70 text-gold-2" : "bg-[#1d1a14] border-parch/60 text-ivory",
               )}
             >
-              <span className="font-display text-[12px] tracking-[0.24em]">ARISE</span>
-              <span className="text-[10px] font-extrabold tabular-nums opacity-90">{Math.round(chance * 100)}%</span>
+              <span className="font-display text-[14px] tracking-[0.22em]">BIND</span>
+              <span className="text-[11px] font-extrabold tabular-nums opacity-90">{Math.round(chance * 100)}%</span>
             </span>
             <span className="flex items-center gap-1">
               {o.isBoss && Array.from({ length: 3 }, (_, k) => <span key={k} className="h-1.5 w-1.5 rotate-45" style={{ background: k < o.attempts ? "#e9c97a" : "rgba(235,228,211,0.18)" }} />)}
               <span className="h-[3px] w-9 rounded-full bg-black/60 overflow-hidden">
-                <span className="block h-full rounded-full" style={{ width: `${frac * 100}%`, background: tone === "gold" ? "#e9d39a" : "#a99cff" }} />
+                <span className="block h-full rounded-full" style={{ width: `${frac * 100}%`, background: tone === "gold" ? "#e9d39a" : "#ebe4d3" }} />
               </span>
             </span>
           </motion.button>
@@ -234,15 +243,15 @@ function SummonStrip() {
         {COMMANDS.map((cmd) => (
           <button
             key={cmd.id}
-            className={cn("flex items-center gap-1 rounded-md h-6 text-[9px] font-bold transition-all", command === cmd.id ? "bg-gold/20 text-gold-2 px-1.5" : "text-mist w-6 justify-center")}
+            className={cn("flex items-center gap-1 rounded-md h-8 px-2 text-[11px] font-bold", command === cmd.id ? "bg-gold/20 text-gold-2" : "text-parch")}
             onClick={() => c.setCommand(cmd.id)}
             data-guide={`command-${cmd.id}`}
             data-testid={`command-${cmd.id}`}
             aria-pressed={command === cmd.id}
             aria-label={cmd.label}
           >
-            <Icon name={cmd.icon} size={12} />
-            {command === cmd.id && <span>{cmd.label}</span>}
+            <Icon name={cmd.icon} size={13} />
+            <span>{cmd.label}</span>
           </button>
         ))}
       </div>
@@ -259,40 +268,21 @@ function QuestBanner() {
   const done = isQuestComplete(profile, quest);
   const reward = quest.reward;
   return (
-    <motion.div layout className="absolute right-2 bottom-2 z-10" data-testid="quest-banner">
+    <motion.div layout className="absolute right-2 bottom-[84px] z-10 max-w-[64%]" data-testid="quest-banner">
       <button
-        className={cn("flex items-center gap-2 rounded-lg border px-2.5 py-1.5 shadow-[0_6px_16px_rgba(0,0,0,0.45)]", done ? "bg-[#201a0c] border-gold/70" : "bg-ink/80 border-white/10")}
+        className={cn("flex items-center gap-2 rounded-full border pl-3 pr-2 h-8 shadow-[0_4px_12px_rgba(0,0,0,0.4)] max-w-full", done ? "bg-[#231c0d] border-gold/70" : "bg-ink/80 border-white/10")}
         onClick={() => done && c.claimQuest()}
         data-guide={done ? "quest-claim" : undefined}
         aria-label={done ? "Claim quest reward" : "Current objective"}
       >
-        <div className="flex flex-col items-start leading-tight">
-          <span className={cn("caps", done ? "text-gold-2" : "")}>{done ? "Reward ready" : "Objective"}</span>
-          <span className="text-[11px] font-semibold text-ivory">
-            {quest.text} <span className={done ? "text-gold-2" : "text-parch"}>{prog.value}/{prog.target}</span>
-          </span>
-        </div>
-        <div className="flex items-center gap-1 text-[10px] font-bold">
-          {reward.gold ? (
-            <span className="flex items-center gap-0.5 text-gold-2">
-              <Icon name="coin" size={11} />
-              {fmt(reward.gold)}
-            </span>
-          ) : null}
-          {reward.essence ? (
-            <span className="flex items-center gap-0.5 text-jade-2">
-              <Icon name="essence" size={11} />
-              {fmt(reward.essence)}
-            </span>
-          ) : null}
-          {reward.riftCores ? (
-            <span className="flex items-center gap-0.5 text-violet">
-              <Icon name="core" size={11} />
-              {reward.riftCores}
-            </span>
-          ) : null}
-        </div>
-        {done && <Icon name="chevron" size={14} className="text-gold-2" />}
+        <span className="text-[11px] font-semibold text-ivory truncate">
+          {quest.text} <span className={done ? "text-gold-2" : "text-parch"}>{prog.value}/{prog.target}</span>
+        </span>
+        <span className={cn("flex items-center gap-0.5 text-[11px] font-bold shrink-0", reward.gold ? "text-gold-2" : reward.essence ? "text-jade-2" : "text-violet")}>
+          <Icon name={reward.gold ? "coin" : reward.essence ? "essence" : "core"} size={11} />
+          {fmt(reward.gold ?? reward.essence ?? reward.riftCores ?? 0)}
+        </span>
+        {done && <span className="text-[10px] font-extrabold tracking-[0.12em] text-ink bg-gold-2 rounded-full px-2 py-0.5 shrink-0">CLAIM</span>}
       </button>
     </motion.div>
   );

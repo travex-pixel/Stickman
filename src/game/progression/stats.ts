@@ -6,7 +6,7 @@ import { PERKS } from "../data/perks";
 import { codexBonus } from "../summons/extraction";
 import type { GearEffectId } from "../data/gearEffects";
 
-/** Each Hunter rank multiplies core stats. Rank is earned in Rank Trials, not bought. */
+/** Each Ascendant rank multiplies core stats. Rank is earned in Rank Trials, not bought. */
 export const RANK_STAT_STEP = 0.08;
 export const RANK_LABELS = ["E", "D", "C", "B", "A", "S"] as const;
 
@@ -81,7 +81,7 @@ export interface PlayerModifiers {
   lifeOnKill: number;
   goldFind: number;
   essenceChanceMult: number;
-  /** Flat bonus to ARISE success chance. */
+  /** Flat bonus to BIND success chance. */
   extractionBonus: number;
   summonXpMult: number;
   deploySlots: number;

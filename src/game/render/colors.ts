@@ -6,7 +6,6 @@ export const PALETTE = {
   goldDeep: 0xcfa95e,
   jade: 0x8fe0c4,
   steel: 0xa8c4e6,
-  violet: 0x8f7cff,
   crimson: 0xd95a66,
   ember: 0xd9823f,
 } as const;

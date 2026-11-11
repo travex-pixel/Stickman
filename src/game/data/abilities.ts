@@ -59,7 +59,7 @@ export const ABILITIES: Record<AbilityId, AbilityDef> = {
     radius: 0,
     ultimate: false,
     unlockLevel: 1,
-    color: 0xa48ee0,
+    color: 0xd9cdb2,
   },
   soul_burst: {
     id: "soul_burst",
@@ -87,7 +87,7 @@ export const ABILITIES: Record<AbilityId, AbilityDef> = {
     radius: 170,
     ultimate: false,
     unlockLevel: 6,
-    color: 0x8a74d0,
+    color: 0x2b2722,
   },
   ascendant_fury: {
     id: "ascendant_fury",

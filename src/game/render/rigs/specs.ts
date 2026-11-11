@@ -7,13 +7,14 @@ import type { WeaponPath } from "../../data/ids";
  * Character art direction.
  *  - The hero is ivory with a gold sash: the only pale figure on the field, always findable.
  *  - Enemies are ink silhouettes. Their eyes carry the archetype colour so threats read at a glance.
- *  - Summons are the shadow army: indigo ink with a violet glow. Rare forms add a coloured edge.
+ *  - Summons are the Oathbound: slate stone with a gold edge and gold eyes. Rarer forms burn brighter.
  */
 export const INK = 0x16161c;
-export const SHADOW_BODY = 0x23234a;
-export const SHADOW_GLOW = 0x8f7cff;
+/** The Oathbound: slate stone edged in gold, a third value between the ivory hero and the ink horde. */
+export const SHADOW_BODY = 0x4a5160;
+export const SHADOW_GLOW = 0xe9c97a;
 
-const PATH_ACCENT: Record<WeaponPath, number> = { none: 0xc9a35a, stormblade: 0x7fa8d8, infernal: 0xd9823f, voidfang: 0x9b84d6 };
+const PATH_ACCENT: Record<WeaponPath, number> = { none: 0xc9a35a, stormblade: 0x7fa8d8, infernal: 0xd9823f, voidfang: 0xc2414f };
 
 export function playerSpec(path: WeaponPath): RigSpec {
   const accent = PATH_ACCENT[path];
@@ -52,8 +53,9 @@ export function summonSpec(defId: string): RigSpec {
   const d = SUMMONS[defId];
   const legendary = d?.rarity === "legendary";
   const edge = d?.rarity === "rare" || d?.rarity === "epic" || legendary;
-  const eye = legendary ? 0xf0d48a : edge ? (d?.palette.eye ?? SHADOW_GLOW) : 0xb7aaff;
-  const base = { body: SHADOW_BODY, accent: edge ? (d?.palette.accent ?? SHADOW_GLOW) : SHADOW_GLOW, eye, glow: SHADOW_GLOW, finish: "shadow" as const };
+  const eye = legendary ? 0xfff0c2 : 0xf0d9a8;
+  const accent = legendary ? 0xf0d48a : edge ? 0xd9b26a : 0xb8975a;
+  const base = { body: legendary ? 0x404657 : SHADOW_BODY, accent, eye, glow: SHADOW_GLOW, finish: "shadow" as const };
   switch (d?.role) {
     case "vanguard":
       return { ...base, style: "bulky", weapon: "mace_shield", height: 126, horns: true };

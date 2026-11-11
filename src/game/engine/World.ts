@@ -105,6 +105,8 @@ export class World {
   private autoCastTimer = 0;
   private nextOrbExpiryWarned = new Set<number>();
   playerMoveLockTimer = 0;
+  /** Set by the tutorial director while it teaches dodging. */
+  tutorialSlow = false;
   private basicHits = 0;
   /** Kill chain: kills landed within CHAIN_WINDOW of each other. Feeds the HUD and energy. */
   chain = 0;
@@ -252,7 +254,7 @@ export class World {
     return this.orbs.find((o) => o.id === orbId && !o.claimed);
   }
 
-  /** A failed ARISE: the shadow resists. Bosses keep their remaining attempts. */
+  /** A failed BIND: the oath is refused. Bosses keep their remaining attempts. */
   failExtraction(orbId: number): number {
     const orb = this.peekOrb(orbId);
     if (!orb) return 0;
@@ -369,7 +371,7 @@ export class World {
   // ---------------------------------------------------------------------
 
   update(rawDt: number): void {
-    const dt = rawDt * this.timeScale;
+    const dt = rawDt * (this.tutorialSlow ? Math.min(this.timeScale, 0.35) : this.timeScale);
     this.time += dt;
     this.updateRunState(rawDt);
     this.updateTimers(dt, rawDt);
@@ -526,6 +528,12 @@ export class World {
     const scale = stageScale(this.stage);
     const boss = createEnemy(this.allocId(), def, { x: ARENA.maxX - 70, y: ARENA.homeY }, scale, this.stage, this.mode !== "trial");
     boss.kind = "boss";
+    if (this.mode === "campaign" && this.stage === 1 && this.loadout.bestStage < 1) {
+      // The very first Warden is a lesson, not a wall.
+      boss.stats.maxHp = Math.round(boss.stats.maxHp * 0.7);
+      boss.hp = boss.stats.maxHp;
+      boss.stats.attack = Math.round(boss.stats.attack * 0.8 * 10) / 10;
+    }
     if (this.mode === "trial") {
       // The trial Warden is empowered: brutal, and it remembers its second phase sooner.
       makeElite(boss, "brutal");
@@ -1109,7 +1117,8 @@ export class World {
         continue;
       }
       // Essence waits while the player reads the moment; it fades only during normal fighting.
-      if (this.phase !== "victory") o.remaining -= rawDt;
+      // Before the first oath is sworn, nothing fades: the first one must never be missed.
+      if (this.phase !== "victory" && this.loadout.hasSummons) o.remaining -= rawDt;
       if (o.remaining <= 0) {
         this.events.push({ type: "essence_expired", orbId: o.id });
         this.orbs.splice(i, 1);

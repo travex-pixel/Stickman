@@ -74,15 +74,15 @@ function SummonReveal({ modal }: { modal: Extract<Modal, { kind: "summon_reveal"
           initial={{ opacity: 0, scale: 1.6, letterSpacing: "0.8em" }}
           animate={{ opacity: [0, 0, 1, 1], scale: [1.6, 1.6, 1, 1], letterSpacing: ["0.8em", "0.8em", "0.32em", "0.32em"] }}
           transition={{ duration: modal.first ? 3.2 : 0.9, times: [0, modal.first ? 0.55 : 0.1, modal.first ? 0.75 : 0.5, 1], ease: "easeOut" }}
-          className="font-display text-[34px] text-[#e4dcff]"
-          style={{ textShadow: "0 0 24px rgba(143,124,255,0.75), 0 2px 0 rgba(0,0,0,0.6)" }}
+          className="font-display text-[30px] text-gold-2"
+          style={{ textShadow: "0 0 26px rgba(233,201,122,0.7), 0 2px 0 rgba(0,0,0,0.6)" }}
         >
-          ARISE
+          OATHBOUND
         </motion.div>
       </div>
     );
   }
-  const title = o.kind === "new" ? (modal.first ? "Your first shadow has answered." : "A new shadow joins your army.") : "Kindred shadow absorbed.";
+  const title = o.kind === "new" ? (modal.first ? "Your first oath is sworn." : "A new Oathbound joins your army.") : "Kindred oath absorbed.";
   return (
     <Card className="pointer-events-auto">
       <div className="absolute inset-0 pointer-events-none" style={{ background: `radial-gradient(60% 50% at 50% 30%, rgba(125,240,200,0.14), transparent)` }} />
@@ -134,7 +134,7 @@ function PerkChoice({ modal }: { modal: Extract<Modal, { kind: "perk_choice" }> 
                 <div className="text-[12px] font-bold text-ivory">{p.name}</div>
                 <div className="text-[10px] text-mist">{p.description}</div>
               </div>
-              <div className="text-[9px] text-mist shrink-0">{stacks}/{p.maxStacks}</div>
+              <div className="text-[10px] text-mist shrink-0">{stacks}/{p.maxStacks}</div>
             </button>
           );
         })}
@@ -182,7 +182,7 @@ export function StageClear({ modal }: { modal: Extract<Modal, { kind: "stage_cle
             Stage {modal.nextStage} →{left > 0 ? ` ${left}` : ""}
           </button>
         </div>
-        {left > 0 && <div className="text-[9px] text-mist">Advancing automatically. Replay to stay.</div>}
+        {left > 0 && <div className="text-[10px] text-mist">Advancing automatically. Replay to stay.</div>}
       </div>
     </Card>
   );
@@ -238,7 +238,7 @@ function WeaponPathChoice() {
           <button key={w.id} className="card text-left px-3 py-2 active:scale-[0.98]" style={{ borderColor: `${w.color}66` }} onClick={() => c.chooseWeaponPath(w.id)} data-testid={`path-${w.id}`}>
             <div className="flex items-baseline justify-between">
               <span className="font-display text-[14px]" style={{ color: w.color }}>{w.name}</span>
-              <span className="text-[9px] uppercase tracking-widest text-mist">{w.tagline}</span>
+              <span className="text-[10px] uppercase tracking-widest text-mist">{w.tagline}</span>
             </div>
             <div className="text-[10px] text-ivory/85 leading-snug mt-0.5">{w.description}</div>
           </button>
@@ -289,7 +289,7 @@ function Journal() {
                 <div className="min-w-0">
                   <div className="text-[12px] font-bold text-ivory">{known ? e.name : "Unknown"}</div>
                   <div className="text-[10px] text-mist leading-snug line-clamp-2">{known ? e.lore : "Defeat it to learn more."}</div>
-                  {known && <div className="text-[9px] text-gold mt-0.5">Slain {profile.progress.killsByEnemy[e.id] ?? 0}{e.essenceSummonId ? " · leaves a shadow" : ""}</div>}
+                  {known && <div className="text-[10px] text-gold mt-0.5">Slain {profile.progress.killsByEnemy[e.id] ?? 0}{e.essenceSummonId ? " · leaves a shadow" : ""}</div>}
                 </div>
               </div>
             );
@@ -322,7 +322,7 @@ function RankUp({ modal }: { modal: Extract<Modal, { kind: "rank_up" }> }) {
     <Card>
       <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(60% 45% at 50% 32%, rgba(233,201,122,0.22), transparent)" }} />
       <div className="relative px-5 pt-6 pb-4 flex flex-col items-center gap-2 text-center" data-testid="rank-up">
-        <div className="caps text-gold-2">Hunter rank</div>
+        <div className="caps text-gold-2">Ascendant rank</div>
         <div className="relative h-[110px] w-[110px] flex items-center justify-center">
           <motion.span className="absolute font-display text-[76px] text-mist" initial={{ opacity: 1, scale: 1 }} animate={{ opacity: 0, scale: 0.6, y: 20 }} transition={{ duration: 0.6, delay: 0.3 }}>
             {RANKS[modal.from]}
@@ -359,7 +359,7 @@ function RankUp({ modal }: { modal: Extract<Modal, { kind: "rank_up" }> }) {
 export function ModeResult({ modal }: { modal: Extract<Modal, { kind: "mode_result" }> }) {
   const c = useController();
   const again = c.modeAvailability(modal.mode);
-  const tone = { gold: "text-gold-2", jade: "text-jade-2", violet: "text-[#c2b6ff]" } as const;
+  const tone = { gold: "text-gold-2", jade: "text-jade-2", violet: "text-parch" } as const;
   return (
     <Card>
       <div className="px-4 pt-3 pb-3 text-center flex flex-col gap-1.5 items-center" data-testid="mode-result">
@@ -369,7 +369,7 @@ export function ModeResult({ modal }: { modal: Extract<Modal, { kind: "mode_resu
         <div className="w-full grid grid-cols-3 gap-1 mt-1">
           {modal.lines.map((l) => (
             <div key={l.label} className="card px-1.5 py-1.5">
-              <div className="caps !text-[8px]">{l.label}</div>
+              <div className="caps !text-[10px]">{l.label}</div>
               <div className={cn("font-display text-[15px]", l.tone ? tone[l.tone] : "text-ivory")}>{l.value}</div>
             </div>
           ))}
@@ -382,7 +382,7 @@ export function ModeResult({ modal }: { modal: Extract<Modal, { kind: "mode_resu
             {again.ok ? `Again${modal.mode === "vault" || modal.mode === "rift" ? ` (${c.profile.modes.keys[modal.mode]})` : ""}` : again.reason}
           </button>
         </div>
-        <div className="text-[9px] text-mist">{MODES[modal.mode].name}</div>
+        <div className="text-[10px] text-mist">{MODES[modal.mode].name}</div>
       </div>
     </Card>
   );

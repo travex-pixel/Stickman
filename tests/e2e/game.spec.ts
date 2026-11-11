@@ -50,8 +50,7 @@ test.describe("ASCEND vertical slice", () => {
       const c = (window as unknown as { __ASCEND__: { world: { kills: number } } }).__ASCEND__;
       return c.world.kills > 0;
     }, undefined, { timeout: 30_000 });
-    const gold = await page.getByTestId("gold").textContent();
-    expect(Number(gold)).toBeGreaterThan(0);
+    await expect.poll(async () => Number(await page.getByTestId("gold").textContent())).toBeGreaterThan(0);
   });
 
   test("abilities activate and dodge works", async ({ page }) => {
@@ -108,8 +107,8 @@ test.describe("ASCEND vertical slice", () => {
     await expect(page.getByTestId("summon-reveal-name")).toHaveText("Husk Blade");
     await page.getByTestId("summon-reveal-continue").click();
     expect(await game<number>(page, "c => c.profile.summons.collection.length")).toBe(1);
+    // The first Oathbound deploys itself.
     await page.getByTestId("tab-summons").click();
-    await page.getByTestId("deploy-button").click();
     await expect(page.getByTestId("deploy-count")).toHaveText("1/2");
     await page.waitForFunction(() => {
       const c = (window as unknown as { __ASCEND__: { world: { summonEntities(): unknown[] } } }).__ASCEND__;
@@ -146,6 +145,7 @@ test.describe("ASCEND vertical slice", () => {
     await game(page, "c => { c.profile.player.skillPoints = 3; c['commit'](); }");
     await page.getByTestId("tab-skills").click();
     await page.getByTestId("skill-p1").click();
+    await page.getByTestId("skill-unlock").click();
     expect(await game<string[]>(page, "c => c.profile.skills.unlocked")).toContain("p1");
     await expect(page.getByTestId("skill-points")).toHaveText("2");
   });

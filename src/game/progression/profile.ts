@@ -52,7 +52,7 @@ export interface Profile {
     perks: Record<string, number>;
     pendingPerkChoices: number;
     autoCast: boolean;
-    /** Hunter rank: 0 = E, 1 = D, 2 = C, 3 = B, 4 = A, 5 = S. */
+    /** Ascendant rank: 0 = E, 1 = D, 2 = C, 3 = B, 4 = A, 5 = S. */
     rank: number;
   };
   equipment: {

@@ -1,3 +1,5 @@
+// CSP-safe Pixi: replaces the eval-generated shader and uniform code so the strict Content-Security-Policy holds.
+import "pixi.js/unsafe-eval";
 import { Application, Container, Graphics, Sprite } from "pixi.js";
 import type { GameController } from "../GameController";
 import type { World } from "../engine/World";
@@ -36,7 +38,7 @@ type Fx =
 const WORLD_W = ARENA.width;
 const WORLD_D = ARENA.depth;
 /** Figures are drawn larger than the simulation footprint so fighters dominate the frame, as in the genre's best. */
-const FIGURE_SCALE = 1.42;
+const FIGURE_SCALE = 1.62;
 
 /**
  * BattleRenderer: PixiJS presentation of the simulation. Reads world state each frame,
@@ -187,8 +189,10 @@ export class BattleRenderer {
     const h = this.host.clientHeight || 300;
     this.width = w;
     this.height = h;
-    this.groundTop = h * 0.42;
-    this.groundBottom = h * 0.95;
+    // The lower 78px carry the ability medallions; fighters stand on the ground above them.
+    const reserve = 70;
+    this.groundTop = Math.max(h * 0.36, (h - reserve) * 0.46);
+    this.groundBottom = h - reserve;
     this.background?.layout(w, h, this.groundTop);
     this.flashRect.clear().rect(0, 0, w, h).fill(0xffffff);
     this.flashRect.alpha = 0;
@@ -372,12 +376,12 @@ export class BattleRenderer {
         if (p.kind === "arrow") {
           const g = new Graphics();
           g.rect(-14 * u, -1 * u, 28 * u, 2 * u).fill(0xe8e2d4);
-          g.poly([14 * u, -3 * u, 20 * u, 0, 14 * u, 3 * u]).fill(0xa48ee0);
+          g.poly([14 * u, -3 * u, 20 * u, 0, 14 * u, 3 * u]).fill(0xd9cdb2);
           c.addChild(g);
         } else {
           const s = new Sprite(softCircle());
           s.anchor.set(0.5);
-          s.tint = p.kind === "ember" ? 0xe0954f : p.kind === "warden_bolt" ? 0xa9d0e6 : p.kind === "shard" ? 0xb59cf0 : 0xffffff;
+          s.tint = p.kind === "ember" ? 0xe0954f : p.kind === "warden_bolt" ? 0xa9d0e6 : p.kind === "shard" ? 0xe7d3a6 : 0xffffff;
           s.blendMode = "add";
           s.scale.set(p.kind === "warden_bolt" ? 0.55 : 0.4);
           c.addChild(s);
@@ -417,11 +421,11 @@ export class BattleRenderer {
         const c = new Container();
         const ringS = new Sprite(ring());
         ringS.anchor.set(0.5);
-        ringS.tint = o.isBoss || o.elite ? 0xe9c56f : 0xa99cff;
+        ringS.tint = o.isBoss || o.elite ? 0xe9c56f : 0xf0e6d0;
         ringS.blendMode = "add";
         const core = new Sprite(softCircle());
         core.anchor.set(0.5);
-        core.tint = o.isBoss || o.elite ? 0xe9c97a : 0xc2b6ff;
+        core.tint = o.isBoss || o.elite ? 0xe9c97a : 0xfff6e2;
         core.blendMode = "add";
         c.addChild(ringS, core);
         this.orbLayer.addChild(c);
@@ -440,7 +444,7 @@ export class BattleRenderer {
       v.ring.rotation += dt;
       v.ring.alpha = 0.5 + frac * 0.5;
       if (!this.reduced && Math.random() < dt * 10) {
-        this.particles.emit({ x: sx, y: sy, count: 1, texture: softCircle(), color: o.isBoss || o.elite ? 0xe9c97a : 0xa99cff, speed: [6, 22], angle: [-Math.PI * 0.8, -Math.PI * 0.2], life: [0.6, 1.1], scale: [0.1, 0.25], alpha: 0.8 });
+        this.particles.emit({ x: sx, y: sy, count: 1, texture: softCircle(), color: o.isBoss || o.elite ? 0xe9c97a : 0xf0e6d0, speed: [6, 22], angle: [-Math.PI * 0.8, -Math.PI * 0.2], life: [0.6, 1.1], scale: [0.1, 0.25], alpha: 0.8 });
       }
     }
     for (const [id, v] of this.orbs) {
@@ -451,10 +455,35 @@ export class BattleRenderer {
     }
   }
 
+  /** Ink splatters left by the fallen. They soak into the ground and fade. Capped. */
+  private decals: { x: number; y: number; rx: number; ry: number; life: number; total: number; color: number }[] = [];
+
+  private splatter(x: number, y: number, big: boolean, color = 0x14110d): void {
+    const u = this.unit();
+    const n = big ? 16 : this.reduced ? 4 : 8;
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const d = Math.random() * (big ? 70 : 26) * u;
+      const r = (2 + Math.random() * (big ? 12 : 7)) * u;
+      this.decals.push({ x: x + Math.cos(a) * d, y: y + Math.sin(a) * d * 0.4, rx: r, ry: r * 0.45, life: 2.4, total: 2.4, color });
+    }
+    if (this.decals.length > 80) this.decals.splice(0, this.decals.length - 80);
+  }
+
   private drawGroundFx(world: World): void {
     const g = this.groundFx;
     g.clear();
     const u = this.unit();
+    for (let i = this.decals.length - 1; i >= 0; i--) {
+      const d = this.decals[i]!;
+      d.life -= 1 / 60;
+      if (d.life <= 0) {
+        this.decals.splice(i, 1);
+        continue;
+      }
+      const k = d.life / d.total;
+      g.ellipse(d.x, d.y, d.rx * (1 + (1 - k) * 0.3), d.ry * (1 + (1 - k) * 0.3)).fill({ color: d.color, alpha: 0.55 * Math.min(1, k * 1.6) });
+    }
     for (const t of world.telegraphs) {
       const k = 1 - t.remaining / t.total;
       const sx = this.sx(t.pos.x);
@@ -481,7 +510,7 @@ export class BattleRenderer {
       const sx = this.sx(h.pos.x);
       const sy = this.sy(h.pos.y);
       const r = h.radius * u;
-      const color = h.kind === "fire" ? (h.faction === "ally" ? 0xe0954f : 0xc9643a) : 0x6a56b8;
+      const color = h.kind === "fire" ? (h.faction === "ally" ? 0xe0954f : 0xc9643a) : 0x1d1a16;
       const flicker = 0.75 + Math.sin(this.time * 14 + h.id) * 0.15;
       g.ellipse(sx, sy, r, r * 0.42).fill({ color, alpha: 0.18 * flicker * Math.min(1, h.remaining) });
       g.ellipse(sx, sy, r * 0.6, r * 0.25).fill({ color: lighten(color, 0.4), alpha: 0.2 * flicker * Math.min(1, h.remaining) });
@@ -564,8 +593,8 @@ export class BattleRenderer {
           const sx = this.sx(e.pos.x);
           const sy = this.sy(e.pos.y) - 34 * u * FIGURE_SCALE * this.depthScale(e.pos.y);
           if (e.kind === "player") {
-            const color = world.loadout.weaponPath === "stormblade" ? 0xa8c4e6 : world.loadout.weaponPath === "infernal" ? 0xe0954f : world.loadout.weaponPath === "voidfang" ? 0xa48ee0 : 0xf0eadc;
-            this.fx.push({ kind: "slash", x: sx + e.facing * 12 * u, y: sy, facing: e.facing, radius: 52 * u, life: 0.22, total: 0.22, color, width: 5 * u, sweep: Math.PI * 1.1 });
+            const color = world.loadout.weaponPath === "stormblade" ? 0xa8c4e6 : world.loadout.weaponPath === "infernal" ? 0xe0954f : world.loadout.weaponPath === "voidfang" ? 0xd95a66 : 0xf0eadc;
+            this.fx.push({ kind: "slash", x: sx + e.facing * 14 * u, y: sy, facing: e.facing, radius: 58 * u, life: 0.26, total: 0.26, color, width: 8 * u, sweep: Math.PI * 1.1 });
           } else if (e.kind === "summon") {
             this.fx.push({ kind: "slash", x: sx + e.facing * 10 * u, y: sy, facing: e.facing, radius: 36 * u, life: 0.18, total: 0.18, color: 0x8fe0c4, width: 3 * u, sweep: Math.PI * 0.9 });
           } else if (e.heavy) {
@@ -587,7 +616,7 @@ export class BattleRenderer {
           }
           if (e.amount > 0) {
             const label = e.crit ? `${fmtNum(e.amount)}!` : fmtNum(e.amount);
-            const col = isPlayer ? 0xd95a66 : e.crit ? 0xe9c97a : e.element === "lightning" ? 0xc4d8ee : e.element === "fire" ? 0xe6a65a : e.element === "void" ? 0xc4b4ee : e.element === "soul" ? 0xb6ecd8 : 0xf3ede0;
+            const col = isPlayer ? 0xd95a66 : e.crit ? 0xe9c97a : e.element === "lightning" ? 0xc4d8ee : e.element === "fire" ? 0xe6a65a : e.element === "void" ? 0xe7d3a6 : e.element === "soul" ? 0xb6ecd8 : 0xf3ede0;
             this.numbers.spawn(sx, sy - 10, label, col, e.crit ? 1.25 : isPlayer ? 0.9 : 0.95, e.crit);
           }
           if (e.crit) this.shake(3);
@@ -605,7 +634,8 @@ export class BattleRenderer {
           const sx = this.sx(e.pos.x);
           const sy = this.sy(e.pos.y) - 30 * u;
           const isBoss = e.kind === "boss";
-          const color = e.kind === "summon" ? 0x8fe0c4 : isBoss ? 0xa9d0e6 : 0x2c2b2a;
+          const color = e.kind === "summon" ? 0xe9c97a : isBoss ? 0xa9d0e6 : 0x2c2b2a;
+          if (e.kind !== "summon") this.splatter(sx, this.sy(e.pos.y), isBoss);
           this.particles.emit({ x: sx, y: sy, count: isBoss ? 70 : this.reduced ? 10 : 22, texture: shard(), color, speed: [40, isBoss ? 420 : 220], life: [0.4, isBoss ? 1.6 : 0.9], scale: [0.25, isBoss ? 1.0 : 0.6], endScale: 0, gravity: 260, additive: false, alpha: 0.95, spin: 8 });
           this.particles.emit({ x: sx, y: sy, count: isBoss ? 40 : 8, texture: softCircle(), color: isBoss ? 0xa9d0e6 : 0x2a2a30, speed: [10, isBoss ? 160 : 60], life: [0.5, isBoss ? 1.8 : 1.0], scale: [0.4, isBoss ? 1.6 : 0.8], endScale: 1.6, alpha: 0.5 });
           if (isBoss) this.fx.push({ kind: "ring", x: sx, y: this.sy(e.pos.y), r0: 20, r1: this.width, life: 0.9, total: 0.9, color: 0xa9d0e6, width: 6, squash: 0.42 });
@@ -627,16 +657,16 @@ export class BattleRenderer {
           for (let i = 0; i < steps; i++) {
             const t = i / steps;
             const x = lerp(e.from.x, e.to.x, t);
-            this.fx.push({ kind: "afterimage", x: this.sx(x), y: this.sy(e.from.y) - 42 * u, life: 0.25 + t * 0.1, total: 0.35, color: 0x8a74d0, w: 12 * u, h: 40 * u });
+            this.fx.push({ kind: "afterimage", x: this.sx(x), y: this.sy(e.from.y) - 42 * u, life: 0.25 + t * 0.1, total: 0.35, color: 0x2a2620, w: 12 * u, h: 40 * u });
           }
-          this.particles.emit({ x: this.sx(e.from.x), y: this.sy(e.from.y) - 30 * u, count: this.reduced ? 5 : 12, texture: softCircle(), color: 0x8a74d0, speed: [20, 90], life: [0.3, 0.6], scale: [0.3, 0.6], endScale: 0 });
+          this.particles.emit({ x: this.sx(e.from.x), y: this.sy(e.from.y) - 30 * u, count: this.reduced ? 5 : 12, texture: softCircle(), color: 0xd9cdb2, speed: [20, 90], life: [0.3, 0.6], scale: [0.3, 0.6], endScale: 0, alpha: 0.6 });
           break;
         }
         case "essence_available": {
           const sx = this.sx(e.pos.x);
           const sy = this.sy(e.pos.y) - 28 * u;
-          this.fx.push({ kind: "ring", x: sx, y: this.sy(e.pos.y), r0: 4, r1: 60 * u, life: 0.8, total: 0.8, color: e.isBoss ? 0xe9c56f : 0xa99cff, width: 3, squash: 0.42 });
-          this.particles.emit({ x: sx, y: sy, count: 18, texture: softCircle(), color: e.isBoss ? 0xe9c97a : 0xa99cff, speed: [20, 80], life: [0.6, 1.2], scale: [0.2, 0.5], endScale: 0, alpha: 0.9 });
+          this.fx.push({ kind: "ring", x: sx, y: this.sy(e.pos.y), r0: 4, r1: 60 * u, life: 0.8, total: 0.8, color: e.isBoss ? 0xe9c56f : 0xf0e6d0, width: 3, squash: 0.42 });
+          this.particles.emit({ x: sx, y: sy, count: 18, texture: softCircle(), color: e.isBoss ? 0xe9c97a : 0xf0e6d0, speed: [20, 80], life: [0.6, 1.2], scale: [0.2, 0.5], endScale: 0, alpha: 0.9 });
           break;
         }
         case "projectile_hit": {
@@ -675,7 +705,7 @@ export class BattleRenderer {
           this.fx.push({ kind: "ring", x: sx, y: sy, r0: 10, r1: 80 * u, life: 0.5, total: 0.5, color: glow, width: 3, squash: 0.42 });
           const src = world.entities.get(e.id);
           const label = src ? { x: this.sx(src.pos.x), y: this.sy(src.pos.y) - 70 * u } : { x: sx, y: sy - 60 * u };
-          this.numbers.spawn(label.x, label.y, e.ability, 0xc2b6ff, 0.5, false);
+          this.numbers.spawn(label.x, label.y, e.ability, 0xf0d9a8, 0.5, false);
           break;
         }
         case "shield": {
@@ -687,7 +717,7 @@ export class BattleRenderer {
         case "hazard": {
           const sx = this.sx(e.pos.x);
           const sy = this.sy(e.pos.y);
-          this.fx.push({ kind: "ring", x: sx, y: sy, r0: 4, r1: e.radius * u, life: 0.4, total: 0.4, color: e.kind === "fire" ? 0xe0954f : 0x6a56b8, width: 3, squash: 0.42 });
+          this.fx.push({ kind: "ring", x: sx, y: sy, r0: 4, r1: e.radius * u, life: 0.4, total: 0.4, color: e.kind === "fire" ? 0xe0954f : 0x2a2620, width: 3, squash: 0.42 });
           break;
         }
         case "boss_intro": {
@@ -765,7 +795,7 @@ export class BattleRenderer {
     const color = def?.color ?? 0xffffff;
     switch (ability) {
       case "arc_slash":
-        this.fx.push({ kind: "slash", x: sx + facing * 20 * u, y: bodyY, facing, radius: 120 * u, life: 0.42, total: 0.42, color: 0xf0eadc, width: 11 * u, sweep: Math.PI * 1.25 });
+        this.fx.push({ kind: "slash", x: sx + facing * 20 * u, y: bodyY, facing, radius: 124 * u, life: 0.46, total: 0.46, color: 0xf0eadc, width: 15 * u, sweep: Math.PI * 1.25 });
         this.fx.push({ kind: "slash", x: sx + facing * 20 * u, y: bodyY + 6 * u, facing, radius: 95 * u, life: 0.36, total: 0.36, color: 0xe9c97a, width: 5 * u, sweep: Math.PI * 1.1 });
         this.particles.emit({ x: sx + facing * 70 * u, y: bodyY, count: this.reduced ? 8 : 22, texture: spark(), color: 0xffffff, speed: [80, 300], angle: facing === 1 ? [-Math.PI * 0.6, Math.PI * 0.6] : [Math.PI * 0.4, Math.PI * 1.6], life: [0.2, 0.45], scale: [0.4, 1.0], endScale: 0.1, spin: 6 });
         break;
@@ -785,10 +815,10 @@ export class BattleRenderer {
         break;
       case "void_nova":
         this.fx.push({ kind: "ring", x: sx, y: sy, r0: 4, r1: 170 * u, life: 0.5, total: 0.5, color, width: 10, squash: 0.42 });
-        this.fx.push({ kind: "ring", x: sx, y: sy, r0: 4, r1: 120 * u, life: 0.6, total: 0.6, color: 0xc4b4ee, width: 4, squash: 0.42 });
-        this.particles.emit({ x: sx, y: bodyY, count: this.reduced ? 15 : 48, texture: shard(), color, speed: [120, 420], life: [0.3, 0.8], scale: [0.3, 0.9], endScale: 0, spin: 10 });
+        this.fx.push({ kind: "ring", x: sx, y: sy, r0: 4, r1: 120 * u, life: 0.6, total: 0.6, color: 0xe9c97a, width: 3, squash: 0.42 });
+        this.particles.emit({ x: sx, y: bodyY, count: this.reduced ? 15 : 48, texture: shard(), color, speed: [120, 420], life: [0.3, 0.8], scale: [0.3, 0.9], endScale: 0, spin: 10, additive: false });
         this.particles.emit({ x: sx, y: bodyY, count: 1, texture: softCircle(), color: 0x000000, speed: [0, 0], life: [0.35, 0.35], scale: [3, 3], endScale: 0.2, alpha: 0.9, additive: false });
-        this.flash(0x6a56b8, 0.2);
+        this.flash(0xf0eadc, 0.1);
         break;
       case "ascendant_fury": {
         const enemies = this.world?.enemies() ?? [];
@@ -837,10 +867,10 @@ export class BattleRenderer {
     const u = this.unit();
     const sx = this.sx(pos.x);
     const sy = this.sy(pos.y);
-    this.particles.emit({ x: sx, y: sy - 10 * u, count: 26, texture: softCircle(), color: 0x8f7cff, speed: [10, 50], angle: [-Math.PI * 0.9, -Math.PI * 0.1], life: [0.4, 0.8], scale: [0.25, 0.55], endScale: 0, alpha: 0.9 });
+    this.particles.emit({ x: sx, y: sy - 10 * u, count: 26, texture: softCircle(), color: 0xf0e6d0, speed: [10, 50], angle: [-Math.PI * 0.9, -Math.PI * 0.1], life: [0.4, 0.8], scale: [0.25, 0.55], endScale: 0, alpha: 0.7 });
     this.particles.emit({ x: sx, y: sy - 40 * u, count: 22, texture: shard(), color: 0x2a2840, speed: [60, 200], life: [0.4, 0.9], scale: [0.25, 0.6], endScale: 0, gravity: 260, additive: false, spin: 8, alpha: 0.95 });
-    this.fx.push({ kind: "ring", x: sx, y: sy, r0: 70 * u, r1: 6, life: 0.45, total: 0.45, color: 0x8f7cff, width: 3, squash: 0.42 });
-    this.numbers.spawn(sx, sy - 70 * u, "Resisted", 0xb59cf0, 0.75, true);
+    this.fx.push({ kind: "ring", x: sx, y: sy, r0: 70 * u, r1: 6, life: 0.45, total: 0.45, color: 0x2a2620, width: 4, squash: 0.42 });
+    this.numbers.spawn(sx, sy - 70 * u, "Refused", 0xd9cdb2, 0.75, true);
     this.shake(4);
   }
 
@@ -956,7 +986,7 @@ function elementColor(element: string, crit: boolean): number {
     case "fire":
       return 0xe0954f;
     case "void":
-      return 0x8a74d0;
+      return 0xe7d3a6;
     case "soul":
       return 0x8fe0c4;
     default:

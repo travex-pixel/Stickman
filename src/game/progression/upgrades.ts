@@ -29,13 +29,15 @@ export function upgradeStat(profile: Profile, stat: UpgradeableStat): UpgradeAtt
 }
 
 /**
- * Hold-to-upgrade cadence: the first upgrade is immediate, then repeats accelerate
- * from 380ms down to 55ms. Pure function so it can be unit-tested.
+ * Hold-to-upgrade cadence: the first upgrade is immediate, the next few are deliberate
+ * (about 400 ms apart, so a short hold buys a few levels, not your whole purse), then
+ * repeats accelerate to a 70 ms floor for long holds. Pure so it can be unit-tested.
  */
 export function holdRepeatDelay(repeatIndex: number): number {
   if (repeatIndex <= 0) return 0;
-  const start = 380;
-  const floor = 55;
-  const t = Math.min(1, (repeatIndex - 1) / 14);
+  if (repeatIndex <= 3) return 400;
+  const start = 340;
+  const floor = 70;
+  const t = Math.min(1, (repeatIndex - 4) / 18);
   return Math.round(start + (floor - start) * (1 - Math.pow(1 - t, 2)));
 }

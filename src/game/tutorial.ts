@@ -51,7 +51,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
   },
   {
     id: "summon",
-    targets: [{ target: "claim-essence", label: "Tap ARISE to raise its shadow", gesture: "tap" }],
+    targets: [{ target: "claim-essence", label: "Tap BIND to swear it to your army", gesture: "tap" }],
     ready: (c) => (c.snapshot?.orbs.length ?? 0) > 0,
   },
   {

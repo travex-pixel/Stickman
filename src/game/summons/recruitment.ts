@@ -19,7 +19,7 @@ export function newInstanceId(now = Date.now()): string {
 }
 
 /**
- * Called after a successful ARISE. A new species joins the army.
+ * Called after a successful BIND. A new species joins the army.
  * A duplicate strengthens its kin with a shard and refunds Essence.
  */
 export function claimEssence(profile: Profile, summonId: string, now = Date.now()): ClaimOutcome {

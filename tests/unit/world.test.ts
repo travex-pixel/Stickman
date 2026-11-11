@@ -176,6 +176,7 @@ describe("boss", () => {
     p.player.statLevels = { attack: 60, maxHp: 60, attackSpeed: 30, critChance: 10, critDamage: 10, defense: 30 };
     p.player.level = 10;
     p.player.autoCast = true;
+    p.progress.bestStage = 1; // a veteran: the first-ever Warden is deliberately softened
     const w = new World({ stage: 1, loadout: buildLoadout(p), seed: 11 });
     const ev: GameEvent[] = [];
     step(w, 240, ev);

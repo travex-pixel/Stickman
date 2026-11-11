@@ -17,7 +17,7 @@ export const GEAR_EFFECTS: Record<GearEffectId, GearEffectDef> = {
   bloodthirst: { id: "bloodthirst", name: "Bloodthirst", description: "Basic attacks heal you for 6% of the damage they deal.", build: "sustain" },
   executioner: { id: "executioner", name: "Executioner", description: "Deal 40% more damage to enemies below 30% health.", build: "burst" },
   bulwark: { id: "bulwark", name: "Bulwark", description: "Take 15% less damage. Heavy hits against you grant a shield.", build: "defence" },
-  shadowbound: { id: "shadowbound", name: "Shadowbound", description: "Your shadows deal 25% more damage. ARISE +5%.", build: "summoner" },
+  shadowbound: { id: "shadowbound", name: "Shadowbound", description: "Your Oathbound deal 25% more damage. BIND +5%.", build: "summoner" },
   tempest: { id: "tempest", name: "Tempest", description: "Ability cooldowns are 15% shorter.", build: "ability" },
   huntmark: { id: "huntmark", name: "Huntmark", description: "Critical hits mark the target: it takes 20% more damage for 3 seconds.", build: "crit" },
 };

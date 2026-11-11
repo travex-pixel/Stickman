@@ -22,8 +22,6 @@ export function SettingsModal() {
         </button>
       </div>
       <div className="px-4 pb-4 flex flex-col gap-3">
-        <GiftCode />
-        <div className="h-px bg-white/8" />
         <Slider label="Music" value={s.music} onChange={(v) => c.updateSettings({ music: v })} />
         <Slider label="Effects" value={s.sfx} onChange={(v) => c.updateSettings({ sfx: v })} />
         <Toggle label="Advance to the next stage automatically" value={s.autoAdvance} onChange={(v) => c.updateSettings({ autoAdvance: v })} />
@@ -34,6 +32,9 @@ export function SettingsModal() {
             {stats.fps} fps · {stats.frameMs} ms · {stats.renderer} · particles {stats.particles}
           </div>
         )}
+        <div className="h-px bg-white/8" />
+        <GiftCode />
+        <div className="h-px bg-white/8" />
         <div className="flex gap-2">
           <button className="btn-ghost flex-1 text-[11px]" onClick={() => c.replayTutorial()} data-testid="replay-tutorial">Replay guidance</button>
           {!confirmReset ? (
@@ -42,8 +43,8 @@ export function SettingsModal() {
             <button className={cn("btn-ghost flex-1 text-[11px] bg-crimson/20 border-crimson/60 text-ivory")} onClick={() => void c.resetSave()} data-testid="reset-save-confirm">Erase everything?</button>
           )}
         </div>
-        <div className="text-[9px] text-mist text-center leading-snug">
-          Your progress is saved on this device. Runs: {profile.progress.runs} · Best stage: {profile.progress.bestStage}
+        <div className="text-[10px] text-mist text-center leading-snug">
+          Your progress is saved on this device. Runs: {profile.progress.runs} · Best stage: {profile.progress.bestStage || "none yet"}
         </div>
       </div>
     </motion.div>

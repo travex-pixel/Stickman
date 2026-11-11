@@ -29,6 +29,7 @@ export interface PlayerLoadout {
   hasSummons: boolean;
   /** Species already sworn: ordinary kills of these convert straight to shards. */
   owned: string[];
+  bestStage: number;
 }
 
 export function buildLoadout(profile: Profile): PlayerLoadout {
@@ -51,6 +52,7 @@ export function buildLoadout(profile: Profile): PlayerLoadout {
     level: profile.player.level,
     hasSummons: profile.summons.collection.length > 0,
     owned: ownedSpecies(profile),
+    bestStage: profile.progress.bestStage,
   };
 }
 

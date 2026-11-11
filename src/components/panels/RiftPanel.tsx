@@ -42,9 +42,9 @@ export default function RiftPanel() {
             data-testid={`stage-${s}`}
             aria-label={`Stage ${s}`}
           >
-            <div className="caps !text-[8px]">Stage</div>
+            <div className="caps !text-[10px]">Stage</div>
             <div className="font-display text-[15px] text-ivory leading-none">{s}</div>
-            <div className="h-3 flex items-center justify-center">{s <= profile.progress.bestStage ? <Icon name="check" size={10} className="text-jade-2" /> : <span className="text-[8px] text-gold">new</span>}</div>
+            <div className="h-3 flex items-center justify-center">{s <= profile.progress.bestStage ? <Icon name="check" size={10} className="text-jade-2" /> : <span className="text-[10px] text-gold">new</span>}</div>
           </button>
         ))}
       </div>
@@ -68,7 +68,7 @@ export default function RiftPanel() {
                   <Icon name={avail.ok ? MODE_ICON[m] : "lock"} size={14} />
                   <span className="font-display text-[13px] text-ivory truncate">{title}</span>
                 </span>
-                {keys !== null && avail.ok && <span className="text-[9px] font-bold text-parch shrink-0">{keys}/3</span>}
+                {keys !== null && avail.ok && <span className="text-[10px] font-bold text-parch shrink-0">{keys}/3</span>}
               </div>
               <div className="text-[10px] text-mist leading-snug line-clamp-2">{sub}</div>
             </button>

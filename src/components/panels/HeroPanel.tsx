@@ -60,7 +60,7 @@ function StatCard({ stat, icon, value, next, level, gold, unlocked, onUpgrade }:
         <Icon name="lock" size={16} className="text-mist shrink-0" />
         <div className="leading-tight min-w-0">
           <div className="text-[11px] font-semibold text-mist truncate">{STAT_LABEL[stat]}</div>
-          <div className="text-[9px] text-mist/80">Requires {STAT_LABEL[rule.requires]} Lv {rule.level}</div>
+          <div className="text-[10px] text-mist/80">Requires {STAT_LABEL[rule.requires]} Lv {rule.level}</div>
         </div>
       </div>
     );
@@ -71,19 +71,19 @@ function StatCard({ stat, icon, value, next, level, gold, unlocked, onUpgrade }:
         <div className="flex items-center gap-1 text-mist min-w-0">
           <Icon name={icon} size={12} className="text-gold shrink-0" />
           <span className="text-[10px] font-semibold truncate">{STAT_LABEL[stat]}</span>
-          <span className="ml-auto text-[9px] text-mist shrink-0">Lv {level}</span>
+          <span className="ml-auto text-[10px] text-mist shrink-0">Lv {level}</span>
         </div>
         <div className="flex items-baseline gap-1 min-w-0">
           <span className="font-display text-[16px] text-ivory tabular-nums shrink-0" data-testid={`stat-value-${stat}`}>{value}</span>
-          {!capped && <span className="text-[9px] text-jade-2 tabular-nums truncate hidden min-[360px]:inline">› {next}</span>}
+          {!capped && <span className="text-[10px] text-jade-2 tabular-nums truncate hidden min-[360px]:inline">› {next}</span>}
         </div>
       </div>
-      <HoldButton onRepeat={onUpgrade} disabled={capped || !affordable} className="h-[40px] w-[52px] min-[360px]:w-[56px] shrink-0" guide={stat === "attack" ? "upgrade-attack" : undefined} testId={`upgrade-${stat}`} label={`Upgrade ${STAT_LABEL[stat]} for ${cost} gold`}>
+      <HoldButton onRepeat={onUpgrade} disabled={capped || !affordable} className="h-[40px] w-[52px] min-[360px]:w-[56px] shrink-0" guide={`upgrade-${stat}`} testId={`upgrade-${stat}`} label={`Upgrade ${STAT_LABEL[stat]} for ${cost} gold`}>
         {capped ? (
           <span className="text-[10px] font-bold text-mist">MAX</span>
         ) : (
           <span className="flex flex-col items-center leading-none">
-            <span className="caps text-gold-2 !text-[8px]">Hold</span>
+            <span className="caps text-gold-2 !text-[10px]">Hold</span>
             <span className={cn("flex items-center gap-0.5 text-[10px] font-bold tabular-nums", affordable ? "text-gold" : "text-crimson-2")}>
               <Icon name="coin" size={10} />
               {fmt(cost)}
@@ -105,13 +105,13 @@ function RankBadge() {
       className={cn("flex items-center gap-1.5 rounded-lg border pl-1 pr-2 py-0.5", ready ? "border-gold/70 bg-gold/10" : "border-white/10 bg-black/20")}
       onClick={() => (ready ? c.startMode("trial") : c.setPanel("rift"))}
       data-testid="rank-badge"
-      aria-label={`Hunter rank ${rankLetter(profile.player.rank)}${ready ? ", trial ready" : ""}`}
+      aria-label={`Ascendant rank ${rankLetter(profile.player.rank)}${ready ? ", trial ready" : ""}`}
     >
       <span className="h-6 w-6 rounded-md flex items-center justify-center font-display text-[15px] text-gold-2" style={{ background: "linear-gradient(180deg,#2c2414,#17130b)", boxShadow: "inset 0 0 0 1px rgba(207,169,94,0.5)" }}>
         {rankLetter(profile.player.rank)}
       </span>
       <span className="text-[10px] leading-tight text-left">
-        <span className="block caps !text-[8px]">Rank</span>
+        <span className="block caps !text-[10px]">Rank</span>
         <span className={cn("block font-semibold", ready ? "text-gold-2" : "text-mist")}>{step ? (ready ? "Trial ready" : `Trial at Lv ${step.level}`) : "Apex"}</span>
       </span>
     </button>

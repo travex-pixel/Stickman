@@ -5,7 +5,6 @@ import { GameController } from "@/game/GameController";
 import { GameContext, useUi } from "@/hooks/useGame";
 import { Battlefield } from "./Battlefield";
 import { TopBar } from "@/components/hud/TopBar";
-import { AbilityBar } from "@/components/hud/AbilityBar";
 import { TabNav } from "@/components/navigation/TabNav";
 import { PanelHost } from "@/components/panels/PanelHost";
 import { HandGuide } from "@/components/guidance/HandGuide";
@@ -58,9 +57,8 @@ export default function GameShell() {
     <GameContext.Provider value={controller}>
       <div id="app-shell" data-testid="app-shell" onPointerDownCapture={() => controller.userGesture()}>
         <TopBar />
-        <main className="relative min-h-0 min-w-0 grid" style={{ gridTemplateRows: "minmax(0,1fr) auto clamp(190px, 36dvh, 310px)", gridTemplateColumns: "minmax(0,1fr)" }}>
+        <main className="relative min-h-0 min-w-0 grid" style={{ gridTemplateRows: "minmax(0,1fr) clamp(176px, 31dvh, 272px)", gridTemplateColumns: "minmax(0,1fr)" }}>
           <Battlefield />
-          <AbilityBar />
           <PanelHost />
         </main>
         <TabNav />

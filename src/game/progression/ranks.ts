@@ -14,11 +14,11 @@ export interface RankStep {
 
 /** Each rank is a breakthrough: stats, extraction power, and at C and S another deploy slot. */
 export const RANK_STEPS: RankStep[] = [
-  { to: 1, level: 5, trialStage: 2, rewards: ["+8% Attack and Health", "+4% ARISE chance"] },
-  { to: 2, level: 10, trialStage: 4, rewards: ["+8% Attack and Health", "+4% ARISE chance", "+1 deploy slot"] },
-  { to: 3, level: 16, trialStage: 6, rewards: ["+8% Attack and Health", "+4% ARISE chance"] },
-  { to: 4, level: 24, trialStage: 9, rewards: ["+8% Attack and Health", "+4% ARISE chance"] },
-  { to: 5, level: 32, trialStage: 13, rewards: ["+8% Attack and Health", "+4% ARISE chance", "+1 deploy slot"] },
+  { to: 1, level: 5, trialStage: 2, rewards: ["+8% Attack and Health", "+4% BIND chance"] },
+  { to: 2, level: 10, trialStage: 4, rewards: ["+8% Attack and Health", "+4% BIND chance", "+1 deploy slot"] },
+  { to: 3, level: 16, trialStage: 6, rewards: ["+8% Attack and Health", "+4% BIND chance"] },
+  { to: 4, level: 24, trialStage: 9, rewards: ["+8% Attack and Health", "+4% BIND chance"] },
+  { to: 5, level: 32, trialStage: 13, rewards: ["+8% Attack and Health", "+4% BIND chance", "+1 deploy slot"] },
 ];
 
 export function rankLetter(rank: number): RankLetter {
