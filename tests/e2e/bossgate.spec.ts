@@ -10,13 +10,15 @@ const STRONG = "c => { const p = c.profile; p.tutorial.finished = true; p.player
 
 test.describe("boss gate loop", () => {
   test("1-3: farming is automatic, reaches the gate, and keeps farming while the boss waits", async ({ page }) => {
-    test.setTimeout(200_000);
+    test.setTimeout(300_000);
     const errors = collectErrors(page);
     await waitForGame(page);
     await game(page, STRONG);
     // 1: no input, yet enemies fall and gold arrives.
+    // Timeouts here are wall-clock. Headless Chromium renders in software at 6 to 10 fps, and the
+    // game loop caps catch-up per frame, so the game clock can run at half real time: allow for it.
     const gold0 = await game<number>(page, "c => c.profile.player.gold");
-    await expect.poll(() => game<number>(page, "c => c.world.kills"), { timeout: 30_000 }).toBeGreaterThan(2);
+    await expect.poll(() => game<number>(page, "c => c.world.kills"), { timeout: 60_000 }).toBeGreaterThan(2);
     expect(await game<number>(page, "c => c.profile.player.gold")).toBeGreaterThan(gold0);
     // 2: stage 1 is a boss stage: clearing its encounters raises the gate, and advancement stops.
     await expect.poll(() => game<number>(page, "c => c.profile.progress.bossGate"), { timeout: 150_000 }).toBe(1);
@@ -24,7 +26,7 @@ test.describe("boss gate loop", () => {
     expect(await game<number>(page, "c => c.profile.progress.bestStage")).toBe(0);
     // 3: the same stage keeps farming: more cycles, more kills, no boss on the field.
     const kills = await game<number>(page, "c => c.world.kills");
-    await expect.poll(() => game<number>(page, "c => c.world.kills"), { timeout: 40_000 }).toBeGreaterThan(kills + 2);
+    await expect.poll(() => game<number>(page, "c => c.world.kills"), { timeout: 60_000 }).toBeGreaterThan(kills + 2);
     expect(await game<string>(page, "c => c.world.mode")).toBe("campaign");
     expect(await game<number>(page, "c => c.world.stage")).toBe(1);
     expect(await game<boolean>(page, "c => [...c.world.entities.values()].some(e => e.kind === 'boss')")).toBe(false);
