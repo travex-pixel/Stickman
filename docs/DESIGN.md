@@ -165,7 +165,15 @@ is several weeks for most players once offline time is counted:
 | 0 to 3 | 44 | First climb, first Depth (31) |
 | 3 to 10 | 44 to 86 | Ascensions every 1.5 to 3 hours, +10 to 20 stages each; Aether tree bought out cheaply |
 | 10 to 28 | 86 to 300 | The breakthrough: deep Aether (x1.1 per stage past 60) and the compounding tree push +20 to 30 stages per ascension, a new Depth every ascension or two |
-| 28 to 60 | 300 to 370 | The long tail: Might and Vigor near their caps, +3 stages per ascension; Limit Break and the Tyrant's weekly tiers carry the power growth |
+| 28 to 60 | 300 to 450 | The long tail: Might and Vigor near their caps; Limit Break (25 levels) and the Tyrant's weekly tiers carry the power growth |
+| 60 to 100 | 450 to 500 | Still moving: about one Rift Depth every 15 to 20 hours |
+
+Past 60 hours (one seed, `MAXMIN=6000`): with Limit Break capped at 10 levels the climb hit a
+wall, stage 386 at 68 hours and 395 at 97: Attack and Health were pinned at their 800-level cap.
+Raising Limit Break to 25 levels (its cost grows 4x a level, so the last ones are a late-game
+sink) turns the wall into steady progress: 449 at 60 hours, 503 at 97, with Attack at 1104 of a
+possible 1400 (gold, not the cap, is now the limit). Also uncapping Might and Vigor reached 662
+but pulled the mid-game forward by about 100 stages, spending content too fast; not adopted.
 
 What made the difference, found with the simulator:
 

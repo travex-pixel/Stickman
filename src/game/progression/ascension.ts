@@ -94,7 +94,7 @@ const growing = (base: number) => (l: number) => Math.ceil(base * Math.pow(1.3, 
 /** Levels of Might and Vigor (economy knob, tuned with the simulator). */
 export const TREE_DEEP_MAX = Number(process.env.ASCEND_TREE_MAX ?? 100);
 /** Levels of Limit Break (economy knob, tuned with the simulator). */
-export const LIMIT_BREAK_MAX = Number(process.env.ASCEND_LIMIT_MAX ?? 10);
+export const LIMIT_BREAK_MAX = Number(process.env.ASCEND_LIMIT_MAX ?? 25);
 
 export const TREE: TreeNode[] = [
   { id: "might", name: "Might", per: "+5% Attack, compounding", max: TREE_DEEP_MAX, cost: growing(2) },
