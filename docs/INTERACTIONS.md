@@ -11,12 +11,12 @@ or error tone instead of silence when a press cannot succeed.
 | Control | Purpose | Available | Unavailable look | Press | Feedback | Result | Failure |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | BOSS CHALLENGE plaque (`boss-challenge`) | Open the boss readiness sheet | A boss gate is open and the campaign is farming | Not shown | Opens the sheet over the battlefield (farming continues) | Breathing crimson glow, boss portrait, name and readiness tier; press scale | `boss_ready` sheet; forecast starts or refreshes | Not reachable without a gate; controller refuses with an error tone |
-| FIGHT (`boss-fight`) | Start the boss encounter. The only entry to a boss fight | Sheet open, gate open, farming, warrior alive, no pending transition | Not shown | `challengeBoss()` | Dark flash, boss horn, `BOSS CHALLENGE` banner, boss intro with its counter tip | New `boss` world on the gate stage | Returns false with an error tone; nothing starts |
+| FIGHT (`boss-fight`) | Start the boss encounter. The only entry to a boss fight | Sheet open, gate open, farming, warrior alive, no pending transition | Not shown | `challengeBoss()` | Boss horn; inside the 2.4s intro, letterbox, dimmed field, camera to the spawn, the boss's own emergence (fissure, water rings, ember column, gold flare) and an impact beat; then its counter tip | New `boss` world on the gate stage | Returns false with an error tone; nothing starts |
 | Keep farming (`boss-later`) | Close the sheet | Always | – | Close | Sheet closes | Farming as before | – |
 | Readiness tips | Go fix a weakness | Tip listed | – | Opens the named panel (sheet stays open) | Panel switch | Upgrades refresh the tips and the forecast | – |
-| Retreat (`mode-leave`, lower right in a boss fight) | Leave a boss fight | During the fight | – | Back to farming | Toast | Farming world; gate stays; no win or loss recorded | – |
-| BIND on the victory card (`victory-bind-button`) | Bind the fallen boss's essence | The boss left an essence | Not shown | Card steps aside, BIND rolls | Reveal on success, "Refused" and the new chance on failure; the card returns | Collection, pity; the countdown waits while the essence does | – |
-| Onward (`victory-continue`) | Leave the victory card | Victory card | – | Farming at the next stage | Card closes; stage banner | Farming world at `nextStage`; auto after a short countdown when enabled | – |
+| Retreat (`mode-leave`, upper left under the boss bar) | Leave a boss fight, hunt or Vault run | During the fight | – | Two taps: the first arms it ("Tap again to retreat", threat red, `data-armed`) for 3s; the second leaves | Label change, then a toast | Farming world; gate stays; no win or loss recorded | A single stray tap does nothing but arm it |
+| BIND on the victory card (`victory-bind-button`) | Bind the fallen boss's essence | The boss left an essence | Not shown | A quiet button with gold text (Onward is the one gold action). Card steps aside, BIND rolls | Reveal on success, "Refused" and the new chance on failure; the card returns | Collection, pity; the countdown waits while the essence does | – |
+| Onward (`victory-continue`) | Leave the victory card | Victory card | – | Farming at the next stage. With an unbound essence, the first tap shows "The essence stays here if you go. Tap again to leave it." (`victory-leave-warning`) and the second leaves | Card closes; stage banner; the countdown is a thin line along the button's foot | Farming world at `nextStage`; auto after a short countdown when enabled, never while an essence waits | – |
 | Keep farming / Get stronger (defeat card) | Leave the defeat summary | Defeat card | – | Close; or close and open Hero with the hand on an upgrade | Card closes | Farming continues; the boss is never retried automatically | – |
 | Push chip (`push-stage`, lower left) | Resume pushing after a fall or a manual hold | Farming below the frontier with auto-push off, warrior standing | Not shown (also hidden while the warrior is down) | `pushStage()` | Toast, foes withdraw, `STAGE n` banner | Farming moves up one stage now and keeps pushing | During the fall beat: "regrouping" toast, nothing changes |
 | Stage tiles (Rift panel) | Farm a chosen stage | Any stage up to the frontier | Future stages not listed | `selectStage()` | Toast | Farming moves in place; below the frontier it holds there | – |
@@ -31,14 +31,14 @@ or error tone instead of silence when a press cannot succeed.
 | AUTO | Let abilities fire on their own | After using an ability and dodging; on by default when the tutorial ends | Faded | Toggle | ON/OFF label, gold when on | Loadout autoCast | Locked: toast explaining the unlock |
 | Battle speed (`speed-toggle`) | 1x / 2x | After stage 3 | Lock icon, faded | Toggle | Label | Sim steps per frame | Locked: toast |
 | Tap an enemy | Focus target | An enemy under the finger | – | `focusAt()` | Gold rotating reticle; first time, a toast | Warrior and army (except guards) target it | No enemy under the finger: nothing happens |
-| BIND (`claim-essence`) | Try to bind a shadow | Orb on the field | Not shown | Roll at the shown chance | Success: OATHBOUND cinematic and reveal. Failure: "Refused" and the new chance | Collection, pity | First failure explains that BIND is a chance that rises |
+| BIND (`claim-essence`) | Try to bind a shadow | Orb on the field | Not shown | Roll at the shown chance | Success: a staging by rarity (quick 0.5s for a duplicate, common 0.9s, rare 1.6s, epic 2.3s, legendary and boss shadows 3.6s; the first bind ever is legendary), then the reveal; a tap after 0.4s skips to the name. Failure: the pool collapses with a dry crack, "Refused" and the new chance | Collection, pity | First failure explains that BIND is a chance that rises |
 | Command buttons | Army stance | Army deployed | Not shown | `setCommand()` | Pressed state | Summon AI behaviour | – |
 
 ## Growth
 
 | Control | Purpose | Available | Unavailable look | Press | Feedback | Result | Failure |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Hold-to-upgrade (stats) | Raise a stat | Unlocked and affordable | Locked rule text; cost in red when unaffordable | Hold: repeats, accelerating | Tick sounds, fill, next value preview | Real stat change in the live world | Stops when gold runs out |
+| Hold-to-upgrade (stats) | Raise a stat | Unlocked and affordable | Locked rule text; a flat grey cost pill when unaffordable (a raised pill with gold text when affordable) | Hold: repeats, accelerating | Tick sounds, fill, next value preview; a gold lozenge marks the affordable upgrade with the most Power per gold (`best-buy`) | Real stat change in the live world | Stops when gold runs out |
 | Item upgrade (hold) | Level an item | Below cap and affordable | MAX or red cost | Hold | As above | Item level | Stops |
 | Equip / Unequip | Wear an item | Item selected | – | Equip | Equip sound | Loadout and set bonuses | – |
 | Forge | Fuse three of a rarity | Three unequipped of the rarity, not legendary | Not shown | Fuse | Bright reveal for epic and legendary, toast | New item of the next rarity in this slot; half the levels kept | Error tone |
@@ -63,3 +63,23 @@ or error tone instead of silence when a press cannot succeed.
 | Goals (Rift panel) | Daily and weekly objectives | Always | Badge when claimable | Opens objectives | – | – | – |
 | Claim (objective) | Collect an objective | Complete and unclaimed | "…" or Done | Claim | Toast with the payout | Gold, essence, cores (and the all-three bonus once a day) | Error tone |
 | Collect (offline card) | Close the return summary | Always | – | Close | Gold tone | Rewards were credited and saved before the card opened | – |
+| Upgrades ready (offline card, `offline-upgrade`) | Spend the return's gold | Affordable upgrades exist | Not shown | Closes the card and opens Hero with the hand guide on an upgrade | Panel switch | Nothing is bought for the player | – |
+
+## Panel and settings
+
+| Control | Purpose | Available | Unavailable look | Press | Feedback | Result | Failure |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Panel grabber (`panel-grabber`) | Switch the panel between its base and tall heights | Army, Gear, Skills and Rift, when the screen has room for a tall panel (Hero never grows) | Not shown | Tap, drag past 24px, or Enter/Space (a window splitter for assistive technology) | The panel slides over 320ms; the battlefield's framing lifts with it | Each tab opens at its base and remembers the choice for the session | – |
+| Detail raise | Give a detail room for its actions | A picked item (Gear) or the Arts (Skills) | – | Opens with the detail; closes with it | The panel rises, then returns to the player's own height | Equip, upgrade and rank-up stay in reach at every phone size | Dragging the panel down while raised wins until the detail opens again |
+| Claim beside the gate (quest banner) | Collect a finished quest while a boss waits | Quest complete and a gate open | – | Claim | Claim sound | Reward | – |
+| Short reveals (Settings) | Shorter BIND stagings | Always | – | Toggle | Switch | Every bind plays its short form; the very first bind always plays in full; tap to skip works either way | – |
+
+## Playtest recording
+
+Add `?playtest=1` to the address to record a session on the device. Once a second the recorder
+reads the game (kills, gold, level, stage, boss wins and losses, upgrades, shadows, gear, the
+tutorial step, the card, panel and mode on screen); it also logs each tap with what it hit. At the
+end the player rates seven statements from 1 to 7 ("Hits felt powerful", "I always knew what to
+do next" and five more). The report is shown to the player, who chooses whether to copy and send
+it: nothing leaves the device on its own, and nothing is recorded without the flag
+(`src/game/telemetry/`).

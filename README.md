@@ -16,7 +16,10 @@ The whole game fits one phone screen with no scrolling, from 320x568 to 430x932:
 - **Top**: level, gold, essence, stage and wave progress, battle speed, menu.
 - **Battlefield**: the live PixiJS fight, with the boss bar, BIND prompts, army commands and the quest pill.
   Six round medallions sit on the battlefield itself: AUTO, five abilities and the Ascendant Fury ultimate.
-- **Panel**: Hero (hold-to-upgrade stats, Ascendant rank), Summons (the Oathbound army), Gear, Skills (three seal paths plus Arts) and Rift (game modes, journal, bestiary).
+- **Panel**: Hero (hold-to-upgrade stats, Ascendant rank), Army (the Oathbound shadows), Gear, Skills (three seal paths plus Arts) and Rift (game modes, journal, bestiary).
+  Every tab opens at its base height so the fight stays in view; drag or tap the grabber for a
+  taller panel. A detail whose buttons need the room (a picked item, the Arts) raises the panel
+  while it is open.
 
 ### The loop: farming never stops, bosses wait for you
 
@@ -61,6 +64,11 @@ Enemies marked with a pale light leave their oath behind when they fall. Tap **B
 - **Roles**: Vanguard, Reaper, Ranger, Arcanist, Sentinel (guards the warrior), Caller (raises temporary shades mid-fight) and Sovereign (the Hollow Warden).
 - **Army**: deploy two to start, a third at rank C and a fourth at rank S. Commands (Follow, Attack, Guard) change positioning and targeting immediately.
 - **Growth**: deployed shadows earn XP, benched ones a share. Bond is raised with essence. Binding a species you already own gives shards, and shards plus Rift Cores raise **stars**. Evolution needs stars and level.
+- **Synergies**: some role pairs in the field fight better together, such as Shield Wall
+  (Vanguard and Sentinel: +30% defence, +10% health), Crossfire (Ranger and Arcanist: +15%
+  attack) and Warband (any three roles: +8% attack and health). Within one synergy each role is
+  a different shadow; one shadow can serve several synergies. The Army panel names the deploy
+  that gains one.
 - **Oath Codex**: every species you own grants a permanent bonus to the warrior, and the bonus grows with that species' best star (x3.5 at five stars). Collecting widely and deeply both matter, not just the strongest summon.
 
 ## Progression
@@ -89,6 +97,17 @@ Enemies marked with a pale light leave their oath behind when they fall. Tap **B
 
 Daily keys refill each day and never stack into an obligation.
 
+## Look and feel
+
+"Ink and Gilt": warm ink surfaces, a paper grain and a gilt edge on the panel only, gold for the
+one action that matters on each screen, crimson for threat, jade for what you keep. Two
+typefaces: Instrument Sans for the interface (tabular numbers) and Instrument Serif for names
+and the numbers worth a pause. The battlefield is the loud part: a camera that frames the fight
+and kicks on heavy hits, blended poses with contact on the strike, local hit-stop, BIND stagings
+by rarity (a tap skips to the name; "Short reveals" in Settings shortens every bind but the
+first) and an entrance, a phase change and a death for each boss. The design, its reasoning and
+the measurements behind it are in `ASCEND_REBIRTH_BLUEPRINT.md` and `docs/rebirth/EVIDENCE.md`.
+
 ## Gift codes
 
 Players redeem codes from the menu, once per save. `WELCOME`, `ASCENDANT`, `QUIETSOLDIER` and `OATHKEEPER` are built in. Signed one-off codes are generated with:
@@ -112,10 +131,13 @@ src/game/summons       role AI, BIND extraction, recruitment, stars, evolution
 src/game/progression   profile model, derived stats, upgrades, skills, arts, ranks, perks, quests, loadout
 src/game/economy       loot, stage rewards, gift codes
 src/game/data          all content as data: abilities, enemies, summons, regions, skills, perks, lore
-src/game/render        PixiJS presentation: procedural rigs, particles, effects, background
+src/game/render        PixiJS presentation: procedural rigs, camera, particles, effects, background;
+                       anim/ (timelines, pose blending, hit-stop) and cinematics/ (BIND, bosses)
+src/game/telemetry     the opt-in playtest recorder (?playtest=1)
 src/game/audio         runtime-synthesised sound (no licensed assets) through Howler
 src/persistence        IndexedDB saves, validation, migrations, unload safety, offline rewards
-src/components         React HUD, panels, guidance (HandGuide), modals, settings
+src/components         React HUD, panels, guidance (HandGuide), settings; ui/ holds the primitives
+                       (Button, Sheet, Moment, Row, Meter...) and sheets/ one file per card or sheet
 ```
 
 The simulation (`World`) is pure TypeScript with no DOM or Pixi dependency, driven at 60 steps per second with interpolated rendering. It emits events; the renderer, audio and progression layers react to them. New enemies, summons, waves, skills, perks and quests are added as data.
@@ -135,6 +157,19 @@ npm run test:e2e      # Playwright on a Pixel 5 profile plus six phone viewports
                       # zero-scroll layout, no console errors
 BALANCE_PRINT=1 npx vitest run tests/unit/balance.print.test.ts   # prints the balance table
 ```
+
+Measuring instruments, each against a running `next start` on `PORT`:
+
+```bash
+PORT=3100 node scripts/design-audit.mjs   # type floor, boxes, gradients, touch targets, contrast on 35 screens
+PORT=3100 node scripts/framing.mjs        # how large and how centred the warrior sits in the battlefield
+PORT=3100 node scripts/ftue.mjs           # a bot plays the first minutes and times each first
+PORT=3100 node scripts/perf.mjs           # per-frame simulate and render cost at 4x CPU throttle (?perf=1)
+PORT=3100 OUT=dir node scripts/shots.mjs  # screenshots of every screen
+```
+
+On a real phone, add `?playtest=1` to the address to record a session and finish with a short
+survey; the player sees the report and chooses whether to send it.
 
 Playwright uses the preinstalled Chromium at `/opt/pw-browsers/chromium` with software WebGL. Remove `launchOptions` in `playwright.config.ts` to use a normal browser locally. An opt-in progression simulator runs with `PROGRESSION_SIM=1 npx vitest run tests/unit/progression.sim.test.ts`.
 

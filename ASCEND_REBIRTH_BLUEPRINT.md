@@ -305,6 +305,9 @@ is deliberate.
   The ability bar rides the panel's top edge. The renderer exposes
   `setViewportInsets({ bottom })` so the camera lifts the action above the sheet (section 7,
   camera). If this destabilises the e2e suite, ship the base height only and say so.
+  *Amended after blind judging round 2:* every tab opens at its base height (a tall panel by
+  default "crushes the battle"), the grabber still grows it, and a detail whose actions need the
+  room (a picked item, the Arts) raises the panel only while it is open (`useRaisePanel`).
 
 ### Battlefield overlays: `BattleOverlays.tsx`, `AbilityBar.tsx`
 

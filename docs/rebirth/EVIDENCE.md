@@ -222,6 +222,111 @@ stage-3 boss not yet challenged by 240s. A newcomer trades waiting for a new, re
 last 30 hours, Attack and Health pinned at their level cap. Limit Break now goes to 25 levels;
 the same player reaches 449 at 60 hours and 503 at 97. Details in `docs/DESIGN.md`.
 
-### After phase 2
+### After phase 2 (every sheet and moment, cinematics, Ink and Gilt), commit `b6a6799`
 
-To be filled.
+**Design lint, all 35 screens of the shared walk (`scripts/lib/screens.mjs`): Verified**
+
+The walk grew from 17 to 35 screens in phase 2 (every sheet, moment and panel state), so these
+totals cover twice the surface of the baseline row and are still lower on every count.
+
+| Measure | Before (17 screens) | After phase 2, 390px (35 screens) | 320px (35 screens) |
+|---|---|---|---|
+| Text elements under 11px | 389 | 0 | 0 |
+| Bordered boxes | 175 | 0 | 0 |
+| Elements painted with a gradient | 288 | 7 | 7 |
+| Touch targets under 44px | 159 | 0 | 0 |
+| Text at weight 700 or more | 185 | 0 | 0 |
+| Low-contrast text | not measurable | 0 | 0 |
+| Horizontal overflow | 0 | 0 | 0 |
+| Font families | Marcellus, Manrope | Instrument Sans, Instrument Serif | same |
+
+The seven gradients are the scrims behind moment text, allowed by the blueprint. The contrast row
+needed a fix to the lint first: it treated the panel's paper texture as an unknown background and
+so skipped most panel text. Once it read the texture as the colour beneath, it found ten failures
+(crimson text at 4.0:1); a separate text tone, `--color-threat` at 6.2:1, fixed them.
+
+**Framing (H3): Verified.** Warrior height 26.3% of the battlefield (target 24%), 10.6% of the
+width from centre (target 10%). Height met; centring still half a point short, unchanged since
+phase 1.
+
+**Performance (H4): MET. Verified.** Paired runs of `scripts/perf.mjs` (4x CPU throttle, 30s at
+stage 20), three rounds each, alternating between the baseline `a90d3bb` (the pre-Rebirth game
+plus the harness, nothing else) and the phase-2 build. Medians of the three rounds:
+
+| Speed | Measure | Baseline | Phase 2 | Change |
+|---|---|---|---|---|
+| 1x | Scripting per frame, p50 | 9.9ms | 9.6ms | -3% |
+| 1x | Scripting per frame, p95 | 29.4ms | 28.9ms | -2% |
+| 2x | Scripting per frame, p50 | 11.7ms | 9.1ms | -22% |
+| 2x | Scripting per frame, p95 | 33.5ms | 28.1ms | -16% |
+
+The 25 to 30% overrun measured after phase 1 is gone. The cinematics stream (commit `abd827e`)
+measured number glyphs once at mount, shared rig drawings per kind, prepared white copies at
+spawn, rewrote trails in place, pooled splatters and motes, redrew only on change and capped the
+backdrop texture at 16 MB. In both builds the first round was the slowest, probably the machine
+warming up, so the medians are taken over all three.
+
+**Blind pairwise judging (H1), round 2: NOT MET, but close. Verified.**
+
+Same method as round 1 (matched screens, sides randomised, answer key held outside the judges'
+folder), now on twelve screens with four fresh reviewers, none told which side was new. The same
+three lenses as round 1, plus a player of the genre.
+
+| Reviewer (lens) | Round 1 | Round 2 |
+|---|---|---|
+| Usability researcher (first-time player) | 6 of 8 | 11 of 12 |
+| Senior product designer (hierarchy, craft) | 5 of 8 | 10 of 12 |
+| Game art director (art direction, premium feel, fantasy tone) | 1 of 8 | 4 of 12 |
+| **Same three lenses** | **12 of 24 (50%)** | **25 of 36 (69%)**, target 75% |
+| Mobile RPG player (new in round 2) | | 8 of 12 |
+
+Per screen, how many of the four chose the new design:
+
+| Screen | Chose new |
+|---|---|
+| First boot, boss ready, boss fight, Rift panel | 4 of 4 |
+| Gate plaque, Ascension, Army, offline return | 3 of 4 |
+| Gear | 2 of 4 |
+| Hero battle screen, boss victory, Skills | 1 of 4 |
+
+What changed between rounds: the usability reviewer now chose the new build on every screen but
+one (the Hero battle screen), and the boss screens, which carry the new cinematics and the
+designed challenge, won unanimously. What did not: the art director still preferred the old,
+framed build on eight of twelve screens, writing that the new persistent HUD is "a generic
+productivity-app dashboard with sans labels" while the new sheets and serif moments are the
+stronger half. The identity gap of round 1 is narrower, not closed.
+
+The weakest screens drew specific complaints, several made independently by two or more
+reviewers. Each is now addressed:
+
+| Screen | What the reviewers wrote | Change |
+|---|---|---|
+| Boss victory | "'Onward' is a dull grey button while 'BIND' is gold, so the main action is unclear"; the overlay is "not opaque enough: ... stat values show through behind the victory text" | Onward is always the one gold action and BIND a quiet button with gold text; the scrim behind moment text is opaque; leaving an unbound essence takes a second tap, with a warning |
+| Gear, Skills, Rift | "the sheet crushes the battle"; "buries the battle under a mostly empty sheet"; "the fight is a thin strip" | Every tab opens at its base height; a detail that needs the room (a picked item, the Arts) raises the panel while it is open |
+| Hero | "nothing marks the best buy"; the upgrade chip "looks the same and is low contrast"; "the upgrade pills are tiny" | Raised cost pills when affordable; a gold lozenge on the upgrade with the most Power per gold |
+| Army, offline return, empty Gear | "'Star' and 'Evolve' are plain text with no button shape"; "'50+ upgrades ready' is plain grey text that looks like a label"; "'Find a boss' is a dark, low-contrast chip" and "doesn't say where it goes" | The cause was one token: the quiet button's fill measured 1.1:1 against the panel. It is now one step lighter with a hairline edge everywhere. The empty Gear button names the boss to face, or the Rift hunt |
+| Gate plaque | "The red boss card and the gold Claim button sit side by side at almost equal weight" | Claim beside the gate is quiet, with gold text |
+| Ascension | "'Starts over' gets no warning treatment" | Starts over in the threat red, You keep in jade |
+| Boss fight | "A pill-shaped Retreat next to the controls invites mis-taps"; "Give the Retreat button a confirm step" | Retreat asks for a second tap within three seconds |
+| Boss victory | "the essence line is truncated ('ling…')" | The row reads "Its essence lingers": the headline above already names the boss |
+| Rift | "what '3/3' means is never stated" | "3 left" |
+| Hero battle screen | "'Defeat enemies 1 of 3' is grey text on the scene and hard to read" | The objective sits on a small ink pill inside its 44px target |
+| Hero battle screen (art direction) | the persistent HUD is "a generic productivity-app dashboard with sans labels" | A glyph per stat before its name (sword, heart, shield...), from 360px up. A partial answer at most; round 3 will say |
+
+H1 will be re-run on these fixes with fresh reviewers.
+
+**Regressions caught by the tests, kept on the record.** Opening every tab at its base height
+(the first fix above) pushed the equip and upgrade buttons of a picked item, and the rank-up
+button of the Arts, below the panel's edge: the viewport suite failed at every phone size. The
+raise on open detail views fixed it. The re-run then failed at 360x800 alone: Skills' Learn
+button sat 4px past the edge. Measuring other sizes found it 23px past at 360x740 (Galaxy S8 and
+S9), a size the suite did not cover. With 360x740 added, the suite found the same fault in the
+Army panel, which had been there before this round: Deploy, Bond, Star and Evolve below the
+edge, because its compact form only switched on below 700px of screen height. Both panels now
+measure their own fit (`useCompactFit`): the full layout is drawn first and kept only if
+nothing overflows, whatever the screen.
+
+A process error, also on the record: one re-run hung because a stale server kept the port
+(`next start` renames its process, so stopping it by command line missed it) and served the
+previous build's page against the new build's files. That run's results were discarded; servers
+are now stopped by folder, and each run first checks that the page boots without errors.
