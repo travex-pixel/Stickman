@@ -91,13 +91,17 @@ export const TREE_COMPOUND = { might: 0.05, vigor: 0.05, fortune: 0.08, insight:
 export const LIMIT_BREAK_STEP = 40;
 
 const growing = (base: number) => (l: number) => Math.ceil(base * Math.pow(1.3, l));
+/** Levels of Might and Vigor (economy knob, tuned with the simulator). */
+export const TREE_DEEP_MAX = Number(process.env.ASCEND_TREE_MAX ?? 100);
+/** Levels of Limit Break (economy knob, tuned with the simulator). */
+export const LIMIT_BREAK_MAX = Number(process.env.ASCEND_LIMIT_MAX ?? 10);
 
 export const TREE: TreeNode[] = [
-  { id: "might", name: "Might", per: "+5% Attack, compounding", max: 100, cost: growing(2) },
-  { id: "vigor", name: "Vigor", per: "+5% Health, compounding", max: 100, cost: growing(2) },
+  { id: "might", name: "Might", per: "+5% Attack, compounding", max: TREE_DEEP_MAX, cost: growing(2) },
+  { id: "vigor", name: "Vigor", per: "+5% Health, compounding", max: TREE_DEEP_MAX, cost: growing(2) },
   { id: "fortune", name: "Fortune", per: "+8% gold, compounding", max: 60, cost: growing(3) },
   { id: "insight", name: "Insight", per: "+8% XP, compounding", max: 60, cost: growing(3) },
-  { id: "limit", name: "Limit Break", per: `+${LIMIT_BREAK_STEP} to the Attack, Health and Defence level caps`, max: 10, cost: (l) => 500 * Math.pow(4, l) },
+  { id: "limit", name: "Limit Break", per: `+${LIMIT_BREAK_STEP} to the Attack, Health and Defence level caps`, max: LIMIT_BREAK_MAX, cost: (l) => 500 * Math.pow(4, l) },
   { id: "treasury", name: "Treasury", per: "Keep 10% of your gold when you ascend", max: 3, cost: (l) => 12 * (l + 1) },
   { id: "oathbinder", name: "Oathbinder", per: "+3% BIND chance", max: 5, cost: (l) => 8 * (l + 1) },
   { id: "patience", name: "Patience", per: "+1 hour of offline time", max: 4, cost: (l) => 15 * (l + 1) },

@@ -7,7 +7,7 @@ import { codexBonus } from "../summons/extraction";
 import { TECHNIQUE_OWNED_ATTACK } from "../data/abilities";
 import type { GearEffectId } from "../data/gearEffects";
 import { GEAR_SETS, setCounts } from "../data/gearSets";
-import { LIMIT_BREAK_STEP, TREE_COMPOUND, aetherGoldMult, aetherPowerMult, nodeLevel } from "./ascension";
+import { LIMIT_BREAK_MAX, LIMIT_BREAK_STEP, TREE_COMPOUND, aetherGoldMult, aetherPowerMult, nodeLevel } from "./ascension";
 
 /** Each Ascendant rank multiplies core stats. Rank is earned in Rank Trials, not bought. */
 export const RANK_STAT_STEP = 0.08;
@@ -56,7 +56,7 @@ export const STAT_UPGRADE_CAP: Record<UpgradeableStat, number> = {
 
 /** Stats the Aether tree's Limit Break raises the cap of. */
 export const LIMIT_BREAK_STATS: readonly UpgradeableStat[] = ["attack", "maxHp", "defense"];
-export const LIMIT_BREAK_MAX_LEVELS = 10;
+export const LIMIT_BREAK_MAX_LEVELS = LIMIT_BREAK_MAX;
 
 /** A stat's level cap for this warrior: the base cap, plus Limit Break for Attack, Health and Defence. */
 export function statCap(profile: Profile, stat: UpgradeableStat): number {

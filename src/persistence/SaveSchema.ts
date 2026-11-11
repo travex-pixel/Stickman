@@ -2,7 +2,8 @@ import { createDefaultProfile, PROFILE_VERSION, type Profile } from "@/game/prog
 import { SUMMONS } from "@/game/data/summons";
 import { EQUIP_SLOTS, type AbilityId } from "@/game/data/ids";
 import { ABILITIES, TECHNIQUES } from "@/game/data/abilities";
-import { TREE } from "@/game/progression/ascension";
+import { LIMIT_BREAK_MAX, LIMIT_BREAK_STEP, TREE } from "@/game/progression/ascension";
+import { STAT_UPGRADE_CAP } from "@/game/progression/stats";
 import { PLAYER_LEVEL_CAP, SUMMON_LEVEL_CAP } from "@/game/progression/xp";
 
 /** The largest currency value a save keeps (far beyond anything reachable, well short of Infinity). */
@@ -117,12 +118,12 @@ export function sanitizeProfile(raw: unknown): { profile: Profile; repaired: boo
       riftCores: num(p.riftCores, 0),
       skillPoints: num(p.skillPoints, 0),
       statLevels: {
-        attack: num(statLevels.attack, 1, 1, 400 + 40 * 10),
-        maxHp: num(statLevels.maxHp, 1, 1, 400 + 40 * 10),
+        attack: num(statLevels.attack, 1, 1, STAT_UPGRADE_CAP.attack + LIMIT_BREAK_STEP * LIMIT_BREAK_MAX),
+        maxHp: num(statLevels.maxHp, 1, 1, STAT_UPGRADE_CAP.maxHp + LIMIT_BREAK_STEP * LIMIT_BREAK_MAX),
         attackSpeed: num(statLevels.attackSpeed, 1, 1, 120),
         critChance: num(statLevels.critChance, 1, 1, 150),
         critDamage: num(statLevels.critDamage, 1, 1, 300),
-        defense: num(statLevels.defense, 1, 1, 250 + 40 * 10),
+        defense: num(statLevels.defense, 1, 1, STAT_UPGRADE_CAP.defense + LIMIT_BREAK_STEP * LIMIT_BREAK_MAX),
       },
       weaponPath,
       perks,
