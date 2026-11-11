@@ -103,3 +103,20 @@ describe("campaign progression rules", () => {
     expect(unlocksBetween(7, 8)).toEqual([]);
   });
 });
+
+describe("next milestone", () => {
+  it("names the most meaningful next goal", async () => {
+    const { nextMilestone } = await import("@/game/progression/milestones");
+    const p = createDefaultProfile();
+    p.progress.bossGate = 1;
+    expect(nextMilestone(p)).toContain("Hollow Warden");
+    p.progress.bossGate = 0;
+    p.progress.bestStage = 1;
+    expect(nextMilestone(p)).toContain("Gold Vault");
+    p.progress.bestStage = 5;
+    expect(nextMilestone(p)).toContain("Drowned Hollow");
+    p.progress.bestStage = 12;
+    p.player.level = 3;
+    expect(nextMilestone(p)).toMatch(/rank/i);
+  });
+});

@@ -16,6 +16,7 @@ import { WEAPON_PATHS } from "@/game/progression/weaponPaths";
 import { fmt, fmtDuration } from "@/lib/format";
 import { bossForStage } from "@/game/data/regions";
 import { affordableUpgrades } from "@/game/progression/readiness";
+import { nextMilestone } from "@/game/progression/milestones";
 import { DAILY_BONUS, objectiveDef, objectivePayout } from "@/game/progression/objectives";
 import { cn } from "@/lib/cn";
 import { SettingsModal } from "@/components/settings/SettingsModal";
@@ -214,6 +215,12 @@ function Offline({ modal }: { modal: Extract<Modal, { kind: "offline" }> }) {
           </div>
         )}
         {r.fellBack && <div className="text-[10px] text-crimson-2">Your warrior could not hold the frontier and stepped back to stage {r.endStage}.</div>}
+        {!boss && (
+          <div className="text-[11px] text-parch" data-testid="offline-next">
+            <span className="caps !text-[9px] mr-1.5">Next</span>
+            {nextMilestone(profile)}
+          </div>
+        )}
         {boss && (
           <div className="flex items-center gap-2 rounded-lg border border-crimson/50 bg-crimson/10 px-2 py-1.5 text-left" data-testid="offline-boss">
             <Icon name="skull" size={14} className="text-crimson-2 shrink-0" />
