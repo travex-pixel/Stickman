@@ -457,7 +457,7 @@ function Toasts() {
   const bossUp = useHud((s) => !!s?.boss);
   const tone: Record<string, string> = { info: "text-parch border-white/12", gold: "text-gold-2 border-gold/40", essence: "text-jade-2 border-jade/40", warn: "text-crimson-2 border-crimson/40", level: "text-gold-2 border-gold/40" };
   return (
-    <div className={cn("absolute right-2 z-20 flex flex-col items-end gap-1 pointer-events-none max-w-[62%]", bossUp ? "top-[52px]" : "top-2")} aria-live="polite">
+    <div className={cn("absolute right-2 z-20 flex flex-col items-end gap-1 pointer-events-none max-w-[54%] min-[400px]:max-w-[62%]", bossUp ? "top-[52px]" : "top-2")} aria-live="polite">
       <AnimatePresence>
         {toasts.map((t) => (
           <motion.div key={t.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} className={cn("px-2.5 py-1 rounded-md bg-ink/85 border text-[10px] font-semibold text-right leading-tight", tone[t.tone])}>
