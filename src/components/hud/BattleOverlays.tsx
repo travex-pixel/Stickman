@@ -106,7 +106,11 @@ function PerkChip() {
       <motion.span animate={{ scale: [1, 1.25, 1] }} transition={{ duration: 1.2, repeat: Infinity }} className="text-gold-2">
         <Icon name="star" size={12} />
       </motion.span>
-      <span className="font-display text-[12px] tracking-[0.08em] text-gold-2">Choose a perk{pending > 1 ? ` ×${pending}` : ""}</span>
+      <span className="font-display text-[12px] tracking-[0.08em] text-gold-2">
+        <span className="hidden min-[400px]:inline">Choose a perk</span>
+        <span className="min-[400px]:hidden">Perk</span>
+        {pending > 1 ? ` ×${pending}` : ""}
+      </span>
     </motion.button>
   );
 }

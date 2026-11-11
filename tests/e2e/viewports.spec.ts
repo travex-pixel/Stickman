@@ -77,6 +77,29 @@ for (const vp of VIEWPORTS) {
       await page.waitForTimeout(250);
       await page.evaluate(() => (window as unknown as { __ASCEND__: { closeModal(): void } }).__ASCEND__.closeModal());
     }
+    // The most crowded battlefield HUD: a waiting boss, perks to choose and a quest, all at once.
+    await page.evaluate(() => {
+      const c = (window as unknown as { __ASCEND__: { profile: { progress: { bossGate: number }; player: { pendingPerkChoices: number } }; commit(): void } }).__ASCEND__;
+      c.profile.progress.bossGate = 9;
+      c.profile.player.pendingPerkChoices = 2;
+      c.commit();
+    });
+    await page.waitForTimeout(600);
+    const hud = await page.evaluate(() => ["boss-challenge", "perk-chip", "quest-banner"].map((id) => {
+      const el = document.querySelector(`[data-testid=${id}]`);
+      if (!el || getComputedStyle(el).opacity === "0") return null;
+      const r = el.getBoundingClientRect();
+      return { id, l: r.left, t: r.top, r: r.right, b: r.bottom };
+    }));
+    const boxes = hud.filter((b): b is { id: string; l: number; t: number; r: number; b: number } => b !== null);
+    expect(boxes.length, "plaque and perk chip shown").toBeGreaterThanOrEqual(2);
+    for (let i = 0; i < boxes.length; i++)
+      for (let j = i + 1; j < boxes.length; j++) {
+        const a = boxes[i]!;
+        const b = boxes[j]!;
+        const overlap = a.l < b.r - 1 && b.l < a.r - 1 && a.t < b.b - 1 && b.t < a.b - 1;
+        expect(overlap, `${a.id} overlaps ${b.id}`).toBe(false);
+      }
     const views: [string, string | null][] = [["hero", null], ["summons", null], ["gear", "va"], ["skills", null], ["skills", "arts"], ["rift", null]];
     for (const [tab, extra] of views) {
       await page.getByTestId(`tab-${tab}`).click();
