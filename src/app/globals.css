@@ -389,9 +389,14 @@
     background: var(--color-crimson);
     color: #fff;
   }
-  .ui-btn[data-variant="quiet"] {
-    background: var(--color-bg-2);
+  /* Quiet and raised: one step above the panel with a hairline edge. On the panel's bg-1 a bg-2
+     fill measured 1.1:1, and blind reviewers read those buttons as plain text ("no button
+     shape"). */
+  .ui-btn[data-variant="quiet"],
+  .btn-raised {
+    background: var(--color-bg-3);
     color: var(--color-t1);
+    box-shadow: inset 0 0 0 1px var(--line-2);
   }
   .ui-btn[data-variant="plain"] {
     background: transparent;

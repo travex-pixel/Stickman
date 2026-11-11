@@ -75,11 +75,11 @@ function AscendBody() {
       </div>
       <div className="mt-5 grid grid-cols-2 gap-4">
         <div>
-          <div className="t-label text-t2">Starts over</div>
+          <div className="t-label text-threat">Starts over</div>
           <p className="t-body text-t1 mt-1">Campaign stage, gold, stat levels</p>
         </div>
         <div>
-          <div className="t-label text-t2">You keep</div>
+          <div className="t-label text-jade">You keep</div>
           <p className="t-body text-t1 mt-1">Shadows, gear, level, skills, techniques, perks, rank, Codex</p>
         </div>
       </div>

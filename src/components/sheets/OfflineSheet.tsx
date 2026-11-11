@@ -83,7 +83,7 @@ export function OfflineSheet({ modal, open }: { modal: Extract<Modal, { kind: "o
       <div className="mt-5 flex items-center gap-3">
         {ups > 0 && (
           <Button
-            variant="plain"
+            variant="quiet"
             className="shrink-0 px-4"
             onClick={() => {
               c.dismissOffline();

@@ -68,7 +68,9 @@ export function Sheet({ open, onDismiss, dismissible = true, children, testId, l
       {open && (
         <div className={cn("fixed inset-0 flex flex-col justify-end", zClass)} role="dialog" aria-modal="true" aria-label={label} aria-labelledby={labelledBy} data-testid={testId}>
           <motion.div
-            className="absolute inset-0 bg-[rgba(8,7,5,0.6)] backdrop-blur-[10px] supports-[not(backdrop-filter:blur(1px))]:bg-[rgba(8,7,5,0.86)]"
+            // A dim, not a blur: reviewers saw the blurred top half as dead space. The fight stays
+            // legible behind the sheet (it keeps running there), just quieter.
+            className="absolute inset-0 bg-[rgba(8,7,5,0.55)]"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}

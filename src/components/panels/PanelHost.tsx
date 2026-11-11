@@ -1,11 +1,11 @@
 "use client";
 
-import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { animate, motion, useMotionValue } from "motion/react";
 import { useController, useUi } from "@/hooks/useGame";
 import { useReducedEffects } from "@/hooks/useReducedEffects";
 import { useSheetLift } from "@/hooks/useSheetLift";
-import { DetentContext, type Detent } from "@/hooks/usePanelDetent";
+import { DetentContext, RaiseContext, type Detent } from "@/hooks/usePanelDetent";
 import type { PanelId } from "@/game/data/ids";
 
 const HeroPanel = lazy(() => import("./HeroPanel"));
@@ -16,7 +16,10 @@ const RiftPanel = lazy(() => import("./RiftPanel"));
 
 
 /** Where each tab opens the first time it is selected in a session. Hero stays at the base. */
-const DEFAULT_DETENT: Record<PanelId, Detent> = { hero: "base", summons: "tall", gear: "tall", skills: "tall", rift: "tall" };
+// Every tab opens at its base height: in blind reviews a tall panel by default "crushed the
+// battle to a strip". The tall detent is one drag away, each tab remembers the choice, and a
+// detail whose actions need the room (a picked item, the Arts) raises the panel while it is open.
+const DEFAULT_DETENT: Record<PanelId, Detent> = { hero: "base", summons: "base", gear: "base", skills: "base", rift: "base" };
 const CAN_GROW: Record<PanelId, boolean> = { hero: false, summons: true, gear: true, skills: true, rift: true };
 /** The player's choice per tab, for the rest of the session. */
 const chosen: Partial<Record<PanelId, Detent>> = {};
@@ -57,6 +60,8 @@ export function PanelHost() {
   const y = useMotionValue(0);
   const [extraMax, setExtraMax] = useState(0);
   const [, setVersion] = useState(0);
+  const [raised, setRaised] = useState(false);
+  const raise = useCallback((on: boolean) => setRaised(on), []);
   const [laidOut, setLaidOut] = useState(0);
   const laidRef = useRef(0);
 
@@ -70,7 +75,7 @@ export function PanelHost() {
   }, []);
 
   const canGrow = CAN_GROW[panel] && extraMax > 0;
-  const detent: Detent = canGrow ? (chosen[panel] ?? DEFAULT_DETENT[panel]) : "base";
+  const detent: Detent = canGrow ? (raised ? "tall" : (chosen[panel] ?? DEFAULT_DETENT[panel])) : "base";
   const extra = detent === "tall" ? extraMax : 0;
 
   // The overlays riding the top edge follow the visible edge: laid-out extra minus the slide.
@@ -113,6 +118,7 @@ export function PanelHost() {
   const choose = (d: Detent) => {
     if (!canGrow || d === detent) return;
     chosen[panel] = d;
+    setRaised(false);
     setVersion((v) => v + 1);
   };
 
@@ -126,13 +132,15 @@ export function PanelHost() {
     >
       <span className="gilt-edge" aria-hidden="true" />
       {canGrow && <Grabber detent={detent} onChoose={choose} />}
-      <DetentContext.Provider value={detent}>
-        <motion.div key={panel} className="absolute inset-0 flex flex-col min-h-0" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.12, ease: [0.2, 0, 0, 1] }} data-panel={panel}>
-          <Suspense fallback={<div className="flex-1" />}>
-            <PanelBody id={panel} />
-          </Suspense>
-        </motion.div>
-      </DetentContext.Provider>
+      <RaiseContext.Provider value={raise}>
+        <DetentContext.Provider value={detent}>
+          <motion.div key={panel} className="absolute inset-0 flex flex-col min-h-0" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.12, ease: [0.2, 0, 0, 1] }} data-panel={panel}>
+            <Suspense fallback={<div className="flex-1" />}>
+              <PanelBody id={panel} />
+            </Suspense>
+          </motion.div>
+        </DetentContext.Provider>
+      </RaiseContext.Provider>
     </motion.section>
   );
 }

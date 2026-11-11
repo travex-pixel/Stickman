@@ -19,7 +19,8 @@ import type { AbilityId } from "@/game/data/ids";
 import { ABILITY_RANK_MAX, RANK_COOLDOWN_STEP, RANK_NUMERALS, RANK_POWER_STEP, abilityRank, anyAbilityRankReady, canRankAbility } from "@/game/progression/abilityRanks";
 import { ABILITY_ICON } from "@/components/ui/abilityIcons";
 import { slotForm } from "@/game/progression/techniques";
-import { usePanelDetent } from "@/hooks/usePanelDetent";
+import { usePanelDetent, useRaisePanel } from "@/hooks/usePanelDetent";
+import { useCompactFit } from "@/hooks/useCompactFit";
 
 const BRANCHES: SkillBranch[] = ["power", "soul", "command"];
 const NUMERALS = ["I", "II", "III", "IV", "V"];
@@ -29,6 +30,7 @@ type View = SkillBranch | "arts";
 export default function SkillsPanel() {
   const [view, setView] = useState<View>("power");
   const short = useShortScreen();
+  useRaisePanel(view === "arts");
   return (
     <div className={cn("flex flex-col h-full min-h-0 px-4", short ? "pt-3 pb-2" : "pt-4 pb-3")}>
       <Header view={view} setView={setView} />
@@ -104,6 +106,10 @@ function SealsView({ branch, short }: { branch: SkillBranch; short: boolean }) {
   const disc = short ? 36 : 40;
   // The seal is drawn at `disc`; its button is never under 44.
   const hit = Math.max(44, disc);
+  // The detail is stacked (title, description, a full-width Learn) where it fits, and one row with a
+  // small Learn where it does not (measured: at 360x800 the stacked form pushed Learn off the panel).
+  const [detail, tight] = useCompactFit<HTMLDivElement>(`${selected.id}:${owned}`);
+  const compact = short || tight;
   const learnLabel = check.ok ? `Learn · ${selected.cost} ${selected.cost === 1 ? "point" : "points"}` : check.reason === "requires" ? "Learn the seal before" : `Needs ${selected.cost} ${selected.cost === 1 ? "point" : "points"}`;
   return (
     <>
@@ -150,26 +156,26 @@ function SealsView({ branch, short }: { branch: SkillBranch; short: boolean }) {
           );
         })}
       </div>
-      <div className={cn("flex flex-1 min-h-0", short ? "mt-3 items-end gap-3" : "mt-5 flex-col")} data-testid="skill-detail">
+      <div ref={detail} className={cn("flex flex-1 min-h-0", compact ? "mt-3 items-end gap-3" : "mt-5 flex-col")} data-testid="skill-detail" data-compact={compact || undefined}>
         <div className="flex flex-col min-w-0 flex-1">
           <span className="t-title text-t1 truncate">{selected.name}</span>
-          <p className={cn("t-body text-t2 mt-1", short ? "line-clamp-1" : "line-clamp-2")}>{selected.description}</p>
+          <p className={cn("t-body text-t2 mt-1", compact ? "line-clamp-1" : "line-clamp-2")}>{selected.description}</p>
         </div>
-        <div className={cn("flex items-center gap-2 shrink-0", !short && "mt-auto pt-3")}>
+        <div className={cn("flex items-center gap-2 shrink-0", !compact && "mt-auto pt-3")}>
           {owned ? (
-            <span className={cn("t-label text-jade flex items-center gap-1.5", short ? "h-11" : "h-[52px] flex-1")}>
+            <span className={cn("t-label text-jade flex items-center gap-1.5", compact ? "h-11" : "h-[52px] flex-1")}>
               <Icon name="check" size={16} />
               Learned
             </span>
           ) : (
-            <Button variant="primary" size={short ? "sm" : "md"} className={short ? "" : "flex-1 min-w-0"} disabled={!check.ok} onClick={() => c.unlockSkill(selected.id)} data-testid="skill-unlock">
-              {learnLabel}
+            <Button variant="primary" size={compact ? "sm" : "md"} className={compact ? "" : "flex-1 min-w-0"} disabled={!check.ok} onClick={() => c.unlockSkill(selected.id)} data-testid="skill-unlock">
+              {compact && check.ok ? `Learn · ${selected.cost}` : learnLabel}
             </Button>
           )}
           {mods.weaponPathUnlocked && (
             <Button
               variant="quiet"
-              size={short ? "sm" : "md"}
+              size={compact ? "sm" : "md"}
               className="shrink-0 px-4"
               onClick={() => !path && c.openWeaponPath()}
               data-testid="weapon-path-button"

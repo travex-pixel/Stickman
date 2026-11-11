@@ -23,8 +23,9 @@ interface MomentProps {
 const EASE_OUT = [0.16, 1, 0.3, 1] as const;
 /** The scrims are the only gradients in the interface besides rarity accents: the reveal's leaves the
     figure clear; the solid one is 86% over the field and nearly opaque behind the text. */
-const REVEAL_SCRIM = "linear-gradient(180deg, rgba(12,11,9,0) 0%, rgba(12,11,9,0) 28%, rgba(12,11,9,0.82) 46%, rgba(12,11,9,0.97) 56%, rgba(12,11,9,0.97) 100%)";
-const SOLID_SCRIM = "linear-gradient(180deg, rgba(12,11,9,0.86) 0%, rgba(12,11,9,0.86) 36%, rgba(12,11,9,0.97) 52%, rgba(12,11,9,0.97) 100%)";
+// Behind the text the scrim is fully opaque: at 97% the panel underneath still showed through.
+const REVEAL_SCRIM = "linear-gradient(180deg, rgba(12,11,9,0) 0%, rgba(12,11,9,0) 28%, rgba(12,11,9,0.86) 44%, rgba(12,11,9,1) 54%, rgba(12,11,9,1) 100%)";
+const SOLID_SCRIM = "linear-gradient(180deg, rgba(12,11,9,0.86) 0%, rgba(12,11,9,0.86) 34%, rgba(12,11,9,1) 50%, rgba(12,11,9,1) 100%)";
 
 /**
  * A full-bleed takeover for reveals and boss cards. Content sits bottom-aligned where the thumb

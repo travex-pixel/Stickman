@@ -16,8 +16,9 @@ import { LootRow, RewardTotal } from "./parts";
 /**
  * Victory: the boss's fall in serif, the rewards counting up, the loot as rows, the boss's
  * essence as one row with its own BIND, then "Onward" with the auto-continue countdown drawn as
- * a thin line along the button's foot. An unclaimed essence is a decision: no countdown runs
- * while it waits, and "Onward" steps back to a quiet button so BIND is the one gold action.
+ * a thin line along the button's foot. "Onward" is always the one gold action (blind reviewers
+ * found a gold BIND beside a grey Onward unclear). An unclaimed essence is still a decision: no
+ * countdown runs while it waits, and the first tap on Onward warns that it will be left behind.
  */
 export function BossVictoryMoment({ modal, open }: { modal: Extract<Modal, { kind: "boss_victory" }>; open: boolean }) {
   const c = useController();
@@ -28,6 +29,14 @@ export function BossVictoryMoment({ modal, open }: { modal: Extract<Modal, { kin
   const auto = open && autoAdvance && !orb;
   const total = 7 + Math.min(2, modal.items.length);
   const [left, setLeft] = useState(total);
+  const [warned, setWarned] = useState(false);
+  const onward = () => {
+    if (orb && !warned) {
+      setWarned(true);
+      return;
+    }
+    c.continueAfterVictory();
+  };
   useEffect(() => {
     if (!auto) return;
     if (left <= 0) {
@@ -66,10 +75,11 @@ export function BossVictoryMoment({ modal, open }: { modal: Extract<Modal, { kin
               <MomentItem>
                 <Row
                   gutter={false}
-                  title={`${boss?.name ?? "The boss"}'s essence lingers`}
+                  // The headline already names the boss; with it, the line truncated at every phone width.
+                  title="Its essence lingers"
                   detail={`${orb.attempts > 1 ? `${orb.attempts} attempts` : "Last attempt"} · it will not fade`}
                   trailing={
-                    <Button size="sm" variant="primary" onClick={() => c.bindBossEssence(orb.id)} data-testid="victory-bind-button">
+                    <Button size="sm" variant="quiet" className="!text-gold" onClick={() => c.bindBossEssence(orb.id)} data-testid="victory-bind-button">
                       BIND {Math.round(chance * 100)}%
                     </Button>
                   }
@@ -87,7 +97,12 @@ export function BossVictoryMoment({ modal, open }: { modal: Extract<Modal, { kin
           </div>
         )}
         <MomentItem className="mt-5">
-          <Button variant={orb ? "quiet" : "primary"} block className="relative overflow-hidden" onClick={() => c.continueAfterVictory()} data-testid="victory-continue">
+          {orb && warned && (
+            <p className="t-label text-threat mb-2" data-testid="victory-leave-warning">
+              The essence stays here if you go. Tap again to leave it.
+            </p>
+          )}
+          <Button variant="primary" block className="relative overflow-hidden" onClick={onward} data-testid="victory-continue">
             {modal.hunt ? "Back to farming" : `Onward to stage ${modal.nextStage}`}
             {auto && (
               <span className="pointer-events-none absolute inset-x-0 bottom-0 h-[3px] bg-black/15" aria-hidden="true">

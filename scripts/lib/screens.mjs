@@ -167,6 +167,12 @@ export async function walkMoreScreens(page, visit) {
     await closeAll(page);
     if (t === "skills") await page.click("[data-testid=branch-arts]").catch(() => {});
     await page.waitForTimeout(400);
+    // Tabs open at their base height: raise the panel unless a detail (the Arts) already did.
+    // Where the screen has no room for a tall panel there is no grabber, and this stays at base.
+    if ((await page.getAttribute(`[data-testid=panel-${t}]`, "data-detent").catch(() => null)) !== "tall") {
+      await page.click("[data-testid=panel-grabber]", { timeout: 2000 }).catch(() => {});
+      await page.waitForTimeout(700);
+    }
     await visit(`28-tall-${t}`, page);
   }
   await page.click("[data-testid=panel-grabber]").catch(() => {});

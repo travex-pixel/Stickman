@@ -13,11 +13,14 @@ import { EQUIPMENT_TEMPLATES, SLOT_LABEL, STAT_LABEL } from "@/game/data/equipme
 import { GEAR_EFFECTS } from "@/game/data/gearEffects";
 import { EQUIPMENT_LEVEL_CAP, FUSE_COUNT, equipmentUpgradeCost, fusionSet, itemScore, salvageValue } from "@/game/economy/loot";
 import { RARITY_ORDER } from "@/game/data/ids";
+import { ENEMIES } from "@/game/data/enemies";
+import { bossForStage } from "@/game/data/regions";
 import { setOf } from "@/game/data/gearSets";
 import type { EquipmentItem } from "@/game/progression/profile";
 import { itemStatTotals } from "@/game/progression/stats";
 import { fmt, fmtStat } from "@/lib/format";
 import { cn } from "@/lib/cn";
+import { useRaisePanel } from "@/hooks/usePanelDetent";
 
 const SLOT_ICON: Record<EquipSlot, IconName> = { weapon: "sword", helm: "helm", chest: "chest", gloves: "gloves", boots: "boots", relic: "relic" };
 const RARITY_VAR: Record<string, string> = { common: "var(--color-common)", uncommon: "var(--color-uncommon)", rare: "var(--color-rare)", epic: "var(--color-epic)", legendary: "var(--color-legendary)" };
@@ -38,6 +41,7 @@ export default function GearPanel() {
   const equippedUids = new Set(Object.values(equipped));
   const bag = inv.filter((i) => !equippedUids.has(i.uid)).sort((a, b) => itemScore(b) - itemScore(a));
   const selected = inv.find((i) => i.uid === selectedUid) ?? null;
+  useRaisePanel(selected !== null);
   const sq = short ? 46 : 52;
   const gap = short ? 6 : 8;
   return (
@@ -66,7 +70,7 @@ export default function GearPanel() {
                 <span className="t-label text-t2">Every boss leaves a piece; enemies drop the rest. Equip it here.</span>
                 {/* A next step, not a dead end: the waiting boss, or the Rift to hunt one. */}
                 <Button size="sm" variant="quiet" className="mt-3 self-start" onClick={() => (profile.progress.bossGate ? c.openBossChallenge() : c.setPanel("rift"))} data-testid="gear-empty-next">
-                  {profile.progress.bossGate ? "Face the boss" : "Find a boss"}
+                  {profile.progress.bossGate ? `Face ${ENEMIES[bossForStage(profile.progress.bossGate)]?.name ?? "the boss"}` : "Hunt a boss in the Rift"}
                 </Button>
               </div>
             ) : (

@@ -11,6 +11,7 @@ import { bestSynergyMove, armySynergies, synergiesGained, synergyEffect } from "
 import { Icon } from "@/components/ui/Icon";
 import { useShake } from "@/hooks/useShake";
 import { useShortScreen } from "@/hooks/useShortScreen";
+import { useCompactFit } from "@/hooks/useCompactFit";
 import { collectibleSummons, ROLE_INFO, summonDef } from "@/game/data/summons";
 import { codexBonus, codexMultiplier, ownedSpecies, speciesStars } from "@/game/summons/extraction";
 import { fmtCodex } from "@/lib/codex";
@@ -33,11 +34,14 @@ export default function SummonsPanel() {
   const c = useController();
   const profile = useProfileRef();
   const selectedId = useUi((u) => u.selectedSummon);
-  const short = useShortScreen();
   const collection = profile.summons.collection;
   const slots = computeModifiers(profile).deploySlots;
   const deployedCount = collection.filter((s) => s.deployed).length;
   const selected = collection.find((s) => s.instanceId === selectedId) ?? collection[0] ?? null;
+  // Compact on short screens, and wherever the full layout would push the actions off the panel
+  // (measured: 360x740 did, though it is not "short").
+  const [root, tight] = useCompactFit<HTMLDivElement>(`${selected?.instanceId}:${selected?.deployed}:${collection.length}`);
+  const short = useShortScreen() || tight;
 
   useEffect(() => {
     if (!selectedId && collection[0]) c.selectSummon(collection[0].instanceId);
@@ -47,7 +51,7 @@ export default function SummonsPanel() {
 
   const owned = ownedSpecies(profile).filter((id) => !summonDef(id).hidden).length;
   return (
-    <div className={cn("flex flex-col h-full min-h-0 px-4", short ? "pt-3 pb-2" : "pt-4 pb-3")}>
+    <div ref={root} className={cn("flex flex-col h-full min-h-0 px-4", short ? "pt-3 pb-2" : "pt-4 pb-3")}>
       <div className="flex items-baseline justify-between gap-3 shrink-0 t-label">
         <span className="text-t2 whitespace-nowrap">
           Deployed{" "}
@@ -112,7 +116,7 @@ function ShadowDetail({ inst, slots, deployedCount, short }: { inst: Instance; s
   const h = short ? "h-11" : "h-[52px]";
   // Exactly one gold action: whatever is the real next step for this shadow.
   const next: "deploy" | "evolve" | "star" | "bond" | null = !inst.deployed && canDeploy ? "deploy" : evo.possible ? "evolve" : starReady ? "star" : canBond ? "bond" : null;
-  const gold = "!bg-gold !text-gold-ink";
+  const gold = "!bg-gold !text-gold-ink !shadow-none";
   const gains = useProfile((p) => {
     if (inst.deployed) return "";
     const fielded = p.summons.collection.filter((x) => x.deployed);
@@ -183,12 +187,12 @@ function ShadowDetail({ inst, slots, deployedCount, short }: { inst: Instance; s
           disabled={!canBond}
           onDenied={bondMax ? undefined : () => (shakeBond(), c.audio.play("error", { volume: 0.3, minInterval: 200 }))}
           feedback="scale"
-          className={cn(h, "flex-1 min-w-0 rounded-[14px] bg-bg-2 flex flex-col items-center justify-center", next === "bond" && gold, bondMax && "opacity-40")}
+          className={cn(h, "flex-1 min-w-0 rounded-[14px] btn-raised flex flex-col items-center justify-center", next === "bond" && gold, bondMax && "opacity-40")}
           testId="bond-upgrade"
           label={bondMax ? `Bond ${inst.bond}, at its cap` : `Strengthen bond for ${cost} essence`}
         >
           <span className={cn("t-label", next === "bond" ? "text-gold-ink" : "text-t1")}>Bond {inst.bond}</span>
-          <span ref={bondPill} className={cn("flex items-center gap-1.5 t-caption tnum", next === "bond" ? "text-gold-ink" : canBond ? "text-jade" : "text-t3")}>
+          <span ref={bondPill} className={cn("flex items-center gap-1.5 t-caption tnum", next === "bond" ? "text-gold-ink" : canBond ? "text-jade" : "text-t2")}>
             {bondMax ? (
               "Max"
             ) : (
@@ -200,7 +204,7 @@ function ShadowDetail({ inst, slots, deployedCount, short }: { inst: Instance; s
           </span>
         </HoldButton>
         <button
-          className={cn("press flex flex-col items-center justify-center rounded-[14px] bg-bg-2 px-3 shrink-0 min-w-11", h, next === "star" && gold, !star && "opacity-40")}
+          className={cn("press flex flex-col items-center justify-center rounded-[14px] btn-raised px-3 shrink-0 min-w-11", h, next === "star" && gold, !star && "opacity-40")}
           onClick={() => c.starUp(inst.instanceId)}
           disabled={!star}
           data-testid="star-button"
@@ -210,21 +214,21 @@ function ShadowDetail({ inst, slots, deployedCount, short }: { inst: Instance; s
             {starReady && next !== "star" && <span className="h-1.5 w-1.5 rounded-full bg-gold" aria-hidden="true" />}
             Star
           </span>
-          <span className={cn("t-caption tnum", next === "star" ? "text-gold-ink" : starReady ? "text-gold" : "text-t3")}>{!star ? "Max" : starReady ? "Ready" : `${Math.min(inst.shards, star.shards)}/${star.shards}`}</span>
+          <span className={cn("t-caption tnum", next === "star" ? "text-gold-ink" : starReady ? "text-gold" : "text-t2")}>{!star ? "Max" : starReady ? "Ready" : `${Math.min(inst.shards, star.shards)}/${star.shards}`}</span>
         </button>
         {def.evolution && (
-          <button className={cn("press flex flex-col items-center justify-center rounded-[14px] bg-bg-2 px-3 shrink-0 min-w-11", h, next === "evolve" && gold)} onClick={() => c.evolve(inst.instanceId)} title={evo.reasons.join(", ")} data-testid="evolve-button" aria-label={evo.possible ? "Evolve, ready" : `Evolve: ${evo.reasons.join(", ")}`}>
+          <button className={cn("press flex flex-col items-center justify-center rounded-[14px] btn-raised px-3 shrink-0 min-w-11", h, next === "evolve" && gold)} onClick={() => c.evolve(inst.instanceId)} title={evo.reasons.join(", ")} data-testid="evolve-button" aria-label={evo.possible ? "Evolve, ready" : `Evolve: ${evo.reasons.join(", ")}`}>
             <span className={cn("t-label flex items-center gap-1.5", next === "evolve" ? "text-gold-ink" : "text-t1")}>
               {evo.possible && next !== "evolve" && <span className="h-1.5 w-1.5 rounded-full bg-gold" aria-hidden="true" />}
               Evolve
             </span>
-            <span className={cn("t-caption tnum", next === "evolve" ? "text-gold-ink" : evo.possible ? "text-gold" : "text-t3")}>{evo.possible ? "Ready" : `Lv ${def.evolution.requiredLevel}`}</span>
+            <span className={cn("t-caption tnum", next === "evolve" ? "text-gold-ink" : evo.possible ? "text-gold" : "text-t2")}>{evo.possible ? "Ready" : `Lv ${def.evolution.requiredLevel}`}</span>
           </button>
         )}
         {spareShards(inst) >= REFINE_SHARDS && (
-          <button className="press flex flex-col items-center justify-center rounded-[14px] bg-bg-2 px-3 shrink-0 min-w-11" style={{ height: short ? 44 : 52 }} onClick={() => c.refineShards(inst.instanceId)} data-testid="refine-shards" aria-label={`Refine ${REFINE_SHARDS} spare shards into a Rift Core`}>
+          <button className="press flex flex-col items-center justify-center rounded-[14px] btn-raised px-3 shrink-0 min-w-11" style={{ height: short ? 44 : 52 }} onClick={() => c.refineShards(inst.instanceId)} data-testid="refine-shards" aria-label={`Refine ${REFINE_SHARDS} spare shards into a Rift Core`}>
             <span className="t-label text-t1">Refine</span>
-            <span className="t-caption tnum text-t3 flex items-center gap-1">
+            <span className="t-caption tnum text-t2 flex items-center gap-1">
               <CurrencyGlyph kind="core" size={6} />
               {REFINE_SHARDS}
             </span>

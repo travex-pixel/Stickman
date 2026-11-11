@@ -59,6 +59,8 @@ test.describe("boss gate loop", () => {
     if (revealed) await page.getByTestId("summon-reveal-continue").click();
     await expect(page.getByTestId("boss-victory")).toBeVisible({ timeout: 10_000 });
     await page.getByTestId("victory-continue").click();
+    // An essence still waiting: the first tap only warns that it will be left behind.
+    if (await page.getByTestId("victory-leave-warning").isVisible()) await page.getByTestId("victory-continue").click();
     expect(await game<string>(page, "c => c.world.mode")).toBe("campaign");
     expect(await game<number>(page, "c => c.world.stage")).toBe(2);
   });

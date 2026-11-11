@@ -16,7 +16,6 @@ import type { Profile } from "@/game/progression/profile";
 import { cn } from "@/lib/cn";
 import { useShortScreen } from "@/hooks/useShortScreen";
 import { claimableObjectives } from "@/game/progression/objectives";
-import { usePanelDetent } from "@/hooks/usePanelDetent";
 
 const MODE_ICON: Record<Exclude<ModeId, "campaign">, IconName> = { boss: "skull", hunt: "skull", vault: "coin", rift: "summons", crypt: "relic", endless: "level", trial: "star", tyrant: "skull" };
 type ListedMode = Exclude<ModeId, "campaign" | "boss">;
@@ -33,7 +32,6 @@ type ShortView = "stages" | "bosses" | "runs";
 export default function RiftPanel() {
   const short = useShortScreen();
   const [view, setView] = useState<ShortView>("stages");
-  const tall = usePanelDetent() === "tall";
   if (short) {
     return (
       <div className="flex flex-col h-full min-h-0 px-4 pt-3 pb-2 gap-3">
@@ -67,7 +65,8 @@ export default function RiftPanel() {
         <HeaderLinks />
       </div>
       <StageStrip />
-      {tall ? <ModeRows /> : <ModeGrid modes={MODES_ORDER} cols={2} sortAvailable />}
+      {/* One column of full rows at any height (scrolls at the base height); the two-column grid truncated. */}
+      <ModeRows />
     </div>
   );
 }
@@ -186,9 +185,7 @@ function ModeGrid({ modes, cols, sortAvailable = false }: { modes: ListedMode[];
               <span className="t-caption text-t3 truncate">{sub}</span>
             </span>
             {keys !== null && avail.ok && (
-              <span className="t-caption tnum text-t2 shrink-0">
-                {keys}/{MODES[m].dailyKeys ?? 3}
-              </span>
+              <span className="t-caption tnum text-t2 shrink-0 whitespace-nowrap">{keys} left</span>
             )}
           </button>
         );
@@ -226,8 +223,10 @@ function ModeRows() {
               <span className="t-label text-t2">{sub}</span>
             </span>
             {keys !== null && avail.ok && (
-              <span className={cn("t-num-m shrink-0", keys > 0 ? "text-gold" : "text-t2")}>
-                {keys}/{MODES[m].dailyKeys ?? 3}
+              // Tries left today. A bare "3/3" read as ambiguous in blind review: done, or available?
+              <span className="shrink-0 whitespace-nowrap" aria-label={`${keys} left today`}>
+                <span className={cn("t-num-m", keys > 0 ? "text-gold" : "text-t2")}>{keys}</span>
+                <span className="t-label text-t2"> left</span>
               </span>
             )}
           </button>

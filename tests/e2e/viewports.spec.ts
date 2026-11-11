@@ -3,6 +3,7 @@ import { waitForGame } from "./helpers";
 
 const VIEWPORTS = [
   { w: 320, h: 568 },
+  { w: 360, h: 740 }, // Galaxy S8 and S9: the shortest common Android screen above the 320 class
   { w: 360, h: 800 },
   { w: 375, h: 812 },
   { w: 390, h: 844 },

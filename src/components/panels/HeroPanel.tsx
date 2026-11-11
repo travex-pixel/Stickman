@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Icon } from "@/components/ui/Icon";
+import { Icon, type IconName } from "@/components/ui/Icon";
 import { HoldButton } from "@/components/ui/HoldButton";
 import { Ticker } from "@/components/ui/Ticker";
 import { CurrencyGlyph } from "@/components/ui/Currency";
@@ -12,7 +12,7 @@ import { useShortScreen } from "@/hooks/useShortScreen";
 import type { UpgradeableStat } from "@/game/data/ids";
 import { STAT_LABEL } from "@/game/data/equipment";
 import { aetherFor, canAscend, romanAscension, spendableAether } from "@/game/progression/ascension";
-import { combatPower, computePlayerStats, isStatUnlocked, MILESTONE_EVERY, MILESTONE_MULT, statUnlockRule, statUpgradeCost, statCap } from "@/game/progression/stats";
+import { bestStatBuy, combatPower, computePlayerStats, isStatUnlocked, MILESTONE_EVERY, MILESTONE_MULT, statUnlockRule, statUpgradeCost, statCap } from "@/game/progression/stats";
 import type { Profile } from "@/game/progression/profile";
 import { canAttemptTrial, nextRankStep, rankLetter } from "@/game/progression/ranks";
 import { nextMilestone } from "@/game/progression/milestones";
@@ -23,6 +23,8 @@ const STATS: UpgradeableStat[] = ["attack", "maxHp", "defense", "attackSpeed", "
 /** Sentence case, short enough for a half-width cell on a 320px phone. */
 const LABEL: Record<UpgradeableStat, string> = { attack: "Attack", maxHp: "Health", defense: "Defence", attackSpeed: "Attack speed", critChance: "Crit rate", critDamage: "Crit damage" };
 const NARROW: Partial<Record<UpgradeableStat, string>> = { attackSpeed: "Speed", critDamage: "Crit dmg" };
+/** A glyph per stat, before its name from 360px up: the grid reads as a game's, not a dashboard's. */
+const STAT_ICON: Record<UpgradeableStat, IconName> = { attack: "sword", maxHp: "heart", defense: "shield", attackSpeed: "speed", critChance: "crit", critDamage: "critdmg" };
 /** Stats whose every 25th level multiplies them: their cells carry a gold milestone line. */
 const MILESTONE_STATS: UpgradeableStat[] = ["attack", "maxHp"];
 
@@ -35,6 +37,8 @@ export default function HeroPanel() {
   const power = combatPower(stats);
   // Until the first purchase, a caption teaches the hold.
   const upgraded = STATS.some((s) => profile.player.statLevels[s] > 1);
+  // The best buy, marked with the lozenge: the most Power per gold among what is affordable now.
+  const bestBuy = bestStatBuy(profile);
   return (
     <div className={cn("flex flex-col h-full min-h-0 px-4", short ? "pt-2" : "pt-4")}>
       <div className={cn("flex items-end justify-between gap-3 shrink-0", short ? "mb-1" : "mb-3")}>
@@ -47,7 +51,7 @@ export default function HeroPanel() {
       {upgraded && <NextGoal />}
       <div className="grid grid-cols-2 grid-rows-3 flex-1 min-h-0 -mx-4 shadow-[inset_0_1px_0_var(--line)]">
         {STATS.map((s, i) => (
-          <StatCell key={s} stat={s} index={i} profile={profile} value={stats[s]} next={previewNext(profile, s)[s]} onUpgrade={() => c.upgradeStat(s).ok} onDenied={() => c.audio.play("error", { volume: 0.3, minInterval: 200 })} />
+          <StatCell key={s} stat={s} index={i} profile={profile} value={stats[s]} next={previewNext(profile, s)[s]} best={s === bestBuy} onUpgrade={() => c.upgradeStat(s).ok} onDenied={() => c.audio.play("error", { volume: 0.3, minInterval: 200 })} />
         ))}
       </div>
       {!upgraded && !short && (
@@ -79,6 +83,8 @@ interface CellProps {
   profile: Profile;
   value: number;
   next: number;
+  /** The cheapest affordable upgrade: marked so the eye has somewhere to start. */
+  best: boolean;
   onUpgrade: () => boolean;
   onDenied: () => void;
 }
@@ -88,7 +94,7 @@ interface CellProps {
  * level adds, the cost as a gold-tint pill. A 1px gold line along the foot shows the way to the
  * next milestone; reaching it tints the cell once.
  */
-function StatCell({ stat, index, profile, value, next, onUpgrade, onDenied }: CellProps) {
+function StatCell({ stat, index, profile, value, next, best, onUpgrade, onDenied }: CellProps) {
   const level = profile.player.statLevels[stat];
   const cap = statCap(profile, stat);
   const cost = statUpgradeCost(stat, level);
@@ -119,7 +125,10 @@ function StatCell({ stat, index, profile, value, next, onUpgrade, onDenied }: Ce
     return (
       <div className={cn(edges, "flex items-center justify-between gap-2 px-3 min-[360px]:px-4")} data-testid={`stat-card-${stat}`}>
         <span className="flex flex-col min-w-0">
-          <span className="t-label text-t2 truncate">{label}</span>
+          <span className="t-label text-t2 flex items-center gap-1.5 min-w-0">
+            <Icon name={STAT_ICON[stat]} size={13} className="shrink-0 hidden min-[360px]:block" />
+            <span className="truncate">{label}</span>
+          </span>
           <span className="t-caption text-t3 truncate">
             {STAT_LABEL[rule.requires]} Lv {rule.level}
           </span>
@@ -146,7 +155,11 @@ function StatCell({ stat, index, profile, value, next, onUpgrade, onDenied }: Ce
       >
         <span ref={tint} className="pointer-events-none absolute inset-0 bg-[var(--tint-gold)] opacity-0" aria-hidden="true" />
         <span className="relative flex flex-col min-w-0">
-          <span className="t-label text-t2 truncate">{label}</span>
+          <span className="t-label text-t2 flex items-center gap-1.5 min-w-0">
+            <Icon name={STAT_ICON[stat]} size={13} className="shrink-0 hidden min-[360px]:block" />
+            <span className="truncate">{label}</span>
+            {best && <span className="lozenge shrink-0" aria-label="Best buy" data-testid="best-buy" />}
+          </span>
           <span className="flex items-baseline gap-1.5 min-w-0">
             <span ref={valueRef} className="inline-block origin-left">
               <span data-testid={`stat-value-${stat}`}>
@@ -161,7 +174,8 @@ function StatCell({ stat, index, profile, value, next, onUpgrade, onDenied }: Ce
           </span>
         </span>
         <span className="relative shrink-0 flex flex-col items-end gap-px">
-          <span ref={pill} className={cn("relative flex items-center gap-[5px] rounded-full h-8 px-2.5 min-[360px]:px-3 t-num-m", capped ? "text-t3" : affordable ? "bg-[var(--tint-gold)] text-gold" : "text-t3")}>
+          {/* A raised button when it can be bought (filled, with a thin gold ring); flat when it cannot. */}
+          <span ref={pill} className={cn("relative flex items-center gap-[5px] rounded-full h-8 px-2.5 min-[360px]:px-3 t-num-m", capped ? "text-t3" : affordable ? "bg-bg-3 text-gold shadow-[inset_0_0_0_1px_rgba(218,184,108,0.45),0_1px_0_rgba(0,0,0,0.5)]" : "bg-bg-2 text-t3")}>
             {capped ? (
               "Max"
             ) : (

@@ -6,7 +6,7 @@ import { cn } from "@/lib/cn";
 export type ButtonVariant = "primary" | "threat" | "quiet" | "plain";
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  /** primary: gold fill (one per view). threat: crimson fill. quiet: graphite fill. plain: text only. */
+  /** primary: gold fill (one per view). threat: crimson fill. quiet: raised graphite with a hairline edge. plain: text only. */
   variant?: ButtonVariant;
   /** md is 52 high, sm is 44 (the touch floor). */
   size?: "md" | "sm";

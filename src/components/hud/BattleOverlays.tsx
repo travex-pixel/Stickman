@@ -366,7 +366,7 @@ function BottomStack() {
           <AnimatePresence initial={false}>
             <BossGate key={gate} gate={gate} compact={questDone} />
           </AnimatePresence>
-          {questDone && <QuestLine />}
+          {questDone && <QuestLine beside />}
         </div>
       ) : (
         !fighting && <QuestLine />
@@ -461,14 +461,29 @@ function PushChip() {
   );
 }
 
-/** In a boss fight or a hunt, the only way out is a quiet one. The boss keeps waiting. */
+/**
+ * In a boss fight or a hunt, the only way out is a quiet one, and it asks once: a stray tap must
+ * not throw away a fight. The first tap arms it for three seconds; the second leaves.
+ */
 function Retreat() {
   const c = useController();
   const mode = useHud((s) => s?.mode ?? "campaign");
+  const [armed, setArmed] = useState(false);
+  useEffect(() => {
+    if (!armed) return;
+    const t = setTimeout(() => setArmed(false), 3000);
+    return () => clearTimeout(t);
+  }, [armed]);
   if (mode !== "boss" && mode !== "hunt") return null;
   return (
-    <button className="press pointer-events-auto flex h-11 items-center rounded-full glass-flat px-4 t-label text-t2" onClick={() => c.returnToCampaign()} data-testid="mode-leave" aria-label="Retreat to farming; the boss keeps waiting">
-      Retreat
+    <button
+      className={cn("press pointer-events-auto flex h-11 items-center rounded-full glass-flat px-4 t-label", armed ? "text-threat" : "text-t2")}
+      onClick={() => (armed ? c.returnToCampaign() : setArmed(true))}
+      data-testid="mode-leave"
+      data-armed={armed}
+      aria-label={armed ? "Tap again to retreat; the boss keeps waiting" : "Retreat to farming; the boss keeps waiting"}
+    >
+      {armed ? "Tap again to retreat" : "Retreat"}
     </button>
   );
 }
@@ -513,7 +528,8 @@ function BossGate({ gate, compact = false }: { gate: number; compact?: boolean }
 const QUEST_PANEL: Partial<Record<QuestGoal["kind"], PanelId>> = { statLevel: "hero", playerLevel: "hero", skills: "skills", deployed: "summons", collection: "summons", evolutions: "summons", equipped: "gear", stage: "rift" };
 
 /** The quest as one line of text with a 44px progress tick; complete, it becomes "Claim 40". */
-function QuestLine() {
+/** `beside`: next to the boss gate, the claim steps back to a quiet pill so the gate stays the one call to action. */
+function QuestLine({ beside = false }: { beside?: boolean }) {
   const c = useController();
   const profile = useProfileRef();
   const guide = useUi((u) => u.guide);
@@ -531,17 +547,21 @@ function QuestLine() {
   return (
     <div className={cn("transition-opacity duration-200", hidden ? "opacity-0 [&_*]:!pointer-events-none" : "opacity-100")} data-testid="quest-banner">
       {done ? (
-        <Button size="sm" variant="primary" className="pointer-events-auto px-3" onClick={() => c.claimQuest()} data-guide="quest-claim" aria-label={`Claim quest reward: ${fmt(amount)}`} leading={<CurrencyGlyph kind={kind} className={kind === "gold" ? "!bg-gold-ink" : undefined} />}>
+        <Button size="sm" variant={beside ? "quiet" : "primary"} className={cn("pointer-events-auto px-3", beside && "glass !text-gold")} onClick={() => c.claimQuest()} data-guide="quest-claim" aria-label={`Claim quest reward: ${fmt(amount)}`} leading={<CurrencyGlyph kind={kind} className={kind === "gold" && !beside ? "!bg-gold-ink" : undefined} />}>
           Claim {fmt(amount)}
         </Button>
       ) : (
-        <button className="pointer-events-auto flex h-11 max-w-full items-center gap-2 legible" onClick={() => panel && c.setPanel(panel)} aria-label={panel ? `Current objective: ${quest.text}. Open ${panel === "summons" ? "army" : panel}` : `Current objective: ${quest.text}`}>
-          <span className="t-label text-t1 truncate">{quest.text}</span>
-          <span className="t-label text-t2 tnum shrink-0">
-            {fmt(prog.value)} of {fmt(prog.target)}
-          </span>
-          <span className="relative h-[2px] w-11 shrink-0 overflow-hidden rounded-full bg-white/20" aria-hidden="true">
-            <span className="absolute inset-0 origin-left rounded-full bg-t1" style={{ transform: `scaleX(${frac})`, transition: "transform 200ms var(--ease)" }} />
+        // A 44px target around a small ink pill: over a bright, misty scene the bare line was hard
+        // to read in blind review.
+        <button className="pointer-events-auto flex h-11 max-w-full items-center" onClick={() => panel && c.setPanel(panel)} aria-label={panel ? `Current objective: ${quest.text}. Open ${panel === "summons" ? "army" : panel}` : `Current objective: ${quest.text}`}>
+          <span className="flex h-8 max-w-full items-center gap-2 rounded-full glass-flat px-3">
+            <span className="t-label text-t1 truncate">{quest.text}</span>
+            <span className="t-label text-t2 tnum shrink-0">
+              {fmt(prog.value)} of {fmt(prog.target)}
+            </span>
+            <span className="relative h-[2px] w-11 shrink-0 overflow-hidden rounded-full bg-white/20" aria-hidden="true">
+              <span className="absolute inset-0 origin-left rounded-full bg-t1" style={{ transform: `scaleX(${frac})`, transition: "transform 200ms var(--ease)" }} />
+            </span>
           </span>
         </button>
       )}

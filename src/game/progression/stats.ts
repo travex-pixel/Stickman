@@ -317,3 +317,29 @@ export function combatPower(stats: CombatStats): number {
   const ehp = stats.maxHp / Math.max(0.15, 30 / (30 + stats.defense));
   return Math.round(dps * 4 + ehp * 0.6);
 }
+
+const UPGRADEABLE: readonly UpgradeableStat[] = ["attack", "maxHp", "defense", "attackSpeed", "critChance", "critDamage"];
+
+/**
+ * The best buy among the stat upgrades the warrior can afford now: the most Power (the number the
+ * Hero panel shows) for each piece of gold. Undefined when nothing is affordable or nothing adds
+ * Power (a stat at its own ceiling, such as crit chance at 85%).
+ */
+export function bestStatBuy(profile: Profile): UpgradeableStat | undefined {
+  const now = combatPower(computePlayerStats(profile));
+  let best: UpgradeableStat | undefined;
+  let bestRate = 0;
+  for (const s of UPGRADEABLE) {
+    const level = profile.player.statLevels[s];
+    if (!isStatUnlocked(profile, s) || level >= statCap(profile, s)) continue;
+    const cost = statUpgradeCost(s, level);
+    if (cost > profile.player.gold) continue;
+    const next: Profile = { ...profile, player: { ...profile.player, statLevels: { ...profile.player.statLevels, [s]: level + 1 } } };
+    const rate = (combatPower(computePlayerStats(next)) - now) / cost;
+    if (rate > bestRate) {
+      bestRate = rate;
+      best = s;
+    }
+  }
+  return best;
+}

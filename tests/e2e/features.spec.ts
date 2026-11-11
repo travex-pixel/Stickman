@@ -167,6 +167,8 @@ test.describe("boss hunts", () => {
     // Progress is never at stake.
     expect(await game<number>(page, "c => c.profile.progress.bestStage")).toBe(7);
     await page.getByTestId("mode-leave").click();
+    // Retreat asks once: the second tap leaves.
+    await page.getByTestId("mode-leave").click();
     expect(await game<string>(page, "c => c.world.mode")).toBe("campaign");
   });
 });
