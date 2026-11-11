@@ -45,7 +45,7 @@ test.describe("ASCEND systems", () => {
     expect(await game<string>(page, "c => c.world.mode")).toBe("campaign");
   });
 
-  test("a failed ARISE keeps boss attempts and builds pity", async ({ page }) => {
+  test("a failed BIND keeps boss attempts and builds pity", async ({ page }) => {
     await waitForGame(page);
     await game(page, `c => {
       c.profile.summons.firstSummonSeen = true; c.profile.tutorial.finished = true; c['commit']();
@@ -85,5 +85,22 @@ test.describe("onboarding", () => {
     await game(page, "c => { c.profile.tutorial.finished = true; c.profile.player.gold = 500; c['commit'](); c.world.player.hp = 1; c.world.kill(c.world.player, -1); }");
     await expect(page.getByTestId("modal-defeat")).toBeVisible({ timeout: 10_000 });
     await expect(page.getByTestId("hand-guide")).toHaveAttribute("data-target", /upgrade-maxHp|tab-hero/, { timeout: 10_000 });
+  });
+
+  test("an art can be ranked up with gold from the Skills panel", async ({ page }) => {
+    const errors = collectErrors(page);
+    await waitForGame(page);
+    await game(page, "c => { const p = c.profile; p.tutorial.finished = true; p.player.level = 12; p.player.gold = 50000; c['commit'](); }");
+    await page.getByTestId("tab-skills").click();
+    await page.getByTestId("branch-arts").click();
+    await page.getByTestId("art-thunder_strike").click();
+    await expect(page.getByTestId("art-rank-up")).toContainText("Rank II");
+    await page.getByTestId("art-rank-up").click();
+    expect(await game<number>(page, "c => c.profile.player.abilityRanks.thunder_strike")).toBe(1);
+    await expect(page.getByTestId("art-thunder_strike")).toHaveAttribute("aria-label", /rank II/);
+    await page.reload();
+    await waitForGame(page);
+    expect(await game<number>(page, "c => c.profile.player.abilityRanks.thunder_strike")).toBe(1);
+    expect(errors, errors.join("\n")).toEqual([]);
   });
 });

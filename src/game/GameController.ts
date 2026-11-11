@@ -154,7 +154,10 @@ export class GameController {
   private disposed = false;
   private rng = new Rng(Date.now() >>> 0);
   private visibilityHandler = () => this.onVisibility();
-  private pageHideHandler = () => void this.save.flush();
+  private pageHideHandler = () => {
+    this.save.stashUnsaved();
+    void this.save.flush();
+  };
   private booted = false;
   private cinematicTimer: ReturnType<typeof setTimeout> | null = null;
   private seenAffixes = new Set<string>();
@@ -267,6 +270,7 @@ export class GameController {
       this.audio.suspend();
       this.profile.lastActive = Date.now();
       this.save.schedule(this.profile, 0);
+      this.save.stashUnsaved();
       void this.save.flush();
       this.loop.stop();
     } else {

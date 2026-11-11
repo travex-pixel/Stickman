@@ -9,6 +9,12 @@ const KEY = "profile";
 const BACKUP_KEY = "profile_backup";
 /** The backup rotates at most this often, so one bad session cannot overwrite a good backup. */
 const BACKUP_INTERVAL_MS = 60_000;
+/**
+ * IndexedDB writes are async and browsers do not wait for them while a page unloads, so a change
+ * made in the last moment before closing could be lost. On pagehide the latest unsaved profile is
+ * also written synchronously here; the next load prefers it only when it is valid and newer.
+ */
+const UNSAVED_KEY = "ascend-unsaved";
 
 export interface LoadResult {
   profile: Profile;
@@ -43,6 +49,8 @@ export class IndexedDbSaveManager implements PersistenceAdapter {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private inflight: Promise<void> | null = null;
   private lastBackup = 0;
+  /** The most recent profile handed to schedule(), until it has been written. */
+  private unsaved: Profile | null = null;
   readOnly = false;
 
   private async open(): Promise<IDBPDatabase | null> {
@@ -79,6 +87,13 @@ export class IndexedDbSaveManager implements PersistenceAdapter {
       readError = true;
     }
     const primary = readError ? ({ ok: false, reason: "corrupt" } as Parsed) : this.tryParse(primaryRaw);
+    const stashed = this.readStash();
+    if (stashed && !readError && (primary.ok || primary.reason !== "newer") && (!primary.ok || stashed.result.profile.lastActive > primary.result.profile.lastActive)) {
+      // The last session closed before its final write landed: recover it and persist it now.
+      if (await this.write(stashed.result.profile)) this.clearStash();
+      return { ...stashed.result, readOnly: false, fromBackup: false };
+    }
+    this.clearStash();
     if (primary.ok) return { ...primary.result, readOnly: false, fromBackup: false };
     try {
       backupRaw = await db.get(STORE, BACKUP_KEY);
@@ -122,6 +137,7 @@ export class IndexedDbSaveManager implements PersistenceAdapter {
   /** Debounced save: the latest profile wins. */
   schedule(profile: Profile, delay = 800): void {
     this.pending = profile;
+    this.unsaved = profile;
     if (this.timer) return;
     this.timer = setTimeout(() => {
       this.timer = null;
@@ -147,9 +163,14 @@ export class IndexedDbSaveManager implements PersistenceAdapter {
   }
 
   async save(profile: Profile): Promise<void> {
-    if (this.readOnly) return;
+    await this.write(profile);
+  }
+
+  /** Writes the profile; resolves true only when the transaction completed. */
+  private async write(profile: Profile): Promise<boolean> {
+    if (this.readOnly) return false;
     const db = await this.open();
-    if (!db) return;
+    if (!db) return false;
     const snapshot = JSON.parse(JSON.stringify({ ...profile, version: PROFILE_VERSION }));
     try {
       const tx = db.transaction(STORE, "readwrite");
@@ -163,8 +184,44 @@ export class IndexedDbSaveManager implements PersistenceAdapter {
       }
       await tx.store.put(snapshot, KEY);
       await tx.done;
+      if (this.unsaved === profile && !this.pending) {
+        this.unsaved = null;
+        this.clearStash();
+      }
+      return true;
     } catch {
       // Storage may be unavailable (private mode, quota). The game keeps running in memory.
+      return false;
+    }
+  }
+
+  /** Synchronous last-chance copy of any profile not yet written. Call on pagehide or when hidden. */
+  stashUnsaved(): void {
+    if (this.readOnly || !this.unsaved || typeof localStorage === "undefined") return;
+    try {
+      localStorage.setItem(UNSAVED_KEY, JSON.stringify({ ...this.unsaved, version: PROFILE_VERSION }));
+    } catch {
+      /* quota or privacy mode: IndexedDB remains the source of truth */
+    }
+  }
+
+  private readStash(): Extract<Parsed, { ok: true }> | null {
+    if (typeof localStorage === "undefined") return null;
+    try {
+      const text = localStorage.getItem(UNSAVED_KEY);
+      if (!text) return null;
+      const parsed = this.tryParse(JSON.parse(text));
+      return parsed.ok ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private clearStash(): void {
+    try {
+      if (typeof localStorage !== "undefined") localStorage.removeItem(UNSAVED_KEY);
+    } catch {
+      /* ignore */
     }
   }
 
@@ -174,6 +231,8 @@ export class IndexedDbSaveManager implements PersistenceAdapter {
       this.timer = null;
     }
     this.pending = null;
+    this.unsaved = null;
+    this.clearStash();
     while (this.inflight) await this.inflight;
     this.readOnly = false;
     this.lastBackup = 0;

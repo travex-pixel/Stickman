@@ -162,3 +162,47 @@ describe("save safety", () => {
     await sm.reset();
   });
 });
+
+describe("unsaved stash", () => {
+  if (typeof globalThis.localStorage === "undefined") {
+    const mem = new Map<string, string>();
+    (globalThis as { localStorage?: Pick<Storage, "getItem" | "setItem" | "removeItem" | "clear"> }).localStorage = {
+      getItem: (k) => mem.get(k) ?? null,
+      setItem: (k, v) => void mem.set(k, String(v)),
+      removeItem: (k) => void mem.delete(k),
+      clear: () => mem.clear(),
+    };
+  }
+  it("a change stashed on pagehide survives even if the async write never lands", async () => {
+    localStorage.clear();
+    const a = new IndexedDbSaveManager();
+    await a.reset();
+    const p = createDefaultProfile();
+    p.player.gold = 100;
+    a.schedule(p);
+    await a.flush();
+    p.player.gold = 999;
+    p.lastActive += 5000;
+    a.schedule(p, 60_000); // the debounce never fires: the tab is closing
+    a.stashUnsaved();
+    const b = new IndexedDbSaveManager();
+    const loaded = await b.load();
+    expect(loaded.profile.player.gold).toBe(999);
+    expect(localStorage.getItem("ascend-unsaved")).toBeNull();
+    const c = new IndexedDbSaveManager();
+    expect((await c.load()).profile.player.gold).toBe(999);
+  });
+  it("an older or corrupt stash never beats the real save", async () => {
+    localStorage.clear();
+    const a = new IndexedDbSaveManager();
+    await a.reset();
+    const p = createDefaultProfile();
+    p.player.gold = 500;
+    a.schedule(p);
+    await a.flush();
+    localStorage.setItem("ascend-unsaved", JSON.stringify({ ...p, player: { ...p.player, gold: 1 }, lastActive: p.lastActive - 1000 }));
+    expect((await new IndexedDbSaveManager().load()).profile.player.gold).toBe(500);
+    localStorage.setItem("ascend-unsaved", "{not json");
+    expect((await new IndexedDbSaveManager().load()).profile.player.gold).toBe(500);
+  });
+});
