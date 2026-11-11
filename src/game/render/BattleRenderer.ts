@@ -510,7 +510,7 @@ export class BattleRenderer {
       const sx = this.sx(h.pos.x);
       const sy = this.sy(h.pos.y);
       const r = h.radius * u;
-      const color = h.kind === "fire" ? (h.faction === "ally" ? 0xe0954f : 0xc9643a) : 0x1d1a16;
+      const color = h.kind === "fire" ? (h.faction === "ally" ? 0xe0954f : 0xc9643a) : h.kind === "tide" ? 0x3f7d80 : 0x1d1a16;
       const flicker = 0.75 + Math.sin(this.time * 14 + h.id) * 0.15;
       g.ellipse(sx, sy, r, r * 0.42).fill({ color, alpha: 0.18 * flicker * Math.min(1, h.remaining) });
       g.ellipse(sx, sy, r * 0.6, r * 0.25).fill({ color: lighten(color, 0.4), alpha: 0.2 * flicker * Math.min(1, h.remaining) });
@@ -717,7 +717,7 @@ export class BattleRenderer {
         case "hazard": {
           const sx = this.sx(e.pos.x);
           const sy = this.sy(e.pos.y);
-          this.fx.push({ kind: "ring", x: sx, y: sy, r0: 4, r1: e.radius * u, life: 0.4, total: 0.4, color: e.kind === "fire" ? 0xe0954f : 0x2a2620, width: 3, squash: 0.42 });
+          this.fx.push({ kind: "ring", x: sx, y: sy, r0: 4, r1: e.radius * u, life: 0.4, total: 0.4, color: e.kind === "fire" ? 0xe0954f : e.kind === "tide" ? 0x8fc9c4 : 0x2a2620, width: 3, squash: 0.42 });
           break;
         }
         case "boss_intro": {

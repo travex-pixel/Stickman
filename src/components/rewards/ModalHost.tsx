@@ -295,6 +295,7 @@ function Journal() {
                 <div className="min-w-0">
                   <div className="text-[12px] font-bold text-ivory">{known ? e.name : "Unknown"}</div>
                   <div className="text-[10px] text-mist leading-snug line-clamp-2">{known ? e.lore : "Defeat it to learn more."}</div>
+                  {known && e.counter && <div className="text-[10px] text-parch/90 leading-snug mt-0.5">{e.counter}</div>}
                   {known && <div className="text-[10px] text-gold mt-0.5">Slain {profile.progress.killsByEnemy[e.id] ?? 0}{e.essenceSummonId ? " · leaves a shadow" : ""}</div>}
                 </div>
               </div>

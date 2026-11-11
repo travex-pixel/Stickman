@@ -15,6 +15,8 @@ export interface EnemyDef {
     range: number;
     radius: number;
   };
+  /** One-line counterplay hint shown under a boss name at its entrance. */
+  counter?: string;
   /** Scaling per stage beyond stage 1. */
   xp: number;
   gold: number;
@@ -99,6 +101,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
     title: "Keeper of the First Rift",
     archetype: "boss",
     lore: "It was sworn to guard the Rift against what lay beyond. The Rift took that oath and made it a chain. It guards still, with no memory of what for.",
+    counter: "Dodge the charge, then punish while it staggers.",
     base: { hp: 2100, attack: 18, attackSpeed: 0.6, defense: 4, moveSpeed: 70, range: 80, radius: 36 },
     xp: 220,
     gold: 160,
@@ -212,6 +215,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
     title: "Keeper of the Second Rift",
     archetype: "boss",
     lore: "Another oath, another chain. This Warden sank with its Rift and guards it still from the bottom of a sea that should not exist.",
+    counter: "Step out of the Undertow's lane. Keep moving when the tide pools fall.",
     base: { hp: 2600, attack: 21, attackSpeed: 0.65, defense: 6, moveSpeed: 74, range: 80, radius: 36 },
     xp: 280,
     gold: 210,

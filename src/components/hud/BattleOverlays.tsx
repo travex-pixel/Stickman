@@ -138,7 +138,9 @@ function WaveBanner() {
   const phase = useHud((s) => s?.phase ?? "intro");
   const wave = useHud((s) => s?.wave ?? 0);
   const stage = useHud((s) => s?.stage ?? 1);
-  const bossName = ENEMIES[regionForStage(stage).bossId]?.name.toUpperCase() ?? "THE WARDEN";
+  const bossDef = ENEMIES[regionForStage(stage).bossId];
+  const bossName = bossDef?.name.toUpperCase() ?? "THE WARDEN";
+  const counter = phase === "boss_intro" ? bossDef?.counter : undefined;
   const label = phase === "boss_intro" ? bossName : phase === "between" ? (wave >= 3 ? "THE WARDEN STIRS" : "WAVE CLEARED") : phase === "intro" ? `STAGE ${stage}` : null;
   return (
     <AnimatePresence>
@@ -148,6 +150,11 @@ function WaveBanner() {
             <span className="absolute inset-x-0 -top-px h-px" style={{ background: "linear-gradient(90deg, transparent, rgba(233,211,154,0.6), transparent)" }} />
             {label}
             <span className="absolute inset-x-0 -bottom-px h-px" style={{ background: "linear-gradient(90deg, transparent, rgba(233,211,154,0.6), transparent)" }} />
+            {counter && (
+              <motion.span initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }} className="absolute left-1/2 top-full mt-2 w-[min(86vw,320px)] -translate-x-1/2 text-center font-sans text-[11px] tracking-normal text-parch/90 leading-snug" data-testid="boss-counter">
+                {counter}
+              </motion.span>
+            )}
           </div>
         </motion.div>
       )}

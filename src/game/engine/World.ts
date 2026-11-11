@@ -1143,6 +1143,7 @@ export class World {
           if (Math.abs(e.pos.x - h.pos.x) < h.radius && Math.abs(e.pos.y - h.pos.y) < h.radius * 0.6) {
             this.applyRawDamage(e, Math.max(1, Math.round(h.dps * 0.5)), h.kind === "fire" ? "fire" : "void", h.sourceId, false);
             if (h.kind === "fire") addStatus(e, { kind: "burn", remaining: 2, value: h.dps * 0.3, sourceId: h.sourceId });
+            if (h.kind === "tide") addStatus(e, { kind: "slow", remaining: 0.8, value: 0.4, sourceId: h.sourceId });
           }
         }
       }

@@ -63,7 +63,7 @@ export interface EnemyState {
 export interface BossState {
   phase: 1 | 2;
   patternTimer: number;
-  pattern: "idle" | "swing" | "charge" | "slam" | "volley";
+  pattern: "idle" | "swing" | "charge" | "slam" | "volley" | "undertow" | "riptide";
   patternStep: number;
   introTimer: number;
   enraged: boolean;
@@ -159,6 +159,6 @@ export interface GroundHazard {
   dps: number;
   faction: Faction;
   sourceId: number;
-  kind: "fire" | "void";
+  kind: "fire" | "void" | "tide";
   tick: number;
 }

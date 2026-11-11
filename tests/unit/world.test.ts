@@ -462,3 +462,53 @@ describe("long session soak", () => {
     expect(maxHazards).toBeLessThan(30);
   }, 120_000);
 });
+
+describe("Drowned Warden", () => {
+  function arena() {
+    const w = freshWorld(9, 12);
+    step(w, 1);
+    w.player.stats.maxHp = 1e9;
+    w.player.hp = 1e9;
+    for (const e of w.entities.values()) if (e.kind === "enemy") e.dead = true;
+    const b = w.spawnEnemy("drowned_warden", { pos: { x: w.player.pos.x + 280, y: w.player.pos.y } });
+    b.kind = "boss";
+    b.stats.maxHp = 1e7;
+    b.hp = 1e7;
+    b.boss = { phase: 1, patternTimer: 0.3, pattern: "idle", patternStep: 0, introTimer: 0, enraged: false };
+    return { w, b };
+  }
+  it("Undertow telegraphs a lane, then drags the hero toward the Warden", () => {
+    const { w, b } = arena();
+    w.player.stats.moveSpeed = 0;
+    let pulled = false;
+    let seen = false;
+    for (let i = 0; i < 60 * 40 && !pulled; i++) {
+      const before = Math.abs(w.player.pos.x - b.pos.x);
+      const wasUndertow = b.boss!.pattern === "undertow";
+      w.update(FIXED_DT);
+      w.drainEvents();
+      if (wasUndertow) seen = true;
+      if (wasUndertow && b.boss!.pattern === "swing") {
+        step(w, 0.12);
+        pulled = Math.abs(w.player.pos.x - b.pos.x) < before - 10;
+      }
+    }
+    expect(seen).toBe(true);
+    expect(pulled).toBe(true);
+  });
+  it("below half health it casts Riptide, leaving slowing tide pools", () => {
+    const { w, b } = arena();
+    b.hp = b.stats.maxHp * 0.4;
+    const ev: GameEvent[] = [];
+    let slowed = false;
+    for (let i = 0; i < 60 * 40; i++) {
+      w.update(FIXED_DT);
+      ev.push(...w.drainEvents());
+      if (w.player.statuses.some((s) => s.kind === "slow")) slowed = true;
+      if (slowed) break;
+    }
+    expect(ev.some((e) => e.type === "boss_phase")).toBe(true);
+    expect(ev.some((e) => e.type === "hazard" && e.kind === "tide")).toBe(true);
+    expect(slowed).toBe(true);
+  });
+});

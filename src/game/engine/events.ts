@@ -33,7 +33,7 @@ export type GameEvent =
   | { type: "shake"; strength: number }
   | { type: "freeze"; duration: number }
   | { type: "ultimate_ready" }
-  | { type: "hazard"; pos: Vec2; radius: number; kind: "fire" | "void"; duration: number }
+  | { type: "hazard"; pos: Vec2; radius: number; kind: "fire" | "void" | "tide"; duration: number }
   | { type: "shield"; id: number; pos: Vec2 }
   | { type: "blocked"; id: number; pos: Vec2 }
   | { type: "guard_break"; id: number; pos: Vec2 }
