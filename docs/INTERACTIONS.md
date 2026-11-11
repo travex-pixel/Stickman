@@ -14,10 +14,11 @@ or error tone instead of silence when a press cannot succeed.
 | FIGHT (`boss-fight`) | Start the boss encounter. The only entry to a boss fight | Sheet open, gate open, farming, warrior alive, no pending transition | Not shown | `challengeBoss()` | Dark flash, boss horn, `BOSS CHALLENGE` banner, boss intro with its counter tip | New `boss` world on the gate stage | Returns false with an error tone; nothing starts |
 | Keep farming (`boss-later`) | Close the sheet | Always | – | Close | Sheet closes | Farming as before | – |
 | Readiness tips | Go fix a weakness | Tip listed | – | Opens the named panel (sheet stays open) | Panel switch | Upgrades refresh the tips and the forecast | – |
-| Retreat (`mode-leave` in a boss fight) | Leave a boss fight | During the fight | – | Back to farming | Toast | Farming world; gate stays; no win or loss recorded | – |
+| Retreat (`mode-leave`, lower right in a boss fight) | Leave a boss fight | During the fight | – | Back to farming | Toast | Farming world; gate stays; no win or loss recorded | – |
+| BIND on the victory card (`victory-bind-button`) | Bind the fallen boss's essence | The boss left an essence | Not shown | Card steps aside, BIND rolls | Reveal on success, "Refused" and the new chance on failure; the card returns | Collection, pity; the countdown waits while the essence does | – |
 | Onward (`victory-continue`) | Leave the victory card | Victory card | – | Farming at the next stage | Card closes; stage banner | Farming world at `nextStage`; auto after a short countdown when enabled | – |
 | Keep farming / Get stronger (defeat card) | Leave the defeat summary | Defeat card | – | Close; or close and open Hero with the hand on an upgrade | Card closes | Farming continues; the boss is never retried automatically | – |
-| Push chip (`push-stage`) | Resume pushing after a fall or a manual hold | Farming below the frontier with auto-push off | Not shown | `pushStage()` | Toast, foes withdraw, `STAGE n` banner | Farming moves up one stage now and keeps pushing | – |
+| Push chip (`push-stage`, lower left) | Resume pushing after a fall or a manual hold | Farming below the frontier with auto-push off, warrior standing | Not shown (also hidden while the warrior is down) | `pushStage()` | Toast, foes withdraw, `STAGE n` banner | Farming moves up one stage now and keeps pushing | During the fall beat: "regrouping" toast, nothing changes |
 | Stage tiles (Rift panel) | Farm a chosen stage | Any stage up to the frontier | Future stages not listed | `selectStage()` | Toast | Farming moves in place; below the frontier it holds there | – |
 
 ## Combat

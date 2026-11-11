@@ -151,7 +151,14 @@ simulation. Decisions:
 | Rift Cores starved while shards piled up | Shards refine 25:1 into cores |
 | Boss rematches for repeat rewards | Deferred: refining covers the core shortage without inviting boss farming |
 | Directional swipe dash | Deferred in favour of the automatic escape direction, which keeps the one-thumb control |
-| Elite affixes with new behaviours | Deferred |
+| Elite affixes with new behaviours | Done: Brutal smash, Hasted lunge, Armored guard |
+
+Final QA (the brief's twelve checks, played in real time on the built game): 11 passed first
+time, including no automatic retry after 30 s and more, offline credited once and gate-safe, and
+a 13-minute session with flat entity, node and heap counts and victories equal to boss wins.
+The mobile layout check failed on HUD overlaps; those were fixed (HUD zones for BIND pills, the
+Push chip moved and hidden during falls, compact top bar and Rift tiles at 320 px) together with
+a panel that could stick after fast tab switching, and each now has a browser test.
 
 ## Art direction: "Ink and Gilt"
 
