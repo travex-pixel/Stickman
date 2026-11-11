@@ -3,7 +3,7 @@ export interface JournalEntry {
   title: string;
   body: string;
   /** Condition key used by the progression system to unlock this entry. */
-  unlock: "start" | "first_kill" | "first_summon" | "first_boss" | "stage_3" | "stage_5" | "stage_7" | "stage_16" | "warden_recruited" | "evolution";
+  unlock: "start" | "first_kill" | "first_summon" | "first_boss" | "stage_3" | "stage_5" | "stage_7" | "stage_16" | "stage_31" | "warden_recruited" | "evolution";
 }
 
 export const JOURNAL: JournalEntry[] = [
@@ -54,6 +54,12 @@ export const JOURNAL: JournalEntry[] = [
     title: "The Shattered Crown",
     body: "Beyond the Hollow the land rises into a city that never stopped being a city. The third Rift came down through its throne room. Its banners still fly, its guards still stand, and its king still waits for a coronation that will not come.",
     unlock: "stage_16",
+  },
+  {
+    id: "j_depths",
+    title: "The Rift Depths",
+    body: "Past the Crown the road does not end. It folds. The Verge again, the Hollow again, the Crown again, but deeper, where the Rift's light changes the colour of everything and the dead remember new tricks. Every pass is harder. Every pass pays better. Nobody has found the bottom.",
+    unlock: "stage_31",
   },
   {
     id: "j_oath",

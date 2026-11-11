@@ -1,3 +1,4 @@
+import { depthForStage } from "../data/depths";
 import { stageScale } from "../data/regions";
 
 /**
@@ -15,7 +16,8 @@ export function stageClearXp(stage: number): number {
 /** Rift Cores: every boss stage's first clear, plus a chance on repeat boss kills. */
 export function stageClearCores(stage: number, firstClear: boolean, isBoss: boolean): number {
   if (!isBoss) return 0;
-  return firstClear ? 1 : 0;
+  // Each Rift Depth's bosses yield one more core on their first defeat.
+  return firstClear ? depthForStage(stage) : 0;
 }
 export const REPEAT_BOSS_CORE_CHANCE = 0.2;
 

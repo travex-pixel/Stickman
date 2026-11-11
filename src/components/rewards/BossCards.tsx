@@ -10,6 +10,7 @@ import { useStore } from "@/lib/store";
 import type { Modal } from "@/game/GameController";
 import { ENEMIES } from "@/game/data/enemies";
 import { bossForStage, regionForStage } from "@/game/data/regions";
+import { TWISTS, depthForStage, romanDepth, twistForStage, type TwistId } from "@/game/data/depths";
 import { stageClearCores, stageClearGold } from "@/game/economy/rewards";
 import { combatPower, computeModifiers, computePlayerStats } from "@/game/progression/stats";
 import { TIER_LABEL, readinessTips, type ReadinessTier, type ReadinessTip } from "@/game/progression/readiness";
@@ -91,13 +92,21 @@ export function BossReady({ modal }: { modal: Extract<Modal, { kind: "boss_ready
           <div className="min-w-0 flex-1">
             <div className="caps !text-crimson-2">Boss · Stage {modal.stage}</div>
             <div className={cn("font-display text-ivory leading-tight truncate", (boss?.name.length ?? 0) > 16 ? "text-[15px]" : "text-[17px]")}>{boss?.name ?? "The Warden"}</div>
-            <div className="text-[10px] text-mist truncate">{regionForStage(modal.stage).name}</div>
+            <div className="text-[10px] text-mist truncate">
+              {regionForStage(modal.stage).name}
+              {depthForStage(modal.stage) > 1 && ` · Depth ${romanDepth(depthForStage(modal.stage))}`}
+            </div>
           </div>
           <div className={cn("shrink-0 rounded-md border px-2 py-1 text-center leading-none", forecast ? TIER_TONE[forecast.tier] : "border-white/10 text-mist")} data-testid="boss-readiness">
             <div className="text-[9px] tracking-[0.12em] uppercase opacity-80">Readiness</div>
             <div className="font-display text-[13px] mt-0.5">{forecast ? TIER_LABEL[forecast.tier] : running ? "…" : "–"}</div>
           </div>
         </div>
+        {twistForStage(modal.stage) && (
+          <div className="text-[10.5px] leading-snug rounded-md border px-2 py-1" style={{ borderColor: `#${TWISTS[twistForStage(modal.stage) as TwistId].tint.toString(16).padStart(6, "0")}55` }} data-testid="boss-twist">
+            <b className="text-ivory">{TWISTS[twistForStage(modal.stage) as TwistId].name}:</b> <span className="text-parch">{TWISTS[twistForStage(modal.stage) as TwistId].blurb} {TWISTS[twistForStage(modal.stage) as TwistId].counter}</span>
+          </div>
+        )}
         <div className="text-[11px] text-parch leading-snug" data-testid="boss-forecast">
           {forecast ? (
             <>

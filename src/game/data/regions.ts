@@ -1,4 +1,5 @@
 import type { EliteAffix } from "./ids";
+import { depthRewardMult, localStage } from "./depths";
 
 export interface WaveSpawn {
   enemyId: string;
@@ -171,9 +172,11 @@ export const REGIONS: RegionDef[] = [
   },
 ];
 
+/** The region a stage belongs to. Past stage 30 the regions come round again, one Rift Depth deeper. */
 export function regionForStage(stage: number): RegionDef {
+  const local = localStage(stage);
   let found = REGIONS[0] as RegionDef;
-  for (const r of REGIONS) if (stage >= r.firstStage) found = r;
+  for (const r of REGIONS) if (local >= r.firstStage) found = r;
   return found;
 }
 
@@ -202,7 +205,7 @@ export function stageScale(stage: number): { hp: number; attack: number; reward:
   return {
     hp: Math.pow(HP_GROWTH, early) * Math.pow(HP_GROWTH_LATE, late) * (1 + 0.06 * s),
     attack: Math.pow(ATK_GROWTH, early) * Math.pow(ATK_GROWTH_LATE, late) * (1 + 0.03 * s),
-    reward: Math.pow(REWARD_GROWTH, s),
+    reward: Math.pow(REWARD_GROWTH, s) * depthRewardMult(stage),
   };
 }
 
@@ -221,7 +224,7 @@ export const WAVES_PER_STAGE = 3;
 /** The boss guarding a campaign stage. Rank Trials always face the region's Warden. */
 export function bossForStage(stage: number, mode: string = "campaign"): string {
   const region = regionForStage(stage);
-  return mode !== "trial" && region.bossFor ? region.bossFor(stage) : region.bossId;
+  return mode !== "trial" && region.bossFor ? region.bossFor(localStage(stage)) : region.bossId;
 }
 
 /**

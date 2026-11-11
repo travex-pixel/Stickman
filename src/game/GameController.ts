@@ -14,7 +14,8 @@ import { learnTechniques, setSlotForm } from "./progression/techniques";
 import { offerPerks, takePerk as doTakePerk } from "./progression/perks";
 import { claimQuest as doClaimQuest, currentQuest, isQuestComplete } from "./progression/quests";
 import { evaluateAchievements, evaluateJournal } from "./progression/achievements";
-import { computeModifiers, isStatUnlocked, MILESTONE_EVERY, MILESTONE_MULT, statUpgradeCost } from "./progression/stats";
+import { computeModifiers, MILESTONE_EVERY, MILESTONE_MULT } from "./progression/stats";
+import { canUpgradeStat } from "./progression/upgrades";
 import { claimEssence as doClaimEssence, setDeployed, type ClaimOutcome } from "./summons/recruitment";
 import { CODEX_STAR_STEP, resolveExtraction, speciesStars } from "./summons/extraction";
 import { SLOT_LABEL, STAT_LABEL } from "./data/equipment";
@@ -42,6 +43,7 @@ import { describeReward, verifyCode } from "./economy/codes";
 import { generateItem } from "./economy/loot";
 import { ABILITIES } from "./data/abilities";
 import { bossForStage, isBossStage, regionForStage } from "./data/regions";
+import { TWISTS, depthForStage, romanDepth, twistForDepth, type TwistId } from "./data/depths";
 import { clampFarmStage, frontierStage, normalizeCampaign, resolveBossDefeat, resolveBossVictory, resolveCycle, resolveFarmingDefeat } from "./progression/campaign";
 import { bossFightStepper, readinessTips, summarizeForecast, FORECAST_SEEDS, type BossForecast, type FightResult, type ReadinessTip } from "./progression/readiness";
 import { ascend as doAscend, buyNode as doBuyNode, romanAscension, type TreeNodeId } from "./progression/ascension";
@@ -781,7 +783,7 @@ export class GameController {
     const p = this.profile;
     const ui = this.uiStore.get();
     if (ui.panel !== "hero" && !ui.newBadges.hero) {
-      const affordable = (["attack", "maxHp", "defense", "attackSpeed", "critChance", "critDamage"] as const).some((st) => isStatUnlocked(p, st) && statUpgradeCost(st, p.player.statLevels[st]) <= p.player.gold);
+      const affordable = (["attack", "maxHp", "defense", "attackSpeed", "critChance", "critDamage"] as const).some((st) => canUpgradeStat(p, st).ok);
       if (affordable) this.uiStore.update((u) => ({ ...u, newBadges: { ...u.newBadges, hero: true } }));
     }
     // The plaque's readiness follows the build: re-forecast when something that matters changed.
@@ -884,9 +886,16 @@ export class GameController {
 
   private onStageAdvanced(from: number, stage: number): void {
     this.renderer?.onStageChanged();
-    if (regionForStage(stage).id !== regionForStage(from).id) {
+    const depth = depthForStage(stage);
+    if (depth !== depthForStage(from) && twistForDepth(depth)) {
+      const t = TWISTS[twistForDepth(depth) as TwistId];
+      this.sfx("boss_intro", { volume: 0.6, rate: 0.9 });
+      this.renderer?.flash(t.tint, 0.4);
+      this.toast(`Rift Depth ${romanDepth(depth)} · ${t.name}`, "level");
+      this.toast(`${t.blurb} ${t.counter}`, "info");
+    } else if (regionForStage(stage).id !== regionForStage(from).id) {
       this.sfx("boss_intro", { volume: 0.5, rate: 1.2 });
-      this.toast(`${regionForStage(stage).name}`, "level");
+      this.toast(depth > 1 ? `${regionForStage(stage).name} · Depth ${romanDepth(depth)}` : `${regionForStage(stage).name}`, "level");
     }
   }
 
@@ -1798,7 +1807,7 @@ export class GameController {
     this.sfx("summon_first", { volume: 0.9, rate: 0.9 });
     this.renderer?.flash(0xe9c97a, 0.55);
     this.renderer?.levelUpBurst();
-    this.toast(`Ascension ${romanAscension(res.count)}: +${res.gained} Aether. Your power carries into every climb.`, "level");
+    this.toast(`Ascension ${romanAscension(res.count)}: +${fmt(res.gained)} Aether. Your power carries into every climb.`, "level");
     this.refreshLoadout();
     this.commit();
     void this.save.flush();
@@ -1990,7 +1999,7 @@ export class GameController {
     const q = currentQuest(p);
     if (q && isQuestComplete(p, q)) return { target: "quest-claim", label: "Claim reward", gesture: "tap" };
     if (this.coachUpgrade) {
-      const stat = statUpgradeCost("maxHp", p.player.statLevels.maxHp) <= p.player.gold ? "maxHp" : statUpgradeCost("attack", p.player.statLevels.attack) <= p.player.gold ? "attack" : null;
+      const stat = canUpgradeStat(p, "maxHp").ok ? "maxHp" : canUpgradeStat(p, "attack").ok ? "attack" : null;
       if (!stat) return null;
       if (panel !== "hero") return { target: "tab-hero", label: "Spend your gold", gesture: "tap" };
       return { target: `upgrade-${stat}`, label: stat === "maxHp" ? "Hold to raise Health" : "Hold to raise Attack", gesture: "hold" };

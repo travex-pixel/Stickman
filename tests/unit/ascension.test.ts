@@ -12,6 +12,8 @@ describe("ascension", () => {
     expect(aetherFor(ASCEND_MIN_STAGE - 1)).toBe(0);
     expect(aetherFor(20)).toBeGreaterThan(0);
     expect(aetherFor(40)).toBeGreaterThan(aetherFor(30) * 1.5);
+    // Past stage 60 every stage deeper is worth at least 10% more, so the climb never stalls.
+    for (let st = 61; st < 200; st += 7) expect(aetherFor(st + 1) / aetherFor(st)).toBeGreaterThanOrEqual(1.1);
     const p = createDefaultProfile();
     p.progress.bestStage = 19;
     expect(canAscend(p)).toBe(false);

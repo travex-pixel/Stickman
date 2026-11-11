@@ -1,4 +1,5 @@
 import { isBossStage, regionForStage } from "../data/regions";
+import { TWISTS, depthForStage, localStage, romanDepth, twistForDepth } from "../data/depths";
 import { MODES, type ModeId } from "../data/modes";
 import { stageClearCores, stageClearGold, stageClearXp } from "../economy/rewards";
 import type { Profile } from "./profile";
@@ -127,7 +128,10 @@ export function unlocksBetween(before: number, after: number): string[] {
     if (m.unlockAfterStage > before && m.unlockAfterStage <= after) out.push(`${m.name} opens`);
   }
   if (before < 3 && after >= 3) out.push("2x battle speed");
-  const next = regionForStage(after + 1);
-  if (next.firstStage === after + 1 && after + 1 > 1) out.push(`New region: ${next.name}`);
+  const at = after + 1;
+  const depth = depthForStage(at);
+  const twist = twistForDepth(depth);
+  if (twist && localStage(at) === 1) out.push(`Rift Depth ${romanDepth(depth)} opens: ${TWISTS[twist].name}`);
+  else if (at > 1 && regionForStage(at).firstStage === localStage(at)) out.push(`New region: ${regionForStage(at).name}${depth > 1 ? `, Depth ${romanDepth(depth)}` : ""}`);
   return out;
 }

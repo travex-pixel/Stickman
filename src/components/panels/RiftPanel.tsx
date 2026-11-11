@@ -3,6 +3,7 @@
 import { Icon, type IconName } from "@/components/ui/Icon";
 import { useController, useHud, useProfileRef } from "@/hooks/useGame";
 import { regionForStage } from "@/game/data/regions";
+import { TWISTS, depthLabel, twistForStage } from "@/game/data/depths";
 import { JOURNAL } from "@/game/data/lore";
 import { MODES, cryptSlot, isKeyedMode, type ModeId } from "@/game/data/modes";
 import { SLOT_LABEL } from "@/game/data/equipment";
@@ -20,6 +21,7 @@ export default function RiftPanel() {
   const stage = useHud((s) => s?.stage ?? profile.progress.currentStage);
   const mode = useHud((s) => s?.mode ?? "campaign");
   const region = regionForStage(profile.progress.currentStage);
+  const twist = twistForStage(profile.progress.currentStage);
   const maxStage = profile.progress.bestStage + 1;
   const first = Math.max(1, Math.min(maxStage, stage) - 2);
   const stages = Array.from({ length: 5 }, (_, i) => first + i).filter((s) => s <= maxStage);
@@ -33,7 +35,13 @@ export default function RiftPanel() {
       <div className="flex items-center justify-between leading-tight px-0.5">
         <div className="min-w-0">
           <div className="font-display text-[14px] text-ivory truncate">{region.name}</div>
-          <div className="text-[10px] text-mist italic truncate">{region.subtitle}</div>
+          {twist ? (
+            <div className="text-[10px] truncate font-semibold" style={{ color: hex(TWISTS[twist].tint) }} data-testid="depth-chip" title={`${TWISTS[twist].blurb} ${TWISTS[twist].counter}`}>
+              {depthLabel(profile.progress.currentStage)} · {TWISTS[twist].blurb}
+            </div>
+          ) : (
+            <div className="text-[10px] text-mist italic truncate">{region.subtitle}</div>
+          )}
         </div>
         <div className="flex gap-1 shrink-0">
           <button className="btn-ghost relative !py-0 h-8 !px-2.5 text-[11px] flex items-center gap-1" onClick={() => c.openObjectives()} data-testid="objectives-button" aria-label={`Objectives${claimable ? `, ${claimable} ready to claim` : ""}`}>
@@ -89,4 +97,8 @@ export default function RiftPanel() {
       </div>
     </div>
   );
+}
+
+function hex(n: number): string {
+  return `#${n.toString(16).padStart(6, "0")}`;
 }

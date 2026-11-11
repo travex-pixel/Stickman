@@ -14,10 +14,19 @@ export const ASCEND_MIN_STAGE = 20;
 export const AETHER_POWER = 0.02;
 export const AETHER_GOLD = 0.01;
 
+/**
+ * Past stage 60 every stage deeper is worth 10% more Aether. Aether's power is linear and the
+ * enemies' growth is exponential, so without this each ascension would reach a little less far
+ * than the last and the climb would stall after a day or two. With it, a deeper push keeps paying
+ * enough to move the frontier for weeks (checked with the economy simulator).
+ */
+export const AETHER_DEEP_STAGE = 60;
+export const AETHER_DEEP_GROWTH = 1.1;
+
 /** Aether an ascension from `bestStage` grants. */
 export function aetherFor(bestStage: number): number {
   if (bestStage < ASCEND_MIN_STAGE) return 0;
-  return Math.floor(Math.pow(bestStage - 15, 1.6) / 2);
+  return Math.floor((Math.pow(bestStage - 15, 1.6) / 2) * Math.pow(AETHER_DEEP_GROWTH, Math.max(0, bestStage - AETHER_DEEP_STAGE)));
 }
 
 export function canAscend(p: Profile): boolean {

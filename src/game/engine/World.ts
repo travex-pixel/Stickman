@@ -13,6 +13,7 @@ import type { AbilityId, SummonCommand, Element } from "../data/ids";
 import { ABILITIES, ABILITY_SLOTS, ULTIMATE_ENERGY_COST, ULTIMATE_ID } from "../data/abilities";
 import { enemyDef } from "../data/enemies";
 import { bossForStage, bossScale, regionForStage, stageScale, type WaveDef } from "../data/regions";
+import { TWISTS, twistForStage, type TwistId } from "../data/depths";
 import { computeDamage } from "../combat/damage";
 import { addStatus, hasStatus, speedMultiplier, statusValue, tickStatuses } from "../combat/statuses";
 import { nearestHostile, hostilesWithin, factionWithin } from "../combat/targeting";
@@ -82,6 +83,24 @@ interface WaveRunner {
 
 interface LootDrop {
   item: EquipmentItem;
+}
+
+/** Rift Depth twists (see data/depths.ts). */
+export const BLOODBOUND_LIFESTEAL = 0.15;
+export const VOLATILE_RADIUS = 46;
+export const VOLATILE_FUSE = 1.0;
+export const VOLATILE_POWER = 0.8;
+export const SWARM_HP = 0.7;
+
+/** A twist's effect on one foe as it enters the field. */
+export function applyTwist(e: Combatant, twist: TwistId): void {
+  if (twist === "frenzy") {
+    e.stats.attackSpeed *= e.kind === "boss" ? 1.1 : 1.2;
+    e.stats.moveSpeed *= 1.15;
+  } else if (twist === "swarm" && e.kind !== "boss" && !e.enemy?.minion) {
+    e.stats.maxHp = Math.max(1, Math.round(e.stats.maxHp * SWARM_HP));
+    e.hp = e.stats.maxHp;
+  }
 }
 
 export class World {
@@ -275,6 +294,11 @@ export class World {
 
   schedule(delay: number, fn: () => void): void {
     this.timers.push({ at: this.time + delay, fn });
+  }
+
+  /** The Rift Depth's twist on this fight: campaign farming, its boss gates and hunts only. */
+  get twist(): TwistId | null {
+    return this.mode === "campaign" || this.mode === "boss" || this.mode === "hunt" ? twistForStage(this.stage) : null;
   }
 
   get pendingTimers(): number {
@@ -743,8 +767,10 @@ export class World {
     const def = this.mode === "endless" ? endlessWave(n) : (this.regionWaves[n - 1] ?? this.regionWaves[this.regionWaves.length - 1]);
     if (!def) return;
     const queue: { enemyId: string; at: number; elite?: EliteAffix; attackMult?: number; keeper?: boolean }[] = [];
+    const swarm = this.twist === "swarm";
     for (const group of def.spawns) {
-      for (let i = 0; i < group.count; i++) queue.push({ enemyId: group.enemyId, at: group.delay + i * group.interval, elite: i === 0 ? group.elite : undefined, attackMult: group.attackMult, keeper: i === 0 && group.keeper });
+      const count = swarm ? Math.ceil(group.count * 1.5) : group.count;
+      for (let i = 0; i < count; i++) queue.push({ enemyId: group.enemyId, at: group.delay + i * group.interval, elite: i === 0 ? group.elite : undefined, attackMult: group.attackMult, keeper: i === 0 && group.keeper });
     }
     queue.sort((a, b) => a.at - b.at);
     this.waveRunner = { def, spawnQueue: queue, elapsed: 0 };
@@ -789,6 +815,7 @@ export class World {
       boss.stats.maxHp = Math.round(boss.stats.maxHp * 1.15);
       boss.hp = boss.stats.maxHp;
     }
+    if (this.twist === "frenzy") applyTwist(boss, "frenzy");
     boss.boss = { phase: 1, patternTimer: 1.2, pattern: "idle", patternStep: 0, introTimer: 2.4, enraged: false };
     boss.state = "emerge";
     boss.stateDuration = 2.4;
@@ -808,7 +835,9 @@ export class World {
     const y = opts.pos?.y ?? this.rng.range(ARENA.minY + 10, ARENA.maxY - 10);
     const firstEver = def.essenceSummonId !== undefined && this.stage === 1 && this.wave === 1 && enemyId === "husk" && !this.guaranteedEssenceGiven && this.loadout.summons.length === 0 && !this.loadout.hasSummons;
     if (firstEver) this.guaranteedEssenceGiven = true;
-    const elite = opts.minion ? null : (opts.elite ?? (this.rng.chance(eliteChance(this.stage, this.wave)) ? this.rng.pick(ELITE_IDS) : null));
+    const twist = this.twist;
+    const chance = twist === "elite_tide" ? Math.min(0.45, 3 * eliteChance(this.stage, Math.max(2, this.wave))) : eliteChance(this.stage, this.wave);
+    const elite = opts.minion ? null : (opts.elite ?? (this.rng.chance(chance) ? this.rng.pick(ELITE_IDS) : null));
     const ownedAlready = def.essenceSummonId !== undefined && this.loadout.owned.includes(def.essenceSummonId);
     const eligibleChance = def.essenceChance * this.loadout.mods.essenceChanceMult * (ownedAlready ? 0.5 : 1);
     // Elites always leave a shadow behind: they are the encounters worth hoping for.
@@ -822,6 +851,7 @@ export class World {
       e.hp = e.stats.maxHp;
     }
     if (elite) makeElite(e, elite);
+    if (twist) applyTwist(e, twist);
     e.facing = opts.pos ? (this.player.pos.x >= x ? 1 : -1) : fromLeft ? 1 : -1;
     this.entities.set(e.id, e);
     this.events.push({ type: "spawn", id: e.id, kind: "enemy", defId: def.id, pos: { ...e.pos } });
@@ -1158,6 +1188,12 @@ export class World {
       source.hp = Math.min(source.stats.maxHp, source.hp + heal);
       this.events.push({ type: "heal", targetId: source.id, amount: Math.round(heal), pos: { ...source.pos } });
     }
+    // Bloodbound depth: every foe drinks a share of the blows it lands.
+    if (source.faction === "enemy" && !source.dead && res.amount > 0 && this.twist === "bloodbound") {
+      const heal = res.amount * BLOODBOUND_LIFESTEAL;
+      source.hp = Math.min(source.stats.maxHp, source.hp + heal);
+      if (heal >= 1) this.events.push({ type: "heal", targetId: source.id, amount: Math.round(heal), pos: { ...source.pos } });
+    }
     return res;
   }
 
@@ -1222,6 +1258,7 @@ export class World {
     this.events.push({ type: "death", id: target.id, kind: target.kind, defId: target.defId, pos: { ...target.pos }, killerId, elite: !!target.enemy?.elite || undefined });
     if (target.faction === "enemy") {
       this.kills += 1;
+      if (target.kind === "enemy" && !target.enemy?.minion && this.twist === "volatile") this.volatileBurst(target);
       this.onEnemyKilled(target, killerId);
     }
   }
@@ -1319,6 +1356,24 @@ export class World {
   addTelegraph(pos: Vec2, radius: number, duration: number, shape: Telegraph["shape"] = "circle", dir: 1 | -1 = 1, length = 0, color = 0xff4d6d, hostile = true): void {
     this.telegraphs.push({ id: this.allocId(), pos: { ...pos }, radius, remaining: duration, total: duration, shape, dir, length, color, hostile });
     this.events.push({ type: "telegraph", pos: { ...pos }, radius, duration });
+  }
+
+  /** Volatile depth: a slain foe bursts after a fuse, shown as a ring the warrior can leave or dodge through. */
+  private volatileBurst(e: Combatant): void {
+    const at = { ...e.pos };
+    const attack = e.stats.attack;
+    this.addTelegraph(at, VOLATILE_RADIUS, VOLATILE_FUSE, "circle", 1, 0, TWISTS.volatile.tint);
+    this.schedule(VOLATILE_FUSE, () => {
+      if (this.phase === "victory" || this.phase === "defeat") return;
+      this.events.push({ type: "hazard", pos: { ...at }, radius: VOLATILE_RADIUS, kind: "fire", duration: 0.35 });
+      this.events.push({ type: "shake", strength: 2.5 });
+      for (const o of this.entities.values()) {
+        if (o.dead || o.faction !== "ally" || dist(o.pos, at) > VOLATILE_RADIUS) continue;
+        if (hasStatus(o, "invuln") || hasStatus(o, "submerged")) continue;
+        const res = computeDamage({ attack, power: VOLATILE_POWER, critChance: 0, critDamage: 1, targetDefense: o.stats.defense, bonusMultiplier: 1 }, this.rng);
+        this.applyRawDamage(o, res.amount, "fire", e.id, false, false);
+      }
+    });
   }
 
   addHazard(pos: Vec2, radius: number, duration: number, dps: number, faction: Faction, sourceId: number, kind: GroundHazard["kind"]): void {

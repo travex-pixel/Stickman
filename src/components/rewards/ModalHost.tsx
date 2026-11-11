@@ -532,7 +532,7 @@ function AscendSheet() {
         {(["ascend", "tree"] as const).map((t) => (
           <button key={t} className={cn("flex-1 h-8 rounded-md text-[12px] font-semibold border relative", tab === t ? "border-gold/60 bg-gold/10 text-gold-2" : "border-white/10 text-mist")} onClick={() => setTab(t)} data-testid={`ascend-tab-${t}`} role="tab" aria-selected={tab === t}>
             {t === "ascend" ? "Ascend" : "Aether tree"}
-            {t === "tree" && spendableAether(profile) > 0 && <span className="absolute -top-1 -right-1 rounded-full bg-gold-2 px-1 text-[9px] font-extrabold text-ink leading-4">{spendableAether(profile)}</span>}
+            {t === "tree" && spendableAether(profile) > 0 && <span className="absolute -top-1 -right-1 rounded-full bg-gold-2 px-1 text-[9px] font-extrabold text-ink leading-4">{fmt(spendableAether(profile))}</span>}
           </button>
         ))}
       </div>
@@ -549,7 +549,7 @@ function AetherTree() {
     <div className="px-3 pt-2 pb-3 flex flex-col gap-1" data-testid="aether-tree">
       <div className="flex items-baseline justify-between px-0.5">
         <span className="text-[11px] text-mist">Spending never lowers the flat bonus from lifetime Aether.</span>
-        <span className="font-bold text-gold-2 text-[13px] tabular-nums shrink-0 ml-2">{spend} ✦</span>
+        <span className="font-bold text-gold-2 text-[13px] tabular-nums shrink-0 ml-2">{fmt(spend)} ✦</span>
       </div>
       {TREE.map((n) => {
         const lvl = nodeLevel(profile, n.id);
@@ -586,7 +586,10 @@ function AscendBody() {
   const can = canAscend(profile);
   const gain = aetherFor(profile.progress.bestStage);
   const after = a.aether + gain;
-  const pct = (n: number) => Math.round(n * AETHER_POWER * 100);
+  const mult = (n: number) => {
+    const v = 1 + n * AETHER_POWER;
+    return v < 100 ? `×${v.toFixed(v < 10 ? 2 : 1)}` : `×${fmt(v)}`;
+  };
   return (
     <>
       <div className="px-4 pt-3 pb-3 flex flex-col gap-2" data-testid="ascend-sheet">
@@ -597,9 +600,9 @@ function AscendBody() {
         </div>
         <div className="grid grid-cols-3 gap-1 text-center">
           {[
-            ["Aether now", `${a.aether}`],
-            ["This ascension", can ? `+${gain}` : "–"],
-            ["Power after", `+${pct(can ? after : a.aether)}%`],
+            ["Aether now", fmt(a.aether)],
+            ["This ascension", can ? `+${fmt(gain)}` : "–"],
+            ["Power after", mult(can ? after : a.aether)],
           ].map(([k, v]) => (
             <div key={k} className="rounded-md bg-white/[0.04] border border-white/8 py-1.5 leading-none">
               <div className="text-[9px] uppercase tracking-[0.1em] text-mist">{k}</div>

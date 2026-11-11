@@ -27,6 +27,33 @@ interface Scene {
   props: "ruins" | "drowned" | "crown";
 }
 
+function mixRgb(a: number, b: number, t: number): number {
+  const ch = (sh: number) => Math.round(((a >> sh) & 255) * (1 - t) + ((b >> sh) & 255) * t);
+  return (ch(16) << 16) | (ch(8) << 8) | ch(0);
+}
+
+function mixHex(hex: string, tint: number, t: number): string {
+  if (!hex.startsWith("#") || hex.length !== 7) return hex;
+  return `#${mixRgb(parseInt(hex.slice(1), 16), tint, t).toString(16).padStart(6, "0")}`;
+}
+
+/** A Rift Depth's version of a region: the same place, deeper in the Rift, in another light. */
+function tintScene(s: Scene, tint: number, t: number): Scene {
+  return {
+    ...s,
+    skyTop: mixHex(s.skyTop, tint, t * 0.8),
+    skyMid: mixHex(s.skyMid, tint, t),
+    horizon: mixHex(s.horizon, tint, t * 1.3),
+    far: mixHex(s.far, tint, t * 0.9),
+    mid: mixHex(s.mid, tint, t * 0.6),
+    near: mixHex(s.near, tint, t * 0.4),
+    groundFar: mixHex(s.groundFar, tint, t * 0.5),
+    groundNear: mixHex(s.groundNear, tint, t * 0.3),
+    fog: mixRgb(s.fog, tint, t * 1.2),
+    mote: mixRgb(s.mote, tint, Math.min(1, t * 2)),
+  };
+}
+
 const SCENES: Record<string, Scene> = {
   ashen_verge: {
     skyTop: "#323b49",
@@ -416,9 +443,14 @@ export class Background {
   private reduced = false;
   private cam = 0;
 
-  constructor(region: RegionDef) {
+  readonly depth: number;
+
+  /** `tint` washes the scene toward a Rift Depth's light (null on the first pass). */
+  constructor(region: RegionDef, depth = 1, tint: number | null = null) {
     this.region = region;
-    this.scene = SCENES[region.id] ?? (SCENES.ashen_verge as Scene);
+    this.depth = depth;
+    const base = SCENES[region.id] ?? (SCENES.ashen_verge as Scene);
+    this.scene = tint === null ? base : tintScene(base, tint, Math.min(0.42, 0.22 + 0.04 * (depth - 2)));
     this.container.addChild(this.sky, this.fissureGlow, this.fissure, this.far, this.mid);
     this.fissureGlow.blendMode = "add";
     for (let i = 0; i < 3; i++) {

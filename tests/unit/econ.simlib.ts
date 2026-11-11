@@ -7,7 +7,7 @@ import { buildLoadout } from "@/game/progression/loadout";
 import { createDefaultProfile, type Profile } from "@/game/progression/profile";
 import { applyXp } from "@/game/progression/xp";
 import { claimQuest } from "@/game/progression/quests";
-import { isStatUnlocked, statUpgradeCost, computeModifiers, computePlayerStats, combatPower } from "@/game/progression/stats";
+import { isStatUnlocked, statUpgradeCost, computeModifiers, computePlayerStats, combatPower, STAT_UPGRADE_CAP } from "@/game/progression/stats";
 import { upgradeStat } from "@/game/progression/upgrades";
 import { resolveExtraction } from "@/game/summons/extraction";
 import { claimEssence, setDeployed } from "@/game/summons/recruitment";
@@ -297,7 +297,8 @@ export class Sim {
       while (claimQuest(p)) {
         /* claim all */
       }
-      const opts = (["attack", "maxHp", "defense", "attackSpeed", "critChance", "critDamage"] as const).filter((s) => isStatUnlocked(p, s));
+      const opts = (["attack", "maxHp", "defense", "attackSpeed", "critChance", "critDamage"] as const).filter((s) => isStatUnlocked(p, s) && p.player.statLevels[s] < STAT_UPGRADE_CAP[s]);
+      if (opts.length === 0) break;
       const s = opts.sort((a, b) => statUpgradeCost(a, p.player.statLevels[a]) - statUpgradeCost(b, p.player.statLevels[b]))[0]!;
       const r = upgradeStat(p, s);
       if (!r.ok) break;
@@ -310,7 +311,7 @@ export class Sim {
 
   nextUpgradeCost(): number {
     const p = this.p;
-    const opts = (["attack", "maxHp", "defense", "attackSpeed", "critChance", "critDamage"] as const).filter((s) => isStatUnlocked(p, s));
+    const opts = (["attack", "maxHp", "defense", "attackSpeed", "critChance", "critDamage"] as const).filter((s) => isStatUnlocked(p, s) && p.player.statLevels[s] < STAT_UPGRADE_CAP[s]);
     return Math.min(...opts.map((s) => statUpgradeCost(s, p.player.statLevels[s])));
   }
 

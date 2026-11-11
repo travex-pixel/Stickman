@@ -14,6 +14,7 @@ import { DamageNumbers } from "./DamageNumbers";
 import { Background } from "./Background";
 import { destroyTextures, hardCircle, ring, shard, softCircle, spark } from "./textures";
 import { regionForStage } from "../data/regions";
+import { TWISTS, depthForStage, twistForDepth } from "../data/depths";
 import { ABILITIES } from "../data/abilities";
 import { RARITY_COLOR, lighten } from "./colors";
 import { clamp, easeOutCubic, lerp } from "../engine/math";
@@ -162,7 +163,7 @@ export class BattleRenderer {
     this.syncBackground();
   }
 
-  /** Farming moved stages in place: repaint the backdrop only if the region changed. */
+  /** Farming moved stages in place: repaint the backdrop only if the region or depth changed. */
   onStageChanged(): void {
     this.syncBackground();
   }
@@ -171,9 +172,11 @@ export class BattleRenderer {
     const world = this.world;
     if (!world) return;
     const region = regionForStage(world.stage);
-    if (!this.background || this.background.regionId !== region.id) {
+    const depth = depthForStage(world.stage);
+    if (!this.background || this.background.regionId !== region.id || this.background.depth !== depth) {
       this.background?.destroy();
-      this.background = new Background(region);
+      const twist = twistForDepth(depth);
+      this.background = new Background(region, depth, twist ? TWISTS[twist].tint : null);
       this.root.addChildAt(this.background.container, 0);
       this.root.addChild(this.background.foreground);
       this.root.setChildIndex(this.numbers.container, this.root.children.length - 1);
