@@ -3,7 +3,7 @@ import type { Combatant } from "../entities/types";
 import { clamp, dist } from "../engine/math";
 import { summonDef } from "../data/summons";
 import { addStatus } from "../combat/statuses";
-import { factionWithin, hostilesWithin, lowestHpFraction, mostDangerous, nearestHostile } from "../combat/targeting";
+import { factionWithin, hostilesWithin, isHidden, lowestHpFraction, mostDangerous, nearestHostile } from "../combat/targeting";
 import { ARENA } from "../engine/World";
 
 /**
@@ -144,6 +144,35 @@ function tryActive(world: World, s: Combatant, target: Combatant, nearby: Combat
       const power = s.defId === "gravewalker" ? 3.5 : 2.5;
       const res = world.dealDamage(s, victim, power, "physical", true);
       if (s.defId === "gravewalker" && res && victim.dead) sum.abilityCooldown = 0.01;
+      world.setState(s, "attack", 0.25);
+      return true;
+    }
+    case "tidestalker": {
+      // Dive the backline: the ranged or casting enemy furthest from the warrior.
+      let victim: Combatant | null = null;
+      let far = -1;
+      for (const e of world.entities.values()) {
+        if (e.dead || e.faction === s.faction || isHidden(e) || e.kind === "boss") continue;
+        const back = e.enemy && (e.enemy.archetype === "ranger" || e.enemy.archetype === "arcanist" || e.enemy.archetype === "summoner");
+        if (!back) continue;
+        const dd = Math.abs(e.pos.x - world.player.pos.x);
+        if (dd > far) {
+          far = dd;
+          victim = e;
+        }
+      }
+      if (!victim) return false;
+      const from = { ...s.pos };
+      const behind = victim.pos.x >= world.player.pos.x ? 1 : -1;
+      s.pos.x = clamp(victim.pos.x + behind * (victim.radius + 14), ARENA.minX, ARENA.maxX);
+      s.pos.y = victim.pos.y;
+      s.prevPos = { ...s.pos };
+      s.facing = victim.pos.x >= s.pos.x ? 1 : -1;
+      world.events.push({ type: "dodge", id: s.id, from, to: { ...s.pos } });
+      world.events.push({ type: "hazard", pos: { ...s.pos }, radius: 34, kind: "tide", duration: 0.4 });
+      world.events.push({ type: "summon_ability", id: s.id, defId: s.defId, ability: "Riptide Ambush", pos: { ...s.pos } });
+      world.dealDamage(s, victim, 2.2, "physical", true);
+      addStatus(victim, { kind: "slow", remaining: 2.5, value: 0.4, sourceId: s.id });
       world.setState(s, "attack", 0.25);
       return true;
     }

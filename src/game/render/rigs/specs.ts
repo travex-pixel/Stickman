@@ -42,6 +42,8 @@ export function enemySpec(defId: string): RigSpec {
       return { ...base, style: "lean", weapon: "tower", height: 100 };
     case "summoner":
       return { ...base, style: "robed", weapon: "staff", height: 106, hood: true, floating: true, cape: true };
+    case "lurker":
+      return { ...base, style: "lean", weapon: "dagger", height: 86, hood: true, cape: true };
     case "boss":
       return { ...base, style: "warden", weapon: "greatsword", glow: eye, height: 178, horns: true, cape: true, aura: 46 };
     default:

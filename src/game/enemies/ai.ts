@@ -3,7 +3,7 @@ import type { Combatant } from "../entities/types";
 import { dist } from "../engine/math";
 import { enemyDef } from "../data/enemies";
 import { ARENA } from "../engine/World";
-import { hasStatus } from "../combat/statuses";
+import { addStatus, hasStatus } from "../combat/statuses";
 
 /**
  * Enemy behaviour by archetype.
@@ -47,6 +47,9 @@ export function updateEnemyAi(world: World, e: Combatant, dt: number): void {
     case "summoner":
       summonerBehaviour(world, e, target, d, dt, def.windup);
       break;
+    case "lurker":
+      lurkerBehaviour(world, e, target, d, dt, def.windup);
+      break;
     case "grunt":
       meleeBehaviour(world, e, target, d, def.windup, 0.1, 0.25);
       break;
@@ -62,6 +65,60 @@ export function updateEnemyAi(world: World, e: Combatant, dt: number): void {
     default:
       meleeBehaviour(world, e, target, d, def.windup, 0.1, 0.25);
   }
+}
+
+const LURK_RADIUS = 66;
+
+/**
+ * Lurkers sink (untargetable, gliding fast toward their prey), then surface under it behind a
+ * telegraphed ring and lunge. After surfacing they are exposed and slow to recover: dodge the ring,
+ * then punish.
+ */
+function lurkerBehaviour(world: World, e: Combatant, target: Combatant, d: number, dt: number, windup: number): void {
+  const es = e.enemy;
+  if (!es) return;
+  es.callTimer -= dt;
+  const dive = es.dive;
+  if (dive) {
+    dive.timer -= dt;
+    if (dive.phase === "hidden") {
+      world.moveToward(e, target.pos, dt, 1.7);
+      if (d < 36 || dive.timer <= 0) {
+        world.stop(e);
+        dive.phase = "surfacing";
+        dive.timer = windup;
+        dive.at = { ...e.pos };
+        world.setState(e, "cast", windup);
+        world.addTelegraph(dive.at, LURK_RADIUS, windup, "circle", e.facing, 0, 0x8fc9c4);
+      }
+      return;
+    }
+    world.stop(e);
+    e.state = "cast";
+    if (dive.timer <= 0) {
+      e.statuses = e.statuses.filter((st) => st.kind !== "submerged");
+      world.events.push({ type: "attack_swing", id: e.id, kind: "enemy", heavy: true, pos: { ...e.pos }, facing: e.facing });
+      world.events.push({ type: "shake", strength: 5 });
+      for (const t of world.entities.values()) {
+        if (t.dead || t.faction === e.faction || dist(t.pos, dive.at) > LURK_RADIUS + t.radius * 0.5) continue;
+        world.dealDamage(e, t, 1.5, "physical", true);
+        world.applyKnockback(t, dive.at, 160);
+      }
+      es.dive = undefined;
+      es.callTimer = 6 + world.rng.range(0, 2);
+      // Exposed: a long recovery and an opening for the counter-attack.
+      addStatus(e, { kind: "opening", remaining: 1.6, value: 0.25, sourceId: -1 });
+      world.setState(e, "stagger", 1.1);
+    }
+    return;
+  }
+  if (es.callTimer <= 0 && d > 70) {
+    es.dive = { phase: "hidden", timer: 2.6, at: { ...e.pos } };
+    addStatus(e, { kind: "submerged", remaining: 8, value: 1, sourceId: e.id });
+    world.events.push({ type: "hazard", pos: { ...e.pos }, radius: 30, kind: "tide", duration: 0.4 });
+    return;
+  }
+  meleeBehaviour(world, e, target, d, windup, 0.1, 0.3);
 }
 
 const MAX_MINIONS = 4;

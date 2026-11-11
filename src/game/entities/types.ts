@@ -19,7 +19,7 @@ export interface CombatStats {
   hpRegen: number;
 }
 
-export type StatusKind = "burn" | "slow" | "mark" | "shield" | "invuln" | "opening" | "taunt" | "stun" | "haste";
+export type StatusKind = "burn" | "slow" | "mark" | "shield" | "invuln" | "opening" | "taunt" | "stun" | "haste" | "submerged";
 
 export interface Status {
   kind: StatusKind;
@@ -62,6 +62,8 @@ export interface EnemyState {
   callPoints?: Vec2[];
   /** Ranged repositioning target. */
   dest?: Vec2;
+  /** Lurker dive: hidden and gliding, then surfacing at a telegraphed spot. */
+  dive?: { phase: "hidden" | "surfacing"; timer: number; at: Vec2 };
 }
 
 export interface BossState {

@@ -4,7 +4,7 @@ export const RARITY_ORDER: Rarity[] = ["common", "uncommon", "rare", "epic", "le
 export type SummonRole = "vanguard" | "reaper" | "ranger" | "arcanist" | "sentinel" | "caller" | "sovereign";
 export type SummonCommand = "follow" | "aggressive" | "guard";
 
-export type EnemyArchetype = "grunt" | "brute" | "ranger" | "arcanist" | "shieldbearer" | "summoner" | "boss";
+export type EnemyArchetype = "grunt" | "brute" | "ranger" | "arcanist" | "shieldbearer" | "summoner" | "lurker" | "boss";
 
 export type Element = "physical" | "lightning" | "fire" | "void" | "soul";
 

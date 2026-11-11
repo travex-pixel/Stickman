@@ -528,3 +528,52 @@ describe("attack payloads", () => {
     expect(fired).toBe(0);
   });
 });
+
+describe("Drowned Lurker and Tidestalker", () => {
+  it("sinks out of reach, surfaces behind a ring, strikes and is left exposed", () => {
+    const w = freshWorld(8, 21);
+    step(w, 1);
+    for (const e of w.entities.values()) if (e.kind === "enemy") e.dead = true;
+    w.player.stats.maxHp = 1e6;
+    w.player.hp = 1e6;
+    w.player.stats.moveSpeed = 0;
+    const l = w.spawnEnemy("drowned_lurker", { pos: { x: w.player.pos.x + 240, y: w.player.pos.y } });
+    l.enemy!.callTimer = 0;
+    const ev: GameEvent[] = [];
+    let sawHidden = false;
+    let untouchable = true;
+    let surfacedRing = false;
+    for (let i = 0; i < 60 * 8; i++) {
+      w.update(FIXED_DT);
+      ev.push(...w.drainEvents());
+      if (l.statuses.some((s) => s.kind === "submerged")) {
+        sawHidden = true;
+        if (w.dealDamage(w.player, l, 5, "physical", false) !== null) untouchable = false;
+      }
+      if (l.enemy?.dive?.phase === "surfacing" && w.telegraphs.length > 0) surfacedRing = true;
+      if (sawHidden && !l.enemy?.dive && l.state === "stagger") break;
+    }
+    expect(sawHidden).toBe(true);
+    expect(untouchable).toBe(true);
+    expect(surfacedRing).toBe(true);
+    expect(ev.some((e) => e.type === "hit" && e.targetId === w.player.id)).toBe(true);
+    expect(l.statuses.some((s) => s.kind === "opening")).toBe(true);
+    expect(w.dealDamage(w.player, l, 1, "physical", false)).not.toBeNull();
+  });
+  it("binds into the Tidestalker, which ambushes the enemy backline", () => {
+    expect(enemyDef("drowned_lurker").essenceSummonId).toBe("tidestalker");
+    const p = createDefaultProfile();
+    p.player.level = 10;
+    claimEssence(p, "tidestalker");
+    p.summons.collection[0]!.deployed = true;
+    const w = new World({ stage: 8, loadout: buildLoadout(p), seed: 3 });
+    step(w, 1);
+    for (const e of w.entities.values()) if (e.kind === "enemy") e.dead = true;
+    const archer = w.spawnEnemy("deepshot", { pos: { x: w.player.pos.x + 300, y: w.player.pos.y } });
+    w.spawnEnemy("drowned_husk", { pos: { x: w.player.pos.x + 60, y: w.player.pos.y } });
+    const ev: GameEvent[] = [];
+    step(w, 6, ev);
+    expect(ev.some((e) => e.type === "summon_ability" && e.ability === "Riptide Ambush")).toBe(true);
+    expect(archer.hp < archer.stats.maxHp || archer.dead).toBe(true);
+  });
+});

@@ -708,7 +708,7 @@ export class World {
 
   acquireTarget(self: Combatant): Combatant | null {
     const current = self.targetId >= 0 ? this.entities.get(self.targetId) : undefined;
-    if (current && !current.dead && current.faction !== self.faction) {
+    if (current && !current.dead && current.faction !== self.faction && !hasStatus(current, "submerged")) {
       const n = nearestHostile(self, this.entities.values());
       if (n && n.id !== current.id && dist(self.pos, n.pos) < dist(self.pos, current.pos) * 0.6) return n;
       return current;
@@ -862,6 +862,7 @@ export class World {
       for (const o of factionWithin(target.pos, target.faction, this.entities.values(), 60)) if (o.id !== target.id) this.dealDamage(s, o, 0.4, "fire", false);
     }
     this.dealDamage(s, target, power, s.defId === "ember_acolyte" ? "fire" : "physical", false);
+    if (s.defId === "tidestalker" && !target.dead) addStatus(target, { kind: "slow", remaining: 1.5, value: 0.2, sourceId: s.id });
   }
 
   gainEnergy(amount: number): void {
@@ -876,7 +877,7 @@ export class World {
     if (target.dead || source.dead) return null;
     // Invariant: nothing ever damages its own side.
     if (source.faction === target.faction) return null;
-    if (hasStatus(target, "invuln")) return null;
+    if (hasStatus(target, "invuln") || hasStatus(target, "submerged")) return null;
     let bonus = bonusMult;
     if (hasStatus(target, "mark") && source.faction === "ally") bonus *= 1 + statusValue(target, "mark");
     if (source.faction === "ally") bonus *= 1 + 0.04 * this.shadeCount();
@@ -929,7 +930,7 @@ export class World {
   }
 
   applyRawDamage(target: Combatant, amount: number, element: Element, sourceId: number, crit: boolean, heavy = false): void {
-    if (target.dead) return;
+    if (target.dead || hasStatus(target, "submerged")) return;
     let remaining = amount;
     if (target.shield > 0) {
       const absorbed = Math.min(target.shield, remaining);

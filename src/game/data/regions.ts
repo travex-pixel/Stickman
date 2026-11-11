@@ -86,6 +86,7 @@ const drownedHollowWaves = (stage: number): WaveDef[] => {
         { enemyId: "deepshot", count: 2 + Math.min(2, Math.floor(s / 3)), interval: 3, delay: 1.5 },
         { enemyId: "brine_acolyte", count: 1, interval: 4, delay: 6 },
         { enemyId: "bastion_husk", count: 2 + Math.min(2, Math.floor(s / 3)), interval: 3, delay: 3 },
+        { enemyId: "drowned_lurker", count: 1 + Math.min(2, Math.floor(s / 3)), interval: 4, delay: 5 },
       ],
     },
     {
@@ -95,6 +96,7 @@ const drownedHollowWaves = (stage: number): WaveDef[] => {
         { enemyId: "drowned_husk", count: husks(4), interval: 1.2, delay: 0.3 },
         { enemyId: "deepshot", count: 1 + Math.min(2, Math.floor(s / 4)), interval: 3, delay: 8 },
         { enemyId: "brine_acolyte", count: 1 + Math.min(2, Math.floor(s / 4)), interval: 4, delay: 7 },
+        { enemyId: "drowned_lurker", count: 1 + Math.min(2, Math.floor(s / 3)), interval: 4, delay: 4 },
       ],
     },
   ];

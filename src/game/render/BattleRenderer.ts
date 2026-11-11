@@ -282,6 +282,14 @@ export class BattleRenderer {
       v.rig.root.scale.set(ds);
       v.rig.root.zIndex = y;
       if (e.summon?.temporary) v.rig.root.alpha = Math.min(v.rig.root.alpha, 0.72);
+      const submerged = e.statuses.some((st) => st.kind === "submerged");
+      if (submerged) {
+        // Sunk: only a dark wake and a pale ripple show where it glides.
+        v.rig.root.alpha = 0.12;
+        if (!this.reduced && Math.random() < 0.3) {
+          this.particles.emit({ x: sx + (Math.random() - 0.5) * 30, y: sy, count: 1, texture: softCircle(), color: 0x8fc9c4, speed: [5, 20], angle: [-Math.PI, 0], life: [0.3, 0.6], scale: [0.2, 0.4], alpha: 0.6 });
+        }
+      } else if (e.enemy?.archetype === "lurker" && v.rig.root.alpha < 1 && !e.dead) v.rig.root.alpha = Math.min(1, v.rig.root.alpha + 0.15);
       v.rig.shadow.position.set(sx, sy + 1);
       v.rig.shadow.scale.set(ds, ds * 0.9);
       v.rig.shadow.zIndex = -1000 + y;
@@ -330,7 +338,7 @@ export class BattleRenderer {
     const bar = v.bar;
     const hurt = e.hp < e.stats.maxHp - 0.5 || e.shield > 0;
     const flagged = !!e.enemy?.elite || !!e.enemy?.eligible;
-    if (e.dead || e.kind === "boss" || (!hurt && !flagged)) {
+    if (e.dead || e.kind === "boss" || (!hurt && !flagged) || e.statuses.some((st) => st.kind === "submerged")) {
       bar.visible = false;
       return;
     }

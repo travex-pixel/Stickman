@@ -1,11 +1,16 @@
 import type { Combatant } from "../entities/types";
+
+/** Submerged lurkers cannot be seen or targeted until they surface. */
+export function isHidden(c: Combatant): boolean {
+  return c.statuses.some((st) => st.kind === "submerged");
+}
 import { distSq } from "../engine/math";
 
 export function nearestHostile(self: Combatant, all: Iterable<Combatant>, maxDist = Infinity): Combatant | null {
   let best: Combatant | null = null;
   let bestD = maxDist * maxDist;
   for (const c of all) {
-    if (c.dead || c.faction === self.faction) continue;
+    if (c.dead || c.faction === self.faction || isHidden(c)) continue;
     const d = distSq(self.pos, c.pos);
     if (d < bestD) {
       bestD = d;
@@ -19,7 +24,7 @@ export function hostilesWithin(self: { pos: { x: number; y: number }; faction: s
   const r2 = radius * radius;
   const out: Combatant[] = [];
   for (const c of all) {
-    if (c.dead || c.faction === self.faction) continue;
+    if (c.dead || c.faction === self.faction || isHidden(c)) continue;
     if (distSq(self.pos, c.pos) <= r2) out.push(c);
   }
   return out;
@@ -40,7 +45,7 @@ export function mostDangerous(self: Combatant, all: Iterable<Combatant>): Combat
   let best: Combatant | null = null;
   let score = -1;
   for (const c of all) {
-    if (c.dead || c.faction === self.faction) continue;
+    if (c.dead || c.faction === self.faction || isHidden(c)) continue;
     const s = c.stats.attack * c.stats.attackSpeed * (c.kind === "boss" ? 2 : 1);
     if (s > score) {
       score = s;
@@ -55,7 +60,7 @@ export function lowestHpFraction(self: Combatant, all: Iterable<Combatant>, maxD
   let frac = 2;
   const r2 = maxDist * maxDist;
   for (const c of all) {
-    if (c.dead || c.faction === self.faction) continue;
+    if (c.dead || c.faction === self.faction || isHidden(c)) continue;
     if (distSq(self.pos, c.pos) > r2) continue;
     const f = c.hp / c.stats.maxHp;
     if (f < frac) {
@@ -71,7 +76,7 @@ export function factionWithin(pos: { x: number; y: number }, faction: string, al
   const r2 = radius * radius;
   const out: Combatant[] = [];
   for (const c of all) {
-    if (c.dead || c.faction !== faction) continue;
+    if (c.dead || c.faction !== faction || isHidden(c)) continue;
     if (distSq(pos, c.pos) <= r2) out.push(c);
   }
   return out;
