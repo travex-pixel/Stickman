@@ -5,6 +5,8 @@
 // card that interrupts play, and the longest stretch with nothing new ("dead air").
 //
 // It is a bot, not a person: it measures the pacing the game imposes, not whether it is fun.
+// All times are in GAME seconds (simulated time), so a slow or busy machine does not distort them;
+// the average frame rate is reported so a starved run can be recognised and repeated.
 //
 // Usage: PORT=3100 [SECONDS=300] [OUT=dir] node scripts/ftue.mjs   (needs `next start` on PORT)
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -13,7 +15,11 @@ import { openGame } from "./lib/screens.mjs";
 const SECONDS = Number(process.env.SECONDS ?? 300);
 const { browser, page, errors } = await openGame();
 const t0 = Date.now();
-const now = () => (Date.now() - t0) / 1000;
+const wall = () => (Date.now() - t0) / 1000;
+/** Game seconds elapsed, summed across the worlds the session passes through. */
+let sim = 0;
+const now = () => sim;
+const fpsSamples = [];
 
 const firsts = {};
 const mark = (k) => {
@@ -32,7 +38,19 @@ const read = () =>
     const p = c.profile;
     const ui = c.uiStore.get();
     const w = c.world;
+    // Simulated time survives world changes: add each world's own clock as it advances.
+    const k = (window.__ftue ??= { world: null, last: 0, total: 0 });
+    if (w && k.world !== w) {
+      k.world = w;
+      k.last = 0;
+    }
+    if (w) {
+      k.total += Math.max(0, w.time - k.last);
+      k.last = w.time;
+    }
     return {
+      sim: k.total,
+      fps: c.loop?.fps ?? 0,
       guide: ui.guide,
       modal: ui.modal?.kind ?? null,
       kills: p.progress.totalKills,
@@ -82,8 +100,25 @@ const CARD_ACTION = {
   boss_ready: "[data-testid=boss-fight]",
 };
 
-while (now() < SECONDS) {
+const seenLevels = new Set();
+const seenStages = new Set();
+const seenCards = new Set();
+while (sim < SECONDS && wall() < SECONDS * 5) {
   const s = await read();
+  sim = s.sim;
+  if (s.fps > 0) fpsSamples.push(s.fps);
+  if (s.level > 1 && !seenLevels.has(s.level)) {
+    seenLevels.add(s.level);
+    mark(`level ${s.level}`);
+  }
+  if (s.stage > 0 && !seenStages.has(s.stage)) {
+    seenStages.add(s.stage);
+    mark(`stage ${s.stage} cleared`);
+  }
+  if (s.modal && !seenCards.has(s.modal)) {
+    seenCards.add(s.modal);
+    mark(`first card: ${s.modal}`);
+  }
   if (s.kills > 0) mark("first kill");
   if (s.gold > 0) mark("first gold");
   if (s.upgrades > 0) mark("first upgrade");
@@ -91,13 +126,9 @@ while (now() < SECONDS) {
   if (s.deployed > 0) mark("first shadow deployed");
   if (s.items > 0) mark("first gear drop");
   if (s.equipped > 0) mark("first gear equipped");
-  if (s.level >= 2) mark("level 2");
-  if (s.level >= 5) mark("level 5");
   if (s.gate > 0) mark("first boss gate");
   if (s.bossWins > 0) mark("first boss win");
   if (s.bossLosses > 0) mark("first boss loss");
-  if (s.stage >= 3) mark("stage 3 cleared");
-  if (s.stage >= 6) mark("stage 6 cleared (region 2)");
   if (s.perks > 0) mark("first perk");
   if (s.tutorialDone) mark("tutorial finished");
   if (s.dead) mark("first fall");
@@ -141,7 +172,7 @@ while (now() < SECONDS) {
     await tap("[data-testid=perk-chip]");
     await tap('[data-guide="quest-claim"]');
     if (s.gate > 0 && s.mode === "campaign" && (s.tier === "ready" || s.tier === "even")) await tap("[data-testid=boss-challenge]");
-    if (now() - lastUpgradeTry > 8 && s.gold > 20) {
+    if (now() - lastUpgradeTry > 4 && s.gold >= 8) {
       lastUpgradeTry = now();
       await tap("[data-testid=tab-hero]");
       for (const st of ["attack", "maxHp", "defense"]) await hold(`[data-guide="upgrade-${st}"]`, 500);
@@ -161,8 +192,11 @@ for (const e of [...events, { t: SECONDS, what: "end" }]) {
   prev = e.t;
 }
 const cardTime = cards.reduce((a, c) => a + c.seconds, 0);
+const meanFps = fpsSamples.length ? Math.round(fpsSamples.reduce((a, b) => a + b, 0) / fpsSamples.length) : 0;
 const report = {
   seconds: SECONDS,
+  wallSeconds: Number(wall().toFixed(0)),
+  meanFps,
   firsts,
   tutorialSteps: steps.map((x) => ({ label: x.label, shown: x.shown, waited: x.done === null ? null : Number((x.done - x.shown).toFixed(1)) })),
   cards: { count: cards.length, totalSeconds: Number(cardTime.toFixed(1)), shareOfSession: Number((cardTime / SECONDS).toFixed(3)), list: cards },
@@ -171,13 +205,14 @@ const report = {
   fallbackCloses,
   pageErrors: errors.length,
 };
-console.log("FIRSTS (seconds from first frame)");
+console.log(`RUN: ${SECONDS} game seconds took ${wall().toFixed(0)}s of wall time at a mean ${meanFps} fps${meanFps < 45 ? " (machine was busy; game-time figures still hold, but repeat on a quiet machine before quoting them)" : ""}`);
+console.log("FIRSTS (game seconds)");
 for (const [k, t] of Object.entries(firsts).sort((a, b) => a[1] - b[1])) console.log(`  ${String(t).padStart(6)}  ${k}`);
 console.log("TUTORIAL STEPS (shown at, waited)");
 for (const x of report.tutorialSteps) console.log(`  ${String(x.shown).padStart(6)}  ${String(x.waited ?? "open").padStart(6)}  ${x.label}`);
 console.log(`CARDS: ${cards.length} took the screen for ${cardTime.toFixed(1)}s (${(100 * cardTime / SECONDS).toFixed(1)}% of the session): ${cards.map((c) => `${c.kind}@${c.at}`).join(", ")}`);
 console.log(`DEAD AIR: longest stretch with no first and no step completed: ${deadAir.seconds}s (${deadAir.from}s to ${deadAir.to}s)`);
-console.log(`END after ${SECONDS}s: level ${end.level}, stage ${end.stage} cleared, ${end.shadows} shadows, ${end.upgrades} upgrades, bosses ${end.bossWins}W/${end.bossLosses}L, tutorial ${end.tutorialDone ? "finished" : "NOT finished"}; cards with no visible action: ${fallbackCloses}; page errors: ${errors.length}`);
+console.log(`END after ${SECONDS} game seconds: level ${end.level}, stage ${end.stage} cleared, ${end.shadows} shadows, ${end.upgrades} upgrades, bosses ${end.bossWins}W/${end.bossLosses}L, tutorial ${end.tutorialDone ? "finished" : "NOT finished"}; cards with no visible action: ${fallbackCloses}; page errors: ${errors.length}`);
 if (process.env.OUT) {
   mkdirSync(process.env.OUT, { recursive: true });
   writeFileSync(`${process.env.OUT}/ftue.json`, JSON.stringify(report, null, 2));
