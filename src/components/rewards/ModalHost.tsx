@@ -147,6 +147,13 @@ function PerkChoice({ modal }: { modal: Extract<Modal, { kind: "perk_choice" }> 
           );
         })}
       </div>
+      {profile.player.pendingPerkChoices > 2 && (
+        <div className="px-4 pb-3 -mt-2">
+          <button className="btn-ghost w-full !py-1.5 text-[11px]" onClick={() => c.autoPickPerks()} data-testid="perk-auto">
+            Choose all {profile.player.pendingPerkChoices} for me
+          </button>
+        </div>
+      )}
     </Card>
   );
 }

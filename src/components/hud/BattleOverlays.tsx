@@ -69,13 +69,21 @@ function ModeHud() {
   const total = useHud((s) => s?.wavesTotal ?? 0);
   const hasBoss = useHud((s) => !!s?.boss);
   if (mode === "campaign") return null;
+  if (mode === "boss") {
+    // The boss bar already names the fight: only a quiet way out, clear of the army strip.
+    return (
+      <button className="absolute right-2 bottom-[84px] z-20 rounded-full border border-white/15 bg-ink/80 px-3 py-1.5 text-[11px] font-bold text-mist" onClick={() => c.returnToCampaign()} data-testid="mode-leave" aria-label="Retreat to farming; the boss keeps waiting">
+        Retreat
+      </button>
+    );
+  }
   const status = timeLeft !== null ? `${Math.floor(timeLeft / 60)}:${String(Math.ceil(timeLeft % 60) === 60 ? 0 : Math.ceil(timeLeft % 60)).padStart(2, "0")}` : mode === "endless" ? `Wave ${Math.max(1, wave)}` : total ? `Wave ${Math.max(1, wave)}/${total}` : "";
   return (
     <div className={cn("absolute left-1/2 -translate-x-1/2 z-10 flex items-center gap-2 rounded-full bg-ink/80 border border-gold/40 pl-3 pr-1 py-0.5", hasBoss ? "top-10" : "top-1.5")} data-testid="mode-hud">
       <span className="font-display text-[11px] tracking-[0.14em] text-gold-2 whitespace-nowrap">{MODES[mode].name}</span>
       <span className={cn("text-[11px] font-extrabold tabular-nums", timeLeft !== null && timeLeft < 10 ? "text-crimson-2" : "text-ivory")}>{status}</span>
-      <button className="text-[10px] font-bold text-mist px-2 py-1 rounded-full border border-white/10" onClick={() => c.returnToCampaign()} data-testid="mode-leave" aria-label={mode === "boss" ? "Retreat to farming; the boss keeps waiting" : "Leave this mode"}>
-        {mode === "boss" ? "Retreat" : "Leave"}
+      <button className="text-[10px] font-bold text-mist px-2 py-1 rounded-full border border-white/10" onClick={() => c.returnToCampaign()} data-testid="mode-leave" aria-label="Leave this mode">
+        Leave
       </button>
     </div>
   );

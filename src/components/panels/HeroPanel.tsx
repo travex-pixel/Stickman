@@ -8,6 +8,8 @@ import { STAT_LABEL } from "@/game/data/equipment";
 
 /** Card titles are narrow on phones: short names that never truncate. */
 const SHORT_LABEL: Partial<Record<string, string>> = { attackSpeed: "Atk Speed", critChance: "Crit Rate", critDamage: "Crit Dmg" };
+/** The narrowest phones (320 px) get labels that never truncate. */
+const TINY_LABEL: Record<string, string> = { attack: "ATK", maxHp: "HP", defense: "DEF", attackSpeed: "SPD", critChance: "CRIT", critDamage: "CDMG" };
 import { combatPower, computePlayerStats, isStatUnlocked, MILESTONE_EVERY, MILESTONE_MULT, statUnlockRule, statUpgradeCost, STAT_UPGRADE_CAP } from "@/game/progression/stats";
 import type { Profile } from "@/game/progression/profile";
 import { canAttemptTrial, nextRankStep, rankLetter } from "@/game/progression/ranks";
@@ -73,11 +75,12 @@ function StatCard({ stat, icon, value, next, level, gold, unlocked, onUpgrade }:
       <div className="flex flex-col leading-tight min-w-0 flex-1">
         <div className="flex items-center gap-1 text-mist min-w-0">
           <Icon name={icon} size={12} className="text-gold shrink-0" />
-          <span className="text-[10px] font-semibold truncate">{SHORT_LABEL[stat] ?? STAT_LABEL[stat]}</span>
+          <span className="text-[10px] font-semibold truncate hidden min-[360px]:inline">{SHORT_LABEL[stat] ?? STAT_LABEL[stat]}</span>
+          <span className="text-[10px] font-semibold min-[360px]:hidden">{TINY_LABEL[stat]}</span>
           <span className="ml-auto text-[10px] text-mist shrink-0">
             Lv {level}
             {(stat === "attack" || stat === "maxHp") && (
-              <span className="text-gold-2" title={`Every ${MILESTONE_EVERY} levels multiply ${STAT_LABEL[stat]} ×${MILESTONE_MULT}`}>
+              <span className="text-gold-2 hidden min-[360px]:inline" title={`Every ${MILESTONE_EVERY} levels multiply ${STAT_LABEL[stat]} ×${MILESTONE_MULT}`}>
                 {" "}
                 ◆{(Math.floor(level / MILESTONE_EVERY) + 1) * MILESTONE_EVERY}
               </span>

@@ -773,7 +773,8 @@ export class GameController {
       const affordable = (["attack", "maxHp", "defense", "attackSpeed", "critChance", "critDamage"] as const).some((st) => isStatUnlocked(p, st) && statUpgradeCost(st, p.player.statLevels[st]) <= p.player.gold);
       if (affordable) this.uiStore.update((u) => ({ ...u, newBadges: { ...u.newBadges, hero: true } }));
     }
-    this.revealTechniques(learnTechniques(p));
+    // New techniques are revealed with a card: never in the middle of a boss fight or a mode.
+    if (this.world?.farming) this.revealTechniques(learnTechniques(p));
     if (ui.panel !== "skills" && !this.rankBadgeShown && anyAbilityRankReady(p)) {
       this.rankBadgeShown = true;
       this.uiStore.update((u) => ({ ...u, newBadges: { ...u.newBadges, skills: true } }));
@@ -806,6 +807,24 @@ export class GameController {
     this.refreshLoadout();
     // Perks wait for the player: a chip pulses in the HUD instead of a modal freezing the fight.
     this.toast("Ascension ready: choose a perk", "level");
+  }
+
+  /** Many perks waiting (a long absence): take the first offer of each, in one tap. */
+  autoPickPerks(): void {
+    this.userGesture();
+    const p = this.profile;
+    let n = 0;
+    while (p.player.pendingPerkChoices > 0 && n < 200) {
+      const offer = offerPerks(p, this.rng);
+      const pick = offer[0];
+      if (!pick || !doTakePerk(p, pick.id)) break;
+      n += 1;
+    }
+    this.closeModal();
+    this.refreshLoadout();
+    this.toast(`${n} perk${n === 1 ? "" : "s"} chosen`, "level");
+    this.sfx("level_up", { volume: 0.6 });
+    this.commit();
   }
 
   /** Opens the perk choice when the player taps the HUD chip. */
