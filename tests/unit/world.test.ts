@@ -764,3 +764,40 @@ describe("honest threats", () => {
     expect(w.escapeFrom(w.player.pos)).toBeNull();
   });
 });
+
+describe("elite signature moves", () => {
+  function arenaWith(affix: "brutal" | "hasted" | "armored", gap: number) {
+    const p = createDefaultProfile();
+    p.player.statLevels = { attack: 1, maxHp: 300, attackSpeed: 1, critChance: 1, critDamage: 1, defense: 100 };
+    const w = new World({ stage: 4, loadout: buildLoadout(p), seed: 5 });
+    step(w, 0.5);
+    for (const e of w.entities.values()) if (e.kind === "enemy") e.dead = true;
+    const e = w.spawnEnemy("ashborn_brute", { pos: { x: w.player.pos.x + gap, y: w.player.pos.y }, elite: affix });
+    e.stats.maxHp = e.hp = 1e6;
+    e.enemy!.eliteTimer = -1;
+    return { w, e };
+  }
+  it("a Brutal elite telegraphs a ground smash, then lands it on whoever stayed inside", () => {
+    const { w, e } = arenaWith("brutal", 40);
+    const ev: GameEvent[] = [];
+    step(w, 0.2, ev);
+    expect(w.telegraphs.some((t) => t.hostile && t.radius > 80)).toBe(true);
+    step(w, 1.2, ev);
+    expect(ev.some((x) => x.type === "hit" && x.sourceId === e.id && x.targetId === w.player.id && x.heavy)).toBe(true);
+  });
+  it("a Hasted elite lunges down a telegraphed lane at a distant target", () => {
+    const { w, e } = arenaWith("hasted", 260);
+    const x0 = e.pos.x;
+    step(w, 0.2);
+    expect(w.telegraphs.some((t) => t.hostile && t.shape === "line")).toBe(true);
+    step(w, 1);
+    expect(Math.abs(e.pos.x - x0)).toBeGreaterThan(150);
+  });
+  it("an Armored elite raises its guard once, when half broken", () => {
+    const { w, e } = arenaWith("armored", 60);
+    e.hp = e.stats.maxHp * 0.45;
+    step(w, 0.3);
+    expect(e.statuses.some((s) => s.kind === "shield")).toBe(true);
+    expect(e.enemy!.eliteGuarded).toBe(true);
+  });
+});

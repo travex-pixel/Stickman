@@ -33,11 +33,18 @@ export function updateEnemyAi(world: World, e: Combatant, dt: number): void {
     if (e.stateTime >= e.stateDuration) finishCall(world, e);
     return;
   }
+  if (e.state === "cast" && e.enemy?.elite) {
+    // An elite's signature move is resolving (its effect is scheduled); hold still until it lands.
+    world.stop(e);
+    if (e.stateTime >= e.stateDuration) world.setState(e, "recover", 0.4);
+    return;
+  }
   if (e.state === "windup" || e.state === "attack" || e.state === "recover") {
     world.progressAttack(e);
     return;
   }
   const d = dist(e.pos, target.pos);
+  if (e.enemy?.elite && eliteSignature(world, e, target, d, dt)) return;
   switch (def.archetype) {
     case "shieldbearer":
       // Slow, deliberate, always turning its shield to face the threat.
@@ -242,4 +249,73 @@ function rangedBehaviour(world: World, e: Combatant, target: Combatant, d: numbe
 /** Simulation-time deferred callback, owned by the World so nothing outlives it. */
 export function setTimeoutSim(world: World, delay: number, fn: () => void): void {
   world.schedule(delay, fn);
+}
+
+const SMASH_RADIUS = 92;
+const SMASH_TELL = 0.8;
+const LUNGE_TELL = 0.45;
+
+/**
+ * Each elite affix brings one move of its own, telegraphed and fair:
+ * - Brutal: a ground smash around itself. Dash out of the ring.
+ * - Hasted: a lunge down a lane at a distant target. Step out of the lane.
+ * - Armored: raises a guard (a shield) once, when half broken.
+ * - Vampiric already drinks from every hit it lands.
+ * Returns true when it acted this tick.
+ */
+function eliteSignature(world: World, e: Combatant, target: Combatant, d: number, dt: number): boolean {
+  const en = e.enemy!;
+  en.eliteTimer = (en.eliteTimer ?? 3 + world.rng.next() * 2) - dt;
+  if (en.elite === "armored" && !en.eliteGuarded && e.hp / e.stats.maxHp < 0.5) {
+    en.eliteGuarded = true;
+    addStatus(e, { kind: "shield", remaining: 6, value: Math.round(e.stats.maxHp * 0.25), sourceId: e.id });
+    world.events.push({ type: "shield", id: e.id, pos: { ...e.pos } });
+    return false;
+  }
+  if (en.eliteTimer > 0) return false;
+  if (en.elite === "brutal" && d < SMASH_RADIUS + 20) {
+    en.eliteTimer = 6.5;
+    world.stop(e);
+    world.addTelegraph({ ...e.pos }, SMASH_RADIUS, SMASH_TELL, "circle", 1, 0, 0xd95a66);
+    world.setState(e, "cast", SMASH_TELL);
+    const at = { ...e.pos };
+    world.schedule(SMASH_TELL, () => {
+      if (e.dead) return;
+      world.events.push({ type: "attack_swing", id: e.id, kind: "enemy", heavy: true, pos: { ...at }, facing: e.facing });
+      world.events.push({ type: "shake", strength: 7 });
+      for (const o of world.entities.values()) {
+        if (o.dead || o.faction === e.faction || dist(o.pos, at) > SMASH_RADIUS) continue;
+        world.dealDamage(e, o, 1.6, "physical", true);
+        world.applyKnockback(o, at, 240);
+      }
+    });
+    return true;
+  }
+  if (en.elite === "hasted" && d > 140 && d < 420) {
+    en.eliteTimer = 5.5;
+    world.stop(e);
+    const dir: 1 | -1 = target.pos.x >= e.pos.x ? 1 : -1;
+    e.facing = dir;
+    const length = Math.min(380, Math.abs(target.pos.x - e.pos.x) + 40);
+    const laneY = e.pos.y;
+    world.addTelegraph({ ...e.pos }, 26, LUNGE_TELL, "line", dir, length, 0xe9c97a);
+    world.setState(e, "cast", LUNGE_TELL + 0.2);
+    const startX = e.pos.x;
+    world.schedule(LUNGE_TELL, () => {
+      if (e.dead) return;
+      const endX = Math.max(ARENA.minX, Math.min(ARENA.maxX, startX + dir * length));
+      for (const o of world.entities.values()) {
+        if (o.dead || o.faction === e.faction) continue;
+        const along = (o.pos.x - startX) * dir;
+        if (along < 0 || along > length || Math.abs(o.pos.y - laneY) > 26) continue;
+        world.dealDamage(e, o, 1.2, "physical", true);
+      }
+      const from = { ...e.pos };
+      e.pos.x = endX;
+      e.prevPos = { ...e.pos };
+      world.events.push({ type: "dodge", id: e.id, from, to: { ...e.pos } });
+    });
+    return true;
+  }
+  return false;
 }

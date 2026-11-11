@@ -64,6 +64,10 @@ export interface EnemyState {
   dest?: Vec2;
   /** Relic Crypt keeper: tougher, drops boss-grade gear. */
   keeper?: boolean;
+  /** Elite affix signature move: seconds until the next one. */
+  eliteTimer?: number;
+  /** Armored elites raise their guard once, when half broken. */
+  eliteGuarded?: boolean;
   /** Lurker dive: hidden and gliding, then surfacing at a telegraphed spot. */
   dive?: { phase: "hidden" | "surfacing"; timer: number; at: Vec2 };
 }

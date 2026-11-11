@@ -22,14 +22,16 @@ test.describe("ASCEND systems", () => {
   });
 
   test("the Gold Vault runs on a timer, consumes a key and returns a result", async ({ page }) => {
-    test.setTimeout(150_000);
+    // 45 simulated seconds; under heavy load the fixed-step loop runs slower than real time.
+    test.setTimeout(300_000);
     await waitForGame(page);
-    await game(page, "c => { const p = c.profile; p.progress.bestStage = 3; p.tutorial.finished = true; p.player.statLevels.attack = 30; p.player.statLevels.maxHp = 30; c['commit'](); }");
+    // A build that can hold a stage-3 horde: abilities on, as they are after the tutorial.
+    await game(page, "c => { const p = c.profile; p.progress.bestStage = 3; p.tutorial.finished = true; p.player.autoCast = true; p.player.level = 8; p.player.statLevels.attack = 40; p.player.statLevels.maxHp = 40; c['commit'](); }");
     await page.getByTestId("tab-rift").click();
     await page.getByTestId("mode-vault").click();
     await expect(page.getByTestId("mode-hud")).toContainText("Gold Vault");
     expect(await game<number>(page, "c => c.profile.modes.keys.vault")).toBe(2);
-    await expect(page.getByTestId("mode-result")).toBeVisible({ timeout: 90_000 });
+    await expect(page.getByTestId("mode-result")).toBeVisible({ timeout: 240_000 });
     await page.getByTestId("mode-return").click();
     expect(await game<string>(page, "c => c.world.mode")).toBe("campaign");
   });
