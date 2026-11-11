@@ -109,7 +109,7 @@ test.describe("ASCEND vertical slice", () => {
     expect(await game<number>(page, "c => c.profile.summons.collection.length")).toBe(1);
     // The first Oathbound deploys itself.
     await page.getByTestId("tab-summons").click();
-    await expect(page.getByTestId("deploy-count")).toHaveText("1/2");
+    await expect(page.getByTestId("deploy-count")).toHaveText("1 of 2");
     await page.waitForFunction(() => {
       const c = (window as unknown as { __ASCEND__: { world: { summonEntities(): unknown[] } } }).__ASCEND__;
       return c.world.summonEntities().length === 1;

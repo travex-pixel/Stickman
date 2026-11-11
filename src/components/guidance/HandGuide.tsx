@@ -3,7 +3,8 @@
 import { useEffect, useLayoutEffect, useState } from "react";
 import { isBattlefieldModal } from "@/components/rewards/BossCards";
 import { AnimatePresence, motion } from "motion/react";
-import { useUi, useController } from "@/hooks/useGame";
+import { useUi } from "@/hooks/useGame";
+import { voice } from "@/lib/voice";
 
 interface Rect {
   x: number;
@@ -20,7 +21,6 @@ export function HandGuide() {
   const guide = useUi((u) => u.guide);
   const modal = useUi((u) => u.modal);
   const panel = useUi((u) => u.panel);
-  const c = useController();
   const [rect, setRect] = useState<Rect | null>(null);
 
   useLayoutEffect(() => {
@@ -34,14 +34,10 @@ export function HandGuide() {
       if (!el) {
         setRect(null);
       } else if (guide.target === "battlefield-player") {
-        const host = el.parentElement?.getBoundingClientRect();
-        const v = c.view;
-        const snap = c.hudStore.get();
-        if (host && snap) {
-          const px = host.left + snap.player.x * v.scale;
-          const py = host.top + v.offsetY + snap.player.y * v.depthScale - 40;
-          setRect({ x: px - 24, y: py - 44, w: 48, h: 70 });
-        }
+        // The camera keeps the warrior near the middle of the field, so the guide points at a
+        // fixed anchor there rather than mapping world coordinates (which the camera owns).
+        const r = el.getBoundingClientRect();
+        setRect({ x: r.left - 24, y: r.top - 56, w: 48, h: 70 });
       } else {
         const r = el.getBoundingClientRect();
         setRect({ x: r.left, y: r.top, w: r.width, h: r.height });
@@ -50,7 +46,7 @@ export function HandGuide() {
     };
     measure();
     return () => cancelAnimationFrame(raf);
-  }, [guide, panel, modal, c]);
+  }, [guide, panel, modal]);
 
   const [visible, setVisible] = useState(false);
   // Battlefield cards (defeat, stage clear, mode results) leave the panels usable, so the guide may point past them.
@@ -88,12 +84,12 @@ export function HandGuide() {
             <Hand />
           </motion.div>
           <motion.div
-            className="absolute rounded-lg bg-[#141922]/96 border border-gold/50 px-3 py-1.5 text-[12px] font-semibold text-ivory shadow-[0_6px_24px_rgba(0,0,0,0.5)]"
+            className="absolute rounded-[14px] bg-bg-2 px-3 py-2 t-label text-t1"
             style={{ left: labelX, top: labelY, minWidth: 120, textAlign: "center" }}
             initial={{ y: 6, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
           >
-            {guide.label}
+            {voice(guide.label)}
           </motion.div>
         </motion.div>
       )}

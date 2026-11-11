@@ -1,118 +1,164 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { Icon } from "@/components/ui/Icon";
 import { useController, useHud, useProfile } from "@/hooks/useGame";
+import { replayClass } from "@/hooks/useShake";
 import { ABILITIES, ABILITY_SLOTS, ULTIMATE_ENERGY_COST, ULTIMATE_ID } from "@/game/data/abilities";
 import type { AbilityId } from "@/game/data/ids";
 import { cn } from "@/lib/cn";
 import { ABILITY_ICON } from "@/components/ui/abilityIcons";
 import { slotForm } from "@/game/progression/techniques";
 
-const ICONS = ABILITY_ICON;
-
 /** Unlocks shown in the order they arrive, so the bar fills left to right as the warrior grows. */
 const SLOTS = [...ABILITY_SLOTS].sort((a, b) => ABILITIES[a].unlockLevel - ABILITIES[b].unlockLevel);
 
 /**
- * The ability row sits on the battlefield itself: round ink medallions, one glyph each,
- * a radial sweep for the cooldown and the seconds in the centre.
+ * The ability row sits on the battlefield itself: borderless glass discs, one glyph each. Cooling
+ * discs dim their glyph, show the seconds and sweep a thin ring clockwise. The ultimate is larger
+ * and carries a gold charge ring. AUTO is a word at the row's left.
+ *
+ * Each disc subscribes to its own cooldown (quantised to 50ms), so a cooling disc re-renders
+ * itself and nothing else.
  */
 export function AbilityBar() {
-  const c = useController();
   const level = useProfile((p) => p.player.level);
-  const autoCast = useProfile((p) => p.player.autoCast);
-  const tutorialFinished = useProfile((p) => p.tutorial.finished || (p.tutorial.completed.includes("ability") && p.tutorial.completed.includes("dodge")));
   // A string selector so a form swap (mutated in place) still re-renders the bar.
   const formKey = useProfile((p) => SLOTS.map((s) => slotForm(p, s)).join(","));
   const forms = formKey.split(",") as AbilityId[];
-  const cooldowns = useHud((s) => s?.cooldowns);
-  const cooldownMax = useHud((s) => s?.cooldownMax);
-  const energy = useHud((s) => s?.player.energy ?? 0);
-  const ultActive = useHud((s) => s?.ultimateActive ?? false);
-  const ultUnlocked = ABILITIES[ULTIMATE_ID].unlockLevel <= level;
-  const ultReady = ultUnlocked && energy >= ULTIMATE_ENERGY_COST && !ultActive;
   return (
-    <div className="medal-row absolute inset-x-0 bottom-0 z-20 h-[78px] px-2 pb-2 pt-3 flex items-end gap-1.5 min-w-0" style={{ background: "linear-gradient(180deg, rgba(17,15,12,0) 0%, rgba(17,15,12,0.72) 42%, rgba(17,15,12,0.92) 100%)" }} data-testid="ability-bar">
-      <button
-        className={cn("medal medal-sm shrink-0", autoCast ? "text-gold-2" : "text-mist")}
-        data-ready={autoCast}
-        onClick={() => (tutorialFinished ? c.toggleAutoCast() : c.toast("AUTO unlocks once you have used an ability and dodged", "info"))}
-        aria-pressed={autoCast}
-        aria-label={`Auto abilities ${autoCast ? "on" : "off"}`}
-        data-testid="auto-toggle"
-        aria-disabled={!tutorialFinished}
-        style={{ opacity: tutorialFinished ? 1 : 0.35 }}
-      >
-        <span className="font-display text-[11px] leading-none">AUTO</span>
-        <span className="text-[10px] font-extrabold leading-none mt-0.5">{autoCast ? "ON" : "OFF"}</span>
-      </button>
-      <div className="flex-1 min-w-0 flex items-end justify-center gap-1.5">
-        {SLOTS.map((slot, i) => {
-          const id = forms[i] ?? slot;
-          const def = ABILITIES[id];
-          const unlocked = ABILITIES[slot].unlockLevel <= level;
-          const cd = cooldowns?.[id] ?? 0;
-          const max = cooldownMax?.[id] ?? def.cooldown;
-          const frac = max > 0 ? Math.min(1, cd / max) : 0;
-          const ready = unlocked && cd <= 0;
-          const isDodge = id === "shadow_dash";
-          return (
-            <button
-              key={slot}
-              className={cn("medal", ready ? "text-ivory" : "text-mist", !unlocked && "medal-locked")}
-              data-ready={ready}
-              data-guide={isDodge ? "ability-dodge" : `ability-${slot}`}
-              data-testid={`ability-${slot}`}
-              data-form={id}
-              onClick={() => (!unlocked ? c.toast(`${def.name} unlocks at level ${ABILITIES[slot].unlockLevel}`, "info") : isDodge ? c.dodge() : c.castAbility(id))}
-              aria-label={unlocked ? `${def.name}${ready ? ", ready" : `, ${cd.toFixed(1)} seconds`}` : `${def.name}, unlocks at level ${ABILITIES[slot].unlockLevel}`}
-              aria-disabled={!unlocked}
-            >
-              {unlocked ? (
-                <>
-                  <Icon name={ICONS[id]} size={22} strokeWidth={2.3} />
-                  {cd > 0 && (
-                    <>
-                      <span className="medal-sweep" style={{ ["--cd" as string]: `${frac * 100}%` }} />
-                      <span className="absolute inset-0 flex items-center justify-center font-sans font-extrabold text-[13px] text-ivory tabular-nums">{cd < 10 ? cd.toFixed(1) : Math.ceil(cd)}</span>
-                    </>
-                  )}
-                </>
-              ) : (
-                <span className="flex flex-col items-center leading-none">
-                  <Icon name="lock" size={13} />
-                  <span className="text-[10px] mt-0.5">Lv {ABILITIES[slot].unlockLevel}</span>
-                </span>
-              )}
-            </button>
-          );
-        })}
+    <div className="ab-host absolute inset-x-0 bottom-[calc(var(--panel-overlap)+12px)] z-20 px-0.5" data-testid="ability-bar">
+      <div className="flex items-center justify-center">
+        <AutoToggle />
+        {SLOTS.map((slot, i) => (
+          <AbilityDisc key={slot} slot={slot} id={forms[i] ?? slot} level={level} />
+        ))}
+        <UltimateDisc level={level} />
       </div>
-      <button
-        className={cn("medal medal-lg shrink-0", ultReady ? "text-gold-2" : "text-mist", !ultUnlocked && "medal-locked")}
-        data-ready={ultReady}
-        data-testid="ability-ultimate"
-        onClick={() => {
-          if (!ultUnlocked) c.toast(`Ascendant Fury unlocks at level ${ABILITIES[ULTIMATE_ID].unlockLevel}`, "info");
-          else if (!ultReady && !ultActive) c.toast(`Ascendant Fury is charging: ${Math.round(energy)}%. Strikes, abilities and perfect dodges fill it.`, "info");
-          else c.castAbility(ULTIMATE_ID);
-        }}
-        aria-disabled={!ultUnlocked}
-        aria-label={ultUnlocked ? `Ascendant Fury, ${Math.round(energy)} percent charged` : "Ascendant Fury, unlocks at level 3"}
-      >
-        {ultUnlocked ? (
+    </div>
+  );
+}
+
+function AutoToggle() {
+  const c = useController();
+  const autoCast = useProfile((p) => p.player.autoCast);
+  const tutorialFinished = useProfile((p) => p.tutorial.finished || (p.tutorial.completed.includes("ability") && p.tutorial.completed.includes("dodge")));
+  return (
+    <button
+      className={cn("press flex h-11 w-10 shrink-0 items-center justify-center rounded-full text-[11px] leading-[14px] font-semibold tracking-[0.06em] legible", autoCast ? "text-jade" : "text-t3", !tutorialFinished && "opacity-40")}
+      onClick={() => (tutorialFinished ? c.toggleAutoCast() : c.toast("AUTO unlocks once you have used an ability and dodged", "info"))}
+      aria-pressed={autoCast}
+      aria-label={`Auto abilities ${autoCast ? "on" : "off"}`}
+      data-testid="auto-toggle"
+      aria-disabled={!tutorialFinished}
+    >
+      AUTO
+    </button>
+  );
+}
+
+const RING_R = 22.25;
+const RING_LEN = 2 * Math.PI * RING_R;
+
+function AbilityDisc({ slot, id, level }: { slot: AbilityId; id: AbilityId; level: number }) {
+  const c = useController();
+  const def = ABILITIES[id];
+  const unlockLevel = ABILITIES[slot].unlockLevel;
+  const unlocked = unlockLevel <= level;
+  const cd = useHud((s) => Math.ceil((s?.cooldowns[id] ?? 0) * 20) / 20);
+  const max = useHud((s) => s?.cooldownMax[id] ?? def.cooldown);
+  const cooling = unlocked && cd > 0;
+  const progress = max > 0 ? 1 - Math.min(1, cd / max) : 1;
+  const isDodge = id === "shadow_dash";
+  const disc = useRef<HTMLSpanElement>(null);
+  const flash = useRef<SVGCircleElement>(null);
+  // A cast, by hand or by AUTO, shows on the disc: it dips and its ring flashes.
+  const wasCooling = useRef(cooling);
+  useEffect(() => {
+    if (cooling && !wasCooling.current) {
+      replayClass(disc.current, "cast-pop");
+      replayClass(flash.current, "ring-flash");
+    }
+    wasCooling.current = cooling;
+  }, [cooling]);
+  return (
+    <button
+      className="ab-slot flex shrink-0 items-center justify-center"
+      data-ready={unlocked && !cooling}
+      data-guide={isDodge ? "ability-dodge" : `ability-${slot}`}
+      data-testid={`ability-${slot}`}
+      data-form={id}
+      onClick={() => (!unlocked ? c.toast(`${def.name} unlocks at level ${unlockLevel}`, "info") : isDodge ? c.dodge() : c.castAbility(id))}
+      aria-label={unlocked ? `${def.name}${cooling ? `, ${cd.toFixed(1)} seconds` : ", ready"}` : `${def.name}, unlocks at level ${unlockLevel}`}
+      aria-disabled={!unlocked}
+    >
+      <span ref={disc} className="ab-disc press relative flex items-center justify-center rounded-full glass-flat">
+        {unlocked ? (
           <>
-            <span className="medal-fill" style={{ height: `${Math.min(100, (energy / ULTIMATE_ENERGY_COST) * 100)}%` }} />
-            <Icon name="fury" size={26} strokeWidth={2.3} className={cn("relative", ultReady && "animate-pulse")} />
-            {!ultReady && <span className="absolute bottom-1.5 inset-x-0 text-center text-[10px] font-extrabold tabular-nums text-parch">{Math.round(energy)}%</span>}
+            <Icon name={ABILITY_ICON[id]} size={20} strokeWidth={1.8} className={cn("text-t1 transition-opacity duration-200", cooling && "opacity-25")} />
+            <svg className="absolute inset-0 h-full w-full -rotate-90" viewBox="0 0 46 46" aria-hidden="true">
+              {cooling && <circle cx="23" cy="23" r={RING_R} fill="none" stroke="var(--color-t1)" strokeWidth="1.5" strokeDasharray={RING_LEN} strokeDashoffset={RING_LEN * (1 - progress)} strokeLinecap="round" />}
+              <circle ref={flash} cx="23" cy="23" r={RING_R} fill="none" stroke="var(--color-t1)" strokeWidth="1.5" opacity="0" />
+            </svg>
+            {cooling && <span className="absolute t-num-m text-t1">{cd < 10 ? cd.toFixed(1) : Math.ceil(cd)}</span>}
           </>
         ) : (
-          <span className="flex flex-col items-center leading-none">
+          <span className="flex flex-col items-center text-t3">
             <Icon name="lock" size={14} />
-            <span className="text-[10px] mt-0.5">Lv 3</span>
+            <span className="t-caption tnum mt-[2px]">Lv {unlockLevel}</span>
           </span>
         )}
-      </button>
-    </div>
+      </span>
+    </button>
+  );
+}
+
+const ULT_R = 26.25;
+const ULT_LEN = 2 * Math.PI * ULT_R;
+
+function UltimateDisc({ level }: { level: number }) {
+  const c = useController();
+  const energy = useHud((s) => Math.floor(s?.player.energy ?? 0));
+  const ultActive = useHud((s) => s?.ultimateActive ?? false);
+  const unlockLevel = ABILITIES[ULTIMATE_ID].unlockLevel;
+  const unlocked = unlockLevel <= level;
+  const ready = unlocked && energy >= ULTIMATE_ENERGY_COST && !ultActive;
+  const frac = Math.min(1, energy / ULTIMATE_ENERGY_COST);
+  const disc = useRef<HTMLSpanElement>(null);
+  const was = useRef(ultActive);
+  useEffect(() => {
+    if (ultActive && !was.current) replayClass(disc.current, "cast-pop");
+    was.current = ultActive;
+  }, [ultActive]);
+  return (
+    <button
+      className="ab-ult-slot flex shrink-0 items-center justify-center"
+      data-ready={ready}
+      data-testid="ability-ultimate"
+      onClick={() => {
+        if (!unlocked) c.toast(`Ascendant Fury unlocks at level ${unlockLevel}`, "info");
+        else if (!ready && !ultActive) c.toast(`Ascendant Fury is charging: ${energy}%. Strikes, abilities and perfect dodges fill it.`, "info");
+        else c.castAbility(ULTIMATE_ID);
+      }}
+      aria-disabled={!unlocked}
+      aria-label={unlocked ? `Ascendant Fury, ${energy} percent charged` : `Ascendant Fury, unlocks at level ${unlockLevel}`}
+    >
+      <span ref={disc} className="ab-ult press relative flex items-center justify-center rounded-full glass-flat">
+        {unlocked ? (
+          <>
+            <Icon name="fury" size={22} strokeWidth={1.8} className={ready ? "text-t1" : "text-t2"} />
+            <svg className="absolute inset-0 h-full w-full -rotate-90" viewBox="0 0 56 56" aria-hidden="true">
+              <circle cx="28" cy="28" r={ULT_R} fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="1.5" />
+              <circle className={cn(ready && "breathe")} cx="28" cy="28" r={ULT_R} fill="none" stroke="var(--color-gold)" strokeWidth="1.5" strokeDasharray={ULT_LEN} strokeDashoffset={ULT_LEN * (1 - frac)} strokeLinecap="round" />
+            </svg>
+          </>
+        ) : (
+          <span className="flex flex-col items-center text-t3">
+            <Icon name="lock" size={14} />
+            <span className="t-caption tnum mt-[2px]">Lv {unlockLevel}</span>
+          </span>
+        )}
+      </span>
+    </button>
   );
 }

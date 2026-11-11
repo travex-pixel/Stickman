@@ -640,7 +640,7 @@ export class GameController {
             dirty = true;
           } else if (e.kind === "summon") {
             this.run.summonsLost += 1;
-            if (this.run.summonsLost === 1) this.toast("A companion has fallen. It will return.", "warn", true);
+            if (this.run.summonsLost === 1) this.toast("A shadow has fallen. It will return.", "warn", true);
           }
           break;
         case "gold":

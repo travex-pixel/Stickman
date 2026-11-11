@@ -6,7 +6,10 @@ import { useStore } from "@/lib/store";
 import { BattleOverlays } from "@/components/hud/BattleOverlays";
 import { AbilityBar } from "@/components/hud/AbilityBar";
 
-/** Hosts the PixiJS canvas and the HUD overlays that live on top of it. */
+/**
+ * Hosts the PixiJS canvas and the overlays that live on top of it. The section is its own
+ * stacking context, so nothing on the field can rise over the panel that overlaps its foot.
+ */
 export function Battlefield() {
   const c = useController();
   const hostRef = useRef<HTMLDivElement>(null);
@@ -20,7 +23,7 @@ export function Battlefield() {
   }, [c]);
 
   return (
-    <section className="relative min-h-0 overflow-hidden" data-testid="battlefield" onPointerDown={() => c.userGesture()}>
+    <section className="relative isolate min-h-0 overflow-hidden bg-bg-0" data-testid="battlefield" onPointerDown={() => c.userGesture()}>
       <div
         ref={hostRef}
         className="absolute inset-0"
@@ -29,7 +32,10 @@ export function Battlefield() {
           if (e.target instanceof HTMLCanvasElement) c.focusAt(e.clientX, e.clientY);
         }}
       />
-      <div className="absolute left-1/2 top-1/2 h-0 w-0" data-guide="battlefield-player" />
+      {/* Scene shading, not interface: the sky darkens under the top bar and the ground darkens
+          where the controls sit, so glass reads without boxes. */}
+      <div className="pointer-events-none absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(10,10,11,0.55) 0, rgba(10,10,11,0) 14%, rgba(10,10,11,0) 64%, rgba(10,10,11,0.88) 100%)" }} aria-hidden="true" />
+      <div className="absolute left-1/2 top-[60%] h-0 w-0" data-guide="battlefield-player" />
       <BattleOverlays />
       <AbilityBar />
       {showDiag && <Diagnostics />}
@@ -41,7 +47,7 @@ function Diagnostics() {
   const c = useController();
   const d = useStore(c.diagStore, (x) => x);
   return (
-    <div className="absolute right-2 top-10 z-30 rounded-md bg-black/70 px-2 py-1 text-[10px] font-mono text-jade-2 leading-tight" data-testid="diagnostics">
+    <div className="absolute right-3 top-14 z-30 rounded-[10px] bg-bg-0/80 px-2 py-1 font-mono text-[11px] leading-[14px] text-jade" data-testid="diagnostics">
       <div>
         {d.fps} fps · {d.frameMs} ms
       </div>

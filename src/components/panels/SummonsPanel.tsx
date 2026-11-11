@@ -1,190 +1,217 @@
 "use client";
 
 import { useEffect } from "react";
-import { Icon } from "@/components/ui/Icon";
 import { HoldButton } from "@/components/ui/HoldButton";
+import { Button } from "@/components/ui/Button";
+import { Stat } from "@/components/ui/Stat";
+import { CurrencyGlyph } from "@/components/ui/Currency";
 import { SummonPortrait } from "@/components/ui/Portrait";
 import { useController, useProfileRef, useUi } from "@/hooks/useGame";
+import { useShake } from "@/hooks/useShake";
+import { useShortScreen } from "@/hooks/useShortScreen";
 import { collectibleSummons, ROLE_INFO, summonDef } from "@/game/data/summons";
 import { codexBonus, codexMultiplier, ownedSpecies, speciesStars } from "@/game/summons/extraction";
 import { fmtCodex } from "@/components/rewards/ModalHost";
 import { STAT_LABEL } from "@/game/data/equipment";
 import { computeModifiers } from "@/game/progression/stats";
 import { bondCost, BOND_CAP, canStarUp, checkEvolution, starCost, summonStats } from "@/game/summons/progression";
-import { summonXpForLevel, SUMMON_LEVEL_CAP } from "@/game/progression/xp";
 import { REFINE_SHARDS, spareShards } from "@/game/summons/progression";
+import type { Profile } from "@/game/progression/profile";
 import { fmt } from "@/lib/format";
 import { cn } from "@/lib/cn";
-import { useShortScreen } from "@/hooks/useShortScreen";
 
+type Instance = Profile["summons"]["collection"][number];
+
+const RARITY_VAR: Record<string, string> = { common: "var(--color-common)", uncommon: "var(--color-uncommon)", rare: "var(--color-rare)", epic: "var(--color-epic)", legendary: "var(--color-legendary)" };
+const RARITY_WORD: Record<string, string> = { common: "Common", uncommon: "Uncommon", rare: "Rare", epic: "Epic", legendary: "Legendary" };
+
+/** Objective: field the best army and grow it. Primary action: Deploy. */
 export default function SummonsPanel() {
   const c = useController();
   const profile = useProfileRef();
   const selectedId = useUi((u) => u.selectedSummon);
+  const short = useShortScreen();
   const collection = profile.summons.collection;
   const slots = computeModifiers(profile).deploySlots;
   const deployedCount = collection.filter((s) => s.deployed).length;
   const selected = collection.find((s) => s.instanceId === selectedId) ?? collection[0] ?? null;
-  const short = useShortScreen();
 
   useEffect(() => {
     if (!selectedId && collection[0]) c.selectSummon(collection[0].instanceId);
   }, [selectedId, collection, c]);
 
-  if (collection.length === 0) {
-    return (
-      <div className="flex flex-col h-full items-center justify-center gap-2 px-6 text-center">
-        <Icon name="summons" size={28} className="text-gold" />
-        <div className="font-display text-[15px] tracking-[0.2em] text-ivory">The Oathbound</div>
-        <p className="text-[11px] text-mist leading-snug">Enemies marked with a pale light leave their oath behind when they fall. Tap BIND before it fades and they will fight for you forever.</p>
-      </div>
-    );
-  }
+  if (collection.length === 0) return <EmptyArmy />;
 
+  const owned = ownedSpecies(profile).filter((id) => !summonDef(id).hidden).length;
   return (
-    <div className="flex flex-col h-full min-h-0 px-2 pt-1.5 pb-1.5 gap-1.5">
-      <div className="flex items-center justify-between px-1 gap-2">
-        <span className="caps whitespace-nowrap">
-          Army <span className="text-parch">{ownedSpecies(profile).filter((id) => !summonDef(id).hidden).length}/{collectibleSummons().length}</span>
+    <div className={cn("flex flex-col h-full min-h-0 px-4", short ? "pt-3 pb-2" : "pt-4 pb-3")}>
+      <div className="flex items-baseline justify-between gap-3 shrink-0 t-label">
+        <span className="text-t2 whitespace-nowrap">
+          Deployed{" "}
+          <span className="text-t1 tnum" data-testid="deploy-count">
+            {deployedCount} of {slots}
+          </span>
         </span>
-        <span className="text-[10px] text-gold-2 truncate" title="Oath Codex: permanent bonuses from every shadow you have raised">
+        <span className="text-t2 truncate min-w-0" title="Oath Codex: permanent bonuses from every shadow you have bound">
           {codexSummary(profile)}
         </span>
-        <span className="text-[10px] text-mist whitespace-nowrap">
-          Deployed <span className="text-jade-2 font-bold" data-testid="deploy-count">{deployedCount}/{slots}</span>
+        <span className="text-t3 tnum whitespace-nowrap hidden min-[380px]:inline">
+          {owned} of {collectibleSummons().length}
         </span>
       </div>
-      <div className="flex gap-1.5 overflow-x-auto no-scrollbar shrink-0" style={{ touchAction: "pan-x" }}>
-        {collection.map((s) => {
-          const def = summonDef(s.defId);
-          return (
-            <button key={s.instanceId} className={cn("relative shrink-0 rounded-xl border-2 overflow-hidden", selected?.instanceId === s.instanceId ? "border-gold" : `border-rarity-${def.rarity}`)} onClick={() => c.selectSummon(s.instanceId)} data-testid={`summon-card-${s.defId}`} aria-label={def.name}>
-              <SummonPortrait defId={s.defId} size={short ? 30 : 40} />
-              {s.deployed && <span className="absolute top-0.5 right-0.5 h-2 w-2 rounded-full bg-soul shadow-[0_0_6px_#7df0c8]" />}
-              <span className="absolute bottom-0 left-0 right-0 bg-black/70 text-[10px] text-center font-bold text-ivory">Lv {s.level}</span>
-            </button>
-          );
-        })}
+      <div className={cn("flex gap-3 overflow-x-auto no-scrollbar shrink-0 -mx-4 px-4", short ? "mt-2" : "mt-3")} style={{ touchAction: "pan-x" }}>
+        {collection.map((s) => (
+          <RosterDisc key={s.instanceId} s={s} selected={selected?.instanceId === s.instanceId} short={short} onSelect={() => c.selectSummon(s.instanceId)} />
+        ))}
       </div>
-      {selected && <SummonDetail inst={selected} slots={slots} short={short} />}
+      {selected && <ShadowDetail inst={selected} slots={slots} deployedCount={deployedCount} short={short} />}
     </div>
   );
 }
 
-function SummonDetail({ inst, slots, short }: { inst: ReturnType<typeof useProfileRef>["summons"]["collection"][number]; slots: number; short: boolean }) {
+/** A 2px rarity ring around the portrait, a jade dot when deployed, the level underneath. */
+function RosterDisc({ s, selected, short, onSelect }: { s: Instance; selected: boolean; short: boolean; onSelect: () => void }) {
+  const def = summonDef(s.defId);
+  const size = short ? 44 : 48;
+  return (
+    <button className="press relative flex shrink-0 flex-col items-center rounded-full" onClick={onSelect} data-testid={`summon-card-${s.defId}`} aria-label={`${def.name}, level ${s.level}${s.deployed ? ", deployed" : ""}`} aria-pressed={selected}>
+      <span className="relative rounded-full" style={{ width: size, height: size, boxShadow: selected ? `0 0 0 2px var(--color-bg-1), 0 0 0 3.5px var(--color-t1)` : undefined }}>
+        <SummonPortrait defId={s.defId} size={size} round />
+        <span className="pointer-events-none absolute inset-0 rounded-full" style={{ boxShadow: `inset 0 0 0 2px ${RARITY_VAR[def.rarity]}` }} aria-hidden="true" />
+        {s.deployed && <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-bg-1 bg-jade" aria-hidden="true" />}
+      </span>
+      {!short && <span className={cn("t-caption tnum mt-1", selected ? "text-t1" : "text-t3")}>Lv {s.level}</span>}
+    </button>
+  );
+}
+
+function ShadowDetail({ inst, slots, deployedCount, short }: { inst: Instance; slots: number; deployedCount: number; short: boolean }) {
   const c = useController();
   const profile = useProfileRef();
   const def = summonDef(inst.defId);
   const mods = computeModifiers(profile);
   const stats = summonStats(inst, { damageMult: mods.summonDamageMult, defenseMult: mods.summonDefenseMult, hpMult: mods.summonHpMult });
-  const xpNeed = summonXpForLevel(inst.level);
   const evo = checkEvolution(inst, profile.player.riftCores);
   const star = starCost(inst);
   const starReady = canStarUp(inst, profile.player.riftCores);
   const cost = bondCost(inst.bond);
-  const canBond = inst.bond < BOND_CAP && profile.player.essence >= cost;
-  const deployedCount = profile.summons.collection.filter((s) => s.deployed).length;
+  const bondMax = inst.bond >= BOND_CAP;
+  const canBond = !bondMax && profile.player.essence >= cost;
   const canDeploy = inst.deployed || deployedCount < slots;
+  const starsNow = speciesStars(profile).get(inst.defId) ?? 0;
+  const [bondPill, shakeBond] = useShake<HTMLSpanElement>();
+  const h = short ? "h-11" : "h-[52px]";
   return (
-    <div className="card flex-1 min-h-0 flex flex-col gap-1 px-2 py-1.5" style={{ ["--act-h" as string]: short ? "32px" : "36px" }}>
-      <div className="flex gap-2 min-w-0 shrink-0">
-        {!short && <SummonPortrait defId={inst.defId} size={46} />}
-        <div className="flex-1 min-w-0 flex flex-col gap-1">
-          <div className="flex items-baseline justify-between gap-2 leading-tight">
-            <span className="font-display text-[15px] text-ivory truncate">{def.name}</span>
-            {spareShards(inst) >= REFINE_SHARDS && (
-              <button className="shrink-0 rounded-full border border-gold/50 bg-gold/10 px-1.5 text-[10px] font-bold text-gold-2 leading-[18px]" onClick={() => c.refineShards(inst.instanceId)} data-testid="refine-shards" aria-label={`Refine ${REFINE_SHARDS} spare shards into a Rift Core`}>
-                ◆ Refine {REFINE_SHARDS}
-              </button>
-            )}
-            <span className="text-[10px] text-mist shrink-0">
-              <span className="text-gold-2 tracking-tight">{"★".repeat(inst.stars ?? 0)}</span> <span className={`rarity-${def.rarity}`}>{ROLE_INFO[def.role].label}</span> · Lv {inst.level}
-            </span>
-          </div>
-          <div className="bar">
-            <div style={{ width: `${inst.level >= SUMMON_LEVEL_CAP ? 100 : (inst.xp / xpNeed) * 100}%`, background: "linear-gradient(90deg,#a67d36,#e3c783)" }} />
-          </div>
-          <div className={cn("grid grid-cols-4 gap-1 text-[10px] text-mist", short && "hidden")}>
-            <Mini icon="heart" v={fmt(stats.maxHp)} />
-            <Mini icon="sword" v={fmt(stats.attack)} />
-            <Mini icon="shield" v={fmt(stats.defense)} />
-            <Mini icon="speed" v={stats.attackSpeed.toFixed(1)} />
-          </div>
+    <div className={cn("flex flex-col flex-1 min-h-0", short ? "mt-2" : "mt-3")}>
+      <div className="flex items-end justify-between gap-3 shrink-0">
+        <div className="flex flex-col min-w-0">
+          <span className="t-eyebrow truncate" style={{ color: RARITY_VAR[def.rarity] }}>
+            {RARITY_WORD[def.rarity]} · {ROLE_INFO[def.role].label}
+            {(inst.stars ?? 0) > 0 && <span className="text-gold"> · {"★".repeat(inst.stars ?? 0)}</span>}
+          </span>
+          <span className="t-name text-t1 truncate mt-1">{def.name}</span>
+        </div>
+        <div className="flex gap-4 shrink-0">
+          <Stat label="Health" value={stats.maxHp} />
+          <Stat label="Attack" value={stats.attack} className="hidden min-[360px]:flex" />
         </div>
       </div>
-      <div className="text-[11px] leading-snug text-ivory/85 truncate shrink-0" title={def.active.description}>
-        <span className="text-gold-2 font-semibold">{def.active.name}</span> ·{" "}
-        <span className="text-gold/90" data-testid="codex-line">
-          Codex +{fmtCodex(def.owned, codexMultiplier(speciesStars(profile).get(inst.defId) ?? 0))}
-          {(inst.stars ?? 0) < 5 && <span className="text-jade-2"> · ★ next +{fmtCodex(def.owned, codexMultiplier((speciesStars(profile).get(inst.defId) ?? 0) + 1))}</span>}
-        </span>
-      </div>
-        <div className="mt-auto flex items-center gap-1.5">
-          <button
-            className={cn("h-[var(--act-h)] px-2.5 rounded-lg font-display text-[12px] tracking-[0.08em] border shrink-0", inst.deployed ? "bg-black/40 border-white/15 text-mist" : canDeploy ? "btn-jade" : "bg-black/40 border-white/10 text-mist opacity-60")}
-            onClick={() => c.deploySummon(inst.instanceId, !inst.deployed)}
-            data-guide={!inst.deployed ? "deploy-summon" : undefined}
-            data-testid="deploy-button"
-          >
-            {inst.deployed ? "Recall" : "Deploy"}
-          </button>
-          <HoldButton onRepeat={() => c.upgradeBond(inst.instanceId)} disabled={!canBond} className="flex-1 min-w-0 h-[var(--act-h)]" testId="bond-upgrade" label={`Strengthen bond for ${cost} essence`}>
-            <span className="flex flex-col items-center leading-none">
-              <span className="caps text-gold-2 !text-[10px] whitespace-nowrap">Bond {inst.bond}</span>
-              <span className={cn("flex items-center gap-0.5 text-[10px] font-bold", canBond ? "text-jade-2" : "text-crimson-2")}>
-                <Icon name="essence" size={10} />
-                {inst.bond >= BOND_CAP ? "MAX" : fmt(cost)}
-              </span>
-            </span>
-          </HoldButton>
-          <button
-            className={cn("h-[var(--act-h)] px-2 rounded-lg border leading-tight shrink-0", star && starReady ? "border-gold/70 bg-gold/10 text-gold-2" : "border-white/10 bg-black/30 text-mist")}
-            onClick={() => c.starUp(inst.instanceId)}
-            disabled={!star}
-            data-testid="star-button"
-            aria-label={star ? `Star up for ${star.shards} shards${star.cores ? ` and ${star.cores} Rift Cores` : ""}` : "Max stars"}
-          >
-            <span className="block font-display text-[11px]">{star ? "★ Star" : "★ Max"}</span>
-            {star && (
-              <span className="block text-[10px] tabular-nums">
-                {starReady ? (
-                  <span className="text-jade-2 font-bold">Ready</span>
-                ) : (
-                  <>
-                    {Math.min(inst.shards, star.shards)}/{star.shards}
-                    {star.cores ? ` · ${star.cores}◆` : ""}
-                  </>
-                )}
-              </span>
-            )}
-          </button>
-          {def.evolution && (
-            <button
-              className={cn("h-[var(--act-h)] px-2 rounded-lg border leading-tight shrink-0", evo.possible ? "border-gold/70 bg-gold/15 text-gold-2" : "border-white/10 bg-black/30 text-mist")}
-              onClick={() => c.evolve(inst.instanceId)}
-              title={evo.reasons.join(", ")}
-              data-testid="evolve-button"
-            >
-              <span className="block font-display text-[11px]">Evolve</span>
-              <span className="block text-[10px]">{evo.possible ? "Ready" : `★${def.evolution.requiredStars} · Lv ${def.evolution.requiredLevel}`}</span>
-            </button>
-          )}
+      {!short && (
+        <div className="t-label text-t2 truncate mt-1 shrink-0" title={def.active.description}>
+          <span className="text-t1">{def.active.name}</span>
+          <span className="text-t3"> · </span>
+          <span data-testid="codex-line">
+            Codex +{fmtCodex(def.owned, codexMultiplier(starsNow))}
+            {(inst.stars ?? 0) < 5 && <span className="text-t3"> · next star +{fmtCodex(def.owned, codexMultiplier(starsNow + 1))}</span>}
+          </span>
         </div>
+      )}
+      <div className="mt-auto flex items-center gap-2 pt-3 shrink-0">
+        {inst.deployed ? (
+          <Button variant="quiet" className={cn(h, "shrink-0 px-4")} onClick={() => c.deploySummon(inst.instanceId, false)} data-testid="deploy-button">
+            Recall
+          </Button>
+        ) : (
+          <Button variant="primary" className={cn(h, "shrink-0 px-5")} disabled={!canDeploy} onClick={() => c.deploySummon(inst.instanceId, true)} data-guide="deploy-summon" data-testid="deploy-button" aria-label={canDeploy ? "Deploy" : `Deploy: all ${slots} places are taken`}>
+            Deploy
+          </Button>
+        )}
+        <HoldButton
+          onRepeat={() => c.upgradeBond(inst.instanceId)}
+          disabled={!canBond}
+          onDenied={bondMax ? undefined : () => (shakeBond(), c.audio.play("error", { volume: 0.3, minInterval: 200 }))}
+          feedback="scale"
+          className={cn(h, "flex-1 min-w-0 rounded-[14px] bg-bg-2 flex flex-col items-center justify-center", bondMax && "opacity-40")}
+          testId="bond-upgrade"
+          label={bondMax ? `Bond ${inst.bond}, at its cap` : `Strengthen bond for ${cost} essence`}
+        >
+          <span className="t-label text-t1">Bond {inst.bond}</span>
+          <span ref={bondPill} className={cn("flex items-center gap-1.5 t-caption tnum", canBond ? "text-jade" : "text-t3")}>
+            {bondMax ? (
+              "Max"
+            ) : (
+              <>
+                <CurrencyGlyph kind="essence" size={6} className={canBond ? undefined : "!bg-t3"} />
+                {fmt(cost)}
+              </>
+            )}
+          </span>
+        </HoldButton>
+        <button
+          className={cn("press flex flex-col items-center justify-center rounded-[14px] bg-bg-2 px-3 shrink-0 min-w-11", h, !star && "opacity-40")}
+          onClick={() => c.starUp(inst.instanceId)}
+          disabled={!star}
+          data-testid="star-button"
+          aria-label={star ? `Star up for ${star.shards} shards${star.cores ? ` and ${star.cores} Rift Cores` : ""}` : "Max stars"}
+        >
+          <span className="t-label text-t1 flex items-center gap-1.5">
+            {starReady && <span className="h-1.5 w-1.5 rounded-full bg-gold" aria-hidden="true" />}
+            Star
+          </span>
+          <span className={cn("t-caption tnum", starReady ? "text-gold" : "text-t3")}>{!star ? "Max" : starReady ? "Ready" : `${Math.min(inst.shards, star.shards)}/${star.shards}`}</span>
+        </button>
+        {def.evolution && (
+          <button className={cn("press flex flex-col items-center justify-center rounded-[14px] bg-bg-2 px-3 shrink-0 min-w-11", h)} onClick={() => c.evolve(inst.instanceId)} title={evo.reasons.join(", ")} data-testid="evolve-button" aria-label={evo.possible ? "Evolve, ready" : `Evolve: ${evo.reasons.join(", ")}`}>
+            <span className="t-label text-t1 flex items-center gap-1.5">
+              {evo.possible && <span className="h-1.5 w-1.5 rounded-full bg-gold" aria-hidden="true" />}
+              Evolve
+            </span>
+            <span className={cn("t-caption tnum", evo.possible ? "text-gold" : "text-t3")}>{evo.possible ? "Ready" : `Lv ${def.evolution.requiredLevel}`}</span>
+          </button>
+        )}
+        {spareShards(inst) >= REFINE_SHARDS && (
+          <button className="press flex flex-col items-center justify-center rounded-[14px] bg-bg-2 px-3 shrink-0 min-w-11" style={{ height: short ? 44 : 52 }} onClick={() => c.refineShards(inst.instanceId)} data-testid="refine-shards" aria-label={`Refine ${REFINE_SHARDS} spare shards into a Rift Core`}>
+            <span className="t-label text-t1">Refine</span>
+            <span className="t-caption tnum text-t3 flex items-center gap-1">
+              <CurrencyGlyph kind="core" size={6} />
+              {REFINE_SHARDS}
+            </span>
+          </button>
+        )}
+      </div>
     </div>
   );
 }
 
-function Mini({ icon, v }: { icon: "heart" | "sword" | "shield" | "speed"; v: string }) {
+/** Before the first BIND: say what the Oathbound are and how to get one. */
+function EmptyArmy() {
   return (
-    <span className="flex items-center gap-0.5 rounded bg-black/35 px-1 py-0.5">
-      <Icon name={icon} size={9} className="text-gold-2" />
-      <span className="text-ivory font-semibold tabular-nums">{v}</span>
-    </span>
+    <div className="flex flex-col h-full items-center justify-center gap-4 px-8 text-center">
+      <div className="flex gap-3" aria-hidden="true">
+        {[0, 1, 2].map((i) => (
+          <span key={i} className="h-12 w-12 rounded-full bg-bg-2" style={{ opacity: 1 - i * 0.3 }} />
+        ))}
+      </div>
+      <div className="flex flex-col gap-1">
+        <span className="t-title text-t1">No shadows yet</span>
+        <span className="t-body text-t2">Marked enemies leave an essence when they fall. Tap BIND before it fades.</span>
+      </div>
+    </div>
   );
 }
 
-function codexSummary(profile: ReturnType<typeof useProfileRef>): string {
+function codexSummary(profile: Profile): string {
   const b = codexBonus(profile);
   const parts = (Object.entries(b) as [keyof typeof b, number][]).filter(([, v]) => v > 0).map(([k, v]) => `+${Math.round(v * 100)}% ${STAT_LABEL[k].replace("Critical ", "Crit ")}`);
-  return parts.length ? `Codex ${parts.slice(0, 2).join(" · ")}${parts.length > 2 ? " …" : ""}` : "";
+  return parts.length ? `Codex ${parts.slice(0, 2).join(", ")}${parts.length > 2 ? " …" : ""}` : "";
 }

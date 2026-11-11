@@ -59,8 +59,8 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
   {
     id: "deploy",
     targets: [
-      { target: "tab-summons", label: "Open your Summons", gesture: "tap", panel: "summons" },
-      { target: "deploy-summon", label: "Deploy your companion", gesture: "tap", panel: "summons" },
+      { target: "tab-summons", label: "Open your Army", gesture: "tap", panel: "summons" },
+      { target: "deploy-summon", label: "Deploy your shadow", gesture: "tap", panel: "summons" },
     ],
     ready: (c) => c.profile.summons.collection.length > 0 && !c.profile.summons.collection.some((s) => s.deployed),
   },

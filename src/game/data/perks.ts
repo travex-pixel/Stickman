@@ -31,8 +31,8 @@ export const PERKS: PerkDef[] = [
   { id: "soul_drinker", name: "Soul Drinker", description: "Restore 3% health on every kill.", maxStacks: 3, effect: { kind: "lifeOnKill", amount: 0.03 }, tone: "soul" },
   { id: "rift_tempo", name: "Rift Tempo", description: "Ability cooldowns reduced by 8%.", maxStacks: 3, effect: { kind: "cooldown", pct: 0.08 }, tone: "soul" },
   { id: "ascendant_hunger", name: "Ascendant Hunger", description: "Ultimate energy gains +25%.", maxStacks: 3, effect: { kind: "ultimateGain", pct: 0.25 }, tone: "soul" },
-  { id: "war_cry", name: "War Cry", description: "Summons deal +20% damage.", maxStacks: 5, effect: { kind: "summonDamage", pct: 0.2 }, tone: "command" },
-  { id: "shield_wall", name: "Shield Wall", description: "Deployed summons gain +25% defence.", maxStacks: 4, effect: { kind: "summonDefense", pct: 0.25 }, tone: "command" },
+  { id: "war_cry", name: "War Cry", description: "Your army deals +20% damage.", maxStacks: 5, effect: { kind: "summonDamage", pct: 0.2 }, tone: "command" },
+  { id: "shield_wall", name: "Shield Wall", description: "Your army gains +25% defence.", maxStacks: 4, effect: { kind: "summonDefense", pct: 0.25 }, tone: "command" },
   { id: "gilded_oath", name: "Gilded Oath", description: "+15% gold from enemies.", maxStacks: 4, effect: { kind: "goldFind", pct: 0.15 }, tone: "command" },
 ];
 

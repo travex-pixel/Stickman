@@ -12,15 +12,16 @@ const SkillsPanel = lazy(() => import("./SkillsPanel"));
 const RiftPanel = lazy(() => import("./RiftPanel"));
 
 /**
- * The selected panel, faded in on every switch. There is deliberately no exit animation: waiting
- * for one to finish before showing the next ("wait" mode) could leave the wrong panel on screen
- * after fast tab switching. The keyed element always shows exactly the selected panel.
+ * One sheet with rounded shoulders that overlaps the battlefield by 14px. The selected panel
+ * cross-fades in over 120ms on every switch. There is deliberately no exit animation: waiting for
+ * one ("wait" mode) could leave the wrong panel on screen after fast tab switching. The keyed
+ * element always shows exactly the selected panel.
  */
 export function PanelHost() {
   const panel = useUi((u) => u.panel);
   return (
-    <section className="panel-surface relative min-h-0 overflow-hidden" data-testid={`panel-${panel}`}>
-      <motion.div key={panel} className="absolute inset-0 flex flex-col min-h-0" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.14 }} data-panel={panel}>
+    <section className="relative z-10 -mt-[14px] min-h-0 overflow-hidden rounded-t-[22px] bg-bg-1" data-testid={`panel-${panel}`}>
+      <motion.div key={panel} className="absolute inset-0 flex flex-col min-h-0" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.12, ease: [0.2, 0, 0, 1] }} data-panel={panel}>
         <Suspense fallback={<div className="flex-1" />}>
           <PanelBody id={panel} />
         </Suspense>

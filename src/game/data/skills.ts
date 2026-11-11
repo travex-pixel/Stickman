@@ -39,11 +39,11 @@ export const SKILLS: SkillNode[] = [
   // SOUL
   { id: "s1", branch: "soul", tier: 1, name: "Veil Step", description: "Dodge cooldown reduced by 20%.", cost: 1, effect: { kind: "dodgeCooldown", pct: 0.2 } },
   { id: "s2", branch: "soul", tier: 2, name: "Hungering Rift", description: "Oaths linger 35% more often and BIND succeeds 8% more.", cost: 1, requires: "s1", effect: { kind: "essenceChance", pct: 0.35 } },
-  { id: "s3", branch: "soul", tier: 3, name: "Shared Mending", description: "Soul Burst also heals deployed summons for 25% of their health.", cost: 2, requires: "s2", effect: { kind: "synergy", id: "soul_mend" } },
+  { id: "s3", branch: "soul", tier: 3, name: "Shared Mending", description: "Soul Burst also heals your army for 25% of its health.", cost: 2, requires: "s2", effect: { kind: "synergy", id: "soul_mend" } },
   { id: "s4", branch: "soul", tier: 4, name: "Ascendant Flow", description: "Ultimate energy gains +40%.", cost: 2, requires: "s3", effect: { kind: "ultimateGain", pct: 0.4 } },
   { id: "s5", branch: "soul", tier: 5, name: "Iron Soul", description: "+20% max health and +15% defence.", cost: 3, requires: "s4", effect: { kind: "stat", stat: "maxHp", pct: 0.2 } },
   // COMMAND
-  { id: "c1", branch: "command", tier: 1, name: "Bound Blades", description: "Summons deal +15% damage.", cost: 1, effect: { kind: "summonStat", stat: "attack", pct: 0.15 } },
+  { id: "c1", branch: "command", tier: 1, name: "Bound Blades", description: "Your army deals +15% damage.", cost: 1, effect: { kind: "summonStat", stat: "attack", pct: 0.15 } },
   { id: "c2", branch: "command", tier: 2, name: "Gravity of Steel", description: "Arc Slash drags enemies toward your Vanguard.", cost: 1, requires: "c1", effect: { kind: "synergy", id: "arc_pull" } },
   { id: "c3", branch: "command", tier: 3, name: "Third Oath", description: "Deploy one additional summon.", cost: 3, requires: "c2", effect: { kind: "deploySlot", amount: 1 } },
   { id: "c4", branch: "command", tier: 4, name: "Hunter's Chain", description: "Thunder Strike chains to every enemy marked by a Ranger.", cost: 2, requires: "c3", effect: { kind: "synergy", id: "thunder_mark" } },
