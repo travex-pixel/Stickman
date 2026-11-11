@@ -13,6 +13,8 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { openGame } from "./lib/screens.mjs";
 
 const SECONDS = Number(process.env.SECONDS ?? 300);
+/** VAULT=0 turns off the "run the Gold Vault while a gate is not winnable" habit. */
+const VAULT = process.env.VAULT !== "0";
 const { browser, page, errors } = await openGame();
 const t0 = Date.now();
 const wall = () => (Date.now() - t0) / 1000;
@@ -70,6 +72,7 @@ const read = () =>
       mode: w?.mode,
       dead: !!w?.player.dead,
       tier: c.forecastStore?.get?.()?.forecast?.tier ?? null,
+      vaultOpen: c.modeAvailability("vault").ok,
     };
   });
 
@@ -132,6 +135,7 @@ while (sim < SECONDS && wall() < SECONDS * 5) {
   if (s.perks > 0) mark("first perk");
   if (s.tutorialDone) mark("tutorial finished");
   if (s.dead) mark("first fall");
+  if (s.mode && s.mode !== "campaign" && s.mode !== "boss") mark(`first ${s.mode} run`);
 
   // Tutorial funnel: how long each guided step stays on screen before the player satisfies it.
   const label = s.guide?.label ?? null;
@@ -173,6 +177,11 @@ while (sim < SECONDS && wall() < SECONDS * 5) {
     await tap("[data-testid=perk-chip]");
     await tap('[data-guide="quest-claim"]');
     if (s.gate > 0 && s.mode === "campaign" && (s.tier === "ready" || s.tier === "even")) await tap("[data-testid=boss-challenge]");
+    // Following the boss sheet's advice: while a gate is not yet winnable, run the Gold Vault.
+    else if (VAULT && s.gate > 0 && s.mode === "campaign" && s.tier && s.vaultOpen) {
+      await tap("[data-testid=tab-rift]");
+      await tap("[data-testid=mode-vault]");
+    }
     if (now() - lastUpgradeTry > 4 && s.gold >= 8) {
       lastUpgradeTry = now();
       await tap("[data-testid=tab-hero]");
