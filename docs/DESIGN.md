@@ -39,8 +39,13 @@ Shadows are earned in combat, which ties the collection directly to the fighting
 
 ## Core loop
 
-1. Fight a stage: three waves and the region's Warden. Basic attacks are automatic; abilities,
-   dodge and BIND are the player's decisions. AUTO takes over abilities once taught.
+1. Farm: the campaign fights a stage's three ordinary waves in cycles, on its own, and pushes to
+   the next stage in place. Boss stages raise a gate instead of starting their boss; farming loops
+   there until the player chooses BOSS CHALLENGE, reads the forecast, and presses FIGHT. A loss
+   returns to farming; nothing retries automatically. Offline time is simulated with the same
+   rules and stops at gates. Rules: `src/game/progression/campaign.ts`. Basic attacks are
+   automatic; abilities, dodge, focus and BIND are the player's decisions; AUTO is on after the
+   tutorial.
 2. Enemies marked with pale light leave a shadow. BIND shows its success chance before the tap.
 3. Spend gold on stats (hold to upgrade), essence on shadow bonds, Rift Cores on evolution.
 4. Level ups offer a choice of three perks. Clearing stages unlocks modes, ranks and regions.
@@ -52,6 +57,12 @@ Shadows are earned in combat, which ties the collection directly to the fighting
 | System | Status | Where |
 |---|---|---|
 | Fixed-step deterministic combat, events | Working | `src/game/engine/World.ts` |
+| Always-on farming loop, boss gates, player-started boss challenges, fall-back and push | Working | `src/game/progression/campaign.ts`, `World.queueStage/moveToStage` |
+| Boss readiness: real-simulation forecast (4 fights) and actionable tips | Working | `src/game/progression/readiness.ts` |
+| Offline progression sampled from real cycles, gate-safe, credited once | Working | `src/game/progression/offline.ts` |
+| Daily and weekly objectives | Working | `src/game/progression/objectives.ts` |
+| Gear sets (2 and 4 piece) | Working | `src/game/data/gearSets.ts` |
+| Focus targeting (tap an enemy) | Working | `World.setFocus`, `BattleRenderer.pickEnemy` |
 | Six abilities incl. ultimate with time dilation, dodge with i-frames | Working | `src/game/abilities/execute.ts` |
 | Enemy archetypes: grunt, brute, ranger, arcanist, shieldbearer, summoner | Working | `src/game/enemies/ai.ts` |
 | Elite affixes (Brutal, Armored, Hasted, Vampiric), stage 4+ mini-boss | Working | `src/game/data/elites.ts` |
@@ -70,7 +81,7 @@ Shadows are earned in combat, which ties the collection directly to the fighting
 | Modes: campaign, Gold Vault, Essence Rift, Endless Ascent, Rank Trial | Working | `src/game/data/modes.ts` |
 | Quests, achievements, journal, bestiary | Working | `src/game/progression/quests.ts` |
 | Gift codes (signed, once per save) | Working | `src/game/economy/codes.ts`, `scripts/make-code.mjs` |
-| IndexedDB saves: versioned (v8), validated, backed up, migrated, unload-safe | Working | `src/persistence/` |
+| IndexedDB saves: versioned (v9), validated, backed up, migrated, unload-safe | Working | `src/persistence/` |
 | Capped offline rewards | Working | `src/persistence/OfflineRewards.ts` |
 | Runtime-synthesised audio | Working, untested on devices | `src/game/audio/` |
 

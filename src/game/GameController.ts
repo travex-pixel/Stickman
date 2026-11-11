@@ -436,8 +436,10 @@ export class GameController {
   /** Leave a mode early or after its result and return to the campaign frontier. */
   returnToCampaign(): void {
     this.userGesture();
+    const retreat = this.world?.mode === "boss" && this.world.phase !== "victory" && this.world.phase !== "defeat";
     this.closeModal();
     this.startRun(this.profile.progress.currentStage, "campaign");
+    if (retreat) this.toast("You withdrew. The boss waits for your return.", "info");
   }
 
   private commitTimer: ReturnType<typeof setTimeout> | null = null;

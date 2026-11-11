@@ -18,7 +18,28 @@ The whole game fits one phone screen with no scrolling, from 320x568 to 430x932:
   Six round medallions sit on the battlefield itself: AUTO, five abilities and the Ascendant Fury ultimate.
 - **Panel**: Hero (hold-to-upgrade stats, Ascendant rank), Summons (the Oathbound army), Gear, Skills (three seal paths plus Arts) and Rift (game modes, journal, bestiary).
 
-Combat is hybrid. Basic attacks are automatic; you choose when to cast and when to dodge. A manual dodge in the last instant before an enemy blow lands is a **perfect dodge**: a moment of slow motion, ultimate energy and a guaranteed critical on your next strike. AUTO can take over abilities once the tutorial has taught them, but it never earns perfect dodges.
+### The loop: farming never stops, bosses wait for you
+
+The campaign is always on. Your warrior and army fight a stage's ordinary encounters (three waves)
+on their own, collect gold, XP, gear and shadow shards, and move on to the next stage in place.
+
+- A **boss stage** (stage 1, every third stage, and the last stage of a region) does not start its
+  boss. Clearing its encounters opens a **boss gate**: farming loops that stage while a crimson
+  **BOSS CHALLENGE** plaque waits on the field.
+- The plaque opens a **readiness sheet**: level, power, army, gear, the reward, concrete tips (each
+  opens the panel that fixes it) and an **auto-battle forecast** that fights the real boss four
+  times in the real simulation and reports the result. The boss is never adjusted for it.
+- **FIGHT** is the only way into a boss fight. Win and the next stage unlocks and farming resumes.
+  Lose and you get a battle summary and go back to farming. Nothing ever retries the boss for you.
+- Falling while farming steps back one stage and holds there; a **Push** chip resumes the climb.
+- Menus never pause farming. Upgrade, equip, deploy and read while the fight goes on.
+- **Offline**: when you return, the game samples real farming cycles with your build and repeats
+  them for the time away (capped at 8 hours, fighting half of it). It clears ordinary stages but
+  stops at a boss gate, and the summary tells you which boss is waiting.
+- **Objectives**: three optional dailies and three weeklies (Rift panel, Goals). No streaks.
+- **Tap an enemy** to focus it: the warrior and army strike it first.
+
+Combat is hybrid. Basic attacks are automatic; you choose when to cast and when to dodge. A manual dodge in the last instant before an enemy blow lands is a **perfect dodge**: a moment of slow motion, ultimate energy and a guaranteed critical on your next strike. AUTO unlocks once you have used an ability and dodged, and switches on when the tutorial ends; it never earns perfect dodges.
 
 Stages 1 to 6 are The Ashen Verge, where each stage introduces one new idea (brutes, elite champions, shieldbearers, summoners). Stage 7 opens The Drowned Hollow: the Drowned Lurker sinks out of reach and surfaces under its prey, and the Drowned Warden's Undertow and Riptide ask you to read the field rather than outlast it. Every boss shows a one-line counter at its entrance.
 
