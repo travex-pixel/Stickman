@@ -108,6 +108,51 @@ Shadows are earned in combat, which ties the collection directly to the fighting
   determined player could forge one. ASCEND sells nothing, so the only thing at stake is their
   own fun; the trade-off buys a serverless deployment.
 
+## Economy and pacing
+
+Tuned with `tests/unit/economy.sim.test.ts` (opt-in: `ECON_SIM=1`), which plays the gated loop
+headlessly as an engaged player: AUTO on, greedy spending, every shadow bound, rank trials taken,
+and each gate challenged once the real forecast wins 2 of 4.
+
+- Enemy strength has two phases (`stageScale`): x1.27 health and x1.16 attack per stage up to
+  stage 18, then x1.17 and x1.10. Early on the player's power arrives in bursts (army, gear,
+  skills, codex); later it comes from compounding stats, so the curve eases.
+- Stage gold grows x1.10 per stage. Stat costs grow x1.085 per level.
+- Attack and Health multiply x1.6 every 25 levels (milestones).
+- Gate bosses are x4 health and x1.5 attack over their stage, growing slowly (`bossScale`). The
+  stage 1 Warden keeps its plain strength: it is the tutorial's lesson.
+- Level cap 150, shadow cap 40. Quest gold is a few stage clears per quest.
+- Offline: up to 2 hours on a new save, +30 minutes per boss won, to 8 hours; the warrior fights
+  40% of it, sampled from real cycles, and never passes a gate.
+
+Measured (two seeds): gates 1 to 30 in about 40 minutes with a short wait at gate 3, then a few to
+about 40 minutes of farming per gate through 45 to 48, reached after 2.5 to 5 hours of engaged
+play. Beyond about stage 50 the current content asks for long, idle farming.
+
+## Studio review, round 3 (the always-on loop)
+
+Three independent reviewers (combat, summoning and creative; mobile UX, hostile player and
+technical; game director, idle and economy), each playing the built game and measuring in the
+simulation. Decisions:
+
+| Finding | Decision |
+| --- | --- |
+| Telegraphs drawn about a quarter of their real height | Fixed: drawn with the simulation's own geometry |
+| Perfect dodge granted a second early; auto-dodge wasted its cooldown | Fixed: real time-to-impact on every boss move; AUTO dodges late and only half the time |
+| Boss counters ask for movement the player lacks | Fixed both ways: the dash now leaves telegraphs and burning ground, and the lines name real verbs |
+| Three summon passives did nothing | Fixed (Warden's Presence, Bulwark slow, Fast Hands) |
+| Summon actives idle against a lone boss | Fixed; bosses also respect taunts |
+| Shadows indistinguishable | Species sigil colours on weapons, eyes and ability bursts |
+| Boss shadows could never be bound (victory card covered BIND) | Fixed: BIND from the card; orbs wait while cards are open |
+| Health bars leaked on every world swap | Fixed |
+| A pending post-fall beat could overwrite a newly started run | Fixed; runs cannot start while regrouping |
+| Hard wall at gates 30 to 36; gates 1 to 27 trivial | Rebalanced (see Economy); early gates stay quick by choice, as the climb that teaches the loop |
+| Eight hours offline erased the curve | Cap now grows with bosses won; 40% fought |
+| Rift Cores starved while shards piled up | Shards refine 25:1 into cores |
+| Boss rematches for repeat rewards | Deferred: refining covers the core shortage without inviting boss farming |
+| Directional swipe dash | Deferred in favour of the automatic escape direction, which keeps the one-thumb control |
+| Elite affixes with new behaviours | Deferred |
+
 ## Art direction: "Ink and Gilt"
 
 - Palette: charcoal ink surfaces, antique gold trim, jade for life and essence, slate and gold
@@ -122,6 +167,8 @@ Shadows are earned in combat, which ties the collection directly to the fighting
 ## Testing
 
 - `npm run test`: unit tests for every rule, plus a balance harness that simulates whole runs with
-  passive, active, spender and upgraded player policies.
+  passive, active, spender and upgraded player policies, and checks that every heavy boss blow is
+  announced by the perfect-dodge window no more than 0.45 s before it lands.
+- `ECON_SIM=1 npx vitest run tests/unit/economy.sim.test.ts`: the economy simulator (see Economy).
 - `npm run test:e2e`: Playwright on a phone profile and six viewports from 320x568 to 430x932,
   driving real taps and holds against the production build.

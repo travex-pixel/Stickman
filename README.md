@@ -34,8 +34,12 @@ on their own, collect gold, XP, gear and shadow shards, and move on to the next 
 - Falling while farming steps back one stage and holds there; a **Push** chip resumes the climb.
 - Menus never pause farming. Upgrade, equip, deploy and read while the fight goes on.
 - **Offline**: when you return, the game samples real farming cycles with your build and repeats
-  them for the time away (capped at 8 hours, fighting half of it). It clears ordinary stages but
-  stops at a boss gate, and the summary tells you which boss is waiting.
+  them for the time away (up to 2 hours on a new save, 30 minutes more per boss won, at most 8;
+  the warrior fights 40% of it). It clears ordinary stages but stops at a boss gate, and the
+  summary tells you which boss is waiting.
+- **Milestones**: every 25 levels of Attack or Health multiply that stat by 1.6.
+- **Gear sets** (Warden's Oath, Ember Pact, Veil Runner): two pieces give a stat, four grant a set
+  effect. Spare shadow shards refine into Rift Cores.
 - **Objectives**: three optional dailies and three weeklies (Rift panel, Goals). No streaks.
 - **Tap an enemy** to focus it: the warrior and army strike it first.
 
