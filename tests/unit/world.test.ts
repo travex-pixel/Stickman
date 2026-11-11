@@ -801,3 +801,82 @@ describe("elite signature moves", () => {
     expect(e.enemy!.eliteGuarded).toBe(true);
   });
 });
+
+describe("The Shattered Crown", () => {
+  it("opens at stage 16 with its own roster and the Crownless King as its boss", async () => {
+    const { regionForStage, bossForStage } = await import("@/game/data/regions");
+    expect(regionForStage(15).id).toBe("drowned_hollow");
+    expect(regionForStage(16).id).toBe("shattered_crown");
+    expect(bossForStage(18)).toBe("crownless_king");
+    const p = createDefaultProfile();
+    p.player.level = 40;
+    p.player.statLevels = { attack: 150, maxHp: 150, attackSpeed: 60, critChance: 30, critDamage: 30, defense: 80 };
+    p.player.autoCast = true;
+    const w = new World({ stage: 16, loadout: buildLoadout(p), seed: 3 });
+    const ev: GameEvent[] = [];
+    step(w, 90, ev);
+    const spawned = new Set(ev.filter((e) => e.type === "spawn").map((e) => (e.type === "spawn" ? e.defId : "")));
+    for (const id of ["ashen_runner", "crown_arbalest", "gilded_sentry", "bannerman"]) expect(spawned.has(id), id).toBe(true);
+  });
+  it("a Bannerman's banner rallies the enemies near it", () => {
+    const w = freshWorld(16, 4);
+    step(w, 0.5);
+    for (const e of w.entities.values()) if (e.kind === "enemy") e.dead = true;
+    const banner = w.spawnEnemy("bannerman", { pos: { x: w.player.pos.x + 220, y: w.player.pos.y } });
+    const buddy = w.spawnEnemy("gilded_sentry", { pos: { x: banner.pos.x - 40, y: banner.pos.y } });
+    const far = w.spawnEnemy("gilded_sentry", { pos: { x: banner.pos.x + 400 > 590 ? 60 : banner.pos.x + 400, y: banner.pos.y } });
+    banner.stats.maxHp = banner.hp = buddy.stats.maxHp = buddy.hp = far.stats.maxHp = far.hp = 1e6;
+    step(w, 1);
+    expect(buddy.statuses.some((s) => s.kind === "rally")).toBe(true);
+    expect(far.statuses.some((s) => s.kind === "rally")).toBe(false);
+  });
+  it("the King's Decree leaves gaps, and a dash finds one", () => {
+    const p = createDefaultProfile();
+    p.player.level = 30;
+    p.player.statLevels = { attack: 1, maxHp: 400, attackSpeed: 1, critChance: 1, critDamage: 1, defense: 200 };
+    const w = new World({ stage: 18, loadout: buildLoadout(p), seed: 9, mode: "boss" });
+    let lanes = 0;
+    for (let i = 0; i < 60 * 40 && lanes === 0; i++) {
+      w.update(FIXED_DT);
+      w.drainEvents();
+      const decree = w.telegraphs.filter((t) => t.hostile && t.shape === "line" && t.length > 400);
+      if (decree.length >= 2) {
+        lanes = decree.length;
+        const escape = w.escapeFrom({ x: w.player.pos.x, y: decree[0]!.pos.y });
+        expect(escape).not.toBeNull();
+        expect(decree.some((t) => World.insideTelegraph(t, escape!))).toBe(false);
+      }
+    }
+    expect(lanes).toBeGreaterThanOrEqual(2);
+  });
+  it("the Banner Bearer and the bound King join the army with working abilities", () => {
+    const p = createDefaultProfile();
+    p.player.level = 60;
+    p.player.rank = 2;
+    p.player.statLevels = { attack: 60, maxHp: 300, attackSpeed: 10, critChance: 5, critDamage: 5, defense: 250 };
+    claimEssence(p, "banner_bearer");
+    claimEssence(p, "crownless_king");
+    for (const s of p.summons.collection) {
+      s.deployed = true;
+      s.level = 35;
+    }
+    const w = new World({ stage: 16, loadout: buildLoadout(p), seed: 2 });
+    step(w, 0.5);
+    w.player.hp = w.player.stats.maxHp * 0.5;
+    for (const e of w.entities.values()) if (e.kind === "enemy") e.dead = true;
+    for (let i = 0; i < 4; i++) {
+      const r = w.spawnEnemy("ashen_runner", { pos: { x: w.player.pos.x + 150, y: w.player.pos.y + (i % 2) * 6 } });
+      r.stats.maxHp = r.hp = 1e6;
+    }
+    const ev: GameEvent[] = [];
+    // Keep the warrior hurt: the Rallying Cry answers wounds (or a boss).
+    for (let i = 0; i < 16; i++) {
+      w.player.hp = Math.min(w.player.hp, w.player.stats.maxHp * 0.5);
+      step(w, 1, ev);
+    }
+    const abilities = ev.filter((e) => e.type === "summon_ability").map((e) => (e.type === "summon_ability" ? e.ability : ""));
+    expect(abilities).toContain("Rallying Cry");
+    expect(abilities).toContain("Royal Decree");
+    expect(w.player.statuses.some((s) => s.kind === "rally") || abilities.length > 0).toBe(true);
+  });
+});

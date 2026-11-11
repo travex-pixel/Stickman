@@ -4,7 +4,7 @@ import { darken, lighten } from "../colors";
 import { clamp, easeOutCubic, lerp } from "../../engine/math";
 
 export type BodyStyle = "warrior" | "lean" | "bulky" | "robed" | "archer" | "warden" | "reaper";
-export type WeaponType = "sword" | "greatsword" | "dagger" | "bow" | "staff" | "scythe" | "club" | "mace_shield" | "twin" | "tower" | "none";
+export type WeaponType = "sword" | "greatsword" | "dagger" | "bow" | "staff" | "scythe" | "club" | "mace_shield" | "twin" | "tower" | "banner" | "none";
 
 export interface RigSpec {
   style: BodyStyle;
@@ -18,6 +18,8 @@ export interface RigSpec {
   cape?: boolean;
   hood?: boolean;
   horns?: boolean;
+  /** A gilded crown on the head (the Crownless King and its court). */
+  crown?: boolean;
   aura?: number;
   floating?: boolean;
   /** ivory = the hero, ink = enemies, shadow = the player's summoned army. */
@@ -210,6 +212,18 @@ export class Rig {
         headG.poly([-headR * 0.9, -headR * 0.4, -headR * 1.6, -headR * 1.2, -headR * 0.3, -headR * 0.9]).fill(body);
       }
     }
+    if (s.crown) {
+      // A tall broken crown: five gilt spikes, one snapped short.
+      const gold = s.finish === "shadow" ? 0xd9b26a : 0xc9a24f;
+      const cy = -headR * 0.85;
+      headG
+        .poly([
+          -headR * 0.95, cy, -headR * 1.0, cy - headR * 1.1, -headR * 0.6, cy - headR * 0.55, -headR * 0.3, cy - headR * 1.35, 0, cy - headR * 0.6,
+          headR * 0.3, cy - headR * 0.85, headR * 0.6, cy - headR * 0.5, headR * 1.0, cy - headR * 1.15, headR * 0.95, cy,
+        ])
+        .fill(gold);
+      headG.rect(-headR * 0.95, cy - headR * 0.08, headR * 1.9, headR * 0.28).fill(darken(gold, 0.25));
+    }
     this.head.addChild(headG);
     this.head.addChild(this.eyes);
     // Eyes: the brightest pixels on every figure. Enemies glare, summons glow, the hero is calm.
@@ -290,6 +304,15 @@ export class Rig {
         g.circle(0, -60 * u, 6 * u).fill({ color: accent, alpha: 0.95 });
         this.weaponGlow.circle(0, -60 * u, 12 * u).fill({ color: accent, alpha: 0.35 });
         break;
+      case "banner": {
+        // A war banner: a tall pole and a swallow-tailed cloth in the bearer's colour.
+        g.rect(-1.5 * u, -74 * u, 3 * u, 86 * u).fill(0x3a2d2a);
+        g.poly([1.5 * u, -72 * u, 26 * u, -70 * u, 20 * u, -58 * u, 27 * u, -46 * u, 1.5 * u, -48 * u]).fill({ color: accent, alpha: 0.95 });
+        g.poly([1.5 * u, -72 * u, 26 * u, -70 * u, 20 * u, -58 * u, 27 * u, -46 * u, 1.5 * u, -48 * u]).stroke({ width: 1 * u, color: darken(accent, 0.4), alpha: 0.9 });
+        g.circle(0, -76 * u, 3 * u).fill(0xc9a24f);
+        this.weaponGlow.circle(14 * u, -60 * u, 16 * u).fill({ color: accent, alpha: 0.18 });
+        break;
+      }
       case "scythe":
         g.rect(-1.5 * u, -62 * u, 3 * u, 72 * u).fill(0x2a2a33);
         g.moveTo(0, -62 * u).quadraticCurveTo(28 * u, -70 * u, 34 * u, -44 * u).quadraticCurveTo(22 * u, -58 * u, 0, -56 * u).fill(steel);

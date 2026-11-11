@@ -19,7 +19,7 @@ export interface CombatStats {
   hpRegen: number;
 }
 
-export type StatusKind = "burn" | "slow" | "mark" | "shield" | "invuln" | "opening" | "taunt" | "stun" | "haste" | "submerged";
+export type StatusKind = "burn" | "slow" | "mark" | "shield" | "invuln" | "opening" | "taunt" | "stun" | "haste" | "submerged" | "rally";
 
 export interface Status {
   kind: StatusKind;
@@ -37,6 +37,8 @@ export interface SummonState {
   abilityCooldown: number;
   hitCounter: number;
   lastTargetId: number;
+  /** Support aura pulse timer. */
+  pulse?: number;
   sameTargetTime: number;
   /** Shades called by a Rift Caller expire; permanent shadows have Infinity. */
   expiresAt: number;
@@ -75,7 +77,7 @@ export interface EnemyState {
 export interface BossState {
   phase: 1 | 2;
   patternTimer: number;
-  pattern: "idle" | "swing" | "charge" | "slam" | "volley" | "undertow" | "riptide" | "blink";
+  pattern: "idle" | "swing" | "charge" | "slam" | "volley" | "undertow" | "riptide" | "blink" | "decree" | "sweep";
   patternStep: number;
   /** Charge: who has already been hit this charge. */
   chargeHit?: Set<number>;

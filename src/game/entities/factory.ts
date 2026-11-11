@@ -76,7 +76,7 @@ export function createEnemy(id: number, def: EnemyDef, pos: Vec2, scale: { hp: n
       eligible,
       tier,
       repositionTimer: 0,
-      preferredDistance: def.archetype === "ranger" ? 200 : def.archetype === "arcanist" ? 170 : def.archetype === "summoner" ? 210 : 0,
+      preferredDistance: def.archetype === "ranger" ? 200 : def.archetype === "arcanist" ? 170 : def.archetype === "summoner" ? 210 : def.archetype === "bannerman" ? 150 : 0,
       chargeDir: -1,
       elite: null,
       minion: false,

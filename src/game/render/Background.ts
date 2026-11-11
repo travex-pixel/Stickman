@@ -24,7 +24,7 @@ interface Scene {
   crack: string;
   fog: number;
   mote: number;
-  props: "ruins" | "drowned";
+  props: "ruins" | "drowned" | "crown";
 }
 
 const SCENES: Record<string, Scene> = {
@@ -59,6 +59,22 @@ const SCENES: Record<string, Scene> = {
     fog: 0xc9e2d6,
     mote: 0xbff0e0,
     props: "drowned",
+  },
+  shattered_crown: {
+    skyTop: "#3b2d27",
+    skyMid: "#8a6a4f",
+    horizon: "#e2bd8d",
+    sun: "rgba(244, 196, 128, 0.55)",
+    far: "#9c8169",
+    mid: "#6b5747",
+    near: "#3f3229",
+    groundFar: "#7c654f",
+    groundNear: "#3a2e25",
+    pigment: ["rgba(150, 96, 56, 0.10)", "rgba(90, 64, 44, 0.10)", "rgba(200, 160, 100, 0.08)", "rgba(40, 30, 24, 0.10)"],
+    crack: "rgba(30, 20, 14, 0.5)",
+    fog: 0xe8c9a0,
+    mote: 0xffd9a0,
+    props: "crown",
   },
 };
 
@@ -162,6 +178,27 @@ function skyline(sc: Scene, w: number, h: number, baseY: number, color: string, 
         // broken tower with a jagged top
         wash(ctx, [[x, baseY], [x, top + 6], [x + bw * 0.3, top], [x + bw * 0.45, top + 10 * scale], [x + bw * 0.7, top + 3], [x + bw, top + 14 * scale], [x + bw, baseY]], color, alpha, r, jitter);
       }
+    } else if (sc.props === "crown") {
+      if (r() < 0.4) {
+        // a domed hall: drum and a cracked dome
+        const dw = bw * 1.3;
+        wash(ctx, [[x, baseY], [x, top + dw * 0.45], [x + dw, top + dw * 0.45], [x + dw, baseY]], color, alpha, r, jitter);
+        const pts: [number, number][] = [];
+        for (let k = 0; k <= 10; k++) {
+          const a = Math.PI + (k / 10) * Math.PI;
+          pts.push([x + dw / 2 + Math.cos(a) * dw * 0.5, top + dw * 0.45 + Math.sin(a) * dw * 0.5 * (k === 6 ? 0.7 : 1)]);
+        }
+        wash(ctx, [[x, top + dw * 0.45], ...pts, [x + dw, top + dw * 0.45]], color, alpha, r, jitter);
+        x += dw * 0.3;
+      } else if (r() < 0.55) {
+        // a toppled column lying in the rubble, and the stump it fell from
+        wash(ctx, [[x, baseY], [x, top + bh * 0.4], [x + bw * 0.5, top + bh * 0.45], [x + bw * 0.5, baseY]], color, alpha, r, jitter);
+        wash(ctx, [[x + bw * 0.6, baseY], [x + bw * 0.62, baseY - 9 * scale], [x + bw * 2.4, baseY - 12 * scale], [x + bw * 2.4, baseY]], color, alpha * 0.95, r, jitter);
+        x += bw * 1.4;
+      } else {
+        // a slender tower with a gilt spire
+        wash(ctx, [[x, baseY], [x, top + bw * 0.5], [x + bw * 0.25, top + bw * 0.2], [x + bw * 0.35, top - bw * 0.9], [x + bw * 0.45, top + bw * 0.2], [x + bw * 0.7, top + bw * 0.5], [x + bw * 0.7, baseY]], color, alpha, r, jitter);
+      }
     } else {
       if (r() < 0.45) {
         // drowned pillar leaning out of the water
@@ -204,6 +241,22 @@ function landmark(ctx: CanvasRenderingContext2D, sc: Scene, w: number, baseY: nu
     wash(ctx, [[cx - gap - pw * 1.4, baseY - ph - 6 * scale], [cx - gap - pw * 1.4, baseY - ph - 16 * scale], [cx + 6 * scale, baseY - ph - 14 * scale], [cx + 18 * scale, baseY - ph - 4 * scale], [cx - 4 * scale, baseY - ph - 6 * scale]], color, 0.9, r, 2);
     // Pale light leaking through the gate.
     blob(ctx, cx, baseY - ph * 0.45, gap * 0.9, ph * 0.5, "rgba(235, 225, 200, 0.16)");
+  } else if (sc.props === "crown") {
+    // The fallen Crown: a colossal gilt crown lying on its side, half sunk into the plain.
+    const cw = 120 * scale;
+    const ch = 46 * scale;
+    const cx0 = cx - cw * 0.3;
+    const band: [number, number][] = [[cx0, baseY], [cx0 + cw * 0.08, baseY - ch * 0.55], [cx0 + cw, baseY - ch * 0.75], [cx0 + cw * 1.02, baseY]];
+    wash(ctx, band, color, 0.9, r, 2);
+    // Spikes along the band's upper edge, leaning with the tilt; one snapped.
+    for (let k = 0; k < 6; k++) {
+      const t = (k + 0.5) / 6;
+      const bx = cx0 + cw * (0.08 + t * 0.92);
+      const by = baseY - ch * (0.55 + t * 0.2);
+      const hgt = (k === 3 ? 0.35 : 1) * ch * 0.9;
+      wash(ctx, [[bx - 9 * scale, by + 2], [bx + 6 * scale, by - hgt], [bx + 12 * scale, by + 3]], color, 0.88, r, 2);
+    }
+    blob(ctx, cx0 + cw * 0.55, baseY - ch * 0.9, cw * 0.8, ch * 0.9, "rgba(255, 220, 160, 0.16)");
   } else {
     // A drowned colossus: a cowled head and a raised hand breaking the waterline.
     const hr = 34 * scale;
@@ -321,7 +374,7 @@ function paintVignette(sc: Scene, w: number, h: number, groundTop: number): HTML
   ctx.fillRect(0, 0, w, h);
   // Foreground ink: grass tufts and rubble silhouettes framing the bottom edge.
   const r = rng(91);
-  ctx.fillStyle = sc.props === "drowned" ? "rgba(12,22,24,0.85)" : "rgba(16,14,12,0.85)";
+  ctx.fillStyle = sc.props === "drowned" ? "rgba(12,22,24,0.85)" : sc.props === "crown" ? "rgba(24,16,10,0.85)" : "rgba(16,14,12,0.85)";
   for (let i = 0; i < 18; i++) {
     const x = r() * w;
     const base = h + 2;

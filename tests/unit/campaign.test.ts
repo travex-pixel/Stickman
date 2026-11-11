@@ -116,6 +116,8 @@ describe("next milestone", () => {
     p.progress.bestStage = 5;
     expect(nextMilestone(p)).toContain("Drowned Hollow");
     p.progress.bestStage = 12;
+    expect(nextMilestone(p)).toContain("Shattered Crown");
+    p.progress.bestStage = 20;
     p.player.level = 3;
     expect(nextMilestone(p)).toMatch(/rank/i);
   });

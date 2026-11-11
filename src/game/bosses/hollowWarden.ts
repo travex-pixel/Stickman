@@ -69,6 +69,12 @@ export function updateBossAi(world: World, b: Combatant, dt: number): void {
           else if (d < 120 && bs.patternStep % 2 === 0) startBlink(world, b, target);
           else if (roll < 0.55) startRiptide(world, b);
           else startVolley(world, b, target);
+        } else if (b.enemy?.defId === "crownless_king") {
+          if (bs.phase === 2 && bs.patternStep % 4 === 0) kingGuard(world, b);
+          else if (bs.patternStep % 3 === 1 || roll < 0.25) startDecree(world, b, target);
+          else if (d < 170 && roll < 0.7) startSweep(world, b, target);
+          else if (d > 170) startCharge(world, b, target);
+          else startSwing(world, b, target);
         } else if (b.enemy?.defId === "drowned_warden") {
           if (bs.phase === 2 && bs.patternStep % 3 === 0) startRiptide(world, b);
           else if (bs.patternStep % 3 === 1 || (d > 140 && roll < 0.4)) startUndertow(world, b, target);
@@ -238,6 +244,38 @@ export function updateBossAi(world: World, b: Combatant, dt: number): void {
       }
       break;
     }
+    case "decree": {
+      bs.patternTimer -= dt;
+      world.stop(b);
+      hold(b, "cast", bs.patternTimer);
+      if (bs.patternTimer <= 0) {
+        world.setState(b, "recover", 0.7);
+        bs.pattern = "idle";
+        bs.patternTimer = 0.9;
+      }
+      break;
+    }
+    case "sweep": {
+      bs.patternTimer -= dt;
+      world.stop(b);
+      hold(b, "windup", bs.patternTimer);
+      if (bs.patternTimer <= 0) {
+        world.events.push({ type: "attack_swing", id: b.id, kind: "boss", heavy: true, pos: { ...b.pos }, facing: b.facing });
+        world.events.push({ type: "shake", strength: 9 });
+        for (const e of world.entities.values()) {
+          if (e.dead || e.faction === b.faction) continue;
+          const dx = (e.pos.x - b.pos.x) * b.facing;
+          if (dx >= 0 && dist(e.pos, b.pos) < SWEEP_REACH) {
+            world.dealDamage(b, e, 1.25, "physical", true);
+            world.applyKnockback(e, b.pos, 260);
+          }
+        }
+        world.setState(b, "recover", 0.8);
+        bs.pattern = "idle";
+        bs.patternTimer = 0.8;
+      }
+      break;
+    }
     case "blink": {
       bs.patternTimer -= dt;
       world.stop(b);
@@ -348,4 +386,59 @@ function hold(b: Combatant, state: Combatant["state"], timeLeft: number): void {
     b.stateTime = 0;
   }
   b.stateDuration = b.stateTime + Math.max(0, timeLeft);
+}
+
+const DECREE_HALF = 16;
+const SWEEP_REACH = 165;
+
+/**
+ * Royal Decree: lanes across the whole field, one through the target, with clear gaps between
+ * them. After a breath, everything left in a lane is struck. The answer is the gap.
+ */
+function startDecree(world: World, b: Combatant, target: Combatant): void {
+  const phase2 = b.boss!.phase === 2;
+  const slots = phase2 ? 5 : 4;
+  const tell = phase2 ? 1.0 : 1.25;
+  const step = (ARENA.maxY - ARENA.minY) / slots;
+  const ys = Array.from({ length: slots }, (_, i) => ARENA.minY + step * (i + 0.5));
+  const nearest = ys.reduce((best, y, i) => (Math.abs(y - target.pos.y) < Math.abs((ys[best] ?? 0) - target.pos.y) ? i : best), 0);
+  // Every other slot, starting from one that holds the target: alternating lanes always leave gaps.
+  const start = nearest % 2;
+  const lanes = ys.filter((_, i) => i % 2 === start);
+  b.boss!.pattern = "decree";
+  b.boss!.patternTimer = tell;
+  for (const y of lanes) world.addTelegraph({ x: ARENA.minX, y }, DECREE_HALF, tell, "line", 1, ARENA.maxX - ARENA.minX, 0xc9a24f);
+  world.events.push({ type: "minion_called", id: b.id, pos: { ...b.pos } });
+  world.schedule(tell, () => {
+    if (b.dead) return;
+    world.events.push({ type: "shake", strength: 10 });
+    for (const e of world.entities.values()) {
+      if (e.dead || e.faction === b.faction) continue;
+      if (lanes.some((y) => Math.abs(e.pos.y - y) < DECREE_HALF)) world.dealDamage(b, e, 1.2, "void", true);
+    }
+  });
+}
+
+function startSweep(world: World, b: Combatant, target: Combatant): void {
+  b.facing = target.pos.x >= b.pos.x ? 1 : -1;
+  b.boss!.pattern = "sweep";
+  b.boss!.patternTimer = b.boss!.phase === 2 ? 0.7 : 0.9;
+  world.addTelegraph({ ...b.pos }, SWEEP_REACH, b.boss!.patternTimer, "arc", b.facing, SWEEP_REACH, 0xc9a24f);
+}
+
+/** Phase 2: two Gilded Sentries step out to guard their king. */
+function kingGuard(world: World, b: Combatant): void {
+  const living = Array.from(world.entities.values()).filter((e) => !e.dead && e.enemy?.ownerId === b.id).length;
+  if (living >= 3) return startSweep(world, b, world.player);
+  for (const dy of [-30, 30]) {
+    const pos = { x: Math.max(ARENA.minX + 10, Math.min(ARENA.maxX - 10, b.pos.x - b.facing * 60)), y: Math.max(ARENA.minY, Math.min(ARENA.maxY, b.pos.y + dy)) };
+    world.addTelegraph(pos, 26, 0.6, "circle", 1, 0, 0xc9a24f);
+    world.schedule(0.6, () => {
+      if (!b.dead) world.spawnEnemy("gilded_sentry", { pos, minion: true, ownerId: b.id });
+    });
+  }
+  world.events.push({ type: "minion_called", id: b.id, pos: { ...b.pos } });
+  world.setState(b, "cast", 0.6);
+  b.boss!.pattern = "idle";
+  b.boss!.patternTimer = 1.0;
 }

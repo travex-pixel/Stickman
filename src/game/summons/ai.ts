@@ -40,6 +40,17 @@ export function updateSummonAi(world: World, s: Combatant, dt: number): void {
   }
 
   const player = world.player;
+  if (sum.role === "support") {
+    // The banner's colours: allies near it strike harder (refreshed twice a second).
+    sum.pulse = (sum.pulse ?? 0) - dt;
+    if (sum.pulse <= 0) {
+      sum.pulse = 0.5;
+      for (const o of world.entities.values()) {
+        if (o.dead || o.faction !== s.faction || dist(o.pos, s.pos) > SUPPORT_RADIUS) continue;
+        addStatus(o, { kind: "rally", remaining: 0.8, value: 0.12, sourceId: s.id });
+      }
+    }
+  }
   const engageRadius = sum.command === "aggressive" ? Infinity : sum.command === "guard" ? 150 : 200;
   const anchor = sum.command === "guard" || sum.role === "sentinel" ? guardAnchor(world, s) : player.pos;
 
@@ -79,6 +90,14 @@ export function updateSummonAi(world: World, s: Combatant, dt: number): void {
   }
 
   const d = dist(s.pos, target.pos);
+  if (sum.role === "support") {
+    // Stay at the warrior's shoulder, where the banner covers them; fight only what comes close.
+    const post = { x: clamp(player.pos.x - player.facing * 34, ARENA.minX, ARENA.maxX), y: clamp(player.pos.y + 18, ARENA.minY, ARENA.maxY) };
+    if (d > s.stats.range + target.radius && dist(s.pos, post) > 20) {
+      world.moveToward(s, post, dt, 1);
+      return;
+    }
+  }
   const isRanged = sum.role === "ranger" || sum.role === "arcanist" || sum.role === "caller";
   if (isRanged) {
     const preferred = s.stats.range * 0.75;
@@ -173,6 +192,46 @@ function tryActive(world: World, s: Combatant, target: Combatant, nearby: Combat
         });
       }
       world.events.push({ type: "summon_ability", id: s.id, defId: s.defId, ability: "Pyre Rain", pos: { ...s.pos } });
+      world.setState(s, "cast", 0.6);
+      return true;
+    }
+    case "banner_bearer": {
+      // Rallying Cry: when the army is hurting or a boss is on the field.
+      const allies = Array.from(world.entities.values()).filter((o) => !o.dead && o.faction === s.faction && (o.kind === "player" || o.kind === "summon"));
+      const hurting = allies.some((o) => o.hp / o.stats.maxHp < 0.7);
+      if (!hurting && !world.boss) return false;
+      for (const o of allies) {
+        const heal = Math.round(o.stats.maxHp * 0.12);
+        o.hp = Math.min(o.stats.maxHp, o.hp + heal);
+        world.events.push({ type: "heal", targetId: o.id, amount: heal, pos: { ...o.pos } });
+        addStatus(o, { kind: "haste", remaining: 4, value: 0.25, sourceId: s.id });
+      }
+      world.events.push({ type: "summon_ability", id: s.id, defId: s.defId, ability: "Rallying Cry", pos: { ...s.pos } });
+      world.setState(s, "cast", 0.5);
+      return true;
+    }
+    case "crownless_king": {
+      // Royal Decree: a lane through the thickest enemies, struck after a breath.
+      const foes = world.enemies().filter((e) => !isHidden(e));
+      if (foes.length === 0) return false;
+      let bestY = target.pos.y;
+      let bestN = 0;
+      for (const f of foes) {
+        const n = foes.filter((o) => Math.abs(o.pos.y - f.pos.y) < 22).length;
+        if (n > bestN) {
+          bestN = n;
+          bestY = f.pos.y;
+        }
+      }
+      if (bestN < 2 && !world.boss) return false;
+      const y = bestY;
+      world.addTelegraph({ x: ARENA.minX, y }, 22, 0.6, "line", 1, ARENA.maxX - ARENA.minX, 0xe9c97a, false);
+      world.schedule(0.6, () => {
+        if (s.dead) return;
+        for (const e of world.entities.values()) if (!e.dead && e.faction === "enemy" && Math.abs(e.pos.y - y) < 22) world.dealDamage(s, e, 2.6, "void", true);
+        world.events.push({ type: "shake", strength: 6 });
+      });
+      world.events.push({ type: "summon_ability", id: s.id, defId: s.defId, ability: "Royal Decree", pos: { ...s.pos } });
       world.setState(s, "cast", 0.6);
       return true;
     }
@@ -278,3 +337,4 @@ function tryActive(world: World, s: Combatant, target: Combatant, nearby: Combat
   }
 }
 
+const SUPPORT_RADIUS = 160;

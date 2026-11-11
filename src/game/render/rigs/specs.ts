@@ -44,7 +44,10 @@ export function enemySpec(defId: string): RigSpec {
       return { ...base, style: "robed", weapon: "staff", height: 106, hood: true, floating: true, cape: true };
     case "lurker":
       return { ...base, style: "lean", weapon: "dagger", height: 86, hood: true, cape: true };
+    case "bannerman":
+      return { ...base, style: "lean", weapon: "banner", height: 104, cape: true };
     case "boss":
+      if (defId === "crownless_king") return { ...base, style: "warden", weapon: "greatsword", glow: eye, height: 182, crown: true, cape: true, aura: 46 };
       if (defId === "ember_herald") return { ...base, style: "robed", weapon: "staff", glow: eye, height: 158, hood: true, floating: true, cape: true, aura: 40 };
       return { ...base, style: "warden", weapon: "greatsword", glow: eye, height: 178, horns: true, cape: true, aura: 46 };
     default:
@@ -67,6 +70,8 @@ export const SPECIES_ACCENT: Record<string, number> = {
   tidestalker: 0x7fc8c0,
   rift_caller: 0xe8b4a0,
   hollow_warden: 0xf0d48a,
+  banner_bearer: 0xe8a07a,
+  crownless_king: 0xe9c97a,
   shade: 0xb8b0a0,
 };
 
@@ -89,7 +94,10 @@ export function summonSpec(defId: string): RigSpec {
       if (defId === "ember_herald") return { ...base, style: "robed", weapon: "staff", height: 128, hood: true, floating: true, cape: true, aura: 22 };
       return { ...base, style: "robed", weapon: "staff", height: 102, hood: true, floating: true };
     case "sovereign":
+      if (defId === "crownless_king") return { ...base, style: "warden", weapon: "greatsword", height: 166, crown: true, cape: true, aura: 40 };
       return { ...base, style: "warden", weapon: "greatsword", height: 162, horns: true, cape: true, aura: 40 };
+    case "support":
+      return { ...base, style: "warrior", weapon: "banner", height: 104, cape: true };
     case "sentinel":
       return { ...base, style: "warrior", weapon: "tower", height: 104 };
     case "caller":

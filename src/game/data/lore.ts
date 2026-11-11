@@ -3,7 +3,7 @@ export interface JournalEntry {
   title: string;
   body: string;
   /** Condition key used by the progression system to unlock this entry. */
-  unlock: "start" | "first_kill" | "first_summon" | "first_boss" | "stage_3" | "stage_5" | "stage_7" | "warden_recruited" | "evolution";
+  unlock: "start" | "first_kill" | "first_summon" | "first_boss" | "stage_3" | "stage_5" | "stage_7" | "stage_16" | "warden_recruited" | "evolution";
 }
 
 export const JOURNAL: JournalEntry[] = [
@@ -48,6 +48,12 @@ export const JOURNAL: JournalEntry[] = [
     title: "The Drowned Hollow",
     body: "Past the Verge the ground falls away into water that glows from beneath. The second Rift sank here, and took its Warden with it. The husks that wade out to meet you have been holding their breath for a very long time.",
     unlock: "stage_7",
+  },
+  {
+    id: "j_crown",
+    title: "The Shattered Crown",
+    body: "Beyond the Hollow the land rises into a city that never stopped being a city. The third Rift came down through its throne room. Its banners still fly, its guards still stand, and its king still waits for a coronation that will not come.",
+    unlock: "stage_16",
   },
   {
     id: "j_oath",

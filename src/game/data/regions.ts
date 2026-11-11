@@ -106,6 +106,36 @@ const drownedHollowWaves = (stage: number): WaveDef[] => {
   ];
 };
 
+const shatteredCrownWaves = (stage: number): WaveDef[] => {
+  const s = Math.max(0, stage - 16);
+  const runners = (n: number) => n + Math.min(4, Math.floor(s / 2));
+  return [
+    {
+      spawns: [
+        { enemyId: "ashen_runner", count: runners(6), interval: 0.5, delay: 0.5 },
+        { enemyId: "crown_arbalest", count: 1 + Math.min(2, Math.floor(s / 3)), interval: 3, delay: 4 },
+      ],
+    },
+    {
+      spawns: [
+        // The Bannerman arrives with a line to stand behind: cut it down first.
+        { enemyId: "gilded_sentry", count: 2 + Math.min(2, Math.floor(s / 3)), interval: 2, delay: 0.5 },
+        { enemyId: "bannerman", count: 1 + Math.min(1, Math.floor(s / 4)), interval: 6, delay: 2 },
+        { enemyId: "ashen_runner", count: runners(4), interval: 0.6, delay: 3 },
+        { enemyId: "crown_arbalest", count: 1 + Math.min(2, Math.floor(s / 3)), interval: 3, delay: 5 },
+      ],
+    },
+    {
+      spawns: [
+        { enemyId: "ashborn_brute", count: 1 + Math.min(2, Math.floor(s / 3)), interval: 4, delay: 1, elite: (["brutal", "hasted", "armored", "vampiric"] as const)[stage % 4] },
+        { enemyId: "bannerman", count: 1, interval: 1, delay: 3 },
+        { enemyId: "gilded_sentry", count: 1 + Math.min(2, Math.floor(s / 4)), interval: 3, delay: 2 },
+        { enemyId: "ashen_runner", count: runners(5), interval: 0.5, delay: 4 },
+      ],
+    },
+  ];
+};
+
 export const REGIONS: RegionDef[] = [
   {
     id: "ashen_verge",
@@ -128,6 +158,16 @@ export const REGIONS: RegionDef[] = [
     waves: drownedHollowWaves,
     firstStage: 7,
     palette: { sky: 0x06121a, fog: 0x2a5a66, ground: 0x203a44, horizon: 0x1d4d5a, ember: 0x5fd3c8 },
+  },
+  {
+    id: "shattered_crown",
+    name: "The Shattered Crown",
+    subtitle: "Where the third Rift broke a kingdom",
+    lore: "A royal city in endless dusk. The Rift tore through its throne room and the Crown came down with the sky. Its court never stopped serving.",
+    bossId: "crownless_king",
+    waves: shatteredCrownWaves,
+    firstStage: 16,
+    palette: { sky: 0x1a120c, fog: 0x6a4a30, ground: 0x3a2a1e, horizon: 0x8a5a30, ember: 0xffb050 },
   },
 ];
 

@@ -100,6 +100,13 @@ export class World {
   /** Set by the controller during a cycle break: the stage the next cycle farms. */
   private nextStage: number | null = null;
   time = 0;
+  /** The bound King's Court bonus for the army, recomputed when the army changes. */
+  get courtBonus(): number {
+    const army = this.summonEntities().filter((s) => !s.summon?.temporary);
+    if (!army.some((s) => s.defId === "crownless_king" && !s.dead)) return 0;
+    return 0.03 * Math.max(0, army.length - 1);
+  }
+
   /** Set while a card covers the field: essence orbs wait instead of fading. */
   holdOrbs = false;
   /** The enemy the player tapped: the warrior and the army prefer it while it lives. */
@@ -349,12 +356,16 @@ export class World {
     const consider = (urgency: number, to: Vec2) => {
       if (!best || urgency < best.t) best = { t: urgency, to };
     };
+    const clear = (p: Vec2) => p.y >= ARENA.minY && p.y <= ARENA.maxY && p.x >= ARENA.minX && p.x <= ARENA.maxX && !this.telegraphs.some((o) => o.hostile && World.insideTelegraph(o, p));
     for (const t of this.telegraphs) {
       if (!t.hostile || !World.insideTelegraph(t, pos)) continue;
       if (t.shape === "line") {
+        // Out of the lane, preferring the nearer side, and never into another lane.
         const up = pos.y - t.pos.y;
-        const side = up === 0 ? (pos.y > (ARENA.minY + ARENA.maxY) / 2 ? -1 : 1) : Math.sign(up);
-        consider(t.remaining, { x: pos.x, y: t.pos.y + side * (t.radius + 22) });
+        const near = up === 0 ? (pos.y > (ARENA.minY + ARENA.maxY) / 2 ? -1 : 1) : Math.sign(up);
+        const options: Vec2[] = [];
+        for (const side of [near, -near]) for (const m of [6, 12, 22]) options.push({ x: pos.x, y: t.pos.y + side * (t.radius + m) });
+        consider(t.remaining, options.find(clear) ?? (options[2] as Vec2));
       } else {
         const r = t.shape === "circle" ? t.radius : t.length;
         const dx = pos.x - t.pos.x;
@@ -1118,6 +1129,10 @@ export class World {
     if (hasStatus(target, "invuln") || hasStatus(target, "submerged")) return null;
     let bonus = bonusMult;
     if (hasStatus(target, "mark") && source.faction === "ally") bonus *= 1 + statusValue(target, "mark");
+    // Rally: a banner's colours (an enemy Bannerman's, or the army's Banner Bearer's).
+    if (hasStatus(source, "rally")) bonus *= 1 + statusValue(source, "rally");
+    // Court: the bound Crownless King lends the army 3% attack per other deployed shadow.
+    if (source.faction === "ally" && this.courtBonus > 0) bonus *= 1 + this.courtBonus;
     if (source.faction === "ally") bonus *= 1 + 0.04 * this.shadeCount();
     const block = this.blockFactor(target, source.pos.x, heavy);
     bonus *= block;

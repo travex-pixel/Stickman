@@ -57,6 +57,9 @@ export function updateEnemyAi(world: World, e: Combatant, dt: number): void {
     case "lurker":
       lurkerBehaviour(world, e, target, d, dt, def.windup);
       break;
+    case "bannerman":
+      bannermanBehaviour(world, e, target, d, dt, def.windup);
+      break;
     case "grunt":
       meleeBehaviour(world, e, target, d, def.windup, 0.1, 0.25);
       break;
@@ -318,4 +321,39 @@ function eliteSignature(world: World, e: Combatant, target: Combatant, d: number
     return true;
   }
   return false;
+}
+
+export const BANNER_RADIUS = 150;
+
+/**
+ * The Bannerman hangs back behind its line and keeps its banner over its allies: everything near
+ * it hits harder and moves faster. It fights only when cornered. The answer is to focus it.
+ */
+function bannermanBehaviour(world: World, e: Combatant, target: Combatant, d: number, dt: number, windup: number): void {
+  const es = e.enemy;
+  if (!es) return;
+  // The banner pulses twice a second from the moment it is raised.
+  es.callTimer = Math.min(es.callTimer, 0.5) - dt;
+  if (es.callTimer <= 0) {
+    es.callTimer = 0.5;
+    for (const o of world.entities.values()) {
+      if (o.dead || o.faction !== e.faction || o.id === e.id || dist(o.pos, e.pos) > BANNER_RADIUS) continue;
+      addStatus(o, { kind: "rally", remaining: 0.8, value: 0.18, sourceId: e.id });
+      addStatus(o, { kind: "haste", remaining: 0.8, value: 0.2, sourceId: e.id });
+    }
+  }
+  if (d < es.preferredDistance * 0.5 && e.attackCooldown <= 0) {
+    world.beginAttack(e, target, windup, 0.1, 0.4);
+    return;
+  }
+  if (d < es.preferredDistance * 0.8) {
+    world.moveAway(e, target.pos, dt, 0.8);
+    return;
+  }
+  if (d > es.preferredDistance * 1.4) {
+    world.moveToward(e, target.pos, dt, 0.9);
+    return;
+  }
+  world.stop(e);
+  e.facing = target.pos.x >= e.pos.x ? 1 : -1;
 }

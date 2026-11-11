@@ -604,6 +604,18 @@ export class BattleRenderer {
         g.poly(pts).stroke({ width: 2, color: t.color, alpha: 0.7 });
       }
     }
+    // Banner auras: the ground a banner covers, crimson for the enemy's, gold for the army's.
+    for (const e of world.entities.values()) {
+      if (e.dead) continue;
+      const enemyBanner = e.enemy?.archetype === "bannerman";
+      const allyBanner = e.kind === "summon" && e.summon?.role === "support";
+      if (!enemyBanner && !allyBanner) continue;
+      const radius = enemyBanner ? 150 : 160;
+      const color = enemyBanner ? 0xb3473f : 0xe9c97a;
+      const pulse = 0.75 + Math.sin(this.time * 3 + e.id) * 0.25;
+      g.ellipse(this.sx(e.pos.x), this.sy(e.pos.y), radius * u, radius * vy).fill({ color, alpha: 0.05 * pulse });
+      g.ellipse(this.sx(e.pos.x), this.sy(e.pos.y), radius * u, radius * vy).stroke({ width: 1.5, color, alpha: 0.35 * pulse });
+    }
     for (const h of world.hazards) {
       const sx = this.sx(h.pos.x);
       const sy = this.sy(h.pos.y);
