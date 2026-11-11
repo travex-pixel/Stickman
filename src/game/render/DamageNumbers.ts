@@ -50,6 +50,9 @@ export class DamageNumbers {
     slot.text.visible = true;
   }
 
+  /** Screen width, so numbers near an edge are nudged back on-screen. */
+  viewWidth = 0;
+
   update(dt: number): void {
     for (const n of this.pool) {
       if (!n.active) continue;
@@ -65,6 +68,10 @@ export class DamageNumbers {
       n.text.y += n.vy * dt;
       const pop = k < 0.18 ? 1.5 - (k / 0.18) * 0.5 : 1;
       n.text.scale.set(n.startScale * pop);
+      if (this.viewWidth > 0) {
+        const half = n.text.width / 2 + 4;
+        n.text.x = Math.min(this.viewWidth - half, Math.max(half, n.text.x));
+      }
       n.text.alpha = k > 0.6 ? 1 - easeOutCubic((k - 0.6) / 0.4) : 1;
     }
   }

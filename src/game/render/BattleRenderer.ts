@@ -239,6 +239,7 @@ export class BattleRenderer {
     this.drawGroundFx(world);
     this.updateFx(dt);
     this.particles.update(dt);
+    this.numbers.viewWidth = this.width;
     this.numbers.update(dt);
     this.updateCinematic(dt);
     // Camera shake

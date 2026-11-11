@@ -14,6 +14,7 @@ import { bondCost, BOND_CAP, canStarUp, checkEvolution, starCost, summonStats } 
 import { summonXpForLevel, SUMMON_LEVEL_CAP } from "@/game/progression/xp";
 import { fmt } from "@/lib/format";
 import { cn } from "@/lib/cn";
+import { useShortScreen } from "@/hooks/useShortScreen";
 
 export default function SummonsPanel() {
   const c = useController();
@@ -23,6 +24,7 @@ export default function SummonsPanel() {
   const slots = computeModifiers(profile).deploySlots;
   const deployedCount = collection.filter((s) => s.deployed).length;
   const selected = collection.find((s) => s.instanceId === selectedId) ?? collection[0] ?? null;
+  const short = useShortScreen();
 
   useEffect(() => {
     if (!selectedId && collection[0]) c.selectSummon(collection[0].instanceId);
@@ -56,19 +58,19 @@ export default function SummonsPanel() {
           const def = summonDef(s.defId);
           return (
             <button key={s.instanceId} className={cn("relative shrink-0 rounded-xl border-2 overflow-hidden", selected?.instanceId === s.instanceId ? "border-gold" : `border-rarity-${def.rarity}`)} onClick={() => c.selectSummon(s.instanceId)} data-testid={`summon-card-${s.defId}`} aria-label={def.name}>
-              <SummonPortrait defId={s.defId} size={40} />
+              <SummonPortrait defId={s.defId} size={short ? 30 : 40} />
               {s.deployed && <span className="absolute top-0.5 right-0.5 h-2 w-2 rounded-full bg-soul shadow-[0_0_6px_#7df0c8]" />}
               <span className="absolute bottom-0 left-0 right-0 bg-black/70 text-[10px] text-center font-bold text-ivory">Lv {s.level}</span>
             </button>
           );
         })}
       </div>
-      {selected && <SummonDetail inst={selected} slots={slots} />}
+      {selected && <SummonDetail inst={selected} slots={slots} short={short} />}
     </div>
   );
 }
 
-function SummonDetail({ inst, slots }: { inst: ReturnType<typeof useProfileRef>["summons"]["collection"][number]; slots: number }) {
+function SummonDetail({ inst, slots, short }: { inst: ReturnType<typeof useProfileRef>["summons"]["collection"][number]; slots: number; short: boolean }) {
   const c = useController();
   const profile = useProfileRef();
   const def = summonDef(inst.defId);
@@ -83,9 +85,9 @@ function SummonDetail({ inst, slots }: { inst: ReturnType<typeof useProfileRef>[
   const deployedCount = profile.summons.collection.filter((s) => s.deployed).length;
   const canDeploy = inst.deployed || deployedCount < slots;
   return (
-    <div className="card flex-1 min-h-0 flex flex-col gap-1 px-2 py-1.5">
+    <div className="card flex-1 min-h-0 flex flex-col gap-1 px-2 py-1.5" style={{ ["--act-h" as string]: short ? "32px" : "36px" }}>
       <div className="flex gap-2 min-w-0 shrink-0">
-        <SummonPortrait defId={inst.defId} size={46} />
+        {!short && <SummonPortrait defId={inst.defId} size={46} />}
         <div className="flex-1 min-w-0 flex flex-col gap-1">
           <div className="flex items-baseline justify-between gap-2 leading-tight">
             <span className="font-display text-[15px] text-ivory truncate">{def.name}</span>
@@ -96,7 +98,7 @@ function SummonDetail({ inst, slots }: { inst: ReturnType<typeof useProfileRef>[
           <div className="bar">
             <div style={{ width: `${inst.level >= SUMMON_LEVEL_CAP ? 100 : (inst.xp / xpNeed) * 100}%`, background: "linear-gradient(90deg,#a67d36,#e3c783)" }} />
           </div>
-          <div className="grid grid-cols-4 gap-1 text-[10px] text-mist">
+          <div className={cn("grid grid-cols-4 gap-1 text-[10px] text-mist", short && "hidden")}>
             <Mini icon="heart" v={fmt(stats.maxHp)} />
             <Mini icon="sword" v={fmt(stats.attack)} />
             <Mini icon="shield" v={fmt(stats.defense)} />
@@ -113,14 +115,14 @@ function SummonDetail({ inst, slots }: { inst: ReturnType<typeof useProfileRef>[
       </div>
         <div className="mt-auto flex items-center gap-1.5">
           <button
-            className={cn("h-[36px] px-2.5 rounded-lg font-display text-[12px] tracking-[0.08em] border shrink-0", inst.deployed ? "bg-black/40 border-white/15 text-mist" : canDeploy ? "btn-jade" : "bg-black/40 border-white/10 text-mist opacity-60")}
+            className={cn("h-[var(--act-h)] px-2.5 rounded-lg font-display text-[12px] tracking-[0.08em] border shrink-0", inst.deployed ? "bg-black/40 border-white/15 text-mist" : canDeploy ? "btn-jade" : "bg-black/40 border-white/10 text-mist opacity-60")}
             onClick={() => c.deploySummon(inst.instanceId, !inst.deployed)}
             data-guide={!inst.deployed ? "deploy-summon" : undefined}
             data-testid="deploy-button"
           >
             {inst.deployed ? "Recall" : "Deploy"}
           </button>
-          <HoldButton onRepeat={() => c.upgradeBond(inst.instanceId)} disabled={!canBond} className="flex-1 min-w-0 h-[36px]" testId="bond-upgrade" label={`Strengthen bond for ${cost} essence`}>
+          <HoldButton onRepeat={() => c.upgradeBond(inst.instanceId)} disabled={!canBond} className="flex-1 min-w-0 h-[var(--act-h)]" testId="bond-upgrade" label={`Strengthen bond for ${cost} essence`}>
             <span className="flex flex-col items-center leading-none">
               <span className="caps text-gold-2 !text-[10px] whitespace-nowrap">Bond {inst.bond}</span>
               <span className={cn("flex items-center gap-0.5 text-[10px] font-bold", canBond ? "text-jade-2" : "text-crimson-2")}>
@@ -130,7 +132,7 @@ function SummonDetail({ inst, slots }: { inst: ReturnType<typeof useProfileRef>[
             </span>
           </HoldButton>
           <button
-            className={cn("h-[36px] px-2 rounded-lg border leading-tight shrink-0", star && starReady ? "border-gold/70 bg-gold/10 text-gold-2" : "border-white/10 bg-black/30 text-mist")}
+            className={cn("h-[var(--act-h)] px-2 rounded-lg border leading-tight shrink-0", star && starReady ? "border-gold/70 bg-gold/10 text-gold-2" : "border-white/10 bg-black/30 text-mist")}
             onClick={() => c.starUp(inst.instanceId)}
             disabled={!star}
             data-testid="star-button"
@@ -139,14 +141,20 @@ function SummonDetail({ inst, slots }: { inst: ReturnType<typeof useProfileRef>[
             <span className="block font-display text-[11px]">{star ? "★ Star" : "★ Max"}</span>
             {star && (
               <span className="block text-[10px] tabular-nums">
-                {inst.shards}/{star.shards}
-                {star.cores ? ` · ${star.cores}◆` : ""}
+                {starReady ? (
+                  <span className="text-jade-2 font-bold">Ready</span>
+                ) : (
+                  <>
+                    {Math.min(inst.shards, star.shards)}/{star.shards}
+                    {star.cores ? ` · ${star.cores}◆` : ""}
+                  </>
+                )}
               </span>
             )}
           </button>
           {def.evolution && (
             <button
-              className={cn("h-[36px] px-2 rounded-lg border leading-tight shrink-0", evo.possible ? "border-gold/70 bg-gold/15 text-gold-2" : "border-white/10 bg-black/30 text-mist")}
+              className={cn("h-[var(--act-h)] px-2 rounded-lg border leading-tight shrink-0", evo.possible ? "border-gold/70 bg-gold/15 text-gold-2" : "border-white/10 bg-black/30 text-mist")}
               onClick={() => c.evolve(inst.instanceId)}
               title={evo.reasons.join(", ")}
               data-testid="evolve-button"

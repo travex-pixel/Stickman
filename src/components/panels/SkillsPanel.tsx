@@ -8,6 +8,7 @@ import { canUnlockSkill, skillsInBranch } from "@/game/progression/skills";
 import { computeModifiers } from "@/game/progression/stats";
 import { weaponPathDef } from "@/game/progression/weaponPaths";
 import { cn } from "@/lib/cn";
+import { useShortScreen } from "@/hooks/useShortScreen";
 import { fmt } from "@/lib/format";
 import { ABILITIES, ABILITY_SLOTS, ULTIMATE_ID, TECHNIQUE_OWNED_ATTACK, techniquesFor } from "@/game/data/abilities";
 import type { AbilityId } from "@/game/data/ids";
@@ -65,6 +66,7 @@ function Tabs({ view, setView }: { view: SkillBranch | "arts"; setView: (v: Skil
 
 function SealsView({ branch, setView }: { branch: SkillBranch; setView: (v: SkillBranch | "arts") => void }) {
   const c = useController();
+  const short = useShortScreen();
   const profile = useProfileRef();
   const nodes = skillsInBranch(branch);
   const firstOpen = nodes.find((n) => !profile.skills.unlocked.includes(n.id)) ?? nodes[nodes.length - 1]!;
@@ -87,7 +89,7 @@ function SealsView({ branch, setView }: { branch: SkillBranch; setView: (v: Skil
           return (
             <button
               key={n.id}
-              className={cn("relative h-10 w-10 rounded-full flex items-center justify-center font-display text-[14px] border-2 transition-transform", isSel && "scale-110")}
+              className={cn("relative rounded-full flex items-center justify-center font-display text-[14px] border-2 transition-transform", short ? "h-8 w-8" : "h-10 w-10", isSel && "scale-110")}
               style={{
                 background: has ? `radial-gradient(circle at 50% 35%, ${color}55, #1a1611 75%)` : "radial-gradient(circle at 50% 35%, #2a241b, #15120e 75%)",
                 borderColor: has ? color : ok ? `${color}aa` : "rgba(235,228,211,0.12)",
@@ -109,14 +111,14 @@ function SealsView({ branch, setView }: { branch: SkillBranch; setView: (v: Skil
           <span className="font-display text-[16px] text-ivory truncate">{selected.name}</span>
           <span className="caps shrink-0">Tier {selected.tier}</span>
         </div>
-        <p className="text-[12px] leading-snug text-parch line-clamp-2">{selected.description}</p>
+        <p className={cn("text-[12px] leading-snug text-parch", short ? "line-clamp-1" : "line-clamp-2")}>{selected.description}</p>
         <div className="mt-auto flex items-center gap-2">
           {owned ? (
             <span className="flex-1 text-[12px] font-semibold" style={{ color }}>
               Learned
             </span>
           ) : (
-            <button className="btn-primary flex-1 !py-1.5 !text-[14px]" disabled={!check.ok} onClick={() => c.unlockSkill(selected.id)} data-testid="skill-unlock">
+            <button className={cn("btn-primary flex-1 !text-[14px]", short ? "!py-1" : "!py-1.5")} disabled={!check.ok} onClick={() => c.unlockSkill(selected.id)} data-testid="skill-unlock">
               {check.ok ? `Learn · ${selected.cost} pt` : check.reason === "requires" ? "Learn the previous seal first" : `Needs ${selected.cost} pt`}
             </button>
           )}
@@ -142,6 +144,7 @@ const ARTS: AbilityId[] = [...ABILITY_SLOTS, ULTIMATE_ID].sort((a, b) => ABILITI
 /** Arts: every ability ranks from I to V with gold, gated by level. */
 function ArtsView({ setView }: { setView: (v: SkillBranch | "arts") => void }) {
   const c = useController();
+  const short = useShortScreen();
   const profile = useProfileRef();
   const [selectedSlot, setSelectedId] = useState<AbilityId>(() => ARTS.find((id) => canRankAbility(profile, slotForm(profile, id)).ok) ?? "arc_slash");
   const selectedId = slotForm(profile, selectedSlot);
@@ -165,7 +168,7 @@ function ArtsView({ setView }: { setView: (v: SkillBranch | "arts") => void }) {
           return (
             <button
               key={slot}
-              className={cn("relative h-10 w-10 rounded-full flex items-center justify-center border-2 transition-transform", isSel && "scale-110", isLocked ? "border-white/10 text-mist/50" : "border-gold/60 text-gold-2")}
+              className={cn("relative rounded-full flex items-center justify-center border-2 transition-transform", short ? "h-8 w-8" : "h-10 w-10", isSel && "scale-110", isLocked ? "border-white/10 text-mist/50" : "border-gold/60 text-gold-2")}
               style={{ background: isLocked ? "radial-gradient(circle at 50% 35%, #2a241b, #15120e 75%)" : "radial-gradient(circle at 50% 35%, #3a2f1c, #15120e 75%)", boxShadow: isSel ? "0 0 0 3px rgba(17,15,12,1), 0 0 0 4px rgba(233,211,154,0.6)" : undefined }}
               onClick={() => setSelectedId(slot)}
               data-testid={`art-${slot}`}
@@ -207,11 +210,12 @@ function ArtsView({ setView }: { setView: (v: SkillBranch | "arts") => void }) {
             })}
           </div>
         )}
-        <p className="text-[11px] leading-snug text-parch line-clamp-2">
+        <p className={cn("text-[11px] leading-snug text-parch line-clamp-2", short && forms.length > 1 && "hidden", short && "line-clamp-1")}>
           {def.description}
           {def.slot && <span className="text-gold/90"> Owned: +{Math.round(TECHNIQUE_OWNED_ATTACK * 100)}% attack.</span>}
         </p>
-        <div className="text-[11px] text-mist">
+        <div className={cn("mt-auto", short ? "flex items-center gap-2" : "flex flex-col gap-1")}>
+        <div className={cn("text-[11px] text-mist", short && "flex-1 min-w-0 text-[10px] leading-tight")}>
           {locked ? (
             `Unlocks at level ${def.unlockLevel}`
           ) : (
@@ -222,8 +226,8 @@ function ArtsView({ setView }: { setView: (v: SkillBranch | "arts") => void }) {
             </>
           )}
         </div>
-        <div className="mt-auto">
-          <button className="btn-primary w-full !py-1.5 !text-[14px]" disabled={!check.ok} onClick={() => c.rankAbility(selectedId)} data-testid="art-rank-up">
+        <div className={short ? "shrink-0" : ""}>
+          <button className={cn("btn-primary !text-[14px]", short ? "!py-1 !px-3 !text-[12px]" : "w-full !py-1.5")} disabled={!check.ok} onClick={() => c.rankAbility(selectedId)} data-testid="art-rank-up">
             {check.ok
               ? <span className="inline-flex items-center gap-1">Rank {RANK_NUMERALS[rank + 1]} · <Icon name="coin" size={13} />{fmt(check.cost)}</span>
               : check.reason === "max"
@@ -234,6 +238,7 @@ function ArtsView({ setView }: { setView: (v: SkillBranch | "arts") => void }) {
                     ? `Rank ${RANK_NUMERALS[rank + 1]} at level ${check.level}`
                     : <span className="inline-flex items-center gap-1">Need <Icon name="coin" size={13} />{fmt(check.cost)}</span>}
           </button>
+        </div>
         </div>
       </div>
     </div>

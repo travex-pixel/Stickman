@@ -50,3 +50,55 @@ for (const vp of VIEWPORTS) {
     }
   });
 }
+
+/** A mid-game save: every panel populated, so its controls are what gets measured. */
+for (const vp of VIEWPORTS) {
+  test(`populated panels fit ${vp.w}x${vp.h} with every control reachable`, async ({ page }) => {
+    await page.setViewportSize({ width: vp.w, height: vp.h });
+    await waitForGame(page);
+    await page.evaluate(() => {
+      type P = { tutorial: { finished: boolean }; player: Record<string, unknown>; progress: Record<string, unknown>; equipment: { inventory: unknown[] } };
+      const c = (window as unknown as { __ASCEND__: Record<string, (...a: unknown[]) => unknown> & { profile: P } }).__ASCEND__;
+      const p = c.profile;
+      p.tutorial.finished = true;
+      p.player.level = 14;
+      p.player.gold = 20000;
+      p.player.essence = 400;
+      p.player.riftCores = 3;
+      p.player.skillPoints = 4;
+      p.progress.bestStage = 6;
+      p.player.techniques = ["blade_tempest"];
+      const it = (u: string, t: string, s: string) => ({ uid: u, templateId: t, slot: s, rarity: "rare", level: 2, mainStat: "attack", mainValue: 10, substats: [] });
+      p.equipment.inventory.push(it("va", "ashplate", "chest"), it("vb", "hollow_visage", "helm"), it("vc", "stride_of_dusk", "boots"));
+      (c.redeemCode as (s: string) => unknown)("QUIETSOLDIER");
+      (c.commit as () => void)();
+    });
+    for (let i = 0; i < 6; i++) {
+      await page.waitForTimeout(250);
+      await page.evaluate(() => (window as unknown as { __ASCEND__: { closeModal(): void } }).__ASCEND__.closeModal());
+    }
+    const views: [string, string | null][] = [["hero", null], ["summons", null], ["gear", "va"], ["skills", null], ["skills", "arts"], ["rift", null]];
+    for (const [tab, extra] of views) {
+      await page.getByTestId(`tab-${tab}`).click();
+      await page.waitForTimeout(400);
+      if (extra === "arts") {
+        await page.getByTestId("branch-arts").click();
+        await page.getByTestId("art-arc_slash").click();
+      } else if (extra) await page.evaluate((uid) => (window as unknown as { __ASCEND__: { selectItem(u: string): void } }).__ASCEND__.selectItem(uid), extra);
+      await page.waitForTimeout(500);
+      const overflow = await page.evaluate((t) => {
+        const panel = document.querySelector(`[data-testid=panel-${t}]`) as HTMLElement | null;
+        if (!panel) return { ok: false, reason: "no panel" };
+        const pr = panel.getBoundingClientRect();
+        const bad: string[] = [];
+        panel.querySelectorAll<HTMLElement>("button").forEach((b) => {
+          const r = b.getBoundingClientRect();
+          if (r.width === 0 || r.height === 0) return;
+          if (r.bottom > pr.bottom + 1 || r.right > Math.min(pr.right, window.innerWidth) + 1 || r.top < pr.top - 1 || r.left < -1) bad.push(`${b.getAttribute("data-testid") ?? b.textContent?.slice(0, 20)}`);
+        });
+        return { ok: bad.length === 0, reason: bad.join(",") };
+      }, tab);
+      expect(overflow.ok, `${tab}${extra ? `/${extra}` : ""}: ${overflow.reason}`).toBe(true);
+    }
+  });
+}

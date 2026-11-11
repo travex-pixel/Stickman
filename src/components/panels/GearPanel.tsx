@@ -128,7 +128,21 @@ function ItemDetail({ item, equippedUid, inv, gold }: { item: EquipmentItem; equ
           <span className="font-display text-[12px] text-gold-2">{GEAR_EFFECTS[item.effect].name}.</span> <span className="text-ivory/85">{GEAR_EFFECTS[item.effect].description}</span>
         </div>
       )}
-      {template && <div className="text-[10px] italic text-mist truncate">{template.flavour}</div>}
+      {fuse ? (
+        <button
+          className="w-full h-[26px] shrink-0 rounded-md border border-gold/60 bg-gold/10 flex items-center justify-center gap-1.5 text-[11px]"
+          onClick={() => c.fuseItem(item.uid)}
+          aria-label={`Forge ${FUSE_COUNT} ${item.rarity} items into one ${nextRarity}`}
+          data-testid="fuse-button"
+        >
+          <span className="font-display text-gold-2">Forge {FUSE_COUNT}</span>
+          <span className={cn("capitalize", `rarity-${item.rarity}`)}>{item.rarity}</span>
+          <span className="text-mist">→</span>
+          <span className={cn("capitalize font-semibold", `rarity-${nextRarity}`)}>{nextRarity}</span>
+        </button>
+      ) : (
+        template && <div className="text-[10px] italic text-mist truncate">{template.flavour}</div>
+      )}
       <div className="mt-auto flex items-center gap-1">
         {!isEquipped ? (
           <button className="btn-primary flex-1 !py-1.5 text-[11px]" onClick={() => c.equipItem(item.uid)} data-guide="equip-item" data-testid="equip-button">
@@ -148,17 +162,6 @@ function ItemDetail({ item, equippedUid, inv, gold }: { item: EquipmentItem; equ
             </span>
           </span>
         </HoldButton>
-        {fuse && (
-          <button
-            className="shrink-0 h-[32px] px-2 rounded-lg border border-gold/60 bg-gold/10 leading-none"
-            onClick={() => c.fuseItem(item.uid)}
-            aria-label={`Forge ${FUSE_COUNT} ${item.rarity} items into one ${nextRarity}`}
-            data-testid="fuse-button"
-          >
-            <span className="block font-display text-[11px] text-gold-2">Forge ×{FUSE_COUNT}</span>
-            <span className={cn("block text-[10px] capitalize", `rarity-${nextRarity}`)}>{nextRarity}</span>
-          </button>
-        )}
         <button className="btn-ghost !px-2 !py-1.5 text-[10px] text-mist" onClick={() => c.salvageItem(item.uid)} aria-label={`Salvage for ${salvageValue(item)} gold`} data-testid="salvage-button">
           <Icon name="coin" size={12} className="text-gold inline" /> {salvageValue(item)}
         </button>

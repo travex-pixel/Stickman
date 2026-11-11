@@ -10,7 +10,8 @@ import { regionForStage } from "@/game/data/regions";
 import { currentQuest, isQuestComplete, questProgress } from "@/game/progression/quests";
 import { extractionChance } from "@/game/summons/extraction";
 import { computeModifiers } from "@/game/progression/stats";
-import type { SummonCommand } from "@/game/data/ids";
+import type { PanelId, SummonCommand } from "@/game/data/ids";
+import type { QuestGoal } from "@/game/progression/quests";
 import { cn } from "@/lib/cn";
 import { fmt } from "@/lib/format";
 import { SummonPortrait } from "@/components/ui/Portrait";
@@ -80,7 +81,7 @@ function PerkChip() {
     <motion.button
       initial={{ opacity: 0, y: -6 }}
       animate={{ opacity: 1, y: 0 }}
-      className="absolute left-2 bottom-[84px] z-20 flex items-center gap-1.5 rounded-full border border-gold/70 bg-[#231c0d]/95 pl-2.5 pr-3 py-1 shadow-[0_6px_16px_rgba(0,0,0,0.5)]"
+      className="absolute left-2 bottom-[122px] z-20 flex items-center gap-1.5 rounded-full border border-gold/70 bg-[#231c0d]/95 pl-2.5 pr-3 py-1 shadow-[0_6px_16px_rgba(0,0,0,0.5)]"
       onClick={() => c.openPerkChoice()}
       data-testid="perk-chip"
       aria-label="Choose an ascension perk"
@@ -168,12 +169,15 @@ function EssencePrompts() {
   const profile = useProfileRef();
   const bonus = computeModifiers(profile).extractionBonus;
   const firstEver = !profile.summons.firstSummonSeen;
+  const hasArmy = useHud((s) => (s?.summons.length ?? 0) > 0);
   const view = c.view;
   // Stack pills that would overlap so each one is its own clear target.
   const placed: { left: number; top: number }[] = [];
   const positions = orbs.map((o) => {
     const left = Math.min(view.width - 60, Math.max(60, o.x * view.scale));
     let top = Math.max(40, view.offsetY + o.y * view.depthScale - 84);
+    // Never cover the army's command strip in the top-left corner.
+    if (hasArmy && top < 118 && left - 56 < 200) top = 118;
     for (let guard = 0; guard < 6 && placed.some((q) => Math.abs(q.left - left) < 104 && Math.abs(q.top - top) < 46); guard++) top -= 48;
     const pos = { left, top: Math.max(30, top) };
     placed.push(pos);
@@ -266,21 +270,28 @@ function SummonStrip() {
   );
 }
 
+/** Where an unfinished objective is worked on: tapping the pill takes you there. */
+const QUEST_PANEL: Partial<Record<QuestGoal["kind"], PanelId>> = { statLevel: "hero", playerLevel: "hero", skills: "skills", deployed: "summons", collection: "summons", evolutions: "summons", equipped: "gear", stage: "rift" };
+
 function QuestBanner() {
   const c = useController();
   const profile = useProfileRef();
+  const guide = useUi((u) => u.guide);
   const quest = currentQuest(profile);
   if (!quest) return null;
   const prog = questProgress(profile, quest);
   const done = isQuestComplete(profile, quest);
   const reward = quest.reward;
+  const panel = QUEST_PANEL[quest.goal.kind];
+  // A guide label shares this corner: step aside while it teaches, unless it is pointing at us.
+  const hidden = !!guide && guide.target !== "quest-claim";
   return (
-    <motion.div layout className="absolute right-2 bottom-[84px] z-10 max-w-[64%]" data-testid="quest-banner">
+    <motion.div layout className={cn("absolute right-2 bottom-[84px] z-10 max-w-[64%] transition-opacity", hidden && "opacity-0 pointer-events-none")} data-testid="quest-banner">
       <button
         className={cn("flex items-center gap-2 rounded-full border pl-3 pr-2 h-8 shadow-[0_4px_12px_rgba(0,0,0,0.4)] max-w-full", done ? "bg-[#231c0d] border-gold/70" : "bg-ink/80 border-white/10")}
-        onClick={() => done && c.claimQuest()}
+        onClick={() => (done ? c.claimQuest() : panel && c.setPanel(panel))}
         data-guide={done ? "quest-claim" : undefined}
-        aria-label={done ? "Claim quest reward" : "Current objective"}
+        aria-label={done ? "Claim quest reward" : panel ? `Current objective: ${quest.text}. Open ${panel}` : `Current objective: ${quest.text}`}
       >
         <span className="text-[11px] font-semibold text-ivory truncate">
           {quest.text} <span className={done ? "text-gold-2" : "text-parch"}>{prog.value}/{prog.target}</span>

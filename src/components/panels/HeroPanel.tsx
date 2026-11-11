@@ -5,6 +5,9 @@ import { HoldButton } from "@/components/ui/HoldButton";
 import { useController, useProfileRef } from "@/hooks/useGame";
 import type { UpgradeableStat } from "@/game/data/ids";
 import { STAT_LABEL } from "@/game/data/equipment";
+
+/** Card titles are narrow on phones: short names that never truncate. */
+const SHORT_LABEL: Partial<Record<string, string>> = { attackSpeed: "Atk Speed", critChance: "Crit Rate", critDamage: "Crit Dmg" };
 import { combatPower, computePlayerStats, isStatUnlocked, statUnlockRule, statUpgradeCost, STAT_UPGRADE_CAP } from "@/game/progression/stats";
 import type { Profile } from "@/game/progression/profile";
 import { canAttemptTrial, nextRankStep, rankLetter } from "@/game/progression/ranks";
@@ -70,7 +73,7 @@ function StatCard({ stat, icon, value, next, level, gold, unlocked, onUpgrade }:
       <div className="flex flex-col leading-tight min-w-0 flex-1">
         <div className="flex items-center gap-1 text-mist min-w-0">
           <Icon name={icon} size={12} className="text-gold shrink-0" />
-          <span className="text-[10px] font-semibold truncate">{STAT_LABEL[stat]}</span>
+          <span className="text-[10px] font-semibold truncate">{SHORT_LABEL[stat] ?? STAT_LABEL[stat]}</span>
           <span className="ml-auto text-[10px] text-mist shrink-0">Lv {level}</span>
         </div>
         <div className="flex items-baseline gap-1 min-w-0">

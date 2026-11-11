@@ -64,9 +64,9 @@ export function AbilityBar() {
               data-guide={isDodge ? "ability-dodge" : `ability-${slot}`}
               data-testid={`ability-${slot}`}
               data-form={id}
-              onClick={() => (isDodge ? c.dodge() : c.castAbility(id))}
-              aria-label={unlocked ? `${def.name}${ready ? ", ready" : `, ${cd.toFixed(1)} seconds`}` : `${def.name}, unlocks at level ${def.unlockLevel}`}
-              disabled={!unlocked}
+              onClick={() => (!unlocked ? c.toast(`${def.name} unlocks at level ${ABILITIES[slot].unlockLevel}`, "info") : isDodge ? c.dodge() : c.castAbility(id))}
+              aria-label={unlocked ? `${def.name}${ready ? ", ready" : `, ${cd.toFixed(1)} seconds`}` : `${def.name}, unlocks at level ${ABILITIES[slot].unlockLevel}`}
+              aria-disabled={!unlocked}
             >
               {unlocked ? (
                 <>
@@ -74,14 +74,14 @@ export function AbilityBar() {
                   {cd > 0 && (
                     <>
                       <span className="medal-sweep" style={{ ["--cd" as string]: `${frac * 100}%` }} />
-                      <span className="absolute inset-0 flex items-center justify-center font-display text-[15px] text-ivory tabular-nums">{cd < 10 ? cd.toFixed(1) : Math.ceil(cd)}</span>
+                      <span className="absolute inset-0 flex items-center justify-center font-sans font-extrabold text-[13px] text-ivory tabular-nums">{cd < 10 ? cd.toFixed(1) : Math.ceil(cd)}</span>
                     </>
                   )}
                 </>
               ) : (
                 <span className="flex flex-col items-center leading-none">
                   <Icon name="lock" size={13} />
-                  <span className="text-[10px] mt-0.5">Lv {def.unlockLevel}</span>
+                  <span className="text-[10px] mt-0.5">Lv {ABILITIES[slot].unlockLevel}</span>
                 </span>
               )}
             </button>
@@ -92,8 +92,12 @@ export function AbilityBar() {
         className={cn("medal medal-lg shrink-0", ultReady ? "text-gold-2" : "text-mist", !ultUnlocked && "medal-locked")}
         data-ready={ultReady}
         data-testid="ability-ultimate"
-        onClick={() => c.castAbility(ULTIMATE_ID)}
-        disabled={!ultUnlocked}
+        onClick={() => {
+          if (!ultUnlocked) c.toast(`Ascendant Fury unlocks at level ${ABILITIES[ULTIMATE_ID].unlockLevel}`, "info");
+          else if (!ultReady && !ultActive) c.toast(`Ascendant Fury is charging: ${Math.round(energy)}%. Strikes, abilities and perfect dodges fill it.`, "info");
+          else c.castAbility(ULTIMATE_ID);
+        }}
+        aria-disabled={!ultUnlocked}
         aria-label={ultUnlocked ? `Ascendant Fury, ${Math.round(energy)} percent charged` : "Ascendant Fury, unlocks at level 3"}
       >
         {ultUnlocked ? (

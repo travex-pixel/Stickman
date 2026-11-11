@@ -46,7 +46,7 @@ import { ABILITIES } from "./data/abilities";
 export type Modal =
   | { kind: "summon_reveal"; outcome: ClaimOutcome; summonId: string; first: boolean; cinematicDone: boolean }
   | { kind: "perk_choice"; perks: PerkDef[] }
-  | { kind: "stage_clear"; stage: number; gold: number; xp: number; items: EquipmentItem[]; riftCores: number; nextStage: number }
+  | { kind: "stage_clear"; stage: number; gold: number; runGold: number; xp: number; items: EquipmentItem[]; riftCores: number; nextStage: number; upgrades: number }
   | { kind: "defeat"; stage: number; wave: number }
   | { kind: "offline"; reward: OfflineReward }
   | { kind: "settings" }
@@ -152,6 +152,7 @@ export class GameController {
   private toastId = 0;
   private modalQueue: Modal[] = [];
   private rankBadgeShown = false;
+  private explainedBind = false;
   private tutorialElapsed = 0;
   private tutorialSubstep = 0;
   private enemyWindupNearPlayer = false;
@@ -706,7 +707,10 @@ export class GameController {
     const riftCores = stageClearCores(stage, firstClear, isBossStage(stage));
     p.player.riftCores += riftCores;
     this.sfx("level_up", { volume: 0.9, rate: 0.85 });
-    this.enqueueModal({ kind: "stage_clear", stage, gold, xp, items, riftCores, nextStage: stage + 1 });
+    const upgrades = affordableUpgrades(p);
+    // Early on, banked gold is the difference between the next wall and a stall: point at it now, not after a death.
+    if (upgrades >= 2 && p.progress.bestStage <= 8) this.coachUpgrade = true;
+    this.enqueueModal({ kind: "stage_clear", stage, gold, runGold: this.run.gold, xp, items, riftCores, nextStage: stage + 1, upgrades });
     if (res.levelsGained > 0) this.onLevelUp(res.levelsGained);
   }
 
@@ -763,6 +767,15 @@ export class GameController {
       return;
     }
     p.equipment.inventory.push(item);
+    // An empty slot is never a decision: once the gear lesson is learned, fill it straight away.
+    const gearLearned = p.tutorial.finished || p.tutorial.completed.includes("gear");
+    if (gearLearned && !p.equipment.equipped[item.slot]) {
+      p.equipment.equipped[item.slot] = item.uid;
+      this.refreshLoadout();
+      this.toast(`Equipped: ${itemName(item)}`, "gold");
+      this.sfx("equip", { volume: 0.5 });
+      return;
+    }
     // Loot announces itself in proportion to its worth.
     if (item.effect) {
       this.toast(`${item.rarity === "legendary" ? "Legendary" : "Epic"}: ${itemName(item)} ✦ ${GEAR_EFFECTS[item.effect].name}`, "gold");
@@ -829,7 +842,10 @@ export class GameController {
       this.sfx("enemy_death", { volume: 0.8, rate: 0.55 });
       this.renderer?.playExtractionFail(peek.pos);
       const pity = p.summons.pity[peek.summonId] ?? 0;
-      this.toast(left > 0 ? `The oath is refused. ${left} attempt${left > 1 ? "s" : ""} left.` : `The oath is refused. +${result.essenceOnFail} essence, next attempt +${Math.round(pity * 12)}%`, "warn");
+      const firstRefusal = p.summons.totalAttempts <= 6 && !this.explainedBind;
+      this.explainedBind = true;
+      if (firstRefusal) this.toast("BIND is a chance. Every refusal raises the next one until the oath must be kept.", "info");
+      else this.toast(left > 0 ? `The oath is refused. ${left} attempt${left > 1 ? "s" : ""} left.` : `The oath is refused. +${result.essenceOnFail} essence, next attempt +${Math.round(pity * 12)}%`, "warn");
       this.afterProgression();
       this.commit();
       return;
@@ -883,6 +899,7 @@ export class GameController {
     const res = doUpgradeStat(this.profile, stat);
     if (res.ok) {
       this.coachUpgrade = false;
+      if (this.uiStore.get().guide?.target.startsWith("upgrade-")) this.uiStore.update((u) => ({ ...u, guide: null }));
       this.sfx("upgrade", { volume: 0.5, minInterval: 30, rate: 0.95 + Math.random() * 0.15 });
       this.refreshLoadout();
       this.completeTutorialIf("upgrade");
@@ -1026,6 +1043,16 @@ export class GameController {
       this.refreshLoadout();
       this.commitSoon();
     }
+  }
+
+  /** From the stage-clear card: stop the countdown's pull and walk the player to their upgrades. */
+  spendGoldNow(): void {
+    this.userGesture();
+    this.coachUpgrade = true;
+    this.setPanel("hero");
+    // The stage-clear card pauses the loop that normally refreshes guidance, so point now.
+    const guide = this.contextualGuide("hero");
+    if (guide) this.uiStore.update((u) => ({ ...u, guide }));
   }
 
   /** Swap a slot between its base ability and a learned technique. */
@@ -1453,3 +1480,27 @@ export function itemName(item: EquipmentItem): string {
 }
 
 export type { SummonInstance };
+
+/** How many stat upgrades the current gold buys, cheapest first. */
+export function affordableUpgrades(p: Profile): number {
+  const stats = (["attack", "maxHp", "defense", "attackSpeed", "critChance", "critDamage"] as const).filter((st) => isStatUnlocked(p, st));
+  const levels = { ...p.player.statLevels };
+  let gold = p.player.gold;
+  let n = 0;
+  while (n < 50) {
+    let best: (typeof stats)[number] | null = null;
+    let cost = Infinity;
+    for (const st of stats) {
+      const c = statUpgradeCost(st, levels[st]);
+      if (c < cost) {
+        cost = c;
+        best = st;
+      }
+    }
+    if (!best || cost > gold) break;
+    gold -= cost;
+    levels[best] += 1;
+    n += 1;
+  }
+  return n;
+}

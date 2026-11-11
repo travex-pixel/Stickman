@@ -72,7 +72,7 @@ function SummonReveal({ modal }: { modal: Extract<Modal, { kind: "summon_reveal"
   const o = modal.outcome;
   if (!modal.cinematicDone) {
     return (
-      <div className="pointer-events-none absolute inset-x-0 bottom-[30%] flex flex-col items-center text-center" data-testid="summon-cinematic">
+      <div className="pointer-events-none absolute inset-x-0 top-[24%] flex flex-col items-center text-center" data-testid="summon-cinematic">
         <motion.div
           initial={{ opacity: 0, scale: 1.6, letterSpacing: "0.8em" }}
           animate={{ opacity: [0, 0, 1, 1], scale: [1.6, 1.6, 1, 1], letterSpacing: ["0.8em", "0.8em", "0.32em", "0.32em"] }}
@@ -150,6 +150,7 @@ export function StageClear({ modal }: { modal: Extract<Modal, { kind: "stage_cle
   const c = useController();
   const auto = useProfileRef().settings.autoAdvance;
   const [left, setLeft] = useState(auto ? 6 + Math.min(3, modal.items.length) : -1);
+  const shortShown = modal.upgrades > 0 ? 1 : 2;
   useEffect(() => {
     if (!auto) return;
     if (left <= 0) {
@@ -166,7 +167,7 @@ export function StageClear({ modal }: { modal: Extract<Modal, { kind: "stage_cle
         <div className="font-display text-[20px] text-ivory text-glow-gold leading-none">Stage {modal.stage} cleared</div>
         <div className="flex gap-3 mt-1 text-[13px] font-bold">
           <motion.span initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="flex items-center gap-1 text-gold" data-testid="clear-gold">
-            <Icon name="coin" size={14} /><CountUp prefix="+" value={modal.gold} delay={120} onTick={() => c.rewardCue("tick")} />
+            <Icon name="coin" size={14} /><CountUp prefix="+" value={modal.gold + (modal.runGold ?? 0)} delay={120} onTick={() => c.rewardCue("tick")} />
           </motion.span>
           <motion.span initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }} className="flex items-center gap-1 text-gold-2">
             <Icon name="xp" size={14} /><CountUp prefix="+" value={modal.xp} delay={240} /> XP
@@ -180,11 +181,28 @@ export function StageClear({ modal }: { modal: Extract<Modal, { kind: "stage_cle
         {modal.items.length > 0 && (
           <div className="w-full flex flex-col gap-1" style={{ perspective: 600 }}>
             {modal.items.slice(0, 3).map((it, i) => (
-              <LootCard key={it.uid} item={it} index={i} className={i >= 2 ? "short-hide" : undefined} onReveal={(rare) => c.rewardCue(rare ? "rare" : "card")} />
+              <LootCard key={it.uid} item={it} index={i} className={i >= shortShown ? "short-hide" : undefined} onReveal={(rare) => c.rewardCue(rare ? "rare" : "card")} />
             ))}
             {modal.items.length > 3 && <div className="text-[10px] text-mist short-hide">and {modal.items.length - 3} more in your satchel</div>}
-            {modal.items.length > 2 && <div className="text-[10px] text-mist short-only">and {modal.items.length - 2} more in your satchel</div>}
+            {modal.items.length > shortShown && <div className="text-[10px] text-mist short-only">and {modal.items.length - shortShown} more in your satchel</div>}
           </div>
+        )}
+        {modal.upgrades > 0 && (
+          <button
+            className="w-full flex items-center justify-between gap-2 rounded-lg border border-gold/60 bg-gold/10 px-3 h-9"
+            onClick={() => {
+              setLeft(-1);
+              c.spendGoldNow();
+            }}
+            data-testid="spend-gold"
+          >
+            <span className="text-[12px] text-parch">
+              <b className="text-gold-2">{modal.upgrades >= 50 ? "50+" : modal.upgrades}</b> upgrade{modal.upgrades === 1 ? "" : "s"} ready
+            </span>
+            <span className="font-display text-[13px] text-gold-2 flex items-center gap-1">
+              Spend gold <Icon name="chevron" size={12} />
+            </span>
+          </button>
         )}
         <div className="flex gap-2 w-full mt-1">
           <button className="btn-ghost flex-1" onClick={() => { setLeft(-1); c.updateSettings({ autoAdvance: false }); c.replayStage(modal.stage); }} data-testid="replay-stage">Replay</button>
