@@ -6,6 +6,7 @@ import { PERKS } from "../data/perks";
 import { codexBonus } from "../summons/extraction";
 import { TECHNIQUE_OWNED_ATTACK } from "../data/abilities";
 import type { GearEffectId } from "../data/gearEffects";
+import { GEAR_SETS, setCounts } from "../data/gearSets";
 
 /** Each Ascendant rank multiplies core stats. Rank is earned in Rank Trials, not bought. */
 export const RANK_STAT_STEP = 0.08;
@@ -201,6 +202,7 @@ export function computeModifiers(profile: Profile): PlayerModifiers {
   }
   if (profile.summons.collection.some((s) => s.deployed && s.defId === "hollow_warden")) m.summonDefenseMult += 0.15;
   for (const item of equippedItems(profile)) if (item.effect) m.gearEffects.add(item.effect);
+  for (const [id, n] of setCounts(equippedItems(profile).map((i) => i.templateId))) if (n >= 4) m.gearEffects.add(GEAR_SETS[id].four);
   if (m.gearEffects.has("shadowbound")) {
     m.summonDamageMult += 0.25;
     m.extractionBonus += 0.05;
@@ -258,6 +260,7 @@ export function computePlayerStats(profile: Profile): CombatStats {
   for (const [k, v] of Object.entries(weaponPathBonuses(profile.player.weaponPath)) as [StatKey, number][]) addPct(k, v);
   const codex = codexBonus(profile);
   for (const [k, v] of Object.entries(codex) as [StatKey, number][]) if (v) addPct(k, v);
+  for (const [id, n] of setCounts(equippedItems(profile).map((i) => i.templateId))) if (n >= 2) addPct(GEAR_SETS[id].two.stat, GEAR_SETS[id].two.pct);
   // Techniques are owned power: every one learned adds attack, equipped or not.
   if (profile.player.techniques.length) addPct("attack", profile.player.techniques.length * TECHNIQUE_OWNED_ATTACK);
   const rankMult = 1 + profile.player.rank * RANK_STAT_STEP;

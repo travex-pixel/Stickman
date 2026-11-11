@@ -9,6 +9,7 @@ import { EQUIPMENT_TEMPLATES, SLOT_LABEL, STAT_LABEL } from "@/game/data/equipme
 import { GEAR_EFFECTS } from "@/game/data/gearEffects";
 import { EQUIPMENT_LEVEL_CAP, FUSE_COUNT, equipmentUpgradeCost, fusionSet, itemScore, salvageValue } from "@/game/economy/loot";
 import { RARITY_ORDER } from "@/game/data/ids";
+import { setOf } from "@/game/data/gearSets";
 import type { EquipmentItem } from "@/game/progression/profile";
 import { itemStatTotals } from "@/game/progression/stats";
 import { fmt, fmtStat } from "@/lib/format";
@@ -96,6 +97,15 @@ function ItemDetail({ item, equippedUid, inv, gold }: { item: EquipmentItem; equ
   const capped = item.level >= EQUIPMENT_LEVEL_CAP;
   const template = EQUIPMENT_TEMPLATES.find((t) => t.id === item.templateId);
   const profile = useProfileRef();
+  const set = setOf(item.templateId);
+  // Pieces of this set worn, counting this item as if it were equipped in its slot.
+  const setWorn = set
+    ? Object.entries(profile.equipment.equipped).filter(([slot, uid]) => {
+        if (slot === item.slot) return false;
+        const it = inv.find((x) => x.uid === uid);
+        return it ? set.pieces.includes(it.templateId) : false;
+      }).length + 1
+    : 0;
   const fuse = fusionSet(profile, item.uid);
   const nextRarity = RARITY_ORDER[Math.min(RARITY_ORDER.length - 1, RARITY_ORDER.indexOf(item.rarity) + 1)]!;
   return (
@@ -140,6 +150,12 @@ function ItemDetail({ item, equippedUid, inv, gold }: { item: EquipmentItem; equ
           <span className="text-mist">→</span>
           <span className={cn("capitalize font-semibold", `rarity-${nextRarity}`)}>{nextRarity}</span>
         </button>
+      ) : set ? (
+        <div className="text-[10px] leading-snug truncate" data-testid="item-set" title={template?.flavour}>
+          <span className="font-semibold text-parch">{set.name}</span> <span className="text-mist tabular-nums">{setWorn}/{set.pieces.length}</span>
+          <span className={cn("ml-1.5", setWorn >= 2 ? "text-jade-2" : "text-mist")}>(2) +{Math.round(set.two.pct * 100)}% {STAT_LABEL[set.two.stat]}</span>
+          <span className={cn("ml-1.5", setWorn >= 4 ? "text-gold-2" : "text-mist")}>(4) {GEAR_EFFECTS[set.four].name}</span>
+        </div>
       ) : (
         template && <div className="text-[10px] italic text-mist truncate">{template.flavour}</div>
       )}

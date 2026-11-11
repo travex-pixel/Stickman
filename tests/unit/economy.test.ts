@@ -114,3 +114,44 @@ describe("forge fusion", () => {
     expect(fusionSet(p, items[0]!.uid)).toBeNull();
   });
 });
+
+describe("gear sets", () => {
+  it("every template belongs to exactly one set, and sets never share a slot twice", async () => {
+    const { EQUIPMENT_TEMPLATES } = await import("@/game/data/equipment");
+    const { GEAR_SETS, setOf } = await import("@/game/data/gearSets");
+    for (const t of EQUIPMENT_TEMPLATES) expect(setOf(t.id), t.id).toBeDefined();
+    for (const s of Object.values(GEAR_SETS)) {
+      const slots = s.pieces.map((id) => EQUIPMENT_TEMPLATES.find((t) => t.id === id)!.slot);
+      expect(new Set(slots).size).toBe(slots.length);
+      expect(s.pieces.length).toBeGreaterThanOrEqual(4);
+    }
+  });
+  it("two pieces give the stat, four grant the set effect", async () => {
+    const { createDefaultProfile } = await import("@/game/progression/profile");
+    const { computeModifiers, computePlayerStats } = await import("@/game/progression/stats");
+    const { generateItem } = await import("@/game/economy/loot");
+    const { Rng } = await import("@/game/engine/rng");
+    const { EQUIPMENT_TEMPLATES } = await import("@/game/data/equipment");
+    const rng = new Rng(4);
+    const p = createDefaultProfile();
+    const pieces = ["riftglass_saber", "crown_of_embers", "cinder_gauntlets", "rift_shard"];
+    const items = pieces.map((id) => {
+      const t = EQUIPMENT_TEMPLATES.find((x) => x.id === id)!;
+      const it = generateItem(rng, 3, "rare", t.slot);
+      it.templateId = id;
+      it.effect = undefined;
+      return it;
+    });
+    p.equipment.inventory.push(...items);
+    p.equipment.equipped[items[0]!.slot] = items[0]!.uid;
+    const one = computePlayerStats(p).critDamage;
+    p.equipment.equipped[items[1]!.slot] = items[1]!.uid;
+    const crown = items[1]!;
+    const two = computePlayerStats(p).critDamage;
+    expect(two).toBeGreaterThan(one + (crown.mainStat === "critDamage" ? 0 : 0.01));
+    expect(computeModifiers(p).gearEffects.has("huntmark")).toBe(false);
+    p.equipment.equipped[items[2]!.slot] = items[2]!.uid;
+    p.equipment.equipped[items[3]!.slot] = items[3]!.uid;
+    expect(computeModifiers(p).gearEffects.has("huntmark")).toBe(true);
+  });
+});
