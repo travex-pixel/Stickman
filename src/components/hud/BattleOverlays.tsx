@@ -6,7 +6,7 @@ import { useController, useHud, useProfile, useProfileRef, useUi } from "@/hooks
 import { SUMMONS } from "@/game/data/summons";
 import type { WorldSnapshot } from "@/game/engine/World";
 import { ENEMIES } from "@/game/data/enemies";
-import { regionForStage } from "@/game/data/regions";
+import { bossForStage } from "@/game/data/regions";
 import { currentQuest, isQuestComplete, questProgress } from "@/game/progression/quests";
 import { extractionChance } from "@/game/summons/extraction";
 import { computeModifiers } from "@/game/progression/stats";
@@ -139,7 +139,8 @@ function WaveBanner() {
   const phase = useHud((s) => s?.phase ?? "intro");
   const wave = useHud((s) => s?.wave ?? 0);
   const stage = useHud((s) => s?.stage ?? 1);
-  const bossDef = ENEMIES[regionForStage(stage).bossId];
+  const mode = useHud((s) => s?.mode ?? "campaign");
+  const bossDef = ENEMIES[bossForStage(stage, mode)];
   const bossName = bossDef?.name.toUpperCase() ?? "THE WARDEN";
   const counter = phase === "boss_intro" ? bossDef?.counter : undefined;
   const label = phase === "boss_intro" ? bossName : phase === "between" ? (wave >= 3 ? "THE WARDEN STIRS" : "WAVE CLEARED") : phase === "intro" ? `STAGE ${stage}` : null;

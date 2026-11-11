@@ -53,13 +53,20 @@ export function updateBossAi(world: World, b: Combatant, dt: number): void {
   switch (bs.pattern) {
     case "idle": {
       bs.patternTimer -= dt;
-      if (d > b.stats.range + target.radius * 0.5) world.moveToward(b, target.pos, dt, 1);
+      const herald = b.enemy?.defId === "ember_herald";
+      if (herald && d < 150) world.moveAway(b, target.pos, dt, 0.8);
+      else if (d > b.stats.range + target.radius * 0.5) world.moveToward(b, target.pos, dt, 1);
       else world.stop(b);
       b.facing = target.pos.x >= b.pos.x ? 1 : -1;
       if (bs.patternTimer <= 0) {
         bs.patternStep += 1;
         const roll = world.rng.next();
-        if (b.enemy?.defId === "drowned_warden") {
+        if (b.enemy?.defId === "ember_herald") {
+          if (d < 120 && bs.patternStep % 2 === 0) startBlink(world, b, target);
+          else if (bs.phase === 2 && bs.patternStep % 4 === 0) heraldCall(world, b);
+          else if (roll < 0.55) startRiptide(world, b);
+          else startVolley(world, b, target);
+        } else if (b.enemy?.defId === "drowned_warden") {
           if (bs.phase === 2 && bs.patternStep % 3 === 0) startRiptide(world, b);
           else if (bs.patternStep % 3 === 1 || (d > 140 && roll < 0.4)) startUndertow(world, b, target);
           else if (bs.phase === 2 && roll < 0.35) startSlam(world, b);
@@ -163,14 +170,14 @@ export function updateBossAi(world: World, b: Combatant, dt: number): void {
         ext.burstCount = (ext.burstCount ?? 0) + 1;
         const spread = (ext.burstCount - 3) * 22;
         const aim = { x: target.pos.x, y: Math.max(ARENA.minY, Math.min(ARENA.maxY, target.pos.y + spread)) };
-        const p = world.spawnProjectile(b, aim, 420, "warden_bolt", 0.8);
+        const p = world.spawnProjectile(b, aim, 420, b.enemy?.defId === "ember_herald" ? "ember" : "warden_bolt", 0.8);
         p.radius = 12;
       }
       if (bs.patternTimer <= 0) {
         ext.burstCount = 0;
         world.setState(b, "recover", 0.6);
         bs.pattern = "idle";
-        bs.patternTimer = 0.9;
+        bs.patternTimer = 0.9 + heraldRest(b);
       }
       break;
     }
@@ -206,7 +213,8 @@ export function updateBossAi(world: World, b: Combatant, dt: number): void {
         ext.burstNext = 0.4;
         ext.burstCount = (ext.burstCount ?? 0) + 1;
         const at = { x: target.pos.x + target.vel.x * 0.35, y: Math.max(ARENA.minY, Math.min(ARENA.maxY, target.pos.y + target.vel.y * 0.35)) };
-        world.addTelegraph(at, RIPTIDE_RADIUS, RIPTIDE_DELAY, "circle", 1, 0, 0x8fc9c4);
+        const fire = b.enemy?.defId === "ember_herald";
+        world.addTelegraph(at, RIPTIDE_RADIUS, RIPTIDE_DELAY, "circle", 1, 0, fire ? 0xd9823f : 0x8fc9c4);
         const power = b.stats.attack;
         world.schedule(RIPTIDE_DELAY, () => {
           if (b.dead) return;
@@ -215,20 +223,62 @@ export function updateBossAi(world: World, b: Combatant, dt: number): void {
             if (e.dead || e.faction === b.faction || dist(e.pos, at) > RIPTIDE_RADIUS) continue;
             world.dealDamage(b, e, 1.0, "void", true);
           }
-          world.addHazard(at, RIPTIDE_RADIUS * 0.85, 2.4, power * 0.3, "enemy", b.id, "tide");
+          world.addHazard(at, RIPTIDE_RADIUS * 0.85, 2.4, power * 0.3, "enemy", b.id, fire ? "fire" : "tide");
         });
       }
       if (bs.patternTimer <= 0) {
         ext.burstCount = 0;
         world.setState(b, "recover", 0.8);
         bs.pattern = "idle";
-        bs.patternTimer = 1.0;
+        bs.patternTimer = 1.0 + heraldRest(b);
+      }
+      break;
+    }
+    case "blink": {
+      bs.patternTimer -= dt;
+      world.stop(b);
+      b.state = "cast";
+      if (bs.patternTimer <= 0) {
+        const from = { ...b.pos };
+        // Leave fire where it stood and reappear across the field.
+        world.addHazard(from, 64, 2.6, b.stats.attack * 0.25, "enemy", b.id, "fire");
+        b.pos.x = target.pos.x > (ARENA.minX + ARENA.maxX) / 2 ? ARENA.minX + 70 : ARENA.maxX - 70;
+        b.pos.y = Math.max(ARENA.minY, Math.min(ARENA.maxY, target.pos.y + (world.rng.next() - 0.5) * 60));
+        b.prevPos = { ...b.pos };
+        world.events.push({ type: "dodge", id: b.id, from, to: { ...b.pos } });
+        world.events.push({ type: "hazard", pos: from, radius: 64, kind: "fire", duration: 0.4 });
+        bs.pattern = "idle";
+        bs.patternTimer = 0.9;
       }
       break;
     }
     default:
       bs.pattern = "idle";
   }
+}
+
+function startBlink(world: World, b: Combatant, target: Combatant): void {
+  b.boss!.pattern = "blink";
+  b.boss!.patternTimer = 0.55;
+  world.addTelegraph({ ...b.pos }, 64, 0.55, "circle", 1, 0, 0xd9823f);
+  b.facing = target.pos.x >= b.pos.x ? 1 : -1;
+}
+
+/** Phase 2: the Herald calls two husks to stand between it and the warrior. */
+function heraldCall(world: World, b: Combatant): void {
+  const living = Array.from(world.entities.values()).filter((e) => !e.dead && e.enemy?.ownerId === b.id).length;
+  if (living >= 4) return startRiptide(world, b);
+  for (const dy of [-34, 34]) {
+    const pos = { x: Math.max(ARENA.minX + 10, Math.min(ARENA.maxX - 10, b.pos.x - b.facing * 50)), y: Math.max(ARENA.minY, Math.min(ARENA.maxY, b.pos.y + dy)) };
+    world.addTelegraph(pos, 26, 0.6, "circle", 1, 0, 0xd9823f);
+    world.schedule(0.6, () => {
+      if (!b.dead) world.spawnEnemy("husk", { pos, minion: true, ownerId: b.id });
+    });
+  }
+  world.events.push({ type: "minion_called", id: b.id, pos: { ...b.pos } });
+  world.setState(b, "cast", 0.6);
+  b.boss!.pattern = "idle";
+  b.boss!.patternTimer = 1.0;
 }
 
 const UNDERTOW_HALF_WIDTH = 52;
@@ -280,4 +330,9 @@ function startVolley(world: World, b: Combatant, target: Combatant): void {
   ext.burstNext = 0.45;
   ext.burstCount = 0;
   world.addTelegraph({ x: target.pos.x, y: target.pos.y }, 60, 0.45, "circle", 1, 0, 0x7cf6ff);
+}
+
+/** The Herald is a caster: it breathes between spells, and those pauses are the windows to reach it. */
+function heraldRest(b: Combatant): number {
+  return b.enemy?.defId === "ember_herald" ? 0.9 : 0;
 }

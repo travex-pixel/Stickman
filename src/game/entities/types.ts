@@ -71,7 +71,7 @@ export interface EnemyState {
 export interface BossState {
   phase: 1 | 2;
   patternTimer: number;
-  pattern: "idle" | "swing" | "charge" | "slam" | "volley" | "undertow" | "riptide";
+  pattern: "idle" | "swing" | "charge" | "slam" | "volley" | "undertow" | "riptide" | "blink";
   patternStep: number;
   /** Charge: who has already been hit this charge. */
   chargeHit?: Set<number>;

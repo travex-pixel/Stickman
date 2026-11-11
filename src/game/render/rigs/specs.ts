@@ -45,6 +45,7 @@ export function enemySpec(defId: string): RigSpec {
     case "lurker":
       return { ...base, style: "lean", weapon: "dagger", height: 86, hood: true, cape: true };
     case "boss":
+      if (defId === "ember_herald") return { ...base, style: "robed", weapon: "staff", glow: eye, height: 158, hood: true, floating: true, cape: true, aura: 40 };
       return { ...base, style: "warden", weapon: "greatsword", glow: eye, height: 178, horns: true, cape: true, aura: 46 };
     default:
       return { ...base, style: "lean", weapon: "dagger", height: 94 };
@@ -64,6 +65,7 @@ export function summonSpec(defId: string): RigSpec {
     case "ranger":
       return { ...base, style: "archer", weapon: "bow", height: 96, hood: true };
     case "arcanist":
+      if (defId === "ember_herald") return { ...base, style: "robed", weapon: "staff", height: 128, hood: true, floating: true, cape: true, aura: 22 };
       return { ...base, style: "robed", weapon: "staff", height: 102, hood: true, floating: true };
     case "sovereign":
       return { ...base, style: "warden", weapon: "greatsword", height: 162, horns: true, cape: true, aura: 40 };

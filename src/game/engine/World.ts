@@ -12,7 +12,7 @@ import type { PlayerLoadout, DeployedSummonLoadout } from "../progression/loadou
 import type { AbilityId, SummonCommand, Element } from "../data/ids";
 import { ABILITIES, ABILITY_SLOTS, ULTIMATE_ENERGY_COST, ULTIMATE_ID } from "../data/abilities";
 import { enemyDef } from "../data/enemies";
-import { isBossStage, regionForStage, stageScale, type WaveDef } from "../data/regions";
+import { bossForStage, isBossStage, regionForStage, stageScale, type WaveDef } from "../data/regions";
 import { computeDamage } from "../combat/damage";
 import { addStatus, hasStatus, speedMultiplier, statusValue, tickStatuses } from "../combat/statuses";
 import { nearestHostile, hostilesWithin, factionWithin } from "../combat/targeting";
@@ -600,8 +600,7 @@ export class World {
   }
 
   private startBossIntro(): void {
-    const region = regionForStage(this.stage);
-    const def = enemyDef(region.bossId);
+    const def = enemyDef(bossForStage(this.stage, this.mode));
     const scale = stageScale(this.stage);
     const boss = createEnemy(this.allocId(), def, { x: ARENA.maxX - 70, y: ARENA.homeY }, scale, this.stage, this.mode !== "trial");
     boss.kind = "boss";
@@ -1177,11 +1176,15 @@ export class World {
         if (Math.abs(e.pos.x - p.pos.x) < e.radius + p.radius && Math.abs(e.pos.y - p.pos.y) < e.radius * 0.8 + p.radius) {
           p.hitIds.push(e.id);
           const owner = this.entities.get(p.ownerId);
-          if (hasStatus(e, "invuln")) continue;
+          if (hasStatus(e, "invuln") || hasStatus(e, "submerged")) continue;
           const fromX = p.pos.x - Math.sign(p.vel.x || 1) * 30;
           const dmg = Math.max(1, Math.round(p.damage * Math.max(0.15, 30 / (30 + e.stats.defense)) * this.blockFactor(e, fromX, false)));
           this.applyRawDamage(e, dmg, p.kind === "ember" ? "fire" : p.kind === "warden_bolt" ? "void" : "physical", owner?.id ?? -1, p.crit, p.kind === "warden_bolt");
           if (p.kind === "ember") addStatus(e, { kind: "burn", remaining: 2.5, value: p.damage * 0.25, sourceId: p.ownerId });
+          // Herald's Heat: the bound Herald's embers scorch whoever stands beside the target.
+          if (owner?.defId === "ember_herald" && owner.kind === "summon") {
+            for (const o of factionWithin(e.pos, e.faction, this.entities.values(), 56)) if (o.id !== e.id) this.applyRawDamage(o, Math.max(1, Math.round(dmg * 0.4)), "fire", owner.id, false);
+          }
           this.events.push({ type: "projectile_hit", id: p.id, pos: { ...p.pos }, kind: p.kind });
           if (p.pierce <= 0) {
             consumed = true;

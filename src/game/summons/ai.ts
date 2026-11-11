@@ -147,6 +147,27 @@ function tryActive(world: World, s: Combatant, target: Combatant, nearby: Combat
       world.setState(s, "attack", 0.25);
       return true;
     }
+    case "ember_herald": {
+      // Pyre Rain: three columns of fire on the thickest knots of enemies.
+      const foes = world.enemies().filter((e) => !isHidden(e));
+      if (foes.length < 2 && target.kind !== "boss") return false;
+      const spots = foes
+        .map((e) => ({ e, n: factionWithin(e.pos, "enemy", world.entities.values(), 70).length }))
+        .sort((a, b) => b.n - a.n)
+        .slice(0, 3)
+        .map((x) => ({ ...x.e.pos }));
+      for (const at of spots) {
+        world.addTelegraph(at, 60, 0.5, "circle", 1, 0, 0xd9823f);
+        world.schedule(0.5, () => {
+          if (s.dead) return;
+          for (const e of factionWithin(at, "enemy", world.entities.values(), 60)) world.dealDamage(s, e, 1.6, "fire", true);
+          world.addHazard(at, 52, 4, s.stats.attack * 0.6, "ally", s.id, "fire");
+        });
+      }
+      world.events.push({ type: "summon_ability", id: s.id, defId: s.defId, ability: "Pyre Rain", pos: { ...s.pos } });
+      world.setState(s, "cast", 0.6);
+      return true;
+    }
     case "tidestalker": {
       // Dive the backline: the ranged or casting enemy furthest from the warrior.
       let victim: Combatant | null = null;

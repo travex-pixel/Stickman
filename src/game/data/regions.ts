@@ -24,6 +24,8 @@ export interface RegionDef {
   subtitle: string;
   lore: string;
   bossId: string;
+  /** Optional per-stage boss override, so a region's bosses are not all the same fight. */
+  bossFor?: (stage: number) => string;
   /** Builds the three regular waves for a given stage number (1-based) in this region. */
   waves: (stage: number) => WaveDef[];
   /** Stage where the region begins. */
@@ -111,6 +113,8 @@ export const REGIONS: RegionDef[] = [
     subtitle: "Where the first Rift opened",
     lore: "The Verge was a border town once. Then the sky split, and the town learned that borders are only ideas.",
     bossId: "hollow_warden",
+    // The Warden opens and closes the Verge; its Herald holds the middle.
+    bossFor: (stage) => (stage === 3 ? "ember_herald" : "hollow_warden"),
     waves: ashenVergeWaves,
     firstStage: 1,
     palette: { sky: 0x0a0d18, fog: 0x3a4460, ground: 0x2e3445, horizon: 0x2a3660, ember: 0xff7a3d },
@@ -163,3 +167,9 @@ export function isBossStage(stage: number): boolean {
 }
 
 export const WAVES_PER_STAGE = 3;
+
+/** The boss guarding a campaign stage. Rank Trials always face the region's Warden. */
+export function bossForStage(stage: number, mode: string = "campaign"): string {
+  const region = regionForStage(stage);
+  return mode !== "trial" && region.bossFor ? region.bossFor(stage) : region.bossId;
+}

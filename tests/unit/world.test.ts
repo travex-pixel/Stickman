@@ -577,3 +577,58 @@ describe("Drowned Lurker and Tidestalker", () => {
     expect(archer.hp < archer.stats.maxHp || archer.dead).toBe(true);
   });
 });
+
+describe("Ember Herald", () => {
+  it("guards stage 3 while Rank Trials still face the Warden", async () => {
+    const { bossForStage } = await import("@/game/data/regions");
+    expect(bossForStage(1)).toBe("hollow_warden");
+    expect(bossForStage(3)).toBe("ember_herald");
+    expect(bossForStage(3, "trial")).toBe("hollow_warden");
+    expect(bossForStage(6)).toBe("hollow_warden");
+  });
+  it("blinks away from melee, rains fire, and calls husks below half health", () => {
+    const w = freshWorld(3, 14);
+    step(w, 1);
+    for (const e of w.entities.values()) if (e.kind === "enemy") e.dead = true;
+    w.player.stats.maxHp = 1e7;
+    w.player.hp = 1e7;
+    const b = w.spawnEnemy("ember_herald", { pos: { x: w.player.pos.x + 60, y: w.player.pos.y } });
+    b.kind = "boss";
+    b.stats.maxHp = 1e7;
+    b.hp = 1e7;
+    b.boss = { phase: 1, patternTimer: 0.2, pattern: "idle", patternStep: 1, introTimer: 0, enraged: false };
+    const ev: GameEvent[] = [];
+    let blinked = false;
+    for (let i = 0; i < 60 * 25; i++) {
+      const before = b.pos.x;
+      w.update(FIXED_DT);
+      ev.push(...w.drainEvents());
+      if (Math.abs(b.pos.x - before) > 150) blinked = true;
+      w.player.pos.x = b.pos.x - 50; // keep pressing it
+    }
+    expect(blinked).toBe(true);
+    expect(ev.some((e) => e.type === "hazard" && e.kind === "fire")).toBe(true);
+    b.hp = b.stats.maxHp * 0.4;
+    let minions = 0;
+    for (let i = 0; i < 60 * 30 && minions === 0; i++) {
+      w.update(FIXED_DT);
+      w.drainEvents();
+      minions = Array.from(w.entities.values()).filter((e) => !e.dead && e.enemy?.ownerId === b.id).length;
+    }
+    expect(minions).toBeGreaterThan(0);
+  });
+  it("binds into a shadow whose Pyre Rain burns enemy packs", () => {
+    expect(enemyDef("ember_herald").essenceSummonId).toBe("ember_herald");
+    const p = createDefaultProfile();
+    p.player.level = 10;
+    claimEssence(p, "ember_herald");
+    p.summons.collection[0]!.deployed = true;
+    const w = new World({ stage: 3, loadout: buildLoadout(p), seed: 2 });
+    step(w, 1);
+    for (const e of w.entities.values()) if (e.kind === "enemy") e.dead = true;
+    for (let i = 0; i < 4; i++) w.spawnEnemy("husk", { pos: { x: w.player.pos.x + 140 + i * 6, y: w.player.pos.y + (i % 2) * 10 } });
+    const ev: GameEvent[] = [];
+    step(w, 5, ev);
+    expect(ev.some((e) => e.type === "summon_ability" && e.ability === "Pyre Rain")).toBe(true);
+  });
+});
