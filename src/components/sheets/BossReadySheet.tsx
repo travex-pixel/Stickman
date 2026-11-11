@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/Button";
 import { Row } from "@/components/ui/Row";
 import { Sheet } from "@/components/ui/Sheet";
 import { CurrencyGlyph } from "@/components/ui/Currency";
+import { SummonPortrait } from "@/components/ui/Portrait";
 import { useController, useHud, useProfileRef } from "@/hooks/useGame";
 import { useStore } from "@/lib/store";
 import { useShortScreen } from "@/hooks/useShortScreen";
@@ -52,7 +53,8 @@ export function BossReadySheet({ modal, open }: { modal: Extract<Modal, { kind: 
   const profile = useProfileRef();
   const fc = useStore(c.forecastStore, (s) => s);
   const alive = useHud((s) => s?.player.alive ?? true);
-  const boss = ENEMIES[bossForStage(modal.stage)];
+  const bossId = bossForStage(modal.stage);
+  const boss = ENEMIES[bossId];
   const tips = readinessTips(profile, modal.stage);
   const forecast = fc?.stage === modal.stage ? fc.forecast : null;
   const running = !!fc?.running;
@@ -66,10 +68,17 @@ export function BossReadySheet({ modal, open }: { modal: Extract<Modal, { kind: 
   return (
     <Sheet open={open} onDismiss={() => c.closeModal()} testId="modal-boss_ready" labelledBy="boss-ready-title">
       <div data-testid="boss-ready">
-        <span className="t-eyebrow text-threat">Boss · Stage {modal.stage}</span>
-        <h2 id="boss-ready-title" className="t-display text-t1 mt-1.5">
-          {boss?.name ?? "The Warden"}
-        </h2>
+        {/* The boss itself, its battlefield rig, beside its name: reviewers found the sheet "reads like a
+            settings sheet, not a boss intro" without it. */}
+        <div className="flex items-end justify-between gap-3">
+          <div className="min-w-0">
+            <span className="t-eyebrow text-threat">Boss · Stage {modal.stage}</span>
+            <h2 id="boss-ready-title" className="t-display text-t1 mt-1.5">
+              {boss?.name ?? "The Warden"}
+            </h2>
+          </div>
+          <SummonPortrait defId={bossId} size={short ? 48 : 64} enemy />
+        </div>
         <p className="t-label text-t2 mt-1 flex flex-wrap items-center gap-x-1.5">
           <span>Clears the way to stage {modal.stage + 1}</span>
           <span aria-hidden="true">·</span>

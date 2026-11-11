@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { collectErrors, game, waitForGame } from "./helpers";
 
 test.describe("ASCEND systems", () => {
@@ -61,6 +61,24 @@ test.describe("ASCEND systems", () => {
   });
 });
 
+/** The guide's fingertip meets its target: inside it across, within a few pixels of its top or bottom edge. */
+async function expectHandOnTarget(page: Page) {
+  await page.waitForTimeout(400);
+  const r = await page.evaluate(() => {
+    const target = document.querySelector("[data-testid=hand-guide]")?.getAttribute("data-target");
+    const hand = document.querySelector("[data-testid=hand-pointer]");
+    const el = target ? document.querySelector(`[data-guide="${target}"]`) : null;
+    if (!hand || !el) return null;
+    const b = el.getBoundingClientRect();
+    const x = Number(hand.getAttribute("data-tip-x"));
+    const y = Number(hand.getAttribute("data-tip-y"));
+    return { target, across: x >= b.left - 1 && x <= b.right + 1, gap: Math.min(Math.abs(y - b.top), Math.abs(y - b.bottom)) };
+  });
+  expect(r, "hand and target on screen").not.toBeNull();
+  expect(r!.across, `fingertip across ${r!.target}`).toBe(true);
+  expect(r!.gap, `fingertip at the edge of ${r!.target}`).toBeLessThanOrEqual(6);
+}
+
 test.describe("onboarding", () => {
   test("the tutorial advances when the player performs each lesson", async ({ page }) => {
     test.setTimeout(120_000);
@@ -74,6 +92,7 @@ test.describe("onboarding", () => {
     // The first oath never fades and the guide points at it.
     await page.waitForSelector("[data-testid=claim-essence]", { timeout: 60_000 });
     await expect(page.getByTestId("hand-guide")).toHaveAttribute("data-target", "claim-essence", { timeout: 10_000 });
+    await expectHandOnTarget(page);
     await page.getByTestId("claim-essence").first().click();
     await expect(page.getByTestId("summon-reveal-continue")).toBeVisible({ timeout: 10_000 });
     await page.getByTestId("summon-reveal-continue").click();
@@ -91,6 +110,8 @@ test.describe("onboarding", () => {
     expect(await game<boolean>(page, "c => c.profile.progress.autoPush")).toBe(false);
     await expect(page.getByTestId("push-stage")).toBeVisible();
     await expect(page.getByTestId("hand-guide")).toHaveAttribute("data-target", /upgrade-maxHp|upgrade-attack|tab-hero/, { timeout: 10_000 });
+    // Low on the screen, so the hand points down from above: its fingertip, not its cuff, meets the target.
+    await expectHandOnTarget(page);
     await page.getByTestId("push-stage").click();
     await expect.poll(() => game<number>(page, "c => c.world.stage"), { timeout: 10_000 }).toBe(3);
   });

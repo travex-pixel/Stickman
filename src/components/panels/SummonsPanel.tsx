@@ -262,8 +262,12 @@ function EmptyArmy() {
 
 function codexSummary(profile: Profile): string {
   const b = codexBonus(profile);
-  const parts = (Object.entries(b) as [keyof typeof b, number][]).filter(([, v]) => v > 0).map(([k, v]) => `+${Math.round(v * 100)}% ${STAT_LABEL[k].replace("Critical ", "Crit ")}`);
-  return parts.length ? `Codex ${parts.slice(0, 2).join(", ")}${parts.length > 2 ? " …" : ""}` : "";
+  // The strongest bonus and a count of the rest: two bonuses and an ellipsis read as cut off.
+  const parts = (Object.entries(b) as [keyof typeof b, number][])
+    .filter(([, v]) => v > 0)
+    .sort((x, y) => y[1] - x[1])
+    .map(([k, v]) => `+${Math.round(v * 100)}% ${STAT_LABEL[k].replace("Critical ", "Crit ")}`);
+  return parts.length ? `Codex ${parts[0]}${parts.length > 1 ? ` · ${parts.length - 1} more` : ""}` : "";
 }
 
 /**

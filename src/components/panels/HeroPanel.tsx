@@ -23,6 +23,8 @@ const STATS: UpgradeableStat[] = ["attack", "maxHp", "defense", "attackSpeed", "
 /** Sentence case, short enough for a half-width cell on a 320px phone. */
 const LABEL: Record<UpgradeableStat, string> = { attack: "Attack", maxHp: "Health", defense: "Defence", attackSpeed: "Attack speed", critChance: "Crit rate", critDamage: "Crit damage" };
 const NARROW: Partial<Record<UpgradeableStat, string>> = { attackSpeed: "Speed", critDamage: "Crit dmg" };
+/** From 360 to 399px the stat glyph takes the room the long names had: "Attack spe..." in review. */
+const MID: Partial<Record<UpgradeableStat, string>> = { attackSpeed: "Atk speed", critDamage: "Crit dmg" };
 /** A glyph per stat, before its name from 360px up: the grid reads as a game's, not a dashboard's. */
 const STAT_ICON: Record<UpgradeableStat, IconName> = { attack: "sword", maxHp: "heart", defense: "shield", attackSpeed: "speed", critChance: "crit", critDamage: "critdmg" };
 /** Stats whose every 25th level multiplies them: their cells carry a gold milestone line. */
@@ -117,7 +119,8 @@ function StatCell({ stat, index, profile, value, next, best, onUpgrade, onDenied
   const edges = cn("relative min-w-0 min-h-0 shadow-[inset_0_-1px_0_var(--line)]", index % 2 === 0 && "after:absolute after:right-0 after:top-0 after:bottom-0 after:w-px after:bg-[var(--line)] after:content-['']");
   const label = (
     <>
-      <span className="hidden min-[360px]:inline">{LABEL[stat]}</span>
+      <span className="hidden min-[400px]:inline">{LABEL[stat]}</span>
+      <span className="hidden min-[360px]:inline min-[400px]:hidden">{MID[stat] ?? LABEL[stat]}</span>
       <span className="min-[360px]:hidden">{NARROW[stat] ?? LABEL[stat]}</span>
     </>
   );

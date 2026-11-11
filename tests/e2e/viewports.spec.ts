@@ -130,3 +130,46 @@ for (const vp of VIEWPORTS) {
     }
   });
 }
+
+/** Long sheets scroll, but their main action is pinned: it is fully on screen at every size. */
+for (const vp of VIEWPORTS) {
+  test(`sheet actions stay on screen at ${vp.w}x${vp.h}`, async ({ page }) => {
+    await page.setViewportSize({ width: vp.w, height: vp.h });
+    await waitForGame(page);
+    const onScreen = async (modal: string, id: string) => {
+      // Measure once the sheet has finished sliding in: it waits a moment before it starts, so
+      // "not moving" alone would catch it still parked below the screen.
+      await page.waitForFunction(
+        (m) => {
+          const sheet = document.querySelector(`[data-testid=${m}] .panel-surface`);
+          if (!sheet) return false;
+          const t = getComputedStyle(sheet).transform;
+          return t === "none" || t === "matrix(1, 0, 0, 1, 0, 0)";
+        },
+        modal,
+        { timeout: 15_000 },
+      );
+      const box = await page.getByTestId(id).boundingBox();
+      expect(box, `${id} rendered`).not.toBeNull();
+      expect(box!.y, `${id} top`).toBeGreaterThanOrEqual(0);
+      expect(box!.y + box!.height, `${id} bottom at ${vp.w}x${vp.h}`).toBeLessThanOrEqual(vp.h + 0.5);
+    };
+    // The return summary at its fullest: a waiting boss, shards and upgrades ready.
+    await page.evaluate(() => {
+      const c = (window as unknown as { __ASCEND__: { profile: { player: { gold: number } }; uiStore: { update(f: (u: object) => object): void } } }).__ASCEND__;
+      c.profile.player.gold = 184000;
+      c.uiStore.update((u) => ({ ...u, modal: { kind: "offline", levels: 2, summary: { seconds: 14400, capped: false, foughtSeconds: 5760, startStage: 11, endStage: 12, stagesCleared: [11], cycles: 120, kills: 2100, elites: 14, gold: 184000, xp: 52000, essence: 420, items: [], salvageGold: 1200, shards: { husk_blade: 4 }, bossWaiting: 12, fellBack: false } } }));
+    });
+    await page.waitForTimeout(900);
+    await onScreen("modal-offline", "offline-collect");
+    await page.getByTestId("offline-collect").click();
+    await page.waitForTimeout(500);
+    await page.evaluate(() => {
+      const c = (window as unknown as { __ASCEND__: { profile: { progress: { bestStage: number } }; openAscension(): void } }).__ASCEND__;
+      c.profile.progress.bestStage = 25;
+      c.openAscension();
+    });
+    await page.waitForTimeout(900);
+    await onScreen("modal-ascend", "ascend-confirm");
+  });
+}

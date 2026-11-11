@@ -18,6 +18,11 @@ interface SheetProps {
   className?: string;
   /** Rendered above everything (z-50) by default; pass a lower layer for in-field sheets. */
   zClass?: string;
+  /**
+   * The sheet's own actions, pinned under the scrolling content so the main one is always in
+   * view: at 320x568 Collect and "Hold to ascend" fell below the fold of long sheets.
+   */
+  footer?: ReactNode;
 }
 
 const EASE_OUT = [0.16, 1, 0.3, 1] as const;
@@ -56,7 +61,7 @@ const EASE_IN = [0.4, 0, 1, 1] as const;
  * the safe area. Enters from below (320ms ease-out), leaves faster (200ms ease-in) over a blurred
  * scrim. Content scrolls inside a sheet capped at 86dvh.
  */
-export function Sheet({ open, onDismiss, dismissible = true, children, testId, label, labelledBy, className, zClass = "z-50" }: SheetProps) {
+export function Sheet({ open, onDismiss, dismissible = true, children, testId, label, labelledBy, className, zClass = "z-50", footer }: SheetProps) {
   const reduced = useReducedEffects();
   const drag = useDragControls();
   const canDismiss = dismissible && !!onDismiss;
@@ -94,9 +99,10 @@ export function Sheet({ open, onDismiss, dismissible = true, children, testId, l
             <div className="shrink-0 h-[30px] flex items-start justify-center pt-[10px] touch-none" onPointerDown={(e) => canDismiss && drag.start(e)} aria-hidden="true">
               {canDismiss && <span className="h-1 w-9 rounded-full bg-[var(--line-2)]" />}
             </div>
-            <div className="min-h-0 overflow-y-auto overscroll-contain px-5 pb-[calc(20px+var(--sab))]" style={{ touchAction: "pan-y" }}>
+            <div className={cn("min-h-0 overflow-y-auto overscroll-contain px-5", footer ? "pb-1" : "pb-[calc(20px+var(--sab))]")} style={{ touchAction: "pan-y" }}>
               {children}
             </div>
+            {footer && <div className="shrink-0 px-5 pt-4 pb-[calc(20px+var(--sab))]">{footer}</div>}
           </motion.div>
         </div>
       )}

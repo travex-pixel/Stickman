@@ -23,7 +23,7 @@ export function AscendSheet({ open }: { open: boolean }) {
   const spare = spendableAether(profile);
   const [tab, setTab] = useState<Tab>(() => (spare > 0 && !canAscend(profile) ? "tree" : "ascend"));
   return (
-    <Sheet open={open} onDismiss={() => c.closeModal()} testId="modal-ascend" label="Ascension">
+    <Sheet open={open} onDismiss={() => c.closeModal()} testId="modal-ascend" label="Ascension" footer={tab === "ascend" ? <AscendActions /> : undefined}>
       <Segmented<Tab> value={tab} onChange={setTab} stretch label="Ascension">
         <Segment id="ascend" data-testid="ascend-tab-ascend">
           Ascend
@@ -43,7 +43,6 @@ function mult(n: number): string {
 }
 
 function AscendBody() {
-  const c = useController();
   const profile = useProfileRef();
   const a = profile.ascension;
   const can = canAscend(profile);
@@ -90,14 +89,24 @@ function AscendBody() {
       ) : (
         <p className="t-label text-t2 mt-4">Reach stage {ASCEND_MIN_STAGE} to ascend. Deeper stages grant more Aether.</p>
       )}
-      <div className="mt-5 flex items-center gap-3">
-        <Button variant="plain" className="shrink-0 px-4" onClick={() => c.closeModal()} data-testid="ascend-later">
-          Not yet
-        </Button>
-        <HoldConfirm disabled={!can} onConfirm={() => c.confirmAscend()} className="flex-1" testId="ascend-confirm" label={`Hold to ascend for ${fmt(gain)} Aether`}>
-          Hold to ascend
-        </HoldConfirm>
-      </div>
+    </div>
+  );
+}
+
+/** Pinned under the Ascend tab's content (the sheet's footer), so the hold is always in view. */
+function AscendActions() {
+  const c = useController();
+  const profile = useProfileRef();
+  const can = canAscend(profile);
+  const gain = aetherFor(profile.progress.bestStage);
+  return (
+    <div className="flex items-center gap-3">
+      <Button variant="plain" className="shrink-0 px-4" onClick={() => c.closeModal()} data-testid="ascend-later">
+        Not yet
+      </Button>
+      <HoldConfirm disabled={!can} onConfirm={() => c.confirmAscend()} className="flex-1" testId="ascend-confirm" label={`Hold to ascend for ${fmt(gain)} Aether`}>
+        Hold to ascend
+      </HoldConfirm>
     </div>
   );
 }

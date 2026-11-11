@@ -24,7 +24,17 @@ export function OfflineSheet({ modal, open }: { modal: Extract<Modal, { kind: "o
   const shardTotal = Object.values(r.shards).reduce((a, b) => a + b, 0);
   const boss = r.bossWaiting ? ENEMIES[bossForStage(r.bossWaiting)] : undefined;
   return (
-    <Sheet open={open} onDismiss={() => c.dismissOffline()} testId="modal-offline" labelledBy="offline-title">
+    <Sheet
+      open={open}
+      onDismiss={() => c.dismissOffline()}
+      testId="modal-offline"
+      labelledBy="offline-title"
+      footer={
+        <Button variant="primary" block onClick={() => c.dismissOffline()} data-testid="offline-collect">
+          Collect
+        </Button>
+      }
+    >
       <MomentGroup className="flex flex-col" delay={0.12}>
         <div data-testid="offline-summary">
           <MomentItem>
@@ -78,26 +88,25 @@ export function OfflineSheet({ modal, open }: { modal: Extract<Modal, { kind: "o
               <Row gutter={false} title={nextMilestone(profile)} detail="Next" data-testid="offline-next" />
             )}
           </MomentItem>
+          {ups > 0 && (
+            <MomentItem>
+              {/* A row that leads somewhere, not a second button: beside Collect a quiet button read as
+                  a label in one blind round and as Collect's rival in the next. */}
+              <Row
+                gutter={false}
+                chevron
+                title={`${ups >= 50 ? "50+" : ups} upgrades ready`}
+                detail="Spend the gold on the Hero panel"
+                onClick={() => {
+                  c.dismissOffline();
+                  c.spendGoldNow();
+                }}
+                data-testid="offline-upgrade"
+              />
+            </MomentItem>
+          )}
         </div>
       </MomentGroup>
-      <div className="mt-5 flex items-center gap-3">
-        {ups > 0 && (
-          <Button
-            variant="quiet"
-            className="shrink-0 px-4"
-            onClick={() => {
-              c.dismissOffline();
-              c.spendGoldNow();
-            }}
-            data-testid="offline-upgrade"
-          >
-            {ups >= 50 ? "50+" : ups} upgrades ready
-          </Button>
-        )}
-        <Button variant="primary" className="flex-1" onClick={() => c.dismissOffline()} data-testid="offline-collect">
-          Collect
-        </Button>
-      </div>
     </Sheet>
   );
 }

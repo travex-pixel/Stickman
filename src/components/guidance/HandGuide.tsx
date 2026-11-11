@@ -72,15 +72,21 @@ export function HandGuide() {
   const vh = typeof window !== "undefined" ? window.innerHeight : 800;
   const cx = rect.x + rect.w / 2;
   const cy = rect.y + rect.h / 2;
-  // Place the hand below-right of the target when there is room, otherwise above-left.
-  // FIGHT sits at the foot of the readiness sheet: point from below so the sheet stays readable.
-  const handX = Math.min(vw - 60, Math.max(16, cx + 8));
-  const overlaps = (y: number) => keepClear.some((k) => handX < k.x + k.w && k.x < handX + 48 && y < k.y + k.h && k.y < y + 56);
+  // Point from below when the target is high on the screen, otherwise from above. FIGHT sits at
+  // the foot of the readiness sheet: point from below so the sheet stays readable. The drawing
+  // points up; from above it turns to point down, so the fingertip, never the cuff, meets the
+  // target (blind reviewers read an upright hand above Claim as pointing at its own label).
+  const TIP = { x: 19, y: 2.5 }; // the fingertip in the 48 x 56 drawing
+  const placeX = (from: boolean) => Math.min(vw - 52, Math.max(4, cx - (from ? TIP.x : 48 - TIP.x)));
+  const placeY = (from: boolean) => (from ? cy + rect.h / 2 + 2 - TIP.y : cy - rect.h / 2 - 2 - (56 - TIP.y));
+  const overlaps = (from: boolean) => keepClear.some((k) => placeX(from) < k.x + k.w && k.x < placeX(from) + 48 && placeY(from) < k.y + k.h && k.y < placeY(from) + 56);
   let below = cy < vh * 0.42 || guide.target === "boss-fight";
   // The hand never sits on the gate or a Claim either: point from the other side instead.
-  if (overlaps(below ? cy + rect.h / 2 + 2 : cy - rect.h / 2 - 60)) below = !below;
-  // The fingertip stops at the target's edge: the hand never covers what it points at.
-  const handY = below ? cy + rect.h / 2 + 2 : cy - rect.h / 2 - 60;
+  if (overlaps(below)) below = !below;
+  const handX = placeX(below);
+  const handY = placeY(below);
+  const tipX = handX + (below ? TIP.x : 48 - TIP.x);
+  const tipY = handY + (below ? TIP.y : 56 - TIP.y);
   let labelY = below ? handY + 64 : handY - 34;
   const labelX = Math.min(vw - 140, Math.max(10, cx - 70));
   // Never over the gate or a Claim: step the label above (or below) whatever it would cover.
@@ -89,11 +95,13 @@ export function HandGuide() {
     if (!hit) break;
     labelY = below ? hit.y + hit.h + 8 : hit.y - LABEL_H - 8;
   }
+  // Taps and holds move toward the target, whichever side the hand is on.
+  const toward = below ? -1 : 1;
   const gestureAnim =
     guide.gesture === "tap"
-      ? { y: [0, -10, 0], scale: [1, 0.9, 1] }
+      ? { y: [0, 10 * toward, 0], scale: [1, 0.9, 1] }
       : guide.gesture === "hold"
-        ? { scale: [1, 0.86, 0.86, 1], y: [0, -4, -4, 0] }
+        ? { scale: [1, 0.86, 0.86, 1], y: [0, 4 * toward, 4 * toward, 0] }
         : { x: [0, 6, 0], y: [0, -6, 0] };
   const duration = guide.gesture === "hold" ? 1.6 : guide.gesture === "tap" ? 0.9 : 1.4;
 
@@ -102,8 +110,10 @@ export function HandGuide() {
       {visible && (
         <motion.div key={guide.target} className="pointer-events-none fixed inset-0 z-[60]" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }} data-testid="hand-guide" data-target={guide.target}>
           <div className="guide-pulse" style={{ left: rect.x - 6, top: rect.y - 6, width: rect.w + 12, height: rect.h + 12 }} />
-          <motion.div className="absolute" style={{ left: handX, top: handY, width: 48, height: 56 }} animate={gestureAnim} transition={{ duration, repeat: Infinity, ease: "easeInOut" }}>
-            <Hand />
+          <motion.div className="absolute" style={{ left: handX, top: handY, width: 48, height: 56 }} animate={gestureAnim} transition={{ duration, repeat: Infinity, ease: "easeInOut" }} data-testid="hand-pointer" data-tip-x={Math.round(tipX)} data-tip-y={Math.round(tipY)}>
+            <div style={below ? undefined : { transform: "rotate(180deg)" }}>
+              <Hand />
+            </div>
           </motion.div>
           <motion.div
             className="absolute rounded-[14px] bg-bg-2 px-3 py-2 t-label text-t1"
