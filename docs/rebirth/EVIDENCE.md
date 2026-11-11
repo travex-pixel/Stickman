@@ -189,6 +189,34 @@ on the phase-2 build with the same method and fresh reviewers.
 What this says about method: before this test I judged the new screens finished and premium. The
 lint and the blind test both found what self-review missed.
 
+**First-session funnel (H5): NOT MET on either build. Verified (game seconds, bot).**
+
+`SECONDS=240 node scripts/ftue.mjs`, fresh save, the bot follows the hand guide, accepts cards,
+binds, upgrades every few seconds and fights a boss once its forecast is Ready or Even.
+
+| Moment | Old build | Phase-1 build |
+|---|---|---|
+| First kill; first shadow bound | 5.3s | 5.4 to 5.6s |
+| First upgrade | 6.1s | 6.8s |
+| First boss gate | 35.2s | 35.0s |
+| First boss win | 71.8s | 59.4s |
+| Tutorial finished | 72s | 35s |
+| Stage 3 cleared | 227s | 208s |
+| Longest stretch with nothing new | 113s (114 to 227) | 106s (103 to 208) |
+
+The first minute is strong on both. The quiet stretch is minutes 2 to 4: farming at the stage-3
+gate until the forecast turns. Response: the boss sheet now points at the Gold Vault (open from
+stage 2) while a gate is not winnable, and the bot can follow that advice (`VAULT=0` turns it
+off); re-measured below.
+
+A correction kept on the record: the bot's first report on both builds was invalid (it stalled
+on the first summon reveal because it timed open cards in game time, which stops while a card is
+open, yet it printed a full report). Fixed; runs that stop early now say so.
+
+**Long-term pacing (economy simulator).** A 100-hour run found a wall: stage 386 to 395 for the
+last 30 hours, Attack and Health pinned at their level cap. Limit Break now goes to 25 levels;
+the same player reaches 449 at 60 hours and 503 at 97. Details in `docs/DESIGN.md`.
+
 ### After phase 2
 
 To be filled.
