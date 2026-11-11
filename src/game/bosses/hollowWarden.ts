@@ -62,8 +62,8 @@ export function updateBossAi(world: World, b: Combatant, dt: number): void {
         bs.patternStep += 1;
         const roll = world.rng.next();
         if (b.enemy?.defId === "ember_herald") {
-          if (d < 120 && bs.patternStep % 2 === 0) startBlink(world, b, target);
-          else if (bs.phase === 2 && bs.patternStep % 4 === 0) heraldCall(world, b);
+          if (bs.phase === 2 && bs.patternStep % 4 === 0) heraldCall(world, b);
+          else if (d < 120 && bs.patternStep % 2 === 0) startBlink(world, b, target);
           else if (roll < 0.55) startRiptide(world, b);
           else startVolley(world, b, target);
         } else if (b.enemy?.defId === "drowned_warden") {
