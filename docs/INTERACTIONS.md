@@ -62,8 +62,8 @@ or error tone instead of silence when a press cannot succeed.
 | Depth line (Rift panel, `depth-chip`) | Say which Rift Depth this is and what its twist does | Stage 31 and beyond | Region subtitle instead | – | Tinted in the depth's colour | – | – |
 | Goals (Rift panel) | Daily and weekly objectives | Always | Badge when claimable | Opens objectives | – | – | – |
 | Claim (objective) | Collect an objective | Complete and unclaimed | "…" or Done | Claim | Toast with the payout | Gold, essence, cores (and the all-three bonus once a day) | Error tone |
-| Collect (offline card) | Close the return summary | Always | – | Close | Gold tone | Rewards were credited and saved before the card opened | – |
-| Upgrades ready (offline card, `offline-upgrade`) | Spend the return's gold | Affordable upgrades exist | Not shown | Closes the card and opens Hero with the hand guide on an upgrade | Panel switch | Nothing is bought for the player | – |
+| Collect (offline card) | Close the return summary | Always | – | Close. Pinned under the scrolling summary, so it is always on screen | Gold tone | Rewards were credited and saved before the card opened | – |
+| Upgrades ready (offline card, `offline-upgrade`) | Spend the return's gold | Affordable upgrades exist | Not shown | A row with a chevron above Collect (not a second button). Closes the card and opens Hero with the hand guide on an upgrade | Panel switch | Nothing is bought for the player | – |
 
 ## Panel and settings
 
@@ -83,3 +83,11 @@ end the player rates seven statements from 1 to 7 ("Hits felt powerful", "I alwa
 do next" and five more). The report is shown to the player, who chooses whether to copy and send
 it: nothing leaves the device on its own, and nothing is recorded without the flag
 (`src/game/telemetry/`).
+
+## Hand guide
+
+The hand points with its fingertip, which meets the edge of what it points at and never covers
+it: from below for targets high on the screen (pointing up), from above for low ones (turned to
+point down). It never sits on the boss gate or a Claim it is not pointing at. Taps and holds move
+toward the target. Two browser tests check that the fingertip meets its target.
+

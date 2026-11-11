@@ -315,6 +315,51 @@ reviewers. Each is now addressed:
 
 H1 will be re-run on these fixes with fresh reviewers.
 
+**Blind pairwise judging (H1), round 3: MET on this measure. Verified, with a caveat.**
+
+The same twelve screens and method (a new seed, the answer key outside the judges' folder), the
+same four prompts and models, four fresh reviewers. The "before" side is the unchanged
+pre-Rebirth build; the "after" side carries every fix above.
+
+| Reviewer (lens) | Round 1 | Round 2 | Round 3 |
+|---|---|---|---|
+| Usability researcher | 6 of 8 | 11 of 12 | 11 of 12 |
+| Senior product designer | 5 of 8 | 10 of 12 | 12 of 12 |
+| Game art director | 1 of 8 | 4 of 12 | 12 of 12 |
+| **Same three lenses** | **12 of 24 (50%)** | **25 of 36 (69%)** | **35 of 36 (97%)**, target 75% |
+| Mobile RPG player | | 8 of 12 | 9 of 12 |
+
+Eight screens went 4 of 4. The four dissents: the usability reviewer kept the old Hero battle
+screen; the genre player kept the old boss sheet, victory and Army, each for the same reason:
+"frames, portraits and rarity colour sell the fantasy" on reward moments. The product designer:
+"System B is stronger, and it won every pair on the merits"; its weakness, that it "can read
+like a polished fintech template rather than a dark-fantasy game".
+
+The caveat, which limits what this shows: the judges are models, given the same prompts as in
+round 2, and the changes between rounds answered round-2 judges' own words. Part of the gain may
+be fitting this population's taste rather than players'. H1 as written is met; whether players
+agree is H6 and H7, which need people on phones (`?playtest=1`).
+
+What round 3 still found, and what was done:
+
+| Finding | Reviewers | Change |
+|---|---|---|
+| Hints, the hand and Claim crowd the fight; the hand "does not clearly point at the button" | All four on the crowding; two on the hand itself | The drawing points up; above a target it pointed at its own bubble. It now turns to point down from above, its fingertip on the target's centre. Two browser tests assert the fingertip meets the target |
+| "50+ upgrades ready" is "a heavy button nearly equal to Collect" | All four | A row with a chevron above a full-width Collect. In round 2 the same control read as a label: the row is the middle ground |
+| "Attack spe..." truncated | All four | Introduced in this round by the stat glyph. Shorter names from 360 to 399px; no clipped text in the Hero panel at six widths |
+| The Codex line in the Army header is cut off | Two | Its own ellipsis made it look cut: now the strongest bonus and a count of the rest |
+| The boss sheet "reads like a settings sheet, not a boss intro": no boss art | Product designer, player | The boss's portrait (its own battlefield rig, rendered by the game) beside its name |
+| No ceremony on victory: loot art, a burst, currency icons instead of dots | Product designer, player | **Open.** The rewards count up and the boss has its death cinematic, but stills cannot show either |
+| Only two and a half to three Rift modes fit at the base height | Player, product designer | **Open.** The cost of opening tabs at the base; the grabber raises it |
+
+Checking the "50+ upgrades ready" change at 320x568 found that the longer return sheet pushed
+Collect below the fold, and the Ascension sheet already hid "Hold to ascend" there before this
+round. Sheets now pin their own actions under the scrolling content, and a new browser test
+asserts that both actions sit fully on screen at all seven phone sizes. Its first version also
+failed at 390x844, where Collect was plainly visible: it measured the sheet before its slide
+began. It now waits for the slide to end, fails on the old build at 320 only, and passes on the
+new one at every size.
+
 **Regressions caught by the tests, kept on the record.** Opening every tab at its base height
 (the first fix above) pushed the equip and upgrade buttons of a picked item, and the rank-up
 button of the Arts, below the panel's edge: the viewport suite failed at every phone size. The
