@@ -1,5 +1,12 @@
+"use client";
+
+import { useContext, useEffect } from "react";
 import { SUMMONS } from "@/game/data/summons";
 import { ENEMIES } from "@/game/data/enemies";
+import { GameContext } from "@/hooks/useGame";
+import { useStore, Store } from "@/lib/store";
+
+const EMPTY = new Store<Record<string, string>>({});
 
 const hex = (c: number) => `#${c.toString(16).padStart(6, "0")}`;
 
@@ -9,7 +16,41 @@ type Role = "vanguard" | "reaper" | "ranger" | "arcanist" | "sovereign" | "senti
  * Portrait busts in the same language as the battlefield:
  * summons are indigo shadows with a violet glow, enemies are ink with their archetype eye colour.
  */
+/**
+ * The portrait shows the creature's real battlefield rig, rendered once by Pixi. Until that image
+ * exists (or outside the game), a vector bust in the same palette stands in.
+ */
 export function SummonPortrait({ defId, size = 56, enemy = false }: { defId: string; size?: number; enemy?: boolean }) {
+  const c = useContext(GameContext);
+  const isEnemy = enemy || (!SUMMONS[defId] && !!ENEMIES[defId]);
+  const key = `${isEnemy ? "enemy" : "summon"}:${defId}`;
+  const url = useStore(c?.portraitStore ?? EMPTY, (m) => m[key]);
+  useEffect(() => {
+    c?.requestPortrait(defId, isEnemy ? "enemy" : "summon");
+  }, [c, defId, isEnemy]);
+  if (url) {
+    const legendary = SUMMONS[defId]?.rarity === "legendary";
+    return (
+      <span
+        className="relative inline-block shrink-0 overflow-hidden"
+        style={{
+          width: size,
+          height: size,
+          borderRadius: size * 0.16,
+          background: isEnemy ? "radial-gradient(circle at 50% 35%, #3a342b, #1a1714 75%)" : "radial-gradient(circle at 50% 35%, #4a3f2b, #1c1914 75%)",
+          boxShadow: legendary ? "inset 0 0 0 1px rgba(207,169,94,0.7)" : "inset 0 0 0 1px rgba(235,228,211,0.08)",
+        }}
+        aria-hidden="true"
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={url} alt="" width={size} height={size} className="block w-full h-full" draggable={false} />
+      </span>
+    );
+  }
+  return <VectorPortrait defId={defId} size={size} enemy={enemy} />;
+}
+
+function VectorPortrait({ defId, size = 56, enemy = false }: { defId: string; size?: number; enemy?: boolean }) {
   const s = SUMMONS[defId];
   const e = ENEMIES[defId];
   const isEnemy = enemy || (!s && !!e);

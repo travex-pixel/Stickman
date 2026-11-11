@@ -106,6 +106,34 @@ export class GameController {
     selectedItem: null,
     paused: false,
   });
+  /** Rendered rig portraits by key ("summon:husk_blade"), filled on demand once the renderer is up. */
+  readonly portraitStore = new Store<Record<string, string>>({});
+  private portraitQueue = new Set<string>();
+
+  requestPortrait(defId: string, kind: "summon" | "enemy"): void {
+    const key = `${kind}:${defId}`;
+    if (this.portraitStore.get()[key] || this.portraitQueue.has(key)) return;
+    this.portraitQueue.add(key);
+    void this.drainPortraits();
+  }
+
+  private portraitBusy = false;
+  private async drainPortraits(): Promise<void> {
+    if (this.portraitBusy || !this.renderer) return;
+    this.portraitBusy = true;
+    try {
+      while (this.portraitQueue.size > 0 && this.renderer) {
+        const key = this.portraitQueue.values().next().value as string;
+        const [kind, defId] = key.split(":") as ["summon" | "enemy", string];
+        const url = await this.renderer?.portrait(defId, kind);
+        this.portraitQueue.delete(key);
+        if (url) this.portraitStore.update((m) => ({ ...m, [key]: url }));
+      }
+    } finally {
+      this.portraitBusy = false;
+    }
+  }
+
   /** Diagnostics live in their own store so the HUD never re-renders for them. */
   readonly diagStore = new Store<{ fps: number; particles: number; entities: number; renderer: string; frameMs: number }>({ fps: 0, particles: 0, entities: 0, renderer: "", frameMs: 0 });
   private diagAccum = 0;
@@ -195,6 +223,7 @@ export class GameController {
       this.renderer = renderer;
       renderer.setReducedEffects(this.profile.settings.reducedEffects);
       if (this.world) renderer.setWorld(this.world);
+      void this.drainPortraits();
     } catch (err) {
       console.error("[ASCEND] renderer failed to start", err);
       this.toast("Graphics could not start on this device.", "warn");

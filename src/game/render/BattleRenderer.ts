@@ -875,6 +875,39 @@ export class BattleRenderer {
   }
 
   // ---------------------------------------------------------------------
+  // Portraits: the real rigs, rendered once into images for the UI
+  // ---------------------------------------------------------------------
+
+  /** Renders a three-quarter bust of a summon or enemy rig into a PNG data URL. */
+  async portrait(defId: string, kind: "summon" | "enemy"): Promise<string | null> {
+    const app = this.app;
+    if (!app) return null;
+    const spec = kind === "summon" ? summonSpec(defId) : enemySpec(defId);
+    const rig = new Rig(spec);
+    const box = 128;
+    const holder = new Container();
+    rig.animate("idle", 0.6, 0, 0.2, 1, false, 0, 0);
+    // A bust framed from the rig's measured bounds: the top of the head sits near the top edge
+    // and the figure is drawn 1.45x the frame height, so head, shoulders and weapon fill it.
+    const b = rig.root.getLocalBounds();
+    const scale = (box * 1.45) / Math.max(1, b.height);
+    rig.root.scale.set(scale);
+    rig.root.position.set(box * 0.5 - (b.x + b.width / 2) * scale, box * 0.07 - b.y * scale);
+    // A transparent frame plus a mask pin the extracted bounds to exactly the portrait box.
+    const frame = new Graphics().rect(0, 0, box, box).fill({ color: 0x000000, alpha: 0.001 });
+    const mask = new Graphics().rect(0, 0, box, box).fill(0xffffff);
+    holder.addChild(frame, rig.root, mask);
+    rig.root.mask = mask;
+    try {
+      return await app.renderer.extract.base64({ target: holder, resolution: 2 });
+    } catch {
+      return null;
+    } finally {
+      holder.destroy({ children: true });
+    }
+  }
+
+  // ---------------------------------------------------------------------
   // Summon cinematic
   // ---------------------------------------------------------------------
 
