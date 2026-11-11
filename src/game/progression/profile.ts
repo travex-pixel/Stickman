@@ -72,12 +72,13 @@ export interface Profile {
     killsByEnemy: Record<string, number>;
     abilityCasts: number;
     evolutions: number;
+    redeemedCodes: string[];
   };
   tutorial: { completed: string[]; finished: boolean };
   settings: { music: number; sfx: number; reducedEffects: boolean; diagnostics: boolean; battleSpeed: 1 | 2; autoAdvance: boolean };
 }
 
-export const PROFILE_VERSION = 2;
+export const PROFILE_VERSION = 3;
 
 export function createDefaultProfile(now = Date.now()): Profile {
   return {
@@ -112,6 +113,7 @@ export function createDefaultProfile(now = Date.now()): Profile {
       killsByEnemy: {},
       abilityCasts: 0,
       evolutions: 0,
+      redeemedCodes: [],
     },
     tutorial: { completed: [], finished: false },
     settings: { music: 0.6, sfx: 0.8, reducedEffects: false, diagnostics: false, battleSpeed: 1, autoAdvance: true },

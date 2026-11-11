@@ -38,7 +38,7 @@ function RunOutcome() {
   if (!modal || (modal.kind !== "defeat" && modal.kind !== "stage_clear")) return null;
   return (
     <div className="absolute inset-0 z-30 flex items-center justify-center p-3" data-testid={`modal-${modal.kind}`} role="dialog" aria-modal="false">
-      <div className="absolute inset-0 bg-black/55" />
+      <div className="absolute inset-0 bg-ink/60" />
       <AnimatePresence>{modal.kind === "defeat" ? <Defeat modal={modal} /> : <StageClear modal={modal} />}</AnimatePresence>
     </div>
   );
@@ -50,12 +50,12 @@ function BossBar() {
     <AnimatePresence>
       {boss && (
         <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="absolute left-3 right-3 top-1.5 z-10" data-testid="boss-bar">
-          <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.2em] text-bone/90">
-            <span className="font-display">{boss.name}</span>
-            <span className="text-crimson font-bold">Phase {boss.phase}</span>
+          <div className="flex items-center justify-between">
+            <span className="font-display text-[11px] tracking-[0.18em] text-ivory">{boss.name.toUpperCase()}</span>
+            <span className="caps text-crimson-2">Phase {boss.phase}</span>
           </div>
-          <div className="bar mt-1 h-2 border-crimson/40">
-            <div style={{ width: `${(boss.hp / boss.maxHp) * 100}%`, background: boss.phase === 2 ? "linear-gradient(90deg,#7cf6ff,#3a8fff)" : "linear-gradient(90deg,#ff4d6d,#c2314a)" }} />
+          <div className={cn("bar mt-1 h-2", boss.phase === 2 ? "bar-steel" : "bar-crimson")}>
+            <div style={{ width: `${(boss.hp / boss.maxHp) * 100}%` }} />
           </div>
         </motion.div>
       )}
@@ -73,7 +73,11 @@ function WaveBanner() {
     <AnimatePresence>
       {label && (
         <motion.div key={label} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.05 }} transition={{ duration: 0.35 }} className="absolute inset-x-0 top-[26%] z-10 flex justify-center pointer-events-none">
-          <div className="px-4 py-1.5 rounded-full bg-black/55 border border-white/10 font-display text-[13px] tracking-[0.3em] text-bone text-glow-cyan">{label}</div>
+          <div className="relative px-5 py-1.5 font-display text-[13px] tracking-[0.3em] text-ivory text-glow-gold">
+            <span className="absolute inset-x-0 -top-px h-px" style={{ background: "linear-gradient(90deg, transparent, rgba(233,211,154,0.6), transparent)" }} />
+            {label}
+            <span className="absolute inset-x-0 -bottom-px h-px" style={{ background: "linear-gradient(90deg, transparent, rgba(233,211,154,0.6), transparent)" }} />
+          </div>
         </motion.div>
       )}
     </AnimatePresence>
@@ -88,7 +92,7 @@ function EssencePrompts() {
     <AnimatePresence>
       {orbs.map((o, i) => {
         const def = SUMMONS[o.summonId];
-        const left = Math.min(view.width - 70, Math.max(70, o.x * view.scale));
+        const left = Math.min(view.width - 60, Math.max(60, o.x * view.scale));
         const top = Math.max(40, view.offsetY + o.y * view.depthScale - 78);
         const frac = o.remaining / o.total;
         return (
@@ -98,18 +102,18 @@ function EssencePrompts() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, scale: 0.7 }}
             transition={{ type: "spring", stiffness: 300, damping: 20 }}
-            className="absolute z-20 -translate-x-1/2 flex flex-col items-center gap-0.5"
+            className="absolute z-20 -translate-x-1/2 flex flex-col items-center gap-1"
             style={{ left, top }}
             onClick={() => c.claimEssence(o.id)}
             data-guide={i === 0 ? "claim-essence" : undefined}
             data-testid="claim-essence"
             aria-label={`Claim essence of ${def?.name ?? "creature"}`}
           >
-            <span className={cn("px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wide border shadow-lg", o.isBoss ? "bg-[#2b2210] border-gold/70 text-gold" : "bg-[#0c1a1a] border-soul/70 text-soul")} style={{ boxShadow: o.isBoss ? "0 0 16px rgba(255,194,77,0.45)" : "0 0 16px rgba(125,240,200,0.45)" }}>
+            <span className={cn("font-display px-3 py-1 rounded-full text-[10px] tracking-[0.2em] border shadow-lg", o.isBoss ? "bg-[#2a2210] border-gold/70 text-gold-2" : "bg-[#0f1d1a] border-jade/70 text-jade-2")}>
               CLAIM
             </span>
-            <span className="h-1 w-10 rounded-full bg-black/60 overflow-hidden">
-              <span className="block h-full rounded-full" style={{ width: `${frac * 100}%`, background: o.isBoss ? "#ffc24d" : "#7df0c8" }} />
+            <span className="h-[3px] w-9 rounded-full bg-black/60 overflow-hidden">
+              <span className="block h-full rounded-full" style={{ width: `${frac * 100}%`, background: o.isBoss ? "#e9d39a" : "#9ee3c9" }} />
             </span>
           </motion.button>
         );
@@ -130,29 +134,30 @@ function SummonStrip() {
   const command = useProfile((p) => p.summons.command);
   if (summons.length === 0) return null;
   return (
-    <div className="absolute left-2 top-10 z-10 flex flex-col gap-1.5" data-testid="summon-strip">
+    <div className="absolute left-2 top-9 z-10 flex flex-col gap-1" data-testid="summon-strip">
       <div className="flex gap-1">
         {summons.map((s) => (
-          <div key={s.id} className={cn("relative h-9 w-9 rounded-lg overflow-hidden border", s.alive ? "border-soul/50" : "border-crimson/50 opacity-60")} title={SUMMONS[s.defId]?.name}>
-            <SummonPortrait defId={s.defId} size={36} />
-            <span className="absolute left-0 right-0 bottom-0 h-1 bg-black/70">
-              <span className="block h-full" style={{ width: `${(s.hp / s.maxHp) * 100}%`, background: "#7df0c8" }} />
+          <div key={s.id} className={cn("relative h-8 w-8 rounded-md overflow-hidden border", s.alive ? "border-gold/40" : "border-crimson/50 opacity-60")} title={SUMMONS[s.defId]?.name}>
+            <SummonPortrait defId={s.defId} size={32} />
+            <span className="absolute left-0 right-0 bottom-0 h-[3px] bg-black/70">
+              <span className="block h-full" style={{ width: `${(s.hp / s.maxHp) * 100}%`, background: "#9ee3c9" }} />
             </span>
           </div>
         ))}
       </div>
-      <div className="flex gap-1" role="group" aria-label="Summon commands">
+      <div className="flex gap-0.5 rounded-lg bg-ink/75 border border-white/8 p-0.5 self-start" role="group" aria-label="Summon commands">
         {COMMANDS.map((cmd) => (
           <button
             key={cmd.id}
-            className={cn("flex items-center gap-0.5 rounded-md px-1 py-1 text-[9px] font-bold border", command === cmd.id ? "bg-cyan/20 border-cyan/70 text-cyan" : "bg-black/50 border-white/10 text-mist")}
+            className={cn("flex items-center gap-1 rounded-md h-6 text-[9px] font-bold transition-all", command === cmd.id ? "bg-gold/20 text-gold-2 px-1.5" : "text-mist w-6 justify-center")}
             onClick={() => c.setCommand(cmd.id)}
             data-guide={`command-${cmd.id}`}
             data-testid={`command-${cmd.id}`}
             aria-pressed={command === cmd.id}
+            aria-label={cmd.label}
           >
-            <Icon name={cmd.icon} size={11} />
-            {cmd.label}
+            <Icon name={cmd.icon} size={12} />
+            {command === cmd.id && <span>{cmd.label}</span>}
           </button>
         ))}
       </div>
@@ -171,27 +176,26 @@ function QuestBanner() {
   return (
     <motion.div layout className="absolute right-2 bottom-2 z-10" data-testid="quest-banner">
       <button
-        className={cn("flex items-center gap-2 rounded-xl border px-2.5 py-1.5 shadow-lg", done ? "bg-[#1c1a0e] border-gold/70" : "bg-black/60 border-white/12")}
+        className={cn("flex items-center gap-2 rounded-lg border px-2.5 py-1.5 shadow-[0_6px_16px_rgba(0,0,0,0.45)]", done ? "bg-[#201a0c] border-gold/70" : "bg-ink/80 border-white/10")}
         onClick={() => done && c.claimQuest()}
         data-guide={done ? "quest-claim" : undefined}
         aria-label={done ? "Claim quest reward" : "Current objective"}
-        style={done ? { boxShadow: "0 0 18px rgba(255,194,77,0.35)" } : undefined}
       >
         <div className="flex flex-col items-start leading-tight">
-          <span className="text-[9px] uppercase tracking-[0.2em] text-mist">{done ? "Reward ready" : "Objective"}</span>
-          <span className="text-[11px] font-semibold text-bone">
-            {quest.text} <span className={done ? "text-gold" : "text-cyan"}>{prog.value}/{prog.target}</span>
+          <span className={cn("caps", done ? "text-gold-2" : "")}>{done ? "Reward ready" : "Objective"}</span>
+          <span className="text-[11px] font-semibold text-ivory">
+            {quest.text} <span className={done ? "text-gold-2" : "text-parch"}>{prog.value}/{prog.target}</span>
           </span>
         </div>
         <div className="flex items-center gap-1 text-[10px] font-bold">
           {reward.gold ? (
-            <span className="flex items-center gap-0.5 text-gold">
+            <span className="flex items-center gap-0.5 text-gold-2">
               <Icon name="coin" size={11} />
               {fmt(reward.gold)}
             </span>
           ) : null}
           {reward.essence ? (
-            <span className="flex items-center gap-0.5 text-soul">
+            <span className="flex items-center gap-0.5 text-jade-2">
               <Icon name="essence" size={11} />
               {fmt(reward.essence)}
             </span>
@@ -203,7 +207,7 @@ function QuestBanner() {
             </span>
           ) : null}
         </div>
-        {done && <Icon name="chevron" size={14} className="text-gold" />}
+        {done && <Icon name="chevron" size={14} className="text-gold-2" />}
       </button>
     </motion.div>
   );
@@ -211,12 +215,12 @@ function QuestBanner() {
 
 function Toasts() {
   const toasts = useUi((u) => u.toasts);
-  const tone: Record<string, string> = { info: "text-bone border-white/15", gold: "text-gold border-gold/40", essence: "text-soul border-soul/40", warn: "text-ember border-ember/40", level: "text-cyan border-cyan/40" };
+  const tone: Record<string, string> = { info: "text-parch border-white/12", gold: "text-gold-2 border-gold/40", essence: "text-jade-2 border-jade/40", warn: "text-crimson-2 border-crimson/40", level: "text-gold-2 border-gold/40" };
   return (
-    <div className="absolute left-2 bottom-2 z-20 flex flex-col items-start gap-1 pointer-events-none w-[52%]" aria-live="polite">
+    <div className="absolute right-2 top-2 z-20 flex flex-col items-end gap-1 pointer-events-none max-w-[62%]" aria-live="polite">
       <AnimatePresence>
         {toasts.map((t) => (
-          <motion.div key={t.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} className={cn("px-2.5 py-1 rounded-lg bg-black/75 border text-[10px] font-semibold text-left leading-tight", tone[t.tone])}>
+          <motion.div key={t.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} className={cn("px-2.5 py-1 rounded-md bg-ink/85 border text-[10px] font-semibold text-right leading-tight", tone[t.tone])}>
             {t.text}
           </motion.div>
         ))}

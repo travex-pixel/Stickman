@@ -81,8 +81,8 @@ function BootVeil({ ready }: { ready: boolean }) {
   }, [ready, booted]);
   if (gone) return null;
   return (
-    <div className="fixed inset-0 z-[80] flex flex-col items-center justify-center bg-obsidian transition-opacity duration-500" style={{ opacity: ready && booted ? 0 : 1, pointerEvents: ready && booted ? "none" : "auto" }} aria-hidden={ready && booted} data-testid="boot-veil">
-      <div className="font-display text-4xl tracking-[0.4em] text-bone text-glow-cyan">ASCEND</div>
+    <div className="fixed inset-0 z-[80] flex flex-col items-center justify-center bg-ink transition-opacity duration-500" style={{ opacity: ready && booted ? 0 : 1, pointerEvents: ready && booted ? "none" : "auto" }} aria-hidden={ready && booted} data-testid="boot-veil">
+      <div className="font-display text-4xl tracking-[0.4em] text-ivory text-glow-gold">ASCEND</div>
       <div className="mt-2 text-[11px] uppercase tracking-[0.3em] text-mist">Claim what falls</div>
     </div>
   );

@@ -28,6 +28,8 @@ import { TUTORIAL_STEPS, nextTutorialStep, type TutorialStep, type TutorialStepI
 import type { BattleRenderer } from "./render/BattleRenderer";
 import { summonDef } from "./data/summons";
 import { WEAPON_PATHS } from "./progression/weaponPaths";
+import { describeReward, verifyCode } from "./economy/codes";
+import { generateItem } from "./economy/loot";
 import { ABILITIES } from "./data/abilities";
 
 export type Modal =
@@ -759,6 +761,40 @@ export class GameController {
     this.toast(parts.join(", "), "gold");
     this.afterProgression();
     this.commit();
+  }
+
+  /** Redeem a gift code. Each code works once per save. */
+  async redeemCode(input: string): Promise<{ ok: boolean; message: string }> {
+    this.userGesture();
+    const check = await verifyCode(input);
+    if (!check.ok) {
+      this.sfx("error", { volume: 0.4 });
+      const message = check.reason === "signature" ? "That code is not valid." : check.reason === "format" ? "Codes look like ASC-G500-XXXXXX." : "Unknown code.";
+      return { ok: false, message };
+    }
+    const p = this.profile;
+    if (p.progress.redeemedCodes.includes(check.key)) {
+      this.sfx("error", { volume: 0.4 });
+      return { ok: false, message: "You have already used that code." };
+    }
+    const r = check.reward;
+    p.player.gold += r.gold ?? 0;
+    p.player.essence += r.essence ?? 0;
+    p.player.riftCores += r.riftCores ?? 0;
+    if (r.item) this.addItem(generateItem(this.rng, Math.max(1, p.progress.bestStage), r.item.rarity, r.item.slot));
+    if (r.summonId) {
+      const outcome = doClaimEssence(p, r.summonId);
+      if (outcome.kind === "new") p.summons.firstSummonSeen = true;
+      const first = outcome.kind === "new" && p.summons.collection.length === 1;
+      this.uiStore.update((u) => ({ ...u, modal: { kind: "summon_reveal", outcome, summonId: r.summonId as string, first, cinematicDone: true }, newBadges: { ...u.newBadges, summons: true } }));
+    }
+    p.progress.redeemedCodes.push(check.key);
+    this.sfx("quest", { volume: 0.9 });
+    this.toast(`Gift received: ${describeReward(r)}`, "gold");
+    this.refreshLoadout();
+    this.afterProgression();
+    this.commit();
+    return { ok: true, message: `Received ${describeReward(r)}.` };
   }
 
   toggleBattleSpeed(): void {

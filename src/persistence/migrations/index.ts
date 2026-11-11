@@ -21,6 +21,14 @@ export const MIGRATIONS: Migration[] = [
       };
     },
   },
+  {
+    from: 2,
+    to: 3,
+    migrate: (raw) => {
+      const progress = (raw.progress as Record<string, unknown> | undefined) ?? {};
+      return { ...raw, version: 3, progress: { ...progress, redeemedCodes: progress.redeemedCodes ?? [] } };
+    },
+  },
 ];
 
 export function runMigrations(raw: Record<string, unknown>, targetVersion: number): { raw: Record<string, unknown>; migrated: boolean } {

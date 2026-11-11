@@ -20,6 +20,8 @@ export interface RigSpec {
   horns?: boolean;
   aura?: number;
   floating?: boolean;
+  /** ivory = the hero, ink = enemies, shadow = the player's summoned army. */
+  finish?: "ivory" | "ink" | "shadow";
 }
 
 interface Pose {
@@ -68,7 +70,6 @@ export class Rig {
   private readonly cape = new Graphics();
   private readonly aura = new Graphics();
   readonly shadow = new Graphics();
-  private readonly hitTint = new Graphics();
   private pose: Pose = { ...BASE, hips: { ...BASE.hips } };
   private readonly u: number;
   private deathT = 0;
@@ -87,131 +88,135 @@ export class Rig {
   private build(): void {
     const s = this.spec;
     const u = this.u;
-    const dark = darken(s.body, 0.35);
-    const light = lighten(s.body, 0.18);
-    const rim = { width: 1.1 * u, color: lighten(s.accent, 0.1), alpha: 0.75, join: "round" as const };
-    const rimSoft = { width: 1 * u, color: lighten(s.body, 0.55), alpha: 0.6, join: "round" as const };
     const style = s.style;
+    const finish = s.finish ?? "ink";
+    // Flat silhouettes read best at phone scale. The far-side limbs are a half-step off the body
+    // colour so the figure keeps depth without outlines.
+    const body = s.body;
+    const far = finish === "ivory" ? darken(body, 0.22) : lighten(body, 0.12);
     const bulky = style === "bulky" || style === "warden";
-    const torsoW = (bulky ? 30 : style === "lean" || style === "reaper" ? 16 : 20) * u;
-    const torsoH = (bulky ? 36 : 30) * u;
-    const limbW = (bulky ? 9 : style === "lean" || style === "reaper" ? 4.5 : 6) * u;
+    const lean = style === "lean" || style === "reaper";
+    const torsoW = (bulky ? 28 : lean ? 14 : 17) * u;
+    const torsoH = (bulky ? 34 : 29) * u;
+    const limbW = (bulky ? 10 : lean ? 5.5 : 6.5) * u;
     const upperArm = (bulky ? 18 : 15) * u;
-    const lowerArm = (bulky ? 17 : 14) * u;
+    const lowerArm = (bulky ? 17 : 15) * u;
     const upperLeg = (bulky ? 18 : 17) * u;
-    const lowerLeg = (bulky ? 17 : 16) * u;
-    const headR = (bulky ? 8.5 : 7.5) * u;
+    const lowerLeg = (bulky ? 17 : 17) * u;
+    const headR = (bulky ? 9 : 8.2) * u;
 
-    // Shadow lives outside the body so it never rotates with it.
-    this.shadow.ellipse(0, 0, (bulky ? 26 : 18) * u, (bulky ? 9 : 6) * u).fill({ color: 0x000000, alpha: 0.42 });
+    // Ground shadow lives outside the body so it never rotates with it.
+    this.shadow.ellipse(0, 0, (bulky ? 26 : 17) * u, (bulky ? 8 : 5.5) * u).fill({ color: 0x0a0806, alpha: 0.38 });
 
-    // Aura ring (evolved / legendary)
-    if (s.aura && s.aura > 0) {
-      this.aura.ellipse(0, 0, s.aura * u * 1.1, s.aura * u * 0.4).stroke({ width: 2 * u, color: s.glow ?? s.accent, alpha: 0.55 });
-      this.aura.ellipse(0, 0, s.aura * u * 0.8, s.aura * u * 0.28).stroke({ width: 1 * u, color: s.glow ?? s.accent, alpha: 0.35 });
-      this.root.addChild(this.aura);
+    // Shadow-army glow: a soft pool of light under summons, ring for evolved and legendary forms.
+    if (finish === "shadow") {
+      this.aura.ellipse(0, 0, 22 * u, 7 * u).fill({ color: s.glow ?? s.eye, alpha: 0.16 });
     }
+    if (s.aura && s.aura > 0) {
+      this.aura.ellipse(0, 0, s.aura * u * 1.1, s.aura * u * 0.36).stroke({ width: 1.6 * u, color: s.glow ?? s.accent, alpha: 0.5 });
+    }
+    if (finish === "shadow" || (s.aura && s.aura > 0)) this.root.addChild(this.aura);
 
     this.root.addChild(this.body);
     this.body.addChild(this.hips);
 
-    // Legs
-    const leg = (side: { upper: Container; lower: Container }, x: number) => {
-      const up = new Graphics().roundRect(-limbW / 2, 0, limbW, upperLeg, limbW / 2).fill(dark).stroke(rimSoft);
-      const low = new Graphics().roundRect(-limbW / 2, 0, limbW, lowerLeg, limbW / 2).fill(s.body).stroke(rimSoft);
-      const boot = new Graphics().roundRect(-limbW * 0.7, lowerLeg - 4 * u, limbW * 1.4, 5 * u, 2 * u).fill(darken(s.accent, 0.5));
-      side.upper.addChild(up);
-      side.lower.addChild(low, boot);
+    const limb = (len: number, w: number, color: number, taper = 0.82) =>
+      new Graphics()
+        .poly([-w / 2, 0, w / 2, 0, (w / 2) * taper, len, (-w / 2) * taper, len])
+        .fill(color)
+        .circle(0, 0, w / 2)
+        .fill(color)
+        .circle(0, len, (w / 2) * taper)
+        .fill(color);
+
+    const leg = (side: { upper: Container; lower: Container }, x: number, color: number) => {
+      side.upper.addChild(limb(upperLeg, limbW * 1.05, color));
+      const low = limb(lowerLeg, limbW * 0.9, color, 0.9);
+      // Foot: a small wedge pointing forward gives the stance weight.
+      low.poly([-limbW * 0.4, lowerLeg - 1 * u, limbW * 1.3, lowerLeg + 0.5 * u, limbW * 1.1, lowerLeg + 2.6 * u, -limbW * 0.5, lowerLeg + 2.6 * u]).fill(color);
+      side.lower.addChild(low);
       side.lower.y = upperLeg;
       side.upper.addChild(side.lower);
       side.upper.x = x;
       this.hips.addChild(side.upper);
     };
-    leg(this.legL, -torsoW * 0.28);
-    leg(this.legR, torsoW * 0.28);
+    leg(this.legL, -torsoW * 0.22, far);
+    leg(this.legR, torsoW * 0.22, body);
 
-    // Cape behind torso
+    // Cape / scarf: the warrior's only colour accent besides the blade.
     if (s.cape) {
-      this.cape.poly([-torsoW * 0.45, 0, torsoW * 0.45, 0, torsoW * 0.7, torsoH * 1.7, -torsoW * 0.3, torsoH * 1.75]).fill({ color: darken(s.accent, 0.72), alpha: 0.95 });
+      const capeColor = finish === "ivory" ? s.accent : darken(s.accent, 0.55);
+      this.cape.poly([-torsoW * 0.42, 0, torsoW * 0.3, 0, -torsoW * 0.2, torsoH * 1.45, -torsoW * 0.95, torsoH * 1.3]).fill({ color: capeColor, alpha: finish === "ivory" ? 0.95 : 0.85 });
       this.cape.y = -torsoH * 0.95;
     }
 
-    // Torso
     this.hips.addChild(this.torso);
     const torsoG = new Graphics();
     if (style === "robed") {
-      torsoG.poly([-torsoW * 0.55, -torsoH, torsoW * 0.55, -torsoH, torsoW * 1.0, torsoH * 0.9, -torsoW * 1.0, torsoH * 0.9]).fill(s.body).stroke(rimSoft);
-      torsoG.poly([-torsoW * 0.2, -torsoH * 0.6, torsoW * 0.2, -torsoH * 0.6, torsoW * 0.35, torsoH * 0.8, -torsoW * 0.35, torsoH * 0.8]).fill({ color: s.accent, alpha: 0.5 });
+      torsoG.poly([-torsoW * 0.5, -torsoH, torsoW * 0.5, -torsoH, torsoW * 1.05, torsoH * 0.95, -torsoW * 1.05, torsoH * 0.95]).fill(body);
+      torsoG.poly([-torsoW * 0.08, -torsoH * 0.7, torsoW * 0.08, -torsoH * 0.7, torsoW * 0.16, torsoH * 0.9, -torsoW * 0.16, torsoH * 0.9]).fill({ color: s.accent, alpha: 0.55 });
     } else if (bulky) {
-      torsoG.poly([-torsoW * 0.6, -torsoH, torsoW * 0.6, -torsoH, torsoW * 0.42, 0, -torsoW * 0.42, 0]).fill(s.body).stroke(rimSoft);
-      // shoulder plates
-      torsoG.roundRect(-torsoW * 0.78, -torsoH * 1.08, torsoW * 0.42, torsoH * 0.32, 4 * u).fill(light).stroke(rim);
-      torsoG.roundRect(torsoW * 0.36, -torsoH * 1.08, torsoW * 0.42, torsoH * 0.32, 4 * u).fill(light).stroke(rim);
-      torsoG.roundRect(-torsoW * 0.18, -torsoH * 0.72, torsoW * 0.36, torsoH * 0.4, 3 * u).fill({ color: s.accent, alpha: 0.9 });
+      torsoG.poly([-torsoW * 0.62, -torsoH, torsoW * 0.62, -torsoH, torsoW * 0.38, 0, -torsoW * 0.38, 0]).fill(body);
+      torsoG.circle(-torsoW * 0.58, -torsoH * 0.9, torsoW * 0.26).fill(body);
+      torsoG.circle(torsoW * 0.58, -torsoH * 0.9, torsoW * 0.26).fill(body);
+      // A single ember core in the chest: the brute's one point of colour.
+      torsoG.circle(0, -torsoH * 0.58, torsoW * 0.1).fill({ color: s.eye, alpha: 0.9 });
+      torsoG.circle(0, -torsoH * 0.58, torsoW * 0.2).fill({ color: s.eye, alpha: 0.18 });
     } else {
-      torsoG.poly([-torsoW * 0.5, -torsoH, torsoW * 0.5, -torsoH, torsoW * 0.36, 0, -torsoW * 0.36, 0]).fill(s.body).stroke(rimSoft);
-      if (style === "warrior") {
-        torsoG.poly([-torsoW * 0.5, -torsoH, torsoW * 0.5, -torsoH, torsoW * 0.44, -torsoH * 0.55, -torsoW * 0.44, -torsoH * 0.55]).fill(light).stroke(rim);
-        torsoG.roundRect(-torsoW * 0.1, -torsoH * 0.85, torsoW * 0.2, torsoH * 0.55, 2 * u).fill({ color: s.accent, alpha: 0.85 });
-        torsoG.roundRect(-torsoW * 0.62, -torsoH * 1.05, torsoW * 0.3, torsoH * 0.22, 3 * u).fill(light).stroke(rim);
-        torsoG.roundRect(torsoW * 0.32, -torsoH * 1.05, torsoW * 0.3, torsoH * 0.22, 3 * u).fill(light).stroke(rim);
-        torsoG.rect(-torsoW * 0.4, -torsoH * 0.12, torsoW * 0.8, 3 * u).fill(darken(s.accent, 0.4));
-      } else if (style === "archer") {
-        torsoG.poly([-torsoW * 0.5, -torsoH, torsoW * 0.1, -torsoH * 0.2, -torsoW * 0.36, 0]).fill({ color: s.accent, alpha: 0.35 });
-        torsoG.rect(-torsoW * 0.4, -torsoH * 0.2, torsoW * 0.8, 2.5 * u).fill(darken(s.accent, 0.3));
-      } else if (style === "reaper") {
-        torsoG.poly([-torsoW * 0.5, -torsoH, torsoW * 0.5, -torsoH, torsoW * 0.5, -torsoH * 0.2, -torsoW * 0.5, -torsoH * 0.2]).fill({ color: s.accent, alpha: 0.25 });
-      } else {
-        torsoG.rect(-torsoW * 0.4, -torsoH * 0.3, torsoW * 0.8, 2 * u).fill({ color: s.accent, alpha: 0.5 });
+      torsoG.poly([-torsoW * 0.5, -torsoH, torsoW * 0.5, -torsoH, torsoW * 0.32, 0, -torsoW * 0.32, 0]).fill(body);
+      torsoG.circle(0, -torsoH, torsoW * 0.5).fill(body);
+      if (finish === "ivory") {
+        // Belt and sash: thin gold lines, nothing more.
+        torsoG.rect(-torsoW * 0.36, -torsoH * 0.16, torsoW * 0.72, 2.2 * u).fill(s.accent);
+        torsoG.poly([-torsoW * 0.46, -torsoH * 0.92, -torsoW * 0.32, -torsoH * 0.98, torsoW * 0.4, -torsoH * 0.2, torsoW * 0.26, -torsoH * 0.14]).fill({ color: s.accent, alpha: 0.85 });
       }
     }
     if (s.cape) this.torso.addChild(this.cape);
     this.torso.addChild(torsoG);
 
     // Head
-    this.head.y = -torsoH - headR * 0.3;
+    this.head.y = -torsoH - headR * 0.75;
     const headG = new Graphics();
     if (s.hood) {
-      headG.poly([-headR * 1.2, headR * 0.9, 0, -headR * 1.5, headR * 1.2, headR * 0.9]).fill(darken(s.body, 0.15)).stroke(rimSoft);
-      headG.circle(0, 0, headR * 0.8).fill(darken(s.body, 0.6));
+      headG.poly([-headR * 1.15, headR * 1.0, -headR * 0.2, -headR * 1.6, headR * 1.15, headR * 1.0]).fill(body);
+      headG.circle(headR * 0.1, headR * 0.15, headR * 0.72).fill(darken(body, 0.5));
     } else if (bulky) {
-      headG.roundRect(-headR, -headR * 1.1, headR * 2, headR * 2.1, headR * 0.5).fill(s.body).stroke(rimSoft);
-      headG.rect(-headR * 1.05, -headR * 0.2, headR * 2.1, headR * 0.35).fill(light).stroke(rim);
+      headG.circle(0, 0, headR).fill(body);
       if (s.horns) {
-        headG.poly([-headR * 0.9, -headR * 0.9, -headR * 2.1, -headR * 2.4, -headR * 0.4, -headR * 1.1]).fill(light).stroke(rim);
-        headG.poly([headR * 0.9, -headR * 0.9, headR * 2.1, -headR * 2.4, headR * 0.4, -headR * 1.1]).fill(light).stroke(rim);
+        headG.poly([-headR * 0.7, -headR * 0.6, -headR * 1.9, -headR * 2.2, -headR * 0.15, -headR * 1.0]).fill(body);
+        headG.poly([headR * 0.7, -headR * 0.6, headR * 1.9, -headR * 2.2, headR * 0.15, -headR * 1.0]).fill(body);
       }
-    } else if (style === "warrior") {
-      headG.roundRect(-headR, -headR * 1.15, headR * 2, headR * 2.2, headR * 0.7).fill(s.body).stroke(rimSoft);
-      headG.poly([-headR * 0.4, -headR * 1.15, headR * 0.4, -headR * 1.15, headR * 0.15, -headR * 2.3, -headR * 0.15, -headR * 2.3]).fill(light).stroke(rim);
-      headG.rect(-headR * 0.95, -headR * 0.15, headR * 1.9, headR * 0.3).fill(darken(s.body, 0.6));
     } else {
-      headG.circle(0, 0, headR).fill(s.body).stroke(rimSoft);
+      headG.circle(0, 0, headR).fill(body);
+      if (finish === "ivory") {
+        // Swept hair: a single shape that gives the hero a recognisable profile.
+        headG.poly([-headR * 1.0, -headR * 0.1, -headR * 0.6, -headR * 1.05, headR * 0.5, -headR * 1.1, headR * 1.05, -headR * 0.35, headR * 0.1, -headR * 0.55, -headR * 1.45, headR * 0.15]).fill(darken(body, 0.12));
+      } else if (style === "reaper" || finish === "shadow") {
+        headG.poly([-headR * 0.9, -headR * 0.4, -headR * 1.6, -headR * 1.2, -headR * 0.3, -headR * 0.9]).fill(body);
+      }
     }
     this.head.addChild(headG);
     this.head.addChild(this.eyes);
-    const eyeY = s.hood ? headR * 0.1 : bulky ? 0 : -headR * 0.05;
-    const eyeDx = headR * 0.42;
-    this.eyes.roundRect(-eyeDx - headR * 0.22, eyeY - headR * 0.12, headR * 0.44, headR * 0.24, headR * 0.1).fill(s.eye);
-    this.eyes.roundRect(eyeDx - headR * 0.22, eyeY - headR * 0.12, headR * 0.44, headR * 0.24, headR * 0.1).fill(s.eye);
-    this.eyes.circle(-eyeDx, eyeY, headR * 0.5).fill({ color: s.eye, alpha: 0.18 });
-    this.eyes.circle(eyeDx, eyeY, headR * 0.5).fill({ color: s.eye, alpha: 0.18 });
+    // Eyes: the brightest pixels on every figure. Enemies glare, summons glow, the hero is calm.
+    const eyeY = s.hood ? headR * 0.15 : -headR * 0.05;
+    if (finish === "ivory") {
+      this.eyes.roundRect(headR * 0.15, eyeY - headR * 0.1, headR * 0.5, headR * 0.2, headR * 0.1).fill(darken(body, 0.75));
+    } else {
+      this.eyes.poly([headR * 0.05, eyeY - headR * 0.18, headR * 0.75, eyeY - headR * 0.02, headR * 0.1, eyeY + headR * 0.12]).fill(s.eye);
+      this.eyes.circle(headR * 0.4, eyeY, headR * 0.65).fill({ color: s.eye, alpha: finish === "shadow" ? 0.28 : 0.16 });
+    }
     this.torso.addChild(this.head);
 
-    // Arms
-    const arm = (side: { upper: Container; lower: Container }, x: number, front: boolean) => {
-      const up = new Graphics().roundRect(-limbW / 2, 0, limbW, upperArm, limbW / 2).fill(front ? s.body : dark).stroke(rimSoft);
-      const low = new Graphics().roundRect(-limbW / 2, 0, limbW, lowerArm, limbW / 2).fill(front ? light : s.body).stroke(rimSoft);
-      const glove = new Graphics().roundRect(-limbW * 0.7, lowerArm - 4 * u, limbW * 1.4, 5 * u, 2 * u).fill(darken(s.accent, 0.45));
-      side.upper.addChild(up);
-      side.lower.addChild(low, glove);
+    const arm = (side: { upper: Container; lower: Container }, x: number, color: number) => {
+      side.upper.addChild(limb(upperArm, limbW, color));
+      side.lower.addChild(limb(lowerArm, limbW * 0.88, color, 0.95));
       side.lower.y = upperArm;
       side.upper.addChild(side.lower);
       side.upper.x = x;
       side.upper.y = -torsoH * 0.92;
     };
-    arm(this.armL, -torsoW * 0.5, false);
-    arm(this.armR, torsoW * 0.5, true);
+    arm(this.armL, -torsoW * 0.36, far);
+    arm(this.armR, torsoW * 0.36, body);
     this.torso.addChildAt(this.armL.upper, 0);
     this.torso.addChild(this.armR.upper);
 
@@ -220,11 +225,6 @@ export class Rig {
     this.buildWeapon(limbW);
     this.armR.lower.addChild(this.weapon);
 
-    // Hit tint overlay (drawn as additive white silhouette, toggled by alpha)
-    this.hitTint.roundRect(-torsoW, -torsoH - headR * 2.6, torsoW * 2, torsoH + headR * 2.6 + upperLeg + lowerLeg, 6 * u).fill({ color: 0xffffff, alpha: 1 });
-    this.hitTint.blendMode = "add";
-    this.hitTint.alpha = 0;
-    this.hips.addChild(this.hitTint);
 
     this.applyPose(this.pose);
   }
@@ -233,8 +233,8 @@ export class Rig {
     const s = this.spec;
     const u = this.u;
     const g = new Graphics();
-    const steel = 0xb9c2d6;
-    const steelDark = 0x6f7a92;
+    const steel = s.finish === "ivory" ? 0xe7e2d6 : s.finish === "shadow" ? 0x5b5f86 : 0x3a3a40;
+    const steelDark = s.finish === "ivory" ? 0x9a927f : 0x24242a;
     const accent = s.accent;
     switch (s.weapon) {
       case "sword":
@@ -288,12 +288,18 @@ export class Rig {
         g.circle(4 * u, -42 * u, 1.6 * u).fill(accent);
         g.circle(1 * u, -37 * u, 1.4 * u).fill(accent);
         break;
-      case "mace_shield":
-        g.rect(-2.5 * u, -46 * u, 5 * u, 50 * u).fill(0x2f3340);
-        g.roundRect(-9 * u, -64 * u, 18 * u, 22 * u, 5 * u).fill(steelDark);
-        g.roundRect(-5 * u, -60 * u, 10 * u, 14 * u, 3 * u).fill({ color: accent, alpha: 0.9 });
-        this.weaponGlow.roundRect(-12 * u, -66 * u, 24 * u, 26 * u, 6 * u).fill({ color: accent, alpha: 0.3 });
+      case "mace_shield": {
+        // Flanged mace: a haft and a ring of blades, readable as a silhouette.
+        g.rect(-2 * u, -40 * u, 4 * u, 44 * u).fill(steelDark);
+        g.circle(0, -46 * u, 7 * u).fill(steel);
+        for (let k = 0; k < 6; k++) {
+          const a = (k / 6) * Math.PI * 2;
+          g.poly([Math.cos(a) * 5 * u, -46 * u + Math.sin(a) * 5 * u, Math.cos(a + 0.25) * 11 * u, -46 * u + Math.sin(a + 0.25) * 11 * u, Math.cos(a + 0.5) * 5 * u, -46 * u + Math.sin(a + 0.5) * 5 * u]).fill(steel);
+        }
+        g.circle(0, -46 * u, 2.4 * u).fill({ color: s.eye, alpha: 0.9 });
+        this.weaponGlow.circle(0, -46 * u, 14 * u).fill({ color: s.glow ?? accent, alpha: 0.3 });
         break;
+      }
       default:
         break;
     }
@@ -302,19 +308,22 @@ export class Rig {
     this.weapon.addChild(this.weaponGlow);
     this.weapon.addChild(g);
     if (s.weapon === "mace_shield") {
-      // Shield on left forearm
+      // Kite shield on the far forearm: a tall heater shape with a single raised boss.
       const sh = new Graphics();
-      sh.roundRect(-10 * u, -2 * u, 20 * u, 30 * u, 6 * u).fill(darken(s.body, 0.1)).stroke({ width: 1.1 * u, color: lighten(accent, 0.1), alpha: 0.75 });
-      sh.roundRect(-7 * u, 2 * u, 14 * u, 22 * u, 4 * u).stroke({ width: 1.5 * u, color: accent, alpha: 0.9 });
-      sh.circle(0, 13 * u, 3 * u).fill(accent);
+      sh.poly([-11 * u, -2 * u, 11 * u, -2 * u, 12 * u, 14 * u, 0, 30 * u, -12 * u, 14 * u]).fill(lighten(s.body, 0.08));
+      sh.poly([-8 * u, 1 * u, 8 * u, 1 * u, 9 * u, 13 * u, 0, 25 * u, -9 * u, 13 * u]).stroke({ width: 1.2 * u, color: s.glow ?? accent, alpha: 0.55 });
+      sh.circle(0, 11 * u, 2.6 * u).fill({ color: s.eye, alpha: 0.85 });
       sh.y = 4 * u;
       this.armL.lower.addChild(sh);
     }
     void limbW;
   }
 
+  private hitAmount = 0;
+
+  /** Hits read as a sharp recoil: a squash, a lean back and a flash of the eyes. No overlays. */
   setHitFlash(amount: number): void {
-    this.hitTint.alpha = clamp(amount * 5, 0, 0.75);
+    this.hitAmount = clamp(amount / 0.12, 0, 1);
   }
 
   setWeaponGlow(alpha: number): void {
@@ -353,10 +362,14 @@ export class Rig {
       this.eyes.alpha = k * k;
       this.shadow.alpha = k;
     } else {
-      this.body.rotation = 0;
-      this.body.scale.y = p.scaleY;
+      const h = this.hitAmount;
+      this.body.rotation = facing * -0.12 * h;
+      this.body.scale.y = p.scaleY * (1 - 0.08 * h);
+      this.body.scale.x = facing * (1 + 0.06 * h);
+      this.body.x = -facing * 3 * this.u * h;
       this.root.alpha = state === "dodge" ? 0.55 : 1;
       this.eyes.alpha = 1;
+      this.eyes.scale.set(1 + 0.4 * h);
       this.shadow.alpha = 1;
     }
   }

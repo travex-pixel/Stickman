@@ -29,7 +29,7 @@ export default function HeroPanel() {
       <div className="flex items-center justify-between px-1">
         <div className="flex items-baseline gap-2">
           <span className="font-display text-[12px] tracking-[0.2em] text-mist">POWER</span>
-          <span className="font-display text-[16px] text-bone text-glow-cyan tabular-nums" data-testid="combat-power">{fmt(power)}</span>
+          <span className="font-display text-[18px] text-gold-2 text-glow-gold tabular-nums" data-testid="combat-power">{fmt(power)}</span>
         </div>
         <div className="flex items-center gap-3 text-[10px] text-mist">
           <span className="flex items-center gap-1"><Icon name="move" size={11} />{Math.round(stats.moveSpeed)}</span>
@@ -58,7 +58,7 @@ function StatCard({ stat, icon, value, next, level, gold, unlocked, onUpgrade }:
   const rule = statUnlockRule(stat);
   if (!unlocked && rule) {
     return (
-      <div className="card flex items-center gap-2 px-2 py-1 opacity-70 min-h-0 min-w-0 overflow-hidden">
+      <div className="card card-locked flex items-center gap-2 px-2 py-1 opacity-80 min-h-0 min-w-0 overflow-hidden">
         <Icon name="lock" size={16} className="text-mist shrink-0" />
         <div className="leading-tight min-w-0">
           <div className="text-[11px] font-semibold text-mist truncate">{STAT_LABEL[stat]}</div>
@@ -71,13 +71,13 @@ function StatCard({ stat, icon, value, next, level, gold, unlocked, onUpgrade }:
     <div className={cn("card flex items-center gap-1.5 pl-2 pr-1.5 py-1 min-h-0 min-w-0 overflow-hidden", affordable && !capped && "card-active")} data-testid={`stat-card-${stat}`}>
       <div className="flex flex-col leading-tight min-w-0 flex-1">
         <div className="flex items-center gap-1 text-mist min-w-0">
-          <Icon name={icon} size={12} className="text-cyan shrink-0" />
+          <Icon name={icon} size={12} className="text-gold shrink-0" />
           <span className="text-[10px] font-semibold truncate">{STAT_LABEL[stat]}</span>
           <span className="ml-auto text-[9px] text-mist shrink-0">Lv {level}</span>
         </div>
         <div className="flex items-baseline gap-1 min-w-0">
-          <span className="text-[14px] font-bold text-bone tabular-nums shrink-0" data-testid={`stat-value-${stat}`}>{value}</span>
-          {!capped && <span className="text-[9px] text-soul tabular-nums truncate hidden min-[360px]:inline">› {next}</span>}
+          <span className="font-display text-[16px] text-ivory tabular-nums shrink-0" data-testid={`stat-value-${stat}`}>{value}</span>
+          {!capped && <span className="text-[9px] text-jade-2 tabular-nums truncate hidden min-[360px]:inline">› {next}</span>}
         </div>
       </div>
       <HoldButton onRepeat={onUpgrade} disabled={capped || !affordable} className="h-[40px] w-[52px] min-[360px]:w-[56px] shrink-0" guide={stat === "attack" ? "upgrade-attack" : undefined} testId={`upgrade-${stat}`} label={`Upgrade ${STAT_LABEL[stat]} for ${cost} gold`}>
@@ -85,8 +85,8 @@ function StatCard({ stat, icon, value, next, level, gold, unlocked, onUpgrade }:
           <span className="text-[10px] font-bold text-mist">MAX</span>
         ) : (
           <span className="flex flex-col items-center leading-none">
-            <span className="text-[9px] text-cyan font-bold tracking-wider">HOLD</span>
-            <span className={cn("flex items-center gap-0.5 text-[10px] font-bold tabular-nums", affordable ? "text-gold" : "text-crimson")}>
+            <span className="caps text-gold-2 !text-[8px]">Hold</span>
+            <span className={cn("flex items-center gap-0.5 text-[10px] font-bold tabular-nums", affordable ? "text-gold" : "text-crimson-2")}>
               <Icon name="coin" size={10} />
               {fmt(cost)}
             </span>

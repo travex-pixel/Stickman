@@ -20,8 +20,8 @@ export function TabNav() {
     <nav className="panel-surface grid grid-cols-5 h-[58px] shrink-0 min-w-0 w-full" aria-label="Main">
       {TABS.map((t) => (
         <button key={t.id} className="tab-btn min-w-0" data-active={panel === t.id} data-guide={`tab-${t.id}`} data-testid={`tab-${t.id}`} onClick={() => c.setPanel(t.id)} aria-label={t.label}>
-          <Icon name={t.icon} size={20} />
-          <span className="text-[10px] font-semibold tracking-wide">{t.label}</span>
+          <Icon name={t.icon} size={19} strokeWidth={panel === t.id ? 2.2 : 1.8} />
+          <span className="font-display text-[10px] tracking-[0.08em]">{t.label}</span>
           {badges[t.id] && panel !== t.id && <span className="badge-dot" />}
         </button>
       ))}

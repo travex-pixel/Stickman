@@ -26,7 +26,7 @@ export function Battlefield() {
       <div className="absolute left-1/2 top-1/2 h-0 w-0" data-guide="battlefield-player" />
       <BattleOverlays />
       {showDiag && (
-        <div className="absolute right-2 top-10 z-30 rounded-md bg-black/70 px-2 py-1 text-[9px] font-mono text-soul leading-tight" data-testid="diagnostics">
+        <div className="absolute right-2 top-10 z-30 rounded-md bg-black/70 px-2 py-1 text-[9px] font-mono text-jade-2 leading-tight" data-testid="diagnostics">
           <div>{diagnostics} fps · {stats.frameMs} ms</div>
           <div>ent {entities} · fx {stats.particles}</div>
           <div>{stats.renderer}</div>

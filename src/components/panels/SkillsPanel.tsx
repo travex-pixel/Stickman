@@ -23,13 +23,13 @@ export default function SkillsPanel() {
       <div className="flex items-center justify-between">
         <div className="flex gap-1">
           {BRANCHES.map((b) => (
-            <button key={b} className={cn("px-2.5 py-1 rounded-lg text-[10px] font-bold border", branch === b ? "border-white/40 bg-white/10 text-bone" : "border-white/10 text-mist")} style={branch === b ? { borderColor: SKILL_BRANCH_INFO[b].color, color: SKILL_BRANCH_INFO[b].color } : undefined} onClick={() => setBranch(b)} data-testid={`branch-${b}`}>
+            <button key={b} className={cn("px-2.5 py-1 rounded-lg text-[10px] font-bold border", branch === b ? "border-white/40 bg-white/10 text-ivory" : "border-white/10 text-mist")} style={branch === b ? { borderColor: SKILL_BRANCH_INFO[b].color, color: SKILL_BRANCH_INFO[b].color } : undefined} onClick={() => setBranch(b)} data-testid={`branch-${b}`}>
               {SKILL_BRANCH_INFO[b].label}
             </button>
           ))}
         </div>
         <span className="text-[10px] text-mist">
-          Points <b className="text-cyan" data-testid="skill-points">{profile.player.skillPoints}</b>
+          Points <b className="text-gold-2" data-testid="skill-points">{profile.player.skillPoints}</b>
         </span>
       </div>
       <div className="grid grid-cols-5 gap-1 flex-1 min-h-0">
@@ -47,9 +47,9 @@ export default function SkillsPanel() {
               aria-label={`${n.name}: ${n.description}${owned ? ", unlocked" : ` (${n.cost} points)`}`}
             >
               <span className="text-[8px] text-mist">T{n.tier}</span>
-              <span className="text-[10px] font-bold leading-tight text-bone">{n.name}</span>
+              <span className="text-[10px] font-bold leading-tight text-ivory">{n.name}</span>
               <span className="text-[8px] leading-tight text-mist line-clamp-3">{n.description}</span>
-              <span className={cn("text-[9px] font-bold", owned ? "text-soul" : check.ok ? "text-cyan" : "text-mist")}>{owned ? <Icon name="check" size={12} /> : locked ? <Icon name="lock" size={11} /> : `${n.cost} pt`}</span>
+              <span className={cn("text-[9px] font-bold", owned ? "text-jade-2" : check.ok ? "text-gold-2" : "text-mist")}>{owned ? <Icon name="check" size={12} /> : locked ? <Icon name="lock" size={11} /> : `${n.cost} pt`}</span>
             </button>
           );
         })}
@@ -57,7 +57,7 @@ export default function SkillsPanel() {
       <div className="flex items-center justify-between text-[10px] text-mist">
         <span className="truncate">{SKILL_BRANCH_INFO[branch].blurb}</span>
         {mods.weaponPathUnlocked && (
-          <button className={cn("ml-2 shrink-0 px-2 py-1 rounded-lg border text-[10px] font-bold", path ? "border-white/15 text-bone" : "border-gold/60 text-gold bg-gold/10")} style={path ? { color: path.color, borderColor: path.color } : undefined} onClick={() => !path && c.openWeaponPath()} data-testid="weapon-path-button">
+          <button className={cn("ml-2 shrink-0 px-2 py-1 rounded-lg border text-[10px] font-bold", path ? "border-white/15 text-ivory" : "border-gold/60 text-gold bg-gold/10")} style={path ? { color: path.color, borderColor: path.color } : undefined} onClick={() => !path && c.openWeaponPath()} data-testid="weapon-path-button">
             {path ? path.name : "Choose weapon path"}
           </button>
         )}

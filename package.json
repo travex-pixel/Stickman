@@ -11,7 +11,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "next build && playwright test --trace off",
-    "verify": "npm run typecheck && npm run test && npm run build"
+    "verify": "npm run typecheck && npm run test && npm run build",
+    "code": "node scripts/make-code.mjs"
   },
   "dependencies": {
     "howler": "^2.2.4",

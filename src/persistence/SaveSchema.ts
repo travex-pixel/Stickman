@@ -132,6 +132,7 @@ export function sanitizeProfile(raw: unknown): { profile: Profile; repaired: boo
       killsByEnemy: isObj(pr.killsByEnemy) ? Object.fromEntries(Object.entries(pr.killsByEnemy).filter(([, v]) => isNum(v)) as [string, number][]) : {},
       abilityCasts: num(pr.abilityCasts, 0),
       evolutions: num(pr.evolutions, 0),
+      redeemedCodes: Array.isArray(pr.redeemedCodes) ? pr.redeemedCodes.filter(isStr).slice(0, 500) : [],
     },
     tutorial: { completed: Array.isArray(tut.completed) ? tut.completed.filter(isStr) : [], finished: tut.finished === true },
     settings: {

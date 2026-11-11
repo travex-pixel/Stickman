@@ -17,10 +17,11 @@ export class DamageNumbers {
   private pool: Num[] = [];
 
   constructor(size = 28) {
+    const family = displayFamily();
     for (let i = 0; i < size; i++) {
       const text = new BitmapText({
         text: "0",
-        style: { fontFamily: "Arial, Helvetica, sans-serif", fontSize: 28, fontWeight: "900", fill: 0xffffff, stroke: { color: 0x05060a, width: 5 } },
+        style: { fontFamily: family, fontSize: 30, fill: 0xffffff, stroke: { color: 0x0b0a08, width: 5, join: "round" }, dropShadow: { color: 0x000000, alpha: 0.45, blur: 0, distance: 2, angle: Math.PI / 2 } },
       });
       text.anchor.set(0.5);
       text.visible = false;
@@ -72,4 +73,11 @@ export class DamageNumbers {
     this.container.destroy({ children: true });
     this.pool = [];
   }
+}
+
+/** The display serif loaded by next/font, resolved from the CSS variable so canvas text matches the UI. */
+function displayFamily(): string {
+  if (typeof document === "undefined") return "Georgia, serif";
+  const v = getComputedStyle(document.documentElement).getPropertyValue("--font-marcellus").trim();
+  return v ? `${v}, Georgia, serif` : "Georgia, serif";
 }

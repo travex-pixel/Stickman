@@ -37,7 +37,7 @@ export default function GearPanel() {
   return (
     <div className="flex h-full min-h-0 gap-2 px-2 pt-1.5 pb-1.5">
       <div className="flex flex-col gap-1.5 shrink-0">
-        <span className="font-display text-[10px] tracking-[0.2em] text-mist px-0.5">EQUIPPED</span>
+        <span className="caps px-0.5">EQUIPPED</span>
         <div className="grid grid-cols-2 gap-1">
           {EQUIP_SLOTS.map((slot) => {
             const uid = equipped[slot];
@@ -52,7 +52,7 @@ export default function GearPanel() {
       </div>
       <div className="flex-1 min-w-0 flex flex-col gap-1.5">
         <div className="flex items-center justify-between">
-          <span className="font-display text-[10px] tracking-[0.2em] text-mist">BAG {bag.length}/24</span>
+          <span className="caps">BAG {bag.length}/24</span>
           {pages > 1 && (
             <div className="flex items-center gap-1 text-[10px] text-mist">
               <button className="px-1.5 py-0.5 rounded border border-white/10" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0} aria-label="Previous page">‹</button>
@@ -102,9 +102,9 @@ function ItemDetail({ item, equippedUid, inv, gold }: { item: EquipmentItem; equ
         {(Object.entries(totals) as [keyof typeof STAT_LABEL, number][]).map(([k, v]) => {
           const diff = v - (currentTotals[k] ?? 0);
           return (
-            <span key={k} className="text-bone">
+            <span key={k} className="text-ivory">
               {STAT_LABEL[k]} <b>{fmtStat(k, v)}</b>
-              {current && diff !== 0 && <span className={diff > 0 ? "text-soul" : "text-crimson"}> ({diff > 0 ? "+" : ""}{fmtStat(k, diff)})</span>}
+              {current && diff !== 0 && <span className={diff > 0 ? "text-jade-2" : "text-crimson-2"}> ({diff > 0 ? "+" : ""}{fmtStat(k, diff)})</span>}
             </span>
           );
         })}
@@ -112,7 +112,7 @@ function ItemDetail({ item, equippedUid, inv, gold }: { item: EquipmentItem; equ
           (Object.keys(currentTotals) as (keyof typeof STAT_LABEL)[])
             .filter((k) => !(k in totals))
             .map((k) => (
-              <span key={k} className="text-crimson">
+              <span key={k} className="text-crimson-2">
                 {STAT_LABEL[k]} -{fmtStat(k, currentTotals[k] ?? 0)}
               </span>
             ))}
@@ -130,8 +130,8 @@ function ItemDetail({ item, equippedUid, inv, gold }: { item: EquipmentItem; equ
         )}
         <HoldButton onRepeat={() => c.upgradeItem(item.uid)} disabled={capped || gold < cost} className="h-[32px] px-2" testId="item-upgrade" label={`Upgrade item for ${cost} gold`}>
           <span className="flex flex-col items-center leading-none">
-            <span className="text-[8px] text-cyan tracking-wider">HOLD</span>
-            <span className={cn("flex items-center gap-0.5 text-[10px] font-bold", gold >= cost ? "text-gold" : "text-crimson")}>
+            <span className="caps text-gold-2 !text-[8px]">Hold</span>
+            <span className={cn("flex items-center gap-0.5 text-[10px] font-bold", gold >= cost ? "text-gold" : "text-crimson-2")}>
               <Icon name="coin" size={10} />
               {capped ? "MAX" : fmt(cost)}
             </span>

@@ -84,7 +84,7 @@ export function HandGuide() {
             <Hand />
           </motion.div>
           <motion.div
-            className="absolute rounded-xl bg-[#0e1220]/95 border border-cyan/50 px-3 py-1.5 text-[12px] font-semibold text-bone shadow-[0_6px_24px_rgba(0,0,0,0.5)]"
+            className="absolute rounded-lg bg-[#141922]/96 border border-gold/50 px-3 py-1.5 text-[12px] font-semibold text-ivory shadow-[0_6px_24px_rgba(0,0,0,0.5)]"
             style={{ left: labelX, top: labelY, minWidth: 120, textAlign: "center" }}
             initial={{ y: 6, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
@@ -113,8 +113,8 @@ function Hand() {
       <path d="M11 24c0-2 1.5-3.5 3.5-3.5h16.5c4 0 7 2.6 7 7v7c0 7.5-5.5 13-13 13h-6c-5 0-8.5-3-10-7l-2.6-7c-.8-2.2.5-4.5 2.8-4.9z" fill="url(#hand-grad)" stroke="#2a2d3a" strokeWidth="1.5" />
       <path d="M27 21.5v8M33 22.5v8M38 25v7" stroke="#2a2d3a" strokeWidth="1.2" strokeLinecap="round" opacity="0.7" />
       {/* cuff */}
-      <path d="M15 46.5h17c1.6 0 3 1.3 3 3v2c0 1.6-1.4 3-3 3H15c-1.6 0-3-1.4-3-3v-2c0-1.7 1.4-3 3-3z" fill="#1b2130" stroke="#4ee6ff" strokeWidth="1.5" />
-      <circle cx="23.5" cy="50.5" r="1.6" fill="#4ee6ff" />
+      <path d="M15 46.5h17c1.6 0 3 1.3 3 3v2c0 1.6-1.4 3-3 3H15c-1.6 0-3-1.4-3-3v-2c0-1.7 1.4-3 3-3z" fill="#1b2130" stroke="#cfa95e" strokeWidth="1.5" />
+      <circle cx="23.5" cy="50.5" r="1.6" fill="#e9d39a" />
     </svg>
   );
 }

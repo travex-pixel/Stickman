@@ -1,22 +1,22 @@
+/** FX palette. Mirrors the CSS tokens in globals.css so canvas and UI feel like one piece. */
 export const PALETTE = {
-  obsidian: 0x07080f,
-  charcoal: 0x14161f,
-  midnight: 0x0f1630,
-  cyan: 0x4ee6ff,
-  violet: 0x7b4dff,
-  gold: 0xd4b06a,
-  crimson: 0xc2314a,
-  bone: 0xe8ecf4,
-  ember: 0xff7a3d,
-  soul: 0x7df0c8,
+  ink: 0x0d1016,
+  ivory: 0xf0eadc,
+  gold: 0xe9c97a,
+  goldDeep: 0xcfa95e,
+  jade: 0x8fe0c4,
+  steel: 0xa8c4e6,
+  violet: 0x8f7cff,
+  crimson: 0xd95a66,
+  ember: 0xd9823f,
 } as const;
 
 export const RARITY_COLOR: Record<string, number> = {
-  common: 0x9aa3b5,
-  uncommon: 0x5fd38a,
-  rare: 0x4ea8ff,
-  epic: 0xb46bff,
-  legendary: 0xffc24d,
+  common: 0xa8a295,
+  uncommon: 0x6cc49a,
+  rare: 0x7aa6e0,
+  epic: 0xb595e6,
+  legendary: 0xe9c56f,
 };
 
 export function mix(a: number, b: number, t: number): number {

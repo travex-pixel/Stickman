@@ -31,7 +31,7 @@ export const ABILITIES: Record<AbilityId, AbilityDef> = {
     radius: 150,
     ultimate: false,
     unlockLevel: 1,
-    color: 0xe8ecf4,
+    color: 0xf0eadc,
   },
   thunder_strike: {
     id: "thunder_strike",
@@ -45,7 +45,7 @@ export const ABILITIES: Record<AbilityId, AbilityDef> = {
     radius: 130,
     ultimate: false,
     unlockLevel: 2,
-    color: 0x4ee6ff,
+    color: 0xa8c4e6,
   },
   shadow_dash: {
     id: "shadow_dash",
@@ -59,7 +59,7 @@ export const ABILITIES: Record<AbilityId, AbilityDef> = {
     radius: 0,
     ultimate: false,
     unlockLevel: 1,
-    color: 0x9b6bff,
+    color: 0xa48ee0,
   },
   soul_burst: {
     id: "soul_burst",
@@ -73,7 +73,7 @@ export const ABILITIES: Record<AbilityId, AbilityDef> = {
     radius: 120,
     ultimate: false,
     unlockLevel: 4,
-    color: 0x7df0c8,
+    color: 0x8fe0c4,
   },
   void_nova: {
     id: "void_nova",
@@ -87,7 +87,7 @@ export const ABILITIES: Record<AbilityId, AbilityDef> = {
     radius: 170,
     ultimate: false,
     unlockLevel: 6,
-    color: 0x6d3cff,
+    color: 0x8a74d0,
   },
   ascendant_fury: {
     id: "ascendant_fury",
@@ -101,7 +101,7 @@ export const ABILITIES: Record<AbilityId, AbilityDef> = {
     radius: 9999,
     ultimate: true,
     unlockLevel: 3,
-    color: 0xffd36b,
+    color: 0xe9c97a,
   },
 };
 
