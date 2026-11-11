@@ -2,6 +2,7 @@ import { createDefaultProfile, PROFILE_VERSION, type Profile } from "@/game/prog
 import { SUMMONS } from "@/game/data/summons";
 import { EQUIP_SLOTS, type AbilityId } from "@/game/data/ids";
 import { ABILITIES, TECHNIQUES } from "@/game/data/abilities";
+import { TREE } from "@/game/progression/ascension";
 import { ABILITY_RANK_MAX } from "@/game/progression/abilityRanks";
 import { EQUIPMENT_TEMPLATES } from "@/game/data/equipment";
 import { SKILLS } from "@/game/data/skills";
@@ -153,7 +154,9 @@ export function sanitizeProfile(raw: unknown): { profile: Profile; repaired: boo
     objectives: sanitizeObjectives(raw.objectives),
     ascension: (() => {
       const a = isObj(raw.ascension) ? raw.ascension : {};
-      return { count: num(a.count, 0, 0, 9999), aether: num(a.aether, 0, 0, 1e7), bestEver: num(a.bestEver, 0, 0, 9999) };
+      const aether = num(a.aether, 0, 0, 1e7);
+      const nodes = isObj(a.nodes) ? Object.fromEntries(Object.entries(a.nodes).filter(([k, v]) => TREE.some((n) => n.id === k) && isNum(v) && v >= 0).map(([k, v]) => [k, Math.min(TREE.find((n) => n.id === k)!.max, Math.floor(v as number))])) : {};
+      return { count: num(a.count, 0, 0, 9999), aether, bestEver: num(a.bestEver, 0, 0, 9999), spent: Math.min(aether, num(a.spent, 0, 0, 1e7)), nodes };
     })(),
     modes: {
       keyDay: isStr(md.keyDay) ? md.keyDay : "",

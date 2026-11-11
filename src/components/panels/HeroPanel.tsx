@@ -5,7 +5,7 @@ import { HoldButton } from "@/components/ui/HoldButton";
 import { useController, useProfileRef } from "@/hooks/useGame";
 import type { UpgradeableStat } from "@/game/data/ids";
 import { STAT_LABEL } from "@/game/data/equipment";
-import { aetherFor, canAscend, romanAscension } from "@/game/progression/ascension";
+import { aetherFor, canAscend, romanAscension, spendableAether } from "@/game/progression/ascension";
 
 /** Card titles are narrow on phones: short names that never truncate. */
 const SHORT_LABEL: Partial<Record<string, string>> = { attackSpeed: "Atk Speed", critChance: "Crit Rate", critDamage: "Crit Dmg" };
@@ -146,13 +146,14 @@ function AscendBadge() {
   const gain = aetherFor(profile.progress.bestStage);
   return (
     <button
-      className={cn("h-[34px] flex flex-col items-center justify-center rounded-lg border px-2 leading-none", can ? "border-gold/70 bg-gold/10" : "border-white/10 bg-black/20")}
+      className={cn("relative h-[34px] flex flex-col items-center justify-center rounded-lg border px-2 leading-none", can ? "border-gold/70 bg-gold/10" : "border-white/10 bg-black/20")}
       onClick={() => c.openAscension()}
       data-testid="ascend-badge"
       aria-label={can ? `Ascend for ${gain} Aether` : `Aether ${a.aether}`}
     >
       <span className="caps !text-[9px] text-gold-2">{a.count > 0 ? `Ascension ${romanAscension(a.count)}` : "Ascend"}</span>
       <span className="text-[11px] font-bold text-ivory tabular-nums mt-0.5">{can ? `+${gain} ✦` : `${a.aether} ✦`}</span>
+      {spendableAether(profile) > 0 && <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-gold-2 border-2 border-ink" aria-hidden="true" />}
     </button>
   );
 }

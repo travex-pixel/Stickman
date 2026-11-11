@@ -24,7 +24,7 @@ import { REPEAT_BOSS_CORE_CHANCE, shadowXpShare, skillPointsBetween } from "@/ga
 import { resolveBossDefeat, resolveBossVictory, resolveCycle, resolveFarmingDefeat, clampFarmStage } from "@/game/progression/campaign";
 import { forecastBoss } from "@/game/progression/readiness";
 import { learnTechniques } from "@/game/progression/techniques";
-import { ascend, canAscend } from "@/game/progression/ascension";
+import { ascend, buyNode, canAscend, nextNodeCost, spendableAether, type TreeNodeId } from "@/game/progression/ascension";
 
 const SKILL_ORDER = ["c1", "p1", "s1", "c2", "p2", "s2", "c3", "p3", "c4", "s3", "p4", "s4", "c5", "p5", "s5"];
 
@@ -491,6 +491,7 @@ export class Sim {
             if (r) {
               this.log(`ASCENSION ${r.count} from stage ${r.fromStage}: +${r.gained} aether (total ${r.total})`);
               this.ascensions.push({ min: this.min, from: r.fromStage, total: r.total });
+              this.spendAether();
               gateRec = null;
               this.startFarm(1);
               continue;
@@ -503,6 +504,26 @@ export class Sim {
         }
       }
     }
+  }
+
+  /** Aether policy: Command first, then whichever of Might, Vigor, Fortune, Insight is cheapest. */
+  private spendAether(): void {
+    const p = this.p;
+    const order: TreeNodeId[] = ["command", "might", "vigor", "fortune", "insight", "patience"];
+    for (let guard = 0; guard < 500; guard++) {
+      if (nextNodeCost(p, "command") !== null && spendableAether(p) >= 60 && buyNode(p, "command")) continue;
+      let best: TreeNodeId | null = null;
+      let cost = Infinity;
+      for (const id of order) {
+        const c = nextNodeCost(p, id);
+        if (c !== null && c < cost) {
+          cost = c;
+          best = id;
+        }
+      }
+      if (!best || cost > spendableAether(p) || !buyNode(p, best)) break;
+    }
+    this.log(`aether tree: ${JSON.stringify(p.ascension.nodes)} (spare ${spendableAether(p)})`);
   }
 }
 

@@ -44,7 +44,7 @@ import { ABILITIES } from "./data/abilities";
 import { bossForStage, isBossStage, regionForStage } from "./data/regions";
 import { clampFarmStage, frontierStage, normalizeCampaign, resolveBossDefeat, resolveBossVictory, resolveCycle, resolveFarmingDefeat } from "./progression/campaign";
 import { bossFightStepper, readinessTips, summarizeForecast, FORECAST_SEEDS, type BossForecast, type FightResult, type ReadinessTip } from "./progression/readiness";
-import { ascend as doAscend, romanAscension } from "./progression/ascension";
+import { ascend as doAscend, buyNode as doBuyNode, romanAscension, type TreeNodeId } from "./progression/ascension";
 import { claimObjective as doClaimObjective, objectiveDef, recordObjective, refreshObjectives, type ObjectiveCounter } from "./progression/objectives";
 import { fmt } from "@/lib/format";
 
@@ -362,6 +362,7 @@ export class GameController {
   /** Offline rewards are already in the profile: apply XP, feed objectives, save, then show. */
   private presentOffline(summary: OfflineSummary): void {
     const p = this.profile;
+    summary.xp = Math.round(summary.xp * computeModifiers(p).xpMult);
     const lv = applyXp(p.player.level, p.player.xp, summary.xp);
     p.player.level = lv.level;
     p.player.xp = lv.xp;
@@ -751,7 +752,7 @@ export class GameController {
       dirty = true;
     }
     if (xp > 0) {
-      const res = applyXp(p.player.level, p.player.xp, xp);
+      const res = applyXp(p.player.level, p.player.xp, Math.round(xp * (this.world?.loadout.mods.xpMult ?? 1)));
       p.player.level = res.level;
       p.player.xp = res.xp;
       if (res.levelsGained > 0) this.onLevelUp(res.levelsGained);
@@ -857,10 +858,11 @@ export class GameController {
   /** Every ordinary encounter of the farmed stage is down: pay the cycle, then move on or hold. */
   private onEncountersCleared(stage: number): void {
     const p = this.profile;
-    const res = resolveCycle(p, stage, computeModifiers(p).goldFind);
+    const mods = computeModifiers(p);
+    const res = resolveCycle(p, stage, mods.goldFind);
     p.player.gold += res.gold;
     this.run.gold += res.gold;
-    const lv = applyXp(p.player.level, p.player.xp, res.xp);
+    const lv = applyXp(p.player.level, p.player.xp, Math.round(res.xp * mods.xpMult));
     p.player.level = lv.level;
     p.player.xp = lv.xp;
     if (lv.levelsGained > 0) this.onLevelUp(lv.levelsGained);
@@ -1800,6 +1802,20 @@ export class GameController {
     this.refreshLoadout();
     this.commit();
     void this.save.flush();
+    return true;
+  }
+
+  /** Spend Aether on a node of the Ascension tree. */
+  buyAscensionNode(id: TreeNodeId): boolean {
+    this.userGesture();
+    if (!doBuyNode(this.profile, id)) {
+      this.sfx("error", { volume: 0.3 });
+      return false;
+    }
+    this.sfx("upgrade", { volume: 0.7, rate: 0.85 });
+    this.renderer?.flash(0xe9c97a, 0.15);
+    this.refreshLoadout();
+    this.commit();
     return true;
   }
 

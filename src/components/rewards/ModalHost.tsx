@@ -17,7 +17,7 @@ import { fmt, fmtDuration } from "@/lib/format";
 import { bossForStage, isBossStage } from "@/game/data/regions";
 import { affordableUpgrades } from "@/game/progression/readiness";
 import { nextMilestone } from "@/game/progression/milestones";
-import { AETHER_GOLD, AETHER_POWER, ASCEND_MIN_STAGE, aetherFor, canAscend, romanAscension } from "@/game/progression/ascension";
+import { AETHER_GOLD, AETHER_POWER, ASCEND_MIN_STAGE, TREE, aetherFor, canAscend, nextNodeCost, nodeLevel, romanAscension, spendableAether } from "@/game/progression/ascension";
 import { DAILY_BONUS, objectiveDef, objectivePayout } from "@/game/progression/objectives";
 import { cn } from "@/lib/cn";
 import { SettingsModal } from "@/components/settings/SettingsModal";
@@ -524,6 +524,62 @@ function Objectives() {
 }
 
 function AscendSheet() {
+  const profile = useProfileRef();
+  const [tab, setTab] = useState<"ascend" | "tree">(() => (spendableAether(profile) > 0 && !canAscend(profile) ? "tree" : "ascend"));
+  return (
+    <Card>
+      <div className="flex gap-1 px-3 pt-3" role="tablist">
+        {(["ascend", "tree"] as const).map((t) => (
+          <button key={t} className={cn("flex-1 h-8 rounded-md text-[12px] font-semibold border relative", tab === t ? "border-gold/60 bg-gold/10 text-gold-2" : "border-white/10 text-mist")} onClick={() => setTab(t)} data-testid={`ascend-tab-${t}`} role="tab" aria-selected={tab === t}>
+            {t === "ascend" ? "Ascend" : "Aether tree"}
+            {t === "tree" && spendableAether(profile) > 0 && <span className="absolute -top-1 -right-1 rounded-full bg-gold-2 px-1 text-[9px] font-extrabold text-ink leading-4">{spendableAether(profile)}</span>}
+          </button>
+        ))}
+      </div>
+      {tab === "ascend" ? <AscendBody /> : <AetherTree />}
+    </Card>
+  );
+}
+
+function AetherTree() {
+  const c = useController();
+  const profile = useProfileRef();
+  const spend = spendableAether(profile);
+  return (
+    <div className="px-3 pt-2 pb-3 flex flex-col gap-1" data-testid="aether-tree">
+      <div className="flex items-baseline justify-between px-0.5">
+        <span className="text-[11px] text-mist">Spending never lowers the flat bonus from lifetime Aether.</span>
+        <span className="font-bold text-gold-2 text-[13px] tabular-nums shrink-0 ml-2">{spend} ✦</span>
+      </div>
+      {TREE.map((n) => {
+        const lvl = nodeLevel(profile, n.id);
+        const cost = nextNodeCost(profile, n.id);
+        const can = cost !== null && spend >= cost;
+        return (
+          <div key={n.id} className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1" data-testid={`node-${n.id}`}>
+            <div className="flex-1 min-w-0 leading-tight">
+              <div className="flex items-baseline gap-1.5">
+                <span className="font-display text-[13px] text-ivory">{n.name}</span>
+                <span className="text-[10px] text-mist tabular-nums">
+                  {lvl}/{n.max}
+                </span>
+              </div>
+              <div className="text-[10px] text-parch truncate">{n.per}{lvl > 0 && n.max > 1 ? ` (now ${lvl}×)` : ""}</div>
+            </div>
+            <button className={cn("shrink-0 h-8 min-w-[64px] rounded-md text-[11px] font-bold", cost === null ? "text-mist" : can ? "btn-primary !py-0 !px-2" : "border border-white/10 text-mist")} disabled={!can} onClick={() => c.buyAscensionNode(n.id)} data-testid={`buy-${n.id}`}>
+              {cost === null ? "Max" : `${cost} ✦`}
+            </button>
+          </div>
+        );
+      })}
+      <button className="btn-ghost w-full mt-1 !py-2" onClick={() => c.closeModal()}>
+        Close
+      </button>
+    </div>
+  );
+}
+
+function AscendBody() {
   const c = useController();
   const profile = useProfileRef();
   const a = profile.ascension;
@@ -532,8 +588,8 @@ function AscendSheet() {
   const after = a.aether + gain;
   const pct = (n: number) => Math.round(n * AETHER_POWER * 100);
   return (
-    <Card>
-      <div className="px-4 pt-4 pb-3 flex flex-col gap-2" data-testid="ascend-sheet">
+    <>
+      <div className="px-4 pt-3 pb-3 flex flex-col gap-2" data-testid="ascend-sheet">
         <div className="text-center">
           <div className="caps text-gold-2">{a.count > 0 ? `Ascension ${romanAscension(a.count)}` : "Ascension"}</div>
           <div className="font-display text-[20px] text-ivory leading-tight">Begin the climb anew</div>
@@ -569,7 +625,7 @@ function AscendSheet() {
           <HoldConfirm disabled={!can} onConfirm={() => c.confirmAscend()} label={`Hold to ascend (+${gain})`} />
         </div>
       </div>
-    </Card>
+    </>
   );
 }
 

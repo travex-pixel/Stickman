@@ -7,6 +7,7 @@ import { buildLoadout } from "./loadout";
 import type { EquipmentItem, Profile } from "./profile";
 import { clampFarmStage, resolveCycle, resolveFarmingDefeat } from "./campaign";
 import { computeModifiers } from "./stats";
+import { nodeLevel } from "./ascension";
 
 /**
  * Offline progression. Not a formula: it samples real farming cycles in the real simulation
@@ -26,8 +27,8 @@ export const OFFLINE_FIGHT_SHARE = 0.4;
  * The absence that counts grows with the journey: 2 hours to start, half an hour more per boss
  * won, up to 8. A brand-new save cannot skip its own early game by closing the tab overnight.
  */
-export function offlineCapSeconds(bossWins: number): number {
-  return Math.min(OFFLINE_CAP_SECONDS, (2 + 0.5 * Math.max(0, bossWins)) * 3600);
+export function offlineCapSeconds(bossWins: number, patience = 0): number {
+  return Math.min(OFFLINE_CAP_SECONDS, (2 + 0.5 * Math.max(0, bossWins)) * 3600) + Math.max(0, patience) * 3600;
 }
 /** Gear kept from offline drops; the rest is salvaged into gold. */
 export const OFFLINE_ITEMS_KEPT = 6;
@@ -107,7 +108,7 @@ export interface OfflineSummary {
  */
 export function applyOfflineProgress(profile: Profile, elapsedSeconds: number, seed: number): OfflineSummary | null {
   if (!Number.isFinite(elapsedSeconds) || elapsedSeconds < OFFLINE_MIN_SECONDS) return null;
-  const cap = offlineCapSeconds(profile.progress.bossWins);
+  const cap = offlineCapSeconds(profile.progress.bossWins, nodeLevel(profile, "patience"));
   const capped = elapsedSeconds > cap;
   const seconds = Math.min(cap, Math.floor(elapsedSeconds));
   let budget = seconds * OFFLINE_FIGHT_SHARE;

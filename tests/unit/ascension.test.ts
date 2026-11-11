@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createDefaultProfile } from "@/game/progression/profile";
-import { ascend, aetherFor, aetherPowerMult, canAscend, ASCEND_MIN_STAGE } from "@/game/progression/ascension";
+import { ascend, aetherFor, aetherPowerMult, buyNode, canAscend, nextNodeCost, nodeLevel, spendableAether, ASCEND_MIN_STAGE, TREE } from "@/game/progression/ascension";
+import { offlineCapSeconds } from "@/game/progression/offline";
 import { computeModifiers, computePlayerStats } from "@/game/progression/stats";
 import { claimEssence } from "@/game/summons/recruitment";
 import { runMigrations } from "@/persistence/migrations";
@@ -63,6 +64,70 @@ describe("ascension", () => {
     expect(raw.ascension).toEqual({ count: 0, aether: 0, bestEver: 12 });
     const bad = createDefaultProfile() as unknown as Record<string, unknown>;
     bad.ascension = { count: -3, aether: "lots", bestEver: 7 };
-    expect(sanitizeProfile(bad).profile.ascension).toEqual({ count: 0, aether: 0, bestEver: 7 });
+    expect(sanitizeProfile(bad).profile.ascension).toEqual({ count: 0, aether: 0, bestEver: 7, spent: 0, nodes: {} });
+  });
+});
+
+describe("the Aether tree", () => {
+  it("spends Aether at rising costs, stops at the cap, and never lowers the flat bonus", () => {
+    const p = createDefaultProfile();
+    p.ascension.aether = 10;
+    const flat = aetherPowerMult(p);
+    expect(nextNodeCost(p, "might")).toBe(2);
+    expect(buyNode(p, "might")).toBe(true);
+    expect(nextNodeCost(p, "might")).toBe(4);
+    expect(buyNode(p, "might")).toBe(true);
+    expect(spendableAether(p)).toBe(4);
+    expect(buyNode(p, "might")).toBe(false); // costs 6
+    expect(nodeLevel(p, "might")).toBe(2);
+    expect(aetherPowerMult(p)).toBe(flat);
+    p.ascension.aether = 1000;
+    expect(buyNode(p, "command")).toBe(true);
+    expect(nextNodeCost(p, "command")).toBeNull();
+    expect(buyNode(p, "command")).toBe(false);
+    for (const n of TREE) expect(n.cost(0)).toBeGreaterThan(0);
+  });
+
+  it("each node changes the numbers it names", () => {
+    const p = createDefaultProfile();
+    const base = computePlayerStats(p);
+    const mods = computeModifiers(p);
+    p.ascension.aether = 10_000;
+    p.ascension.spent = 10_000; // isolate the nodes from the flat Aether bonus
+    p.ascension.nodes = { might: 5, vigor: 5, fortune: 3, insight: 4, oathbinder: 2, command: 1 };
+    const flat = aetherPowerMult(p);
+    const s = computePlayerStats(p);
+    expect(s.attack / base.attack / flat).toBeCloseTo(1.3, 3);
+    expect(s.maxHp / base.maxHp / flat).toBeCloseTo(1.3, 3);
+    const m = computeModifiers(p);
+    expect(m.xpMult / mods.xpMult).toBeCloseTo(1.4, 5);
+    expect(m.extractionBonus - mods.extractionBonus).toBeCloseTo(0.06, 5);
+    expect(m.deploySlots).toBe(mods.deploySlots + 1);
+    expect(m.goldFind / mods.goldFind).toBeCloseTo((1 + 0.01 * 10_000) * 1.3, 3);
+    expect(offlineCapSeconds(0, 0)).toBe(2 * 3600);
+    expect(offlineCapSeconds(0, 2)).toBe(4 * 3600);
+  });
+
+  it("Treasury keeps a share of the gold through an ascension", () => {
+    const p = createDefaultProfile();
+    p.progress.bestStage = 25;
+    p.player.gold = 10_000;
+    p.ascension.nodes = { treasury: 2 };
+    ascend(p);
+    expect(p.player.gold).toBe(2000);
+  });
+
+  it("version 10 saves gain an empty tree; the sanitiser caps levels and overspending", () => {
+    const v10 = { ...createDefaultProfile(), version: 10 } as Record<string, unknown>;
+    v10.ascension = { count: 2, aether: 40, bestEver: 33 };
+    const { raw } = runMigrations(v10, 11);
+    expect(raw.ascension).toEqual({ count: 2, aether: 40, bestEver: 33, spent: 0, nodes: {} });
+    const bad = createDefaultProfile() as unknown as Record<string, unknown>;
+    bad.ascension = { count: 1, aether: 20, bestEver: 25, spent: 99, nodes: { might: 400, bogus: 3, command: -1 } };
+    const a = sanitizeProfile(bad).profile.ascension;
+    expect(a.spent).toBeLessThanOrEqual(a.aether);
+    expect(a.nodes.might).toBe(25);
+    expect("bogus" in a.nodes).toBe(false);
+    expect(a.nodes.command ?? 0).toBe(0);
   });
 });

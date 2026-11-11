@@ -53,9 +53,63 @@ export function ascend(p: Profile): AscendResult | null {
   p.progress.currentStage = 1;
   p.progress.bossGate = 0;
   p.progress.autoPush = true;
-  p.player.gold = 0;
+  // Treasury keeps a share of the gold for the next climb.
+  p.player.gold = Math.floor(p.player.gold * 0.1 * nodeLevel(p, "treasury"));
   for (const k of Object.keys(p.player.statLevels) as (keyof Profile["player"]["statLevels"])[]) p.player.statLevels[k] = 1;
   return { gained, total: a.aether, count: a.count, fromStage };
+}
+
+/**
+ * The Ascension tree. Lifetime Aether keeps its flat bonus; Aether can also be spent here on
+ * choices that shape every later climb. Spending never lowers the flat bonus.
+ */
+export type TreeNodeId = "might" | "vigor" | "fortune" | "insight" | "patience" | "oathbinder" | "command" | "treasury";
+
+export interface TreeNode {
+  id: TreeNodeId;
+  name: string;
+  /** Effect per level, in words. */
+  per: string;
+  max: number;
+  cost: (level: number) => number;
+}
+
+export const TREE: TreeNode[] = [
+  { id: "might", name: "Might", per: "+6% Attack", max: 25, cost: (l) => 2 + 2 * l },
+  { id: "vigor", name: "Vigor", per: "+6% Health", max: 25, cost: (l) => 2 + 2 * l },
+  { id: "fortune", name: "Fortune", per: "+10% gold", max: 20, cost: (l) => 3 + 2 * l },
+  { id: "insight", name: "Insight", per: "+10% XP", max: 20, cost: (l) => 3 + 2 * l },
+  { id: "treasury", name: "Treasury", per: "Keep 10% of your gold when you ascend", max: 3, cost: (l) => 12 * (l + 1) },
+  { id: "oathbinder", name: "Oathbinder", per: "+3% BIND chance", max: 5, cost: (l) => 8 * (l + 1) },
+  { id: "patience", name: "Patience", per: "+1 hour of offline time", max: 4, cost: (l) => 15 * (l + 1) },
+  { id: "command", name: "Command", per: "+1 shadow in your army", max: 1, cost: () => 60 },
+];
+
+export function nodeLevel(p: Profile, id: TreeNodeId): number {
+  return Math.max(0, Math.floor(p.ascension.nodes[id] ?? 0));
+}
+
+export function spendableAether(p: Profile): number {
+  return Math.max(0, p.ascension.aether - p.ascension.spent);
+}
+
+export function nodeDef(id: TreeNodeId): TreeNode {
+  return TREE.find((n) => n.id === id) as TreeNode;
+}
+
+export function nextNodeCost(p: Profile, id: TreeNodeId): number | null {
+  const def = nodeDef(id);
+  const lvl = nodeLevel(p, id);
+  return lvl >= def.max ? null : def.cost(lvl);
+}
+
+/** Spends Aether on a tree node. Returns false when maxed or unaffordable. */
+export function buyNode(p: Profile, id: TreeNodeId): boolean {
+  const cost = nextNodeCost(p, id);
+  if (cost === null || spendableAether(p) < cost) return false;
+  p.ascension.spent += cost;
+  p.ascension.nodes[id] = nodeLevel(p, id) + 1;
+  return true;
 }
 
 export function romanAscension(n: number): string {

@@ -99,6 +99,15 @@ export const MIGRATIONS: Migration[] = [
       return { ...raw, version: 10, ascension: { count: 0, aether: 0, bestEver: typeof progress.bestStage === "number" ? progress.bestStage : 0 } };
     },
   },
+  {
+    // The Ascension tree: spendable Aether and node levels.
+    from: 10,
+    to: 11,
+    migrate: (raw) => {
+      const a = (raw.ascension as Record<string, unknown> | undefined) ?? {};
+      return { ...raw, version: 11, ascension: { count: 0, aether: 0, bestEver: 0, ...a, spent: a.spent ?? 0, nodes: a.nodes ?? {} } };
+    },
+  },
 ];
 
 export function runMigrations(raw: Record<string, unknown>, targetVersion: number): { raw: Record<string, unknown>; migrated: boolean } {

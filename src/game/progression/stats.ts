@@ -7,7 +7,7 @@ import { codexBonus } from "../summons/extraction";
 import { TECHNIQUE_OWNED_ATTACK } from "../data/abilities";
 import type { GearEffectId } from "../data/gearEffects";
 import { GEAR_SETS, setCounts } from "../data/gearSets";
-import { aetherGoldMult, aetherPowerMult } from "./ascension";
+import { aetherGoldMult, aetherPowerMult, nodeLevel } from "./ascension";
 
 /** Each Ascendant rank multiplies core stats. Rank is earned in Rank Trials, not bought. */
 export const RANK_STAT_STEP = 0.08;
@@ -97,6 +97,8 @@ export interface PlayerModifiers {
   /** Flat bonus to BIND success chance. */
   extractionBonus: number;
   summonXpMult: number;
+  /** Warrior XP from every source. */
+  xpMult: number;
   deploySlots: number;
   synergies: Set<"arc_pull" | "thunder_mark" | "nova_opening" | "soul_mend">;
   gearEffects: Set<GearEffectId>;
@@ -134,6 +136,7 @@ export function computeModifiers(profile: Profile): PlayerModifiers {
     essenceChanceMult: 1,
     extractionBonus: 0,
     summonXpMult: 1,
+    xpMult: 1,
     deploySlots: 2,
     synergies: new Set(),
     gearEffects: new Set(),
@@ -218,7 +221,10 @@ export function computeModifiers(profile: Profile): PlayerModifiers {
     m.extractionBonus += 0.05;
   }
   if (m.gearEffects.has("tempest")) m.cooldownMult *= 0.85;
-  m.goldFind *= aetherGoldMult(profile);
+  m.goldFind *= aetherGoldMult(profile) * (1 + 0.1 * nodeLevel(profile, "fortune"));
+  m.xpMult *= 1 + 0.1 * nodeLevel(profile, "insight");
+  m.extractionBonus += 0.03 * nodeLevel(profile, "oathbinder");
+  m.deploySlots += nodeLevel(profile, "command");
   if (profile.player.rank >= 2) m.deploySlots += 1;
   if (profile.player.rank >= 5) m.deploySlots += 1;
   return m;
@@ -250,8 +256,8 @@ export function computePlayerStats(profile: Profile): CombatStats {
   s.maxHp *= milestoneMult(lv.maxHp);
   // Aether from past ascensions: permanent, compounding with everything else.
   const aether = aetherPowerMult(profile);
-  s.attack *= aether;
-  s.maxHp *= aether;
+  s.attack *= aether * (1 + 0.06 * nodeLevel(profile, "might"));
+  s.maxHp *= aether * (1 + 0.06 * nodeLevel(profile, "vigor"));
 
   // Warrior level: steady compounding power.
   const levelMult = 1 + (profile.player.level - 1) * 0.045;
