@@ -111,4 +111,45 @@ H6 and H7 cannot be tested from this environment. They need a person with a phon
 
 ## Results after Rebirth
 
-To be filled from the same instruments on the merged build.
+### After phase 1 (interface shell, HUD and panels; animation; camera), commit `f61c43c`
+
+The modals had not been rebuilt at this point, so their screens still carry old markup.
+
+**Design lint, totals over the same 17 screens: Verified**
+
+| Measure | Before | After phase 1 | Note |
+|---|---|---|---|
+| Text elements under 11px | 389 | 40 | All 40 are inside modals awaiting phase 2 |
+| Bordered boxes | 175 | 1 | |
+| Elements painted with a gradient | 288 | 0 | |
+| Elements with a shadow | 284 | 87 | |
+| Touch targets under 44px | 159 | 116 | **Not fixed.** Speed and menu buttons 39px, command segments 26px high, skill seals 40px, Rift rows 37px |
+| Uppercase text elements | 78 | 24 | Remainder in modals |
+| Text at weight 700 or more | 185 | 40 | Remainder in modals |
+| Low-contrast text | not measurable | 120 | **A defect the lint found.** The tertiary text token (3.85:1) was used for tab labels, stat levels and mode descriptions |
+| Font families | Marcellus, Manrope | Instrument Sans, Instrument Serif | |
+
+The two "not fixed" rows are the point of measuring: by eye the new screens looked finished. The
+tertiary colour is raised to `#8a877f` (5.2:1) and the touch targets are enlarged in phase 2.
+
+**Framing: Verified**
+
+| Build | Warrior height, share of battlefield | Distance from centre |
+|---|---|---|
+| Before | 17.7% | 19.4% of width |
+| First camera settings | 22.3% | 10.5% |
+| Tuned (minimum zoom 1.12, maximum 1.5, tighter box) | 25.5% | 10.6% |
+
+H3 is supported on height (target 24%). Centring misses its 10% target by half a point.
+
+**Contact timing (H2, first half):** frame sequences stepped at exact simulation frames show the
+blade through the target on the frame the damage number appears. Verified from the sequences in
+the animation stream's contact sheets; the survey half of H2 still needs real players.
+
+**Performance (H4): not met yet.** The animation stream measured the renderer's own scripting
+time at about 25 to 30% over baseline at the median (4x CPU throttle, alternating runs on a noisy
+machine). Reducing it is the first task of the cinematics stream. H4 stays open.
+
+### After phase 2
+
+To be filled.
