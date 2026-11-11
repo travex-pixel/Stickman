@@ -1,6 +1,13 @@
 import type { WaveDef } from "./regions";
+import { EQUIP_SLOTS, type EquipSlot } from "./ids";
 
-export type ModeId = "campaign" | "vault" | "rift" | "endless" | "trial";
+export type ModeId = "campaign" | "vault" | "rift" | "crypt" | "endless" | "trial";
+/** Modes that spend a daily key. */
+export type KeyedMode = "vault" | "rift" | "crypt";
+export const KEYED_MODES: KeyedMode[] = ["vault", "rift", "crypt"];
+export function isKeyedMode(m: ModeId): m is KeyedMode {
+  return m === "vault" || m === "rift" || m === "crypt";
+}
 
 export interface ModeDef {
   id: ModeId;
@@ -21,6 +28,7 @@ export const MODES: Record<ModeId, ModeDef> = {
   campaign: { id: "campaign", name: "Campaign", tagline: "Push deeper into the Rift.", unlockAfterStage: 0, waves: 3, boss: true },
   vault: { id: "vault", name: "Gold Vault", tagline: "45 seconds. Everything that falls drops seven times the gold.", unlockAfterStage: 2, dailyKeys: 3, duration: 45, waves: 1, boss: false },
   rift: { id: "rift", name: "Essence Rift", tagline: "Every foe swears an oath. Double shards for your army.", unlockAfterStage: 3, dailyKeys: 3, waves: 3, boss: false },
+  crypt: { id: "crypt", name: "Relic Crypt", tagline: "Elites guard today's relics. Each one drops gear for the featured slot.", unlockAfterStage: 4, dailyKeys: 3, waves: 3, boss: false },
   endless: { id: "endless", name: "Endless Ascent", tagline: "How far can your army climb?", unlockAfterStage: 5, waves: Infinity, boss: false },
   trial: { id: "trial", name: "Rank Trial", tagline: "Prove yourself against an empowered Warden.", unlockAfterStage: 0, waves: 1, boss: true },
 };
@@ -67,4 +75,26 @@ export function endlessWave(n: number): WaveDef {
 /** Effective difficulty for endless: climbs one stage every two waves from the player's frontier. */
 export function endlessStage(baseStage: number, wave: number): number {
   return Math.max(1, baseStage) + Math.floor((wave - 1) / 2);
+}
+
+/** The Relic Crypt features one equipment slot per day, rotating through all six. */
+export function cryptSlot(now = new Date()): EquipSlot {
+  const day = Math.floor(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) / 86_400_000);
+  return EQUIP_SLOTS[day % EQUIP_SLOTS.length]!;
+}
+
+/**
+ * Relic Crypt: elites in every wave (each guaranteed to drop gear for the featured slot) and a
+ * Crypt Keeper closing wave three. Husks fill the gaps so AoE still matters.
+ */
+export function cryptWaves(stage: number): WaveDef[] {
+  const drowned = stage >= 7;
+  const brute = drowned ? "tide_brute" : "ashborn_brute";
+  const husk = drowned ? "drowned_husk" : "husk";
+  const ranged = drowned ? "deepshot" : "veilshot";
+  return [
+    { spawns: [{ enemyId: husk, count: 4, interval: 1.2, delay: 0.5 }, { enemyId: husk, count: 1, interval: 1, delay: 2, elite: "hasted" }, { enemyId: ranged, count: 1, interval: 1, delay: 3.5, elite: "armored" }] },
+    { spawns: [{ enemyId: husk, count: 3, interval: 1.2, delay: 0.5 }, { enemyId: "bastion_husk", count: 1, interval: 1, delay: 1.5, elite: "vampiric" }, { enemyId: brute, count: 1, interval: 1, delay: 4, elite: "brutal" }] },
+    { spawns: [{ enemyId: husk, count: 3, interval: 1.2, delay: 0.5 }, { enemyId: ranged, count: 1, interval: 1, delay: 2, elite: "hasted" }, { enemyId: brute, count: 1, interval: 1, delay: 4.5, elite: "armored", keeper: true }] },
+  ];
 }

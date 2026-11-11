@@ -89,7 +89,7 @@ export interface Profile {
   modes: {
     /** Local calendar day (YYYY-MM-DD) the keys were last refilled. */
     keyDay: string;
-    keys: { vault: number; rift: number };
+    keys: { vault: number; rift: number; crypt: number };
     endlessBest: number;
     vaultBest: number;
   };
@@ -136,7 +136,7 @@ export function createDefaultProfile(now = Date.now()): Profile {
       evolutions: 0,
       redeemedCodes: [],
     },
-    modes: { keyDay: "", keys: { vault: 3, rift: 3 }, endlessBest: 0, vaultBest: 0 },
+    modes: { keyDay: "", keys: { vault: 3, rift: 3, crypt: 3 }, endlessBest: 0, vaultBest: 0 },
     tutorial: { completed: [], finished: false },
     settings: { music: 0.6, sfx: 0.8, reducedEffects: false, diagnostics: false, battleSpeed: 1, autoAdvance: true },
   };

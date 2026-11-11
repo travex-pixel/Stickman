@@ -6,6 +6,8 @@ export interface WaveSpawn {
   elite?: EliteAffix;
   /** Softens this group's attack (onboarding). */
   attackMult?: number;
+  /** Relic Crypt: the first enemy of this group is the Crypt Keeper (tougher, boss-grade loot). */
+  keeper?: boolean;
   count: number;
   /** Seconds between spawns inside this group. */
   interval: number;

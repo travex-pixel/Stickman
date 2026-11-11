@@ -4,9 +4,10 @@ import { clamp, dist, type Vec2 } from "./math";
 import type { Combatant, EssenceOrb, GroundHazard, Projectile, Telegraph, Faction, ActionState } from "../entities/types";
 import { createPlayer, createEnemy, createSummon, makeElite } from "../entities/factory";
 import { ELITES, ELITE_IDS, ELITE_REWARD_MULT, eliteChance } from "../data/elites";
-import type { EliteAffix } from "../data/ids";
+import type { EliteAffix, EquipSlot } from "../data/ids";
+import { RARITY_ORDER } from "../data/ids";
 import { BOSS_ATTEMPTS } from "../summons/extraction";
-import { MODES, VAULT_GOLD_MULT, endlessStage, endlessWave, riftWaves, vaultWaves, type ModeDef, type ModeId } from "../data/modes";
+import { MODES, VAULT_GOLD_MULT, cryptWaves, endlessStage, endlessWave, riftWaves, vaultWaves, type ModeDef, type ModeId } from "../data/modes";
 import type { PlayerLoadout, DeployedSummonLoadout } from "../progression/loadout";
 import type { AbilityId, SummonCommand, Element } from "../data/ids";
 import { ABILITIES, ULTIMATE_ENERGY_COST, ULTIMATE_ID } from "../data/abilities";
@@ -63,11 +64,13 @@ export interface WorldOptions {
   loadout: PlayerLoadout;
   seed?: number;
   mode?: ModeId;
+  /** Relic Crypt: the slot every elite drop belongs to. */
+  cryptSlot?: EquipSlot;
 }
 
 interface WaveRunner {
   def: WaveDef;
-  spawnQueue: { enemyId: string; at: number; elite?: EliteAffix; attackMult?: number }[];
+  spawnQueue: { enemyId: string; at: number; elite?: EliteAffix; attackMult?: number; keeper?: boolean }[];
   elapsed: number;
 }
 
@@ -116,6 +119,7 @@ export class World {
 
   readonly mode: ModeId;
   readonly modeDef: ModeDef;
+  readonly cryptSlot: EquipSlot;
   /** Seconds spent fighting in this run (drives the Gold Vault timer). */
   modeTime = 0;
 
@@ -125,8 +129,9 @@ export class World {
     this.mode = opts.mode ?? "campaign";
     this.modeDef = MODES[this.mode];
     this.rng = new Rng(opts.seed ?? (this.stage * 7919 + 17));
+    this.cryptSlot = opts.cryptSlot ?? "weapon";
     this.regionWaves =
-      this.mode === "vault" ? vaultWaves() : this.mode === "rift" ? riftWaves(this.stage) : this.mode === "trial" ? regionForStage(this.stage).waves(this.stage).slice(0, 1) : regionForStage(this.stage).waves(this.stage);
+      this.mode === "vault" ? vaultWaves() : this.mode === "rift" ? riftWaves(this.stage) : this.mode === "crypt" ? cryptWaves(this.stage) : this.mode === "trial" ? regionForStage(this.stage).waves(this.stage).slice(0, 1) : regionForStage(this.stage).waves(this.stage);
     if (this.mode === "vault") this.modeGoldMult = VAULT_GOLD_MULT;
     this.cooldowns = { arc_slash: 0, thunder_strike: 0, shadow_dash: 0, soul_burst: 0, void_nova: 0, ascendant_fury: 0 };
     this.player = createPlayer(this.allocId(), opts.loadout, { x: ARENA.homeX, y: ARENA.homeY });
@@ -553,9 +558,9 @@ export class World {
     this.wave = n;
     const def = this.mode === "endless" ? endlessWave(n) : (this.regionWaves[n - 1] ?? this.regionWaves[this.regionWaves.length - 1]);
     if (!def) return;
-    const queue: { enemyId: string; at: number; elite?: EliteAffix; attackMult?: number }[] = [];
+    const queue: { enemyId: string; at: number; elite?: EliteAffix; attackMult?: number; keeper?: boolean }[] = [];
     for (const group of def.spawns) {
-      for (let i = 0; i < group.count; i++) queue.push({ enemyId: group.enemyId, at: group.delay + i * group.interval, elite: i === 0 ? group.elite : undefined, attackMult: group.attackMult });
+      for (let i = 0; i < group.count; i++) queue.push({ enemyId: group.enemyId, at: group.delay + i * group.interval, elite: i === 0 ? group.elite : undefined, attackMult: group.attackMult, keeper: i === 0 && group.keeper });
     }
     queue.sort((a, b) => a.at - b.at);
     this.waveRunner = { def, spawnQueue: queue, elapsed: 0 };
@@ -568,9 +573,16 @@ export class World {
     if (!r) return;
     r.elapsed += rawDt;
     while (r.spawnQueue.length > 0 && (r.spawnQueue[0] as { at: number }).at <= r.elapsed) {
-      const next = r.spawnQueue.shift() as { enemyId: string; at: number; elite?: EliteAffix; attackMult?: number };
+      const next = r.spawnQueue.shift() as { enemyId: string; at: number; elite?: EliteAffix; attackMult?: number; keeper?: boolean };
       const e = this.spawnEnemy(next.enemyId, { elite: next.elite });
       if (next.attackMult) e.stats.attack = Math.round(e.stats.attack * next.attackMult * 10) / 10;
+      if (next.keeper && e.enemy) {
+        e.enemy.keeper = true;
+        e.name = "Crypt Keeper";
+        e.stats.maxHp = Math.round(e.stats.maxHp * 2.2);
+        e.hp = e.stats.maxHp;
+        e.scale *= 1.15;
+      }
     }
   }
 
@@ -1004,6 +1016,14 @@ export class World {
       const item = generateItem(this.rng, this.stage, rollRarity(this.rng, this.stage, true));
       this.pendingLoot.push({ item });
       this.events.push({ type: "loot", pos: { ...e.pos } });
+    } else if (this.mode === "crypt") {
+      // The Crypt is about targeted gear: only elites drop, always for today's slot, a tier up.
+      if (e.enemy?.elite) {
+        const base = e.enemy.keeper ? rollRarity(this.rng, this.stage, true) : rollRarity(this.rng, this.stage, false);
+        const rarity = e.enemy.keeper ? base : RARITY_ORDER[Math.min(RARITY_ORDER.length - 1, RARITY_ORDER.indexOf(base) + 1)]!;
+        this.pendingLoot.push({ item: generateItem(this.rng, this.stage, rarity, this.cryptSlot) });
+        this.events.push({ type: "loot", pos: { ...e.pos } });
+      }
     } else if (this.rng.chance(e.enemy?.elite ? 0.45 : e.enemy?.minion ? 0.02 : 0.09)) {
       const item = generateItem(this.rng, this.stage, rollRarity(this.rng, this.stage, false));
       this.pendingLoot.push({ item });

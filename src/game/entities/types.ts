@@ -62,6 +62,8 @@ export interface EnemyState {
   callPoints?: Vec2[];
   /** Ranged repositioning target. */
   dest?: Vec2;
+  /** Relic Crypt keeper: tougher, drops boss-grade gear. */
+  keeper?: boolean;
   /** Lurker dive: hidden and gliding, then surfacing at a telegraphed spot. */
   dive?: { phase: "hidden" | "surfacing"; timer: number; at: Vec2 };
 }

@@ -16,10 +16,11 @@ import { evaluateAchievements, evaluateJournal } from "./progression/achievement
 import { computeModifiers, isStatUnlocked, statUpgradeCost } from "./progression/stats";
 import { claimEssence as doClaimEssence, setDeployed, type ClaimOutcome } from "./summons/recruitment";
 import { CODEX_STAR_STEP, resolveExtraction, speciesStars } from "./summons/extraction";
-import { STAT_LABEL } from "./data/equipment";
+import { SLOT_LABEL, STAT_LABEL } from "./data/equipment";
 import { bondCost, BOND_CAP, canStarUp, checkEvolution, evolveSummon, grantSummonXp, starCost, starUp } from "./summons/progression";
 import { enemyDef } from "./data/enemies";
-import { MODES, RIFT_ESSENCE_PER_KILL, type ModeId } from "./data/modes";
+import { MODES, RIFT_ESSENCE_PER_KILL, cryptSlot, isKeyedMode, type ModeId } from "./data/modes";
+import { RARITY_ORDER } from "./data/ids";
 import { REPEAT_BOSS_CORE_CHANCE, shadowXpShare, skillPointsBetween, stageClearCores, stageClearGold, stageClearXp } from "./economy/rewards";
 import { isBossStage } from "./data/regions";
 import { RANK_STEPS, nextRankStep, promote } from "./progression/ranks";
@@ -51,7 +52,7 @@ export type Modal =
   | { kind: "weapon_path" }
   | { kind: "journal" }
   | { kind: "boss_intro"; defId: string }
-  | { kind: "mode_result"; mode: ModeId; title: string; subtitle: string; lines: { label: string; value: string; tone?: "gold" | "jade" | "violet" }[]; success: boolean; record?: boolean }
+  | { kind: "mode_result"; mode: ModeId; title: string; subtitle: string; lines: { label: string; value: string; tone?: "gold" | "jade" | "violet" }[]; success: boolean; record?: boolean; items?: EquipmentItem[] }
   | { kind: "rank_up"; from: number; to: number; rewards: string[] };
 
 export interface Toast {
@@ -288,14 +289,14 @@ export class GameController {
   startRun(stage: number, mode: ModeId = "campaign"): void {
     this.world?.dispose();
     const loadout = buildLoadout(this.profile);
-    this.world = new World({ stage, loadout, mode, seed: (Date.now() ^ (stage * 2654435761)) >>> 0 });
-    this.run = { gold: 0, kills: 0, raised: 0, mode };
+    this.world = new World({ stage, loadout, mode, seed: (Date.now() ^ (stage * 2654435761)) >>> 0, cryptSlot: cryptSlot() });
+    this.run = { gold: 0, kills: 0, raised: 0, mode, items: [] };
     this.renderer?.setWorld(this.world);
     this.hudStore.set(this.world.snapshot());
   }
 
   /** Per-run tallies for the result screens. */
-  private run: { gold: number; kills: number; raised: number; mode: ModeId } = { gold: 0, kills: 0, raised: 0, mode: "campaign" };
+  private run: { gold: number; kills: number; raised: number; mode: ModeId; items: EquipmentItem[] } = { gold: 0, kills: 0, raised: 0, mode: "campaign", items: [] };
 
   get mode(): ModeId {
     return this.world?.mode ?? "campaign";
@@ -307,7 +308,7 @@ export class GameController {
     const m = this.profile.modes;
     if (m.keyDay !== day) {
       m.keyDay = day;
-      m.keys = { vault: MODES.vault.dailyKeys ?? 3, rift: MODES.rift.dailyKeys ?? 3 };
+      m.keys = { vault: MODES.vault.dailyKeys ?? 3, rift: MODES.rift.dailyKeys ?? 3, crypt: MODES.crypt.dailyKeys ?? 3 };
       this.commit();
     }
   }
@@ -322,9 +323,7 @@ export class GameController {
       return { ok: true };
     }
     if (p.progress.bestStage < def.unlockAfterStage) return { ok: false, reason: `Clear stage ${def.unlockAfterStage}` };
-    if (mode === "vault" || mode === "rift") {
-      if (p.modes.keys[mode] <= 0) return { ok: false, reason: "Keys refill tomorrow" };
-    }
+    if (isKeyedMode(mode) && p.modes.keys[mode] <= 0) return { ok: false, reason: "Keys refill tomorrow" };
     return { ok: true };
   }
 
@@ -338,7 +337,7 @@ export class GameController {
       return false;
     }
     const p = this.profile;
-    if (mode === "vault" || mode === "rift") p.modes.keys[mode] -= 1;
+    if (isKeyedMode(mode)) p.modes.keys[mode] -= 1;
     const frontier = Math.max(1, p.progress.bestStage);
     const stage = mode === "trial" ? (nextRankStep(p)?.trialStage ?? frontier) : frontier;
     this.closeModal();
@@ -623,7 +622,10 @@ export class GameController {
     }
     const loot = this.world?.takeLoot() ?? [];
     if (loot.length > 0) {
-      for (const l of loot) this.addItem(l.item);
+      for (const l of loot) {
+        this.addItem(l.item);
+        if (this.run.mode === "crypt") this.run.items.push(l.item);
+      }
       dirty = true;
     }
     if (dirty) {
@@ -721,6 +723,12 @@ export class GameController {
       const best = p.modes.vaultBest;
       p.modes.vaultBest = Math.max(best, this.run.gold);
       this.enqueueModal({ kind: "mode_result", mode, title: "Vault emptied", subtitle: `${Math.round(time)} seconds`, lines: [{ label: "Gold", value: `+${this.run.gold}`, tone: "gold" }, { label: "Kills", value: `${this.run.kills}` }, { label: "Best haul", value: `${p.modes.vaultBest}` }], success: true, record: this.run.gold > best });
+      return;
+    }
+    if (mode === "crypt") {
+      const items = [...this.run.items].sort((a, b) => RARITY_ORDER.indexOf(b.rarity) - RARITY_ORDER.indexOf(a.rarity));
+      const best = items[0]?.rarity ?? "none";
+      this.enqueueModal({ kind: "mode_result", mode, title: "Crypt plundered", subtitle: `${SLOT_LABEL[this.world?.cryptSlot ?? "weapon"]} relics`, lines: [{ label: "Relics", value: `${items.length}`, tone: "gold" }, { label: "Best", value: best }, { label: "Gold", value: `+${this.run.gold}`, tone: "gold" }], success: true, items });
       return;
     }
     if (mode === "rift") {

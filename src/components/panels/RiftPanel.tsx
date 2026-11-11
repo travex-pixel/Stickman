@@ -4,11 +4,12 @@ import { Icon, type IconName } from "@/components/ui/Icon";
 import { useController, useHud, useProfileRef } from "@/hooks/useGame";
 import { regionForStage } from "@/game/data/regions";
 import { JOURNAL } from "@/game/data/lore";
-import { MODES, type ModeId } from "@/game/data/modes";
+import { MODES, cryptSlot, isKeyedMode, type ModeId } from "@/game/data/modes";
+import { SLOT_LABEL } from "@/game/data/equipment";
 import { nextRankStep, rankLetter } from "@/game/progression/ranks";
 import { cn } from "@/lib/cn";
 
-const MODE_ICON: Record<Exclude<ModeId, "campaign">, IconName> = { vault: "coin", rift: "summons", endless: "level", trial: "star" };
+const MODE_ICON: Record<Exclude<ModeId, "campaign">, IconName> = { vault: "coin", rift: "summons", crypt: "relic", endless: "level", trial: "star" };
 
 /** The journey: where you are on the campaign, and the trials that sit beside it. */
 export default function RiftPanel() {
@@ -21,7 +22,8 @@ export default function RiftPanel() {
   const first = Math.max(1, Math.min(maxStage, stage) - 2);
   const stages = Array.from({ length: 5 }, (_, i) => first + i).filter((s) => s <= maxStage);
   const step = nextRankStep(profile);
-  const modes: Exclude<ModeId, "campaign">[] = ["trial", "vault", "rift", "endless"];
+  const modes: Exclude<ModeId, "campaign">[] = ["trial", "vault", "rift", "crypt", "endless"];
+  const today = cryptSlot();
   return (
     <div className="flex flex-col h-full min-h-0 px-2 pt-1.5 pb-1.5 gap-1.5">
       <div className="flex items-center justify-between leading-tight px-0.5">
@@ -48,17 +50,17 @@ export default function RiftPanel() {
           </button>
         ))}
       </div>
-      <div className="grid grid-cols-2 grid-rows-2 gap-1.5 flex-1 min-h-0">
+      <div className="grid grid-cols-2 grid-rows-3 gap-1 flex-1 min-h-0">
         {modes.map((m) => {
           const def = MODES[m];
           const avail = c.modeAvailability(m);
-          const keys = m === "vault" || m === "rift" ? profile.modes.keys[m] : null;
+          const keys = isKeyedMode(m) ? profile.modes.keys[m] : null;
           const title = m === "trial" ? (step ? `Rank Trial ${rankLetter(step.to - 1)} → ${rankLetter(step.to)}` : "Rank S") : def.name;
-          const sub = m === "trial" ? (step ? (avail.ok ? "Your breakthrough awaits." : avail.reason) : "Nothing above you.") : m === "endless" && profile.modes.endlessBest > 0 ? `Best: wave ${profile.modes.endlessBest}` : avail.ok ? def.tagline : avail.reason;
+          const sub = m === "trial" ? (step ? (avail.ok ? "Your breakthrough awaits." : avail.reason) : "Nothing above you.") : m === "endless" && profile.modes.endlessBest > 0 ? `Best: wave ${profile.modes.endlessBest}` : m === "crypt" && avail.ok ? `Today: ${SLOT_LABEL[today]} relics from every elite.` : avail.ok ? def.tagline : avail.reason;
           return (
             <button
               key={m}
-              className={cn("card text-left px-2 py-1.5 flex flex-col justify-between min-h-0 overflow-hidden", avail.ok ? (m === "trial" ? "card-active" : "") : "card-locked opacity-75")}
+              className={cn("card text-left px-2 py-1 flex flex-col justify-center gap-0.5 min-h-0 overflow-hidden", m === "trial" && "col-span-2", avail.ok ? (m === "trial" ? "card-active" : "") : "card-locked opacity-75")}
               onClick={() => c.startMode(m)}
               data-testid={`mode-${m}`}
               aria-label={`${title}${avail.ok ? "" : `, ${avail.reason}`}`}
@@ -70,7 +72,7 @@ export default function RiftPanel() {
                 </span>
                 {keys !== null && avail.ok && <span className="text-[10px] font-bold text-parch shrink-0">{keys}/3</span>}
               </div>
-              <div className="text-[10px] text-mist leading-snug line-clamp-2">{sub}</div>
+              <div className="text-[10px] text-mist leading-snug truncate">{sub}</div>
             </button>
           );
         })}

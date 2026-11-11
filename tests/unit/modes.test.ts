@@ -87,3 +87,37 @@ describe("hunter rank", () => {
     expect(canAttemptTrial(p)).toBe(false);
   });
 });
+
+describe("Relic Crypt", () => {
+  it("features a different slot each day and cycles all six", async () => {
+    const { cryptSlot } = await import("@/game/data/modes");
+    const seen = new Set<string>();
+    for (let d = 0; d < 6; d++) seen.add(cryptSlot(new Date(2026, 0, 1 + d)));
+    expect(seen.size).toBe(6);
+  });
+  it("only elites drop, always for the featured slot, and the keeper drops boss-grade gear", async () => {
+    const { World, FIXED_DT } = await import("@/game/engine/World");
+    const { buildLoadout } = await import("@/game/progression/loadout");
+    const { createDefaultProfile } = await import("@/game/progression/profile");
+    const p = createDefaultProfile();
+    p.player.level = 25;
+    p.player.statLevels = { attack: 150, maxHp: 150, attackSpeed: 60, critChance: 30, critDamage: 30, defense: 80 };
+    p.player.autoCast = true;
+    const w = new World({ stage: 5, loadout: buildLoadout(p), seed: 4, mode: "crypt", cryptSlot: "boots" });
+    const items: { slot: string; rarity: string }[] = [];
+    let elites = 0;
+    let keeper = false;
+    for (let i = 0; i < 60 * 240 && w.phase !== "victory" && w.phase !== "defeat"; i++) {
+      w.update(FIXED_DT);
+      for (const e of w.drainEvents()) if (e.type === "elite_spawn") elites++;
+      for (const e of w.entities.values()) if (e.enemy?.keeper) keeper = true;
+      for (const l of w.takeLoot()) items.push(l.item);
+    }
+    expect(w.phase).toBe("victory");
+    expect(keeper).toBe(true);
+    expect(elites).toBe(6);
+    expect(items).toHaveLength(6);
+    expect(items.every((i) => i.slot === "boots")).toBe(true);
+    expect(items.every((i) => i.rarity !== "common")).toBe(true);
+  });
+});

@@ -11,7 +11,7 @@ import { STAT_LABEL } from "@/game/data/equipment";
 import { ACHIEVEMENTS, JOURNAL } from "@/game/data/lore";
 import { ENEMIES } from "@/game/data/enemies";
 import { RANKS } from "@/game/progression/ranks";
-import { MODES } from "@/game/data/modes";
+import { MODES, isKeyedMode } from "@/game/data/modes";
 import { isBossStage } from "@/game/data/regions";
 import { WEAPON_PATHS } from "@/game/progression/weaponPaths";
 import { fmtDuration } from "@/lib/format";
@@ -382,12 +382,19 @@ export function ModeResult({ modal }: { modal: Extract<Modal, { kind: "mode_resu
             </motion.div>
           ))}
         </div>
+        {modal.items && modal.items.length > 0 && (
+          <div className="w-full flex flex-col gap-1" style={{ perspective: 600 }}>
+            {modal.items.slice(0, 3).map((it, k) => (
+              <LootCard key={it.uid} item={it} index={k} className={k >= 2 ? "short-hide" : undefined} onReveal={(rare) => c.rewardCue(rare ? "rare" : "card")} />
+            ))}
+          </div>
+        )}
         <div className="flex gap-2 w-full mt-1">
           <button className="btn-ghost flex-1" onClick={() => c.returnToCampaign()} data-testid="mode-return">
             Campaign
           </button>
           <button className="btn-primary flex-1" disabled={!again.ok} onClick={() => c.startMode(modal.mode)} data-testid="mode-again">
-            {again.ok ? `Again${modal.mode === "vault" || modal.mode === "rift" ? ` (${c.profile.modes.keys[modal.mode]})` : ""}` : again.reason}
+            {again.ok ? `Again${isKeyedMode(modal.mode) ? ` (${c.profile.modes.keys[modal.mode]})` : ""}` : again.reason}
           </button>
         </div>
         <div className="text-[10px] text-mist">{MODES[modal.mode].name}</div>
