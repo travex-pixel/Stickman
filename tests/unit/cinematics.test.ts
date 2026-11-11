@@ -179,6 +179,9 @@ describe("reveal selection", () => {
     expect(selectReveal({ rarity: "legendary", first: false, duplicate: true })).toBe("quick");
     expect(selectReveal({ rarity: "epic", first: false, duplicate: false, owned: true, quickReveals: true })).toBe("quick");
     expect(selectReveal({ rarity: "epic", first: false, duplicate: false, owned: true, quickReveals: false })).toBe("epic");
+    // Short reveals apply to new shadows too, but never to the very first bind.
+    expect(selectReveal({ rarity: "legendary", first: false, duplicate: false, owned: false, quickReveals: true })).toBe("quick");
+    expect(selectReveal({ rarity: "common", first: true, duplicate: false, owned: false, quickReveals: true })).toBe("legendary");
   });
 
   it("lengths before the card follow the table, and the oath is pitched by rarity", () => {

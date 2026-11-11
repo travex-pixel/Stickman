@@ -28,7 +28,8 @@ export interface RevealInput {
 /** Which staging a reveal plays. */
 export function selectReveal(o: RevealInput): RevealStaging {
   if (o.duplicate) return "quick";
-  if (o.quickReveals && o.owned) return "quick";
+  // Short reveals (a setting): every bind plays its short form, except the very first.
+  if (o.quickReveals && !o.first) return "quick";
   if (o.first || o.boss || o.rarity === "legendary") return "legendary";
   if (o.rarity === "epic") return "epic";
   if (o.rarity === "rare") return "rare";

@@ -124,7 +124,7 @@ export interface Profile {
     vaultBest: number;
   };
   tutorial: { completed: string[]; finished: boolean };
-  settings: { music: number; sfx: number; reducedEffects: boolean; diagnostics: boolean; battleSpeed: 1 | 2; autoAdvance: boolean; /** Shadows of a species already owned skip the full BIND sequence. */ quickReveals: boolean };
+  settings: { music: number; sfx: number; reducedEffects: boolean; diagnostics: boolean; battleSpeed: 1 | 2; autoAdvance: boolean; /** Short reveals: every BIND plays its short form (the very first excepted). */ quickReveals: boolean };
 }
 
 export const PROFILE_VERSION = 12;
