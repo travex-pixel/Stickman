@@ -442,6 +442,8 @@ export class Background {
   private scene: Scene;
   private reduced = false;
   private cam = 0;
+  private bleed = 0;
+  private res = 1;
 
   readonly depth: number;
 
@@ -473,42 +475,53 @@ export class Background {
     this.reduced = v;
   }
 
-  /** Parallax: x in [-1, 1], where the action is centred. Layers drift a few pixels, never enough to distract. */
+  /** Parallax: x in [-1, 1], where the camera looks. Layers drift a few pixels, never enough to distract. */
   setCamera(x: number): void {
     this.cam += (x - this.cam) * 0.04;
     const w = this.width;
-    this.far.x = -w * 0.03 - this.cam * w * 0.012;
-    this.mid.x = -w * 0.03 - this.cam * w * 0.028;
+    const b = this.bleed;
+    this.far.x = -b - w * 0.03 - this.cam * w * 0.012;
+    this.mid.x = -b - w * 0.03 - this.cam * w * 0.028;
   }
 
-  layout(width: number, height: number, groundTop: number): void {
+  /**
+   * Paint every layer for a canvas of `width` x `height`. `bleed` px are painted past each edge so
+   * camera shake never shows a border; `res` is the paint resolution (device pixels x headroom for
+   * the camera's zoom).
+   */
+  layout(width: number, height: number, groundTop: number, bleed = 0, res = Math.min(2, typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1)): void {
     // Ignore sub-8px jitter (mobile URL bars, dvh rounding); repaint only on a real size change.
-    if (Math.abs(width - this.width) < 1 && Math.abs(height - this.height) < 8 && this.textures.length > 0) return;
+    if (Math.abs(width - this.width) < 1 && Math.abs(height - this.height) < 8 && this.textures.length > 0 && bleed === this.bleed && res === this.res) return;
     this.width = width;
     this.height = height;
     this.groundTop = groundTop;
+    this.bleed = bleed;
+    this.res = res;
     for (const t of this.textures) t.destroy(true);
     this.textures = [];
-    const res = Math.min(2, typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1);
-    const W = width * res;
-    const H = height * res;
-    const GT = groundTop * res;
-    const make = (c: HTMLCanvasElement, sprite: Sprite, dispW = width, dispH = height) => {
+    const b = bleed;
+    const fw = width + b * 2;
+    const fh = height + b * 2;
+    const W = fw * res;
+    const H = fh * res;
+    const GT = (groundTop + b) * res;
+    const make = (c: HTMLCanvasElement, sprite: Sprite, dispW: number, dispH: number, x: number, y: number) => {
       const t = Texture.from(c);
       this.textures.push(t);
       sprite.texture = t;
       sprite.width = dispW;
       sprite.height = dispH;
+      sprite.position.set(x, y);
     };
     const sc = this.scene;
-    make(paintSky(sc, W, H, GT, 11), this.sky);
-    // Parallax layers are painted slightly wider than the screen so they can drift.
-    make(skyline(sc, W * 1.06, H, GT * 0.98, sc.far, res, 23, 0.85, "far"), this.far, width * 1.06, height);
-    make(skyline(sc, W * 1.06, H, GT + 2 * res, sc.mid, res, 37, 0.95, "mid"), this.mid, width * 1.06, height);
-    make(paintGround(sc, W, H, GT, 53), this.ground);
-    make(paintVignette(sc, W, H, GT), this.vignette);
-    this.far.x = -width * 0.03;
-    this.mid.x = -width * 0.03;
+    make(paintSky(sc, W, H, GT, 11), this.sky, fw, fh, -b, -b);
+    // Parallax layers are painted slightly wider than the view so they can drift.
+    make(skyline(sc, W * 1.06, H, GT * 0.98, sc.far, res, 23, 0.85, "far"), this.far, fw * 1.06, fh, -b - width * 0.03, -b);
+    make(skyline(sc, W * 1.06, H, GT + 2 * res, sc.mid, res, 37, 0.95, "mid"), this.mid, fw * 1.06, fh, -b - width * 0.03, -b);
+    make(paintGround(sc, W, H, GT, 53), this.ground, fw, fh, -b, -b);
+    // The vignette frames the screen, not the scene: canvas size, screen space.
+    const vr = Math.min(2, typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1);
+    make(paintVignette(sc, width * vr, height * vr, groundTop * vr), this.vignette, width, height, 0, 0);
     this.paintFissure(width, groundTop);
     this.fogLayers.forEach((s, i) => {
       s.width = width * (0.9 + i * 0.25);
@@ -516,6 +529,13 @@ export class Background {
       s.y = groundTop - 4 + i * 10;
       s.x = (width / 3) * i + width * 0.2;
     });
+  }
+
+  /** Texture memory of the painted layers, in bytes (RGBA). */
+  get textureBytes(): number {
+    let n = 0;
+    for (const t of this.textures) n += t.source.pixelWidth * t.source.pixelHeight * 4;
+    return n;
   }
 
   private paintFissure(width: number, groundTop: number): void {

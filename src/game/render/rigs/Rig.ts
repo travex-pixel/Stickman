@@ -1,10 +1,11 @@
-import { Container, Graphics } from "pixi.js";
+import { Container, Graphics, type GraphicsContext } from "pixi.js";
 import type { ActionState } from "../../entities/types";
 import { darken, lighten } from "../colors";
-import { clamp, easeOutCubic, lerp } from "../../engine/math";
+import { clamp } from "../../engine/math";
+import { damp, easeInCubic, easeOutCubic, rand2, span } from "../anim/ease";
+import { CHANNELS, Ch, computePose, meleeKit, snapsOnEnter, stateLambda, type BodyStyle, type MeleeKit, type Pose, type PoseInput, type WeaponType } from "./pose";
 
-export type BodyStyle = "warrior" | "lean" | "bulky" | "robed" | "archer" | "warden" | "reaper";
-export type WeaponType = "sword" | "greatsword" | "dagger" | "bow" | "staff" | "scythe" | "club" | "mace_shield" | "twin" | "tower" | "banner" | "none";
+export type { BodyStyle, WeaponType } from "./pose";
 
 export interface RigSpec {
   style: BodyStyle;
@@ -26,35 +27,19 @@ export interface RigSpec {
   finish?: "ivory" | "ink" | "shadow";
 }
 
-interface Pose {
-  torso: number;
-  head: number;
-  hips: { x: number; y: number };
-  armL: [number, number];
-  armR: [number, number];
-  legL: [number, number];
-  legR: [number, number];
-  weapon: number;
-  scaleY: number;
-  lean: number;
-}
+/** Blade length (rig units at scale 1) by weapon, for trails. */
+const BLADE: Record<WeaponType, number> = { sword: 50, greatsword: 70, dagger: 25, twin: 31, scythe: 62, banner: 76, club: 62, mace_shield: 53, tower: 36, staff: 64, bow: 34, none: 18 };
 
-const BASE: Pose = {
-  torso: 0,
-  head: 0,
-  hips: { x: 0, y: 0 },
-  armL: [0.35, 0.3],
-  armR: [-0.3, 0.4],
-  legL: [0.08, 0.05],
-  legR: [-0.08, 0.05],
-  weapon: 0.6,
-  scaleY: 1,
-  lean: 0,
-};
+/** Death presentation, chosen by the killing blow. */
+export const DEATH_COLLAPSE = 0;
+export const DEATH_LAUNCH = 1;
+export const DEATH_DISSOLVE = 2;
 
 /**
- * Procedural humanoid rig built from container "bones". Each body part is drawn once,
- * then animated purely with transforms, which keeps per-frame cost tiny.
+ * Procedural humanoid rig built from container "bones". Each body part is drawn once, then
+ * animated purely with transforms. Poses are targets: every channel is blended toward its target
+ * with frame-rate independent damping, so state changes flow instead of popping. The origin is at
+ * the feet, so the rig stands on its shadow and squash and sink read from the ground up.
  */
 export class Rig {
   readonly root = new Container();
@@ -72,19 +57,57 @@ export class Rig {
   private readonly cape = new Graphics();
   private readonly aura = new Graphics();
   readonly shadow = new Graphics();
-  private pose: Pose = { ...BASE, hips: { ...BASE.hips } };
+  private readonly target: Pose = new Float32Array(CHANNELS);
+  private readonly current: Pose = new Float32Array(CHANNELS);
+  private readonly input: PoseInput;
+  private readonly kit: MeleeKit;
+  private readonly flashParts: Graphics[] = [];
+  private readonly flashOrig: Graphics[] = [];
+  private readonly flashContexts: GraphicsContext[] = [];
   private readonly u: number;
-  private deathT = 0;
   private spec: RigSpec;
+  private fresh = true;
+  private lastState: ActionState | null = null;
+  private clock = 0;
+  private capeAngle = 0;
+  private blinkIn = 0;
+  private blinkLeft = 0;
+  private blinks = 0;
+  private flashOn = false;
+  private legLen = 0;
+  private torsoH = 0;
+  private armX = 0;
+  private upperArm = 0;
+  private lowerArm = 0;
+  private bladeLen = 0;
+  /** Height of the figure from the feet to the top of the head, in rig-local units. */
+  top = 0;
+  /** Horizontal drift of a launched body (rig-local units), so its shadow and pool follow it. */
+  deathShiftX = 0;
+  /** Ground shadow scale factor (the ink pool during a death). The renderer applies it. */
+  poolScale = 1;
+  private death = DEATH_COLLAPSE;
+  private deathDir: 1 | -1 = 1;
+  private deathDist = 50;
+  private squash = 0;
+  private lean = 0;
+  private hitAmount = 0;
+  private capeWhite: Graphics | null = null;
 
   constructor(spec: RigSpec) {
     this.spec = spec;
     this.u = spec.height / 100;
+    this.kit = meleeKit(spec.style, spec.weapon);
+    this.input = { style: spec.style, kit: this.kit, state: "idle", t: 0, duration: 0, seed: 0, clock: 0, speedFrac: 0, variant: 0, death: 0 };
     this.build();
   }
 
   get unit(): number {
     return this.u;
+  }
+
+  get meleeKit(): MeleeKit {
+    return this.kit;
   }
 
   private build(): void {
@@ -106,6 +129,12 @@ export class Rig {
     const upperLeg = (bulky ? 18 : 17) * u;
     const lowerLeg = (bulky ? 17 : 17) * u;
     const headR = (bulky ? 9 : 8.2) * u;
+    this.legLen = upperLeg + lowerLeg + 2.6 * u;
+    this.top = this.legLen + torsoH + headR * 1.8;
+    this.torsoH = torsoH;
+    this.armX = torsoW * 0.36;
+    this.upperArm = upperArm;
+    this.lowerArm = lowerArm;
 
     // Ground shadow lives outside the body so it never rotates with it.
     this.shadow.ellipse(0, 0, (bulky ? 26 : 17) * u, (bulky ? 8 : 5.5) * u).fill({ color: 0x0a0806, alpha: 0.38 });
@@ -255,7 +284,7 @@ export class Rig {
     this.armR.lower.addChild(this.weapon);
 
 
-    this.applyPose(this.pose);
+    this.applyPose();
   }
 
   private buildWeapon(limbW: number): void {
@@ -265,6 +294,7 @@ export class Rig {
     const steel = s.finish === "ivory" ? 0xe7e2d6 : s.finish === "shadow" ? 0x5b5f86 : 0x3a3a40;
     const steelDark = s.finish === "ivory" ? 0x9a927f : 0x24242a;
     const accent = s.accent;
+    this.bladeLen = BLADE[s.weapon] * u;
     switch (s.weapon) {
       case "sword":
         g.rect(-1.6 * u, -44 * u, 3.2 * u, 46 * u).fill(steel);
@@ -367,267 +397,306 @@ export class Rig {
     void limbW;
   }
 
-  private hitAmount = 0;
+  /**
+   * White copies of every body part, hidden until a hit: the 1 to 2 frame impact silhouette.
+   * Each copy is the part's own drawing with every colour replaced by white, so no filter is needed.
+   */
+  private buildFlash(node: Container): void {
+    const kids = node.children.slice();
+    for (const child of kids) {
+      if (child === this.weaponGlow || child === this.aura || child === this.eyes) continue;
+      if (child instanceof Graphics) {
+        const ctx = child.context.clone();
+        ctx.instructions = ctx.instructions.map((ins) => {
+          const data = ins.data as unknown as { style?: { color: number; alpha: number } };
+          if (!data.style) return ins;
+          const alpha = data.style.alpha >= 0.5 ? 1 : data.style.alpha;
+          return { ...ins, data: { ...ins.data, style: { ...data.style, color: 0xffffff, alpha } } } as typeof ins;
+        });
+        const white = new Graphics(ctx);
+        white.position.copyFrom(child.position);
+        white.rotation = child.rotation;
+        white.scale.copyFrom(child.scale);
+        if (child === this.cape) this.capeWhite = white;
+        this.flashParts.push(white);
+        this.flashOrig.push(child);
+        this.flashContexts.push(ctx);
+      } else this.buildFlash(child);
+    }
+  }
 
-  /** Hits read as a sharp recoil: a squash, a lean back and a flash of the eyes. No overlays. */
+  /** Hits read as a sharp recoil: a squash, a lean back and a flash of the eyes. */
   setHitFlash(amount: number): void {
     this.hitAmount = clamp(amount / 0.12, 0, 1);
+  }
+
+  /** Extra reaction from the impact director: squash (0..1) and a lean away from the blow (radians). */
+  setReaction(squash: number, lean: number): void {
+    this.squash = squash;
+    this.lean = lean;
+  }
+
+  /**
+   * The white impact silhouette, on for a frame or two. The copies are built on the first hit and
+   * are only in the display tree while showing, so they cost nothing between hits.
+   */
+  setWhite(on: boolean): void {
+    if (on === this.flashOn) return;
+    this.flashOn = on;
+    if (on && this.flashParts.length === 0) this.buildFlash(this.body);
+    for (let i = 0; i < this.flashParts.length; i++) {
+      const w = this.flashParts[i]!;
+      const o = this.flashOrig[i]!;
+      if (on) {
+        const parent = o.parent;
+        if (parent) parent.addChildAt(w, parent.getChildIndex(o) + 1);
+      } else w.removeFromParent();
+    }
+  }
+
+  /** How this body dies: by collapse, launched along `dir`, or dissolving. */
+  setDeath(variant: number, dir: 1 | -1, seed: number): void {
+    this.death = variant;
+    this.deathDir = dir;
+    this.deathDist = 40 + rand2(seed, 3) * 30;
+  }
+
+  get deathVariant(): number {
+    return this.death;
   }
 
   setWeaponGlow(alpha: number): void {
     this.weaponGlow.alpha = clamp(alpha, 0, 1);
   }
 
-  /** Compute and apply a pose for the given state/time. `facing` flips the whole body. */
-  animate(state: ActionState, t: number, duration: number, seed: number, facing: 1 | -1, moving: boolean, speedFrac: number, deathT: number): void {
+  /**
+   * Blend toward the pose for this state and time, then apply it. `dt` is real seconds since the
+   * last frame (0 holds the pose, as during a hit-stop). `variant` picks the combo swing.
+   */
+  animate(state: ActionState, t: number, duration: number, seed: number, facing: 1 | -1, moving: boolean, speedFrac: number, deathT: number, dt = 0, variant = 0): void {
     const s = this.spec;
-    const p = computePose(s.style, state, t, duration, seed, moving, speedFrac);
-    this.pose = p;
-    this.body.scale.x = facing;
-    this.deathT = deathT;
-    this.applyPose(p);
-    if (s.floating) {
-      this.body.y = -8 * this.u + Math.sin(t * 2 + seed * 6) * 3 * this.u;
+    const inp = this.input;
+    this.clock += dt;
+    inp.state = state;
+    inp.t = t;
+    inp.duration = duration;
+    inp.seed = seed;
+    inp.clock = this.clock;
+    inp.speedFrac = moving ? speedFrac : 0;
+    inp.variant = variant;
+    inp.death = this.death;
+    computePose(this.target, inp);
+    const entering = state !== this.lastState;
+    if (state === "emerge" && entering) this.resetDeath();
+    if (this.fresh || (entering && snapsOnEnter(state))) {
+      this.current.set(this.target);
+      this.capeAngle = this.target[Ch.Torso]!;
+      this.fresh = false;
+    } else if (dt > 0) {
+      const lam = stateLambda(state, t, duration);
+      const striking = lam >= 60;
+      // Secondary motion: the head and the weapon follow the body a beat late, except in the
+      // strike itself, where the blade must arrive with the body.
+      const headLam = striking ? lam : Math.min(lam, 12);
+      const weaponLam = striking ? lam : state === "recover" ? 6 : Math.min(lam, 20);
+      const cur = this.current;
+      const tgt = this.target;
+      for (let i = 0; i < CHANNELS; i++) {
+        const l = i === Ch.Head ? headLam : i === Ch.Weapon ? weaponLam : lam;
+        cur[i] = damp(cur[i]!, tgt[i]!, l, dt);
+      }
     }
-    if (this.spec.aura) {
-      this.aura.rotation += 0.01;
-      this.aura.alpha = 0.6 + Math.sin(t * 3) * 0.2;
+    this.lastState = state;
+    this.applyPose();
+    this.secondary(dt, state, speedFrac, moving);
+
+    const body = this.body;
+    if (s.aura) {
+      this.aura.rotation += dt * 0.6;
+      this.aura.alpha = 0.6 + Math.sin(this.clock * 3) * 0.2;
     }
     const glow = state === "cast" ? 0.8 : state === "windup" ? 0.5 : state === "attack" ? 1 : 0;
-    this.setWeaponGlow(lerp(this.weaponGlow.alpha, glow, 0.35));
+    this.setWeaponGlow(dt > 0 ? damp(this.weaponGlow.alpha, glow, 20, dt) : this.weaponGlow.alpha);
+    body.alpha = 1;
     if (state === "dead") {
-      const k = Math.min(1, deathT / 0.9);
-      this.body.rotation = facing * -easeOutCubic(k) * 1.35;
-      this.body.y = easeOutCubic(k) * 10 * this.u;
-      this.root.alpha = 1 - Math.max(0, (deathT - 0.6) / 0.8);
-      this.eyes.alpha = 1 - k;
-      this.shadow.alpha = 1 - k;
-    } else if (state === "emerge") {
+      this.applyDeath(deathT, facing);
+      return;
+    }
+    this.deathShiftX = 0;
+    this.poolScale = 1;
+    if (state === "emerge") {
       const k = clamp(t / Math.max(0.01, duration), 0, 1);
-      this.body.rotation = 0;
+      body.rotation = 0;
+      body.x = 0;
       this.root.alpha = k;
-      this.body.scale.y = 0.3 + 0.7 * easeOutCubic(k);
+      body.scale.set(facing, 0.3 + 0.7 * easeOutCubic(k));
+      body.y = s.floating ? -8 * this.u : 0;
       this.eyes.alpha = k * k;
       this.shadow.alpha = k;
-    } else {
-      const h = this.hitAmount;
-      this.body.rotation = facing * -0.12 * h;
-      this.body.scale.y = p.scaleY * (1 - 0.08 * h);
-      this.body.scale.x = facing * (1 + 0.06 * h);
-      this.body.x = -facing * 3 * this.u * h;
-      this.root.alpha = state === "dodge" ? 0.55 : 1;
-      this.eyes.alpha = 1;
-      this.eyes.scale.set(1 + 0.4 * h);
-      this.shadow.alpha = 1;
+      return;
     }
+    const h = this.hitAmount;
+    const sq = 0.08 * h + this.squash;
+    body.rotation = facing * -(0.12 * h + this.lean);
+    body.scale.set(facing * (1 + sq * 0.7), this.current[Ch.ScaleY]! * (1 - sq));
+    body.x = -facing * 3 * this.u * h;
+    body.y = s.floating ? -8 * this.u + Math.sin(this.clock * 2 + seed * 6) * 3 * this.u : 0;
+    this.root.alpha = state === "dodge" ? 0.55 : 1;
+    this.eyes.alpha = 1;
+    this.shadow.alpha = 1;
   }
 
-  private applyPose(p: Pose): void {
-    this.hips.x = p.hips.x * this.u;
-    this.hips.y = p.hips.y * this.u;
-    this.torso.rotation = p.torso + p.lean;
-    this.head.rotation = p.head;
-    this.armL.upper.rotation = p.armL[0];
-    this.armL.lower.rotation = p.armL[1];
-    this.armR.upper.rotation = p.armR[0];
-    this.armR.lower.rotation = p.armR[1];
-    this.legL.upper.rotation = p.legL[0];
-    this.legL.lower.rotation = p.legL[1];
-    this.legR.upper.rotation = p.legR[0];
-    this.legR.lower.rotation = p.legR[1];
-    this.weapon.rotation = p.weapon;
+  /** Cape drag and blinking. */
+  private secondary(dt: number, state: ActionState, speedFrac: number, moving: boolean): void {
+    if (this.spec.cape) {
+      // The cape trails the torso's swing (lambda 5) and streams back when running.
+      const torsoAngle = this.current[Ch.Torso]! + this.current[Ch.Lean]!;
+      if (dt > 0) this.capeAngle = damp(this.capeAngle, torsoAngle, 5, dt);
+      const drag = clamp(this.capeAngle - torsoAngle, -0.9, 0.9);
+      const run = moving && state === "move" ? speedFrac * 0.35 + Math.sin(this.clock * 9) * 0.05 * speedFrac : 0;
+      this.cape.rotation = drag + run + Math.sin(this.clock * 1.7) * 0.02;
+      if (this.capeWhite) this.capeWhite.rotation = this.cape.rotation;
+    }
+    // Blink: eyes to 10% height for 90ms every 3 to 6 seconds.
+    if (dt > 0) {
+      if (this.blinkLeft > 0) {
+        this.blinkLeft -= dt;
+      } else {
+        if (this.blinkIn === 0) this.blinkIn = 1 + 3 * rand2(this.spec.height + this.u, 1);
+        this.blinkIn -= dt;
+        if (this.blinkIn <= 0) {
+          this.blinks += 1;
+          this.blinkIn = 3 + 3 * rand2(this.spec.height + this.blinks, this.blinks * 3 + 1);
+          this.blinkLeft = 0.09;
+        }
+      }
+    }
+    const eyeScale = 1 + 0.4 * this.hitAmount;
+    this.eyes.scale.set(eyeScale, this.blinkLeft > 0 ? 0.1 : eyeScale);
+  }
+
+  private applyDeath(deathT: number, facing: 1 | -1): void {
+    const body = this.body;
+    const u = this.u;
+    this.eyes.alpha = 1 - clamp(deathT / 0.3, 0, 1);
+    this.shadow.alpha = 1;
+    if (this.death === DEATH_LAUNCH) {
+      // Thrown 40 to 70u along the blow on an arc with spin; lands, lies a beat, then sinks.
+      const fly = span(deathT, 0, 0.45);
+      const dist = this.deathDist * easeOutCubic(fly);
+      const lift = Math.sin(fly * Math.PI) * 24 * u;
+      this.deathShiftX = this.deathDir * dist * u;
+      body.x = this.deathShiftX;
+      body.y = -lift;
+      // The body turns over in the air and lands on its back, head away from the blow.
+      body.rotation = this.deathDir * Math.PI * 0.5 * easeOutCubic(fly);
+      const sink = easeInCubic(span(deathT, 0.7, 1.2));
+      body.scale.set(facing, 1 - sink);
+      this.poolScale = sink > 0 ? 1.8 * (1 - sink) + 0.15 : 1 + fly * 0.5;
+      this.root.alpha = sink >= 1 ? 0 : 1;
+      return;
+    }
+    if (this.death === DEATH_DISSOLVE) {
+      // The silhouette breaks upward into shards (the renderer emits them); the body thins away.
+      const k = span(deathT, 0, 0.45);
+      body.x = 0;
+      body.y = -k * 10 * u;
+      body.rotation = 0;
+      body.scale.set(facing * (1 - k * 0.3), 1 + k * 0.25);
+      body.alpha = 1 - easeOutCubic(k);
+      this.deathShiftX = 0;
+      this.poolScale = 1 - k;
+      this.root.alpha = k >= 1 ? 0 : 1;
+      return;
+    }
+    // Collapse: the pose folds over 0.5s, then the body sinks into an ink pool that shrinks away.
+    const fold = easeOutCubic(span(deathT, 0, 0.5));
+    const sink = easeInCubic(span(deathT, 0.5, 1.0));
+    body.x = 0;
+    body.y = 0;
+    body.rotation = facing * fold * 0.2;
+    body.scale.set(facing, 1 - sink);
+    this.deathShiftX = 0;
+    this.poolScale = sink > 0 ? 1.8 * (1 - sink) + 0.1 : 1 + fold * 0.8;
+    this.root.alpha = sink >= 1 ? 0 : 1;
+  }
+
+  private resetDeath(): void {
+    this.deathShiftX = 0;
+    this.poolScale = 1;
+    this.body.alpha = 1;
+    this.root.alpha = 1;
+    this.death = DEATH_COLLAPSE;
+  }
+
+  private applyPose(): void {
+    const p = this.current;
+    const u = this.u;
+    this.hips.x = p[Ch.HipsX]! * u;
+    this.hips.y = p[Ch.HipsY]! * u - this.legLen;
+    this.torso.rotation = p[Ch.Torso]! + p[Ch.Lean]!;
+    this.head.rotation = p[Ch.Head]!;
+    this.armL.upper.rotation = p[Ch.ArmL0]!;
+    this.armL.lower.rotation = p[Ch.ArmL1]!;
+    this.armR.upper.rotation = p[Ch.ArmR0]!;
+    this.armR.lower.rotation = p[Ch.ArmR1]!;
+    this.legL.upper.rotation = p[Ch.LegL0]!;
+    this.legL.lower.rotation = p[Ch.LegL1]!;
+    this.legR.upper.rotation = p[Ch.LegR0]!;
+    this.legR.lower.rotation = p[Ch.LegR1]!;
+    this.weapon.rotation = p[Ch.Weapon]!;
+  }
+
+  /**
+   * Weapon tip and the point 60% up the blade, in the rig's parent space (where root sits), from
+   * the current pose by forward kinematics. Writes into `tip` and `mid`; no allocation.
+   */
+  weaponPoints(tip: { x: number; y: number }, mid: { x: number; y: number }): void {
+    const p = this.current;
+    const b = this.body;
+    const ta = p[Ch.Torso]! + p[Ch.Lean]!;
+    const hx = p[Ch.HipsX]! * this.u;
+    const hy = p[Ch.HipsY]! * this.u - this.legLen;
+    // Shoulder: a child of the torso at (armX, -0.92 torsoH).
+    const shX = this.armX;
+    const shY = -this.torsoH * 0.92;
+    const ct = Math.cos(ta);
+    const st = Math.sin(ta);
+    let x = hx + shX * ct - shY * st;
+    let y = hy + shX * st + shY * ct;
+    // Bones hang along +y; a rotation of a turns (0, len) into (-sin a, cos a) * len.
+    let a = ta + p[Ch.ArmR0]!;
+    x += -Math.sin(a) * this.upperArm;
+    y += Math.cos(a) * this.upperArm;
+    a += p[Ch.ArmR1]!;
+    x += -Math.sin(a) * this.lowerArm;
+    y += Math.cos(a) * this.lowerArm;
+    a += p[Ch.Weapon]!;
+    // The blade is drawn along -y from the hand.
+    const dx = Math.sin(a);
+    const dy = -Math.cos(a);
+    const L = this.bladeLen;
+    const r = b.rotation;
+    const c = Math.cos(r);
+    const s = Math.sin(r);
+    const sx = b.scale.x;
+    const sy = b.scale.y;
+    const rs = this.root.scale.x;
+    let px = (x + dx * L) * sx;
+    let py = (y + dy * L) * sy;
+    tip.x = this.root.x + (b.x + px * c - py * s) * rs;
+    tip.y = this.root.y + (b.y + px * s + py * c) * rs;
+    px = (x + dx * L * 0.6) * sx;
+    py = (y + dy * L * 0.6) * sy;
+    mid.x = this.root.x + (b.x + px * c - py * s) * rs;
+    mid.y = this.root.y + (b.y + px * s + py * c) * rs;
   }
 
   destroy(): void {
-    this.root.destroy({ children: true });
-    this.shadow.destroy();
+    if (!this.root.destroyed) this.root.destroy({ children: true });
+    if (!this.shadow.destroyed) this.shadow.destroy();
+    for (const g of this.flashParts) if (!g.destroyed) g.destroy();
+    for (const c of this.flashContexts) c.destroy();
+    this.flashContexts.length = 0;
   }
-}
-
-const TAU = Math.PI * 2;
-
-function computePose(style: BodyStyle, state: ActionState, t: number, duration: number, seed: number, moving: boolean, speedFrac: number): Pose {
-  const p: Pose = { ...BASE, hips: { x: 0, y: 0 }, armL: [...BASE.armL], armR: [...BASE.armR], legL: [...BASE.legL], legR: [...BASE.legR] };
-  const bulky = style === "bulky" || style === "warden";
-  const reaper = style === "reaper";
-  const breathe = Math.sin((t + seed * 10) * (bulky ? 1.6 : 2.4));
-  const k = duration > 0 ? clamp(t / duration, 0, 1) : 1;
-  const legSpeed = bulky ? 6 : reaper ? 13 : 10;
-
-  switch (state) {
-    case "idle":
-    case "emerge": {
-      p.torso = breathe * 0.025 + (reaper ? 0.22 : bulky ? 0.1 : 0);
-      p.head = -breathe * 0.02 + (reaper ? 0.15 : 0);
-      p.hips.y = breathe * 0.8;
-      p.armL = [0.4 + breathe * 0.03, 0.35];
-      p.armR = [-0.35 - breathe * 0.03, 0.5];
-      p.weapon = style === "archer" ? 0.1 : style === "robed" ? -0.3 : 0.5;
-      if (style === "archer") p.armR = [-0.9, 0.9];
-      break;
-    }
-    case "move": {
-      const w = (t + seed * 7) * legSpeed * (0.6 + speedFrac * 0.6);
-      const sw = Math.sin(w);
-      const amp = bulky ? 0.45 : 0.75;
-      p.legL = [sw * amp, Math.max(0, -sw) * 0.9];
-      p.legR = [-sw * amp, Math.max(0, sw) * 0.9];
-      p.armL = [-sw * 0.6 + 0.2, 0.5];
-      p.armR = [sw * 0.5 - 0.3, 0.55];
-      p.hips.y = Math.abs(Math.cos(w)) * -2.2 * (bulky ? 1.6 : 1);
-      p.torso = 0.12 + Math.abs(Math.cos(w)) * 0.03 + (reaper ? 0.25 : 0);
-      p.head = -0.06;
-      p.weapon = style === "archer" ? 0.1 : 0.6;
-      if (style === "robed") {
-        p.legL = [0.05, 0.05];
-        p.legR = [-0.05, 0.05];
-        p.hips.y = Math.sin(w * 0.4) * 2;
-        p.torso = 0.08;
-      }
-      break;
-    }
-    case "windup": {
-      const e = easeOutCubic(k);
-      if (style === "archer") {
-        // draw the bow
-        p.armL = [-1.5, 0.1];
-        p.armR = [-1.5 + e * 0.1, 1.6 * e + 0.2];
-        p.torso = -0.05;
-        p.weapon = 0.1;
-        p.legL = [0.3, 0.1];
-        p.legR = [-0.3, 0.1];
-      } else if (style === "robed") {
-        p.armR = [-2.2 * e, 0.3];
-        p.armL = [-1.8 * e, 0.4];
-        p.torso = -0.15 * e;
-        p.weapon = -0.4;
-        p.hips.y = -2 * e;
-      } else {
-        p.torso = -0.32 * e - (bulky ? 0.1 : 0);
-        p.head = 0.25 * e;
-        p.armR = [-2.4 * e - 0.3, 0.4];
-        p.armL = [0.6 * e + 0.3, 0.5];
-        p.weapon = -0.5 * e + 0.6;
-        p.legL = [0.5 * e, 0.3 * e];
-        p.legR = [-0.45 * e, 0.25 * e];
-        p.hips.y = 2 * e;
-        p.hips.x = -4 * e;
-      }
-      break;
-    }
-    case "attack": {
-      const e = easeOutCubic(k);
-      if (style === "archer") {
-        p.armL = [-1.5, 0.1];
-        p.armR = [-1.4, 0.3 + (1 - e) * 1.4];
-        p.torso = 0.05;
-        p.weapon = 0.1;
-        p.legL = [0.3, 0.1];
-        p.legR = [-0.3, 0.1];
-      } else if (style === "robed") {
-        p.armR = [-2.2 + e * 1.6, 0.2];
-        p.armL = [-1.8 + e * 1.4, 0.3];
-        p.torso = 0.2 * e;
-        p.weapon = -0.4;
-      } else {
-        p.torso = -0.32 + e * 0.75;
-        p.head = 0.25 - e * 0.35;
-        p.armR = [-2.7 + e * 3.4, 0.2 + e * 0.1];
-        p.armL = [0.9 - e * 1.1, 0.4];
-        p.weapon = 0.1 + e * 0.8;
-        p.legL = [0.5 - e * 0.1, 0.3];
-        p.legR = [-0.45 - e * 0.25, 0.25];
-        p.hips.y = 2 - e * 3;
-        p.hips.x = -4 + e * 10;
-      }
-      break;
-    }
-    case "recover": {
-      const e = easeOutCubic(k);
-      p.torso = lerp(0.43, 0, e);
-      p.head = lerp(-0.1, 0, e);
-      p.armR = [lerp(0.7, -0.35, e), lerp(0.3, 0.5, e)];
-      p.armL = [lerp(-0.2, 0.4, e), 0.4];
-      p.weapon = lerp(0.9, 0.5, e);
-      p.hips.y = lerp(-1, 0, e);
-      p.hips.x = lerp(6, 0, e);
-      p.legL = [lerp(0.4, 0.08, e), lerp(0.3, 0.05, e)];
-      p.legR = [lerp(-0.7, -0.08, e), lerp(0.25, 0.05, e)];
-      if (style === "archer") {
-        p.armL = [lerp(-1.5, 0.4, e), 0.2];
-        p.armR = [lerp(-1.4, -0.9, e), lerp(0.3, 0.9, e)];
-        p.weapon = 0.1;
-      }
-      break;
-    }
-    case "cast": {
-      const e = Math.sin(Math.min(1, k) * Math.PI);
-      p.torso = -0.12 * e;
-      p.head = -0.3 * e;
-      p.armR = [-2.9 * e - 0.2, 0.2];
-      p.armL = [2.6 * e + 0.3, 0.2];
-      p.weapon = -0.7 * e + 0.5;
-      p.hips.y = -3 * e;
-      p.legL = [0.35, 0.2];
-      p.legR = [-0.35, 0.2];
-      break;
-    }
-    case "dodge": {
-      p.torso = 0.55;
-      p.head = -0.2;
-      p.legL = [1.1, 0.2];
-      p.legR = [-0.9, 1.1];
-      p.armL = [-0.8, 0.3];
-      p.armR = [0.9, 0.2];
-      p.hips.y = 4;
-      p.weapon = 0.3;
-      break;
-    }
-    case "hit":
-    case "stagger": {
-      const e = Math.sin(Math.min(1, k) * Math.PI);
-      p.torso = -0.35 * e;
-      p.head = -0.4 * e;
-      p.hips.x = -5 * e;
-      p.hips.y = 2 * e;
-      p.armL = [0.8 * e + 0.3, 0.3];
-      p.armR = [-0.2 - 0.8 * e, 0.3];
-      p.legL = [0.5 * e, 0.1];
-      p.legR = [-0.3 * e, 0.3 * e];
-      if (state === "stagger") {
-        p.torso = -0.55 * e;
-        p.hips.y = 6 * e;
-      }
-      break;
-    }
-    case "victory": {
-      // Weapon raised high, a small hop, then a proud stance.
-      const e = easeOutCubic(clamp(t / 0.35, 0, 1));
-      const hop = t < 0.7 ? Math.sin((t / 0.7) * Math.PI) * -4 : breathe * 0.6;
-      p.torso = -0.1 * e;
-      p.head = -0.28 * e;
-      p.armR = [-2.9 * e - 0.1, 0.12];
-      p.armL = [0.55 + 0.25 * e, 0.55];
-      p.weapon = 0.5 - 0.5 * e;
-      p.hips.y = hop;
-      p.legL = [0.22, 0.08];
-      p.legR = [-0.22, 0.08];
-      if (style === "archer") p.armL = [-2.6 * e, 0.1];
-      break;
-    }
-    case "dead": {
-      p.torso = 0.3;
-      p.armL = [1.4, 0.5];
-      p.armR = [-1.2, 0.6];
-      p.legL = [0.4, 0.3];
-      p.legR = [-0.3, 0.5];
-      break;
-    }
-    default:
-      break;
-  }
-  if (moving && state !== "move") {
-    void TAU;
-  }
-  return p;
 }

@@ -13,6 +13,7 @@ interface Particle {
   startAlpha: number;
   endAlpha: number;
   spin: number;
+  align: boolean;
   active: boolean;
   /** Optional attractor (used by the summon cinematic) */
   target?: { x: number; y: number; strength: number };
@@ -36,6 +37,8 @@ export interface EmitOptions {
   spin?: number;
   spread?: number;
   target?: { x: number; y: number; strength: number };
+  /** Rotate each particle to its velocity (streaks, sparks). */
+  alignToVelocity?: boolean;
 }
 
 /** Pooled sprite particles with a hard cap; cheap and never unbounded. */
@@ -44,6 +47,8 @@ export class ParticleSystem {
   private pool: Particle[] = [];
   private activeCount = 0;
   private cap: number;
+  /** Multiplies every emit count (reduced motion: 0.4). */
+  countScale = 1;
 
   constructor(cap = 420) {
     this.cap = cap;
@@ -52,7 +57,7 @@ export class ParticleSystem {
       sprite.anchor.set(0.5);
       sprite.visible = false;
       this.container.addChild(sprite);
-      this.pool.push({ sprite, vx: 0, vy: 0, life: 0, total: 1, drag: 0, gravity: 0, startScale: 1, endScale: 0, startAlpha: 1, endAlpha: 0, spin: 0, active: false });
+      this.pool.push({ sprite, vx: 0, vy: 0, life: 0, total: 1, drag: 0, gravity: 0, startScale: 1, endScale: 0, startAlpha: 1, endAlpha: 0, spin: 0, align: false, active: false });
     }
   }
 
@@ -66,8 +71,9 @@ export class ParticleSystem {
 
   emit(o: EmitOptions): void {
     let emitted = 0;
+    const count = this.countScale < 1 ? Math.max(1, Math.round(o.count * this.countScale)) : o.count;
     for (const p of this.pool) {
-      if (emitted >= o.count) break;
+      if (emitted >= count) break;
       if (p.active) continue;
       if (this.activeCount >= this.cap) break;
       const ang = o.angle ? o.angle[0] + Math.random() * (o.angle[1] - o.angle[0]) : Math.random() * Math.PI * 2;
@@ -90,6 +96,8 @@ export class ParticleSystem {
       p.endAlpha = 0;
       p.spin = (o.spin ?? 0) * (Math.random() - 0.5) * 2;
       p.target = o.target;
+      p.align = o.alignToVelocity ?? false;
+      if (p.align) p.sprite.rotation = ang;
       p.active = true;
       p.sprite.visible = true;
       p.sprite.scale.set(p.startScale);
@@ -122,7 +130,8 @@ export class ParticleSystem {
       p.vy *= drag;
       p.sprite.x += p.vx * dt;
       p.sprite.y += p.vy * dt;
-      p.sprite.rotation += p.spin * dt;
+      if (p.align) p.sprite.rotation = Math.atan2(p.vy, p.vx);
+      else p.sprite.rotation += p.spin * dt;
       const sc = p.startScale + (p.endScale - p.startScale) * k;
       p.sprite.scale.set(Math.max(0.001, sc));
       p.sprite.alpha = p.startAlpha + (p.endAlpha - p.startAlpha) * (k * k);

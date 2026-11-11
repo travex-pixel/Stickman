@@ -118,12 +118,17 @@ export interface UiState {
 }
 
 export interface ViewTransform {
+  /** Legacy, best effort under the battle camera: screenX ~ offsetX + x * scale. Prefer `project`. */
   scale: number;
   offsetX: number;
   offsetY: number;
   depthScale: number;
   width: number;
   height: number;
+  /** World point on the ground to canvas-local CSS pixels, through the camera. */
+  project(worldX: number, worldY: number): { x: number; y: number };
+  /** Viewport (client) coordinates to the world point on the ground under them. */
+  unproject(clientX: number, clientY: number): { x: number; y: number };
 }
 
 interface ProfileWrap {
@@ -190,7 +195,7 @@ export class GameController {
   readonly save = new IndexedDbSaveManager();
   world: World | null = null;
   renderer: BattleRenderer | null = null;
-  view: ViewTransform = { scale: 1, offsetX: 0, offsetY: 0, depthScale: 1, width: 0, height: 0 };
+  view: ViewTransform = { scale: 1, offsetX: 0, offsetY: 0, depthScale: 1, width: 0, height: 0, project: (x, y) => ({ x, y }), unproject: (x, y) => ({ x, y }) };
   private loop: GameLoop;
   private hudAccum = 0;
   private toastId = 0;
@@ -606,8 +611,7 @@ export class GameController {
         case "hit":
           if (e.faction === "enemy") {
             this.sfx(e.crit ? "crit" : e.heavy ? "hit_heavy" : "hit_light", { minInterval: e.crit ? 60 : 45, volume: e.crit ? 0.9 : 0.55, rate: 0.9 + Math.random() * 0.25 });
-            // A short impact frame on the warrior's crits gives hits weight without slowing combat.
-            if (e.crit && e.sourceId === this.world?.player.id && !p.settings.reducedEffects) this.loop.addFreeze(0.035);
+            // Impact frames (hit-stop) are decided by the renderer's ImpactDirector, one policy for all hits.
           } else this.sfx("hit_heavy", { minInterval: 120, volume: 0.6, rate: 0.8 });
           break;
         case "death":
@@ -1386,6 +1390,11 @@ export class GameController {
     const ok = this.world?.castAbility(id) ?? false;
     if (!ok) this.sfx("error", { volume: 0.25, minInterval: 200 });
     return ok;
+  }
+
+  /** A hit-stop granted by the renderer's impact policy (already capped and cooled down). */
+  hitStop(seconds: number): void {
+    this.loop.addFreeze(seconds);
   }
 
   /** Tap on the battlefield: an enemy under the finger becomes the focus target (tap again to clear). */

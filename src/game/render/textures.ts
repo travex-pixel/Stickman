@@ -70,6 +70,18 @@ export function shard(): Texture {
   });
 }
 
+/** Transparent centre, opaque edges: a screen vignette to tint (damage taken, low health). */
+export function vignette(): Texture {
+  return canvasTexture("vignette", 256, (ctx, s) => {
+    const g = ctx.createRadialGradient(s / 2, s / 2, s * 0.28, s / 2, s / 2, s * 0.72);
+    g.addColorStop(0, "rgba(255,255,255,0)");
+    g.addColorStop(0.6, "rgba(255,255,255,0.35)");
+    g.addColorStop(1, "rgba(255,255,255,1)");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, s, s);
+  });
+}
+
 export function destroyTextures(): void {
   for (const t of cache.values()) t.destroy(true);
   cache.clear();
