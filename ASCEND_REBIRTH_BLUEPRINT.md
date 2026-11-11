@@ -134,6 +134,28 @@ Aether: four-point star).
 
 ---
 
+### 3a. Amendment after blind judging: "Ink and Gilt, refined"
+
+Evidence (`docs/rebirth/EVIDENCE.md`, H1): blind reviewers preferred the phase-1 interface in only
+50% of matched screens. All three said it was clearer, and that it had lost the game's identity:
+"a generic dark template". Neutral graphite, borderless pills and sans numerals throughout read as a
+productivity app. The amendment keeps the clarity and restores a world:
+
+- Surfaces are warm ink, not neutral graphite: `bg-0 #0c0b09`, `bg-1 #15130f`, `bg-2 #1e1b16`,
+  `bg-3 #29251e`.
+- The panel carries texture: a paper grain at about 5% and a gilt hairline along its top shoulder.
+  Never over the battlefield.
+- The serif sets the numbers that matter: Power, stage, stat values, boss names, reward totals,
+  level, rank. Condensed sans stays for dense small numerals.
+- One gold ornament means "active or selected": a small lozenge. Ability discs are medallions (a
+  thin gold ring when ready; a double ring for the ultimate).
+- The boss challenge is a designed object, not a saturated slab: dark crimson-black, a crimson
+  rim, the boss name in serif, a verb, and the readiness.
+
+Principle 1 of section 3 ("no gradients, bevels, inner shadows or glow") still holds. What changes
+is principle 2's reading: colour and ornament are allowed where they carry the world, not only
+where they carry meaning.
+
 ## 4. Typography
 
 **Families (both SIL OFL, self-hosted, already added under `src/app/fonts/`):**

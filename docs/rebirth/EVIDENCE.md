@@ -150,6 +150,45 @@ the animation stream's contact sheets; the survey half of H2 still needs real pl
 time at about 25 to 30% over baseline at the median (4x CPU throttle, alternating runs on a noisy
 machine). Reducing it is the first task of the cinematics stream. H4 stays open.
 
+**Blind pairwise judging (H1): NOT MET. Verified.**
+
+Eight matched screens (same save, same moment), old build vs phase-1 build, sides randomised by
+a fixed seed, labels removed. Three fresh reviewers with different lenses, two different models,
+told nothing about which version was new. Pairs and key: scratchpad `judge/pairs`, `judge/key.json`.
+
+| Reviewer (lens) | Chose the new design |
+|---|---|
+| Game art director (art direction, premium feel, fantasy tone) | 1 of 8 |
+| Usability researcher (first-time player) | 6 of 8 |
+| Senior product designer (hierarchy, craft) | 5 of 8 |
+| **Total** | **12 of 24 (50%)**, target 75% |
+
+What the three agreed on, independently:
+
+- **Clarity improved.** Bigger numbers, one obvious primary action per screen, readable rows,
+  better empty-state legibility.
+- **Identity was lost.** "The same dark-grey rounded-pill look as any 2020s productivity or
+  fintech app"; "looks like a generic dark template"; the old design "chooses a world". The
+  brief named this exact risk ("must remain a dark fantasy RPG, not a productivity dashboard"),
+  and the blueprint's "quiet interface" direction walked into it.
+- **Specific defects:** no visible boss health bar in the captured boss fight; the counter hint
+  drawn over the action; AUTO not recognisable as a toggle; level and stage running together in
+  the top bar; Retreat placed just above the ultimate; the tutorial hand covering its target;
+  hold-to-upgrade not discoverable; empty states with no next step; skill nodes without state;
+  truncated Rift descriptions.
+- **A rendering defect:** two of three called the boss "a white blob": the impact silhouette was
+  counted in frames, so at low frame rates and under constant hits a boss stayed white much of
+  the time.
+
+**Action taken:** the direction is amended to "Ink and Gilt, refined" (blueprint section 3a):
+warm ink surfaces, paper texture and a gilt edge on the panel only, the serif for the numbers
+that matter, one restrained gold ornament for "active", medallion ability discs, a designed boss
+challenge. All listed defects were sent to the interface and cinematics leads. H1 will be re-run
+on the phase-2 build with the same method and fresh reviewers.
+
+What this says about method: before this test I judged the new screens finished and premium. The
+lint and the blind test both found what self-review missed.
+
 ### After phase 2
 
 To be filled.
