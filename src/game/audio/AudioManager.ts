@@ -59,6 +59,22 @@ export class AudioManager {
     if (opts.rate) h.rate(opts.rate, id);
   }
 
+  /** Every sound drops to silence for `ms`, then comes back (the legendary claim). */
+  private duckTimer: ReturnType<typeof setTimeout> | null = null;
+  duck(ms: number): void {
+    if (!this.unlocked) return;
+    try {
+      Howler.volume(0);
+      if (this.duckTimer) clearTimeout(this.duckTimer);
+      this.duckTimer = setTimeout(() => {
+        this.duckTimer = null;
+        Howler.volume(1);
+      }, ms);
+    } catch {
+      /* ignore */
+    }
+  }
+
   suspend(): void {
     if (this.ambience) this.ambience.pause();
   }
@@ -68,6 +84,8 @@ export class AudioManager {
   }
 
   dispose(): void {
+    if (this.duckTimer) clearTimeout(this.duckTimer);
+    this.duckTimer = null;
     for (const h of this.sfx.values()) h.unload();
     this.sfx.clear();
     this.ambience?.unload();

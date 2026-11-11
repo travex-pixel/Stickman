@@ -56,6 +56,17 @@ export class Camera {
   private time = 0;
   private settled = false;
 
+  /**
+   * Cinematic push: an extra zoom that keeps the base point (fx, fy) fixed on screen, and a
+   * vertical tilt in screen px. Cinematics set it and must put it back to 1 / 0.
+   */
+  readonly cine = { zoom: 1, fx: 0, fy: 0, tilt: 0 };
+  /**
+   * Cinematic framing: while `weight` > 0 the follow target leans toward (x, y, zoom) and the
+   * follow speeds up to `lambda`, so a boss entrance can pan and zoom onto the spawn point.
+   */
+  readonly hold = { x: 0, y: 0, zoom: 1.3, weight: 0, lambda: 6 };
+
   /** Output transform (apply to the camera layer): pivot = centre, position = anchor + offset. */
   readonly out = { x: 0, y: 0, pivotX: 0, pivotY: 0, scale: 1, rotation: 0 };
 
@@ -104,6 +115,13 @@ export class Camera {
     const my = (box.minY + box.maxY) / 2;
     this.targetX = mx + (focusX - mx) * FOCUS_BIAS;
     this.targetY = my + (focusY - my) * FOCUS_BIAS;
+    const h = this.hold;
+    if (h.weight > 0) {
+      const w = Math.min(1, h.weight);
+      this.targetX += (h.x - this.targetX) * w;
+      this.targetY += (h.y - this.targetY) * w;
+      if (!this.reduced) this.targetZoom += (h.zoom - this.targetZoom) * w;
+    }
   }
 
   /** Jump straight to the current target (new world, resize). */
@@ -142,9 +160,11 @@ export class Camera {
   update(dt: number): void {
     this.time += dt;
     this.settled = true;
-    this.zoom = damp(this.zoom, this.targetZoom, 2.5, dt);
-    this.cx = damp(this.cx, this.targetX, 4, dt);
-    this.cy = damp(this.cy, this.targetY, 4, dt);
+    const w = Math.min(1, this.hold.weight);
+    const follow = 4 + (Math.max(4, this.hold.lambda) - 4) * w;
+    this.zoom = damp(this.zoom, this.targetZoom, 2.5 + (Math.max(2.5, this.hold.lambda) - 2.5) * w, dt);
+    this.cx = damp(this.cx, this.targetX, follow, dt);
+    this.cy = damp(this.cy, this.targetY, follow, dt);
     this.clampCentre();
     spring(this.kickX, 0, KICK_STIFFNESS, KICK_DAMPING, dt);
     spring(this.kickY, 0, KICK_STIFFNESS, KICK_DAMPING, dt);
@@ -185,12 +205,22 @@ export class Camera {
     const bottom = ay + oy + (this.height - this.cy) * scale;
     if (top > b) oy -= top - b;
     if (bottom < this.height - b) oy += this.height - b - bottom;
+    // The cinematic push zooms about its base point (it only ever zooms in, so the view stays
+    // inside the painted area); the tilt lifts the whole view.
+    const c = this.cine;
+    let s = scale;
+    if (c.zoom !== 1) {
+      ox += (c.fx - this.cx) * s * (1 - c.zoom);
+      oy += (c.fy - this.cy) * s * (1 - c.zoom);
+      s *= c.zoom;
+    }
+    oy += c.tilt;
     const o = this.out;
     o.pivotX = this.cx;
     o.pivotY = this.cy;
     o.x = ax + ox;
     o.y = ay + oy;
-    o.scale = scale;
+    o.scale = s;
     o.rotation = rot;
   }
 

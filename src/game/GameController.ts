@@ -38,6 +38,7 @@ import type { PerkDef } from "./data/perks";
 import { TUTORIAL_STEPS, type TutorialStep, type TutorialStepId } from "./tutorial";
 import type { BattleRenderer } from "./render/BattleRenderer";
 import { summonDef } from "./data/summons";
+import { REDUCED_FADE, REVEAL_LENGTH, oathRate, selectReveal, type AriseCue, type RevealStaging } from "./render/cinematics/reveal";
 import { WEAPON_PATHS } from "./progression/weaponPaths";
 import { describeReward, verifyCode } from "./economy/codes";
 import { generateItem } from "./economy/loot";
@@ -681,8 +682,8 @@ export class GameController {
           if (e.wave === 1 && this.world?.stage === 1 && !p.tutorial.finished) this.toast("The Ashen Verge. Hold the line.", "info");
           break;
         case "boss_intro":
+          // The renderer's entrance owns the camera and the impact beat (render/cinematics/boss.ts).
           this.sfx("boss_intro", { volume: 1 });
-          this.renderer?.shake(10);
           break;
         case "boss_phase":
           this.sfx("void_nova", { volume: 0.9 });
@@ -1462,7 +1463,8 @@ export class GameController {
     const result = resolveExtraction(p, peek.summonId, roll, { elite: peek.elite, bonus: computeModifiers(p).extractionBonus });
     if (!result.success) {
       const left = world.failExtraction(orbId);
-      this.sfx("enemy_death", { volume: 0.8, rate: 0.55 });
+      // The dry crack plays on the collapse (renderer cue); without a renderer, play it now.
+      if (!this.renderer) this.sfx("bind_fail", { volume: 0.9 });
       this.renderer?.playExtractionFail(peek.pos);
       const pity = p.summons.pity[peek.summonId] ?? 0;
       const firstRefusal = p.summons.totalAttempts <= 6 && !this.explainedBind;
@@ -1484,21 +1486,78 @@ export class GameController {
       this.refreshLoadout();
       this.completeTutorialIf("deploy");
     }
-    const big = outcome.kind === "new" && (first || summonDef(orb.summonId).rarity === "legendary" || summonDef(orb.summonId).rarity === "epic");
     const modal: Modal = { kind: "summon_reveal", outcome, summonId: orb.summonId, first: first && outcome.kind === "new", cinematicDone: false };
-    this.sfx(big ? "summon_first" : "summon_claim", { volume: 1 });
-    this.renderer?.playSummonCinematic(orb.summonId, orb.pos, big);
+    // BIND / ARISE, staged by rarity in the scene. The renderer reports the naming beat
+    // (revealNamed); the timer below only covers a missing or stalled renderer.
+    const duplicate = outcome.kind !== "new";
+    const reveal = { rarity: summonDef(orb.summonId).rarity, first: first && outcome.kind === "new", duplicate, owned: duplicate, quickReveals: p.settings.quickReveals, boss: orb.isBoss };
+    const staged = this.renderer?.playArise({ summonId: orb.summonId, pos: orb.pos, first: reveal.first, duplicate, owned: duplicate, quickReveals: reveal.quickReveals, boss: orb.isBoss }) ?? null;
+    this.revealStaging = staged?.staging ?? selectReveal(reveal);
     this.uiStore.update((u) => ({ ...u, modal, newBadges: { ...u.newBadges, summons: true }, selectedSummon: outcome.instance?.instanceId ?? u.selectedSummon }));
     if (this.cinematicTimer) clearTimeout(this.cinematicTimer);
-    // Spectacle scales with significance: first and rare shadows get the full rite, duplicates are quick.
-    const duration = big ? 4600 : outcome.kind === "new" ? 1700 : 1100;
-    this.cinematicTimer = setTimeout(() => {
-      this.uiStore.update((u) => (u.modal?.kind === "summon_reveal" ? { ...u, modal: { ...u.modal, cinematicDone: true } } : u));
-    }, duration);
+    const length = staged ? staged.length : this.profile.settings.reducedEffects ? REDUCED_FADE : REVEAL_LENGTH[this.revealStaging];
+    this.cinematicTimer = setTimeout(() => this.revealNamed(), Math.round(length * 1000) + (staged ? 1500 : 0));
     if (outcome.kind === "duplicate") this.toast(`+${outcome.essenceGained} Essence, +1 shard`, "essence");
     this.completeTutorialIf("summon");
     this.afterProgression();
     this.commit();
+  }
+
+  private revealStaging: RevealStaging = "common";
+
+  /** The reveal reached its naming beat: the interface may show the name (cinematicDone). */
+  revealNamed(): void {
+    if (this.cinematicTimer) clearTimeout(this.cinematicTimer);
+    this.cinematicTimer = null;
+    this.uiStore.update((u) => (u.modal?.kind === "summon_reveal" && !u.modal.cinematicDone ? { ...u, modal: { ...u.modal, cinematicDone: true } } : u));
+  }
+
+  /**
+   * A tap on the reveal: skips the sequence to its naming beat (from 0.4s on) and shows the name.
+   * A tap in the first 0.4s is ignored.
+   */
+  skipReveal(): void {
+    if (this.uiStore.get().modal?.kind !== "summon_reveal") return;
+    const r = this.renderer;
+    if (!r || r.skipCinematic()) this.revealNamed();
+  }
+
+  /** Sound for a beat of a boss sequence: the entrance's impact, the death's shattering. */
+  bossCue(name: "impact" | "shatter"): void {
+    if (name === "impact") this.sfx("boss_impact", { volume: 0.95 });
+    else this.sfx("bind_oath", { volume: 0.7, rate: 0.55 });
+  }
+
+  /** Sound for a beat of the BIND sequence (the renderer cues it on the beat). */
+  ariseCue(name: AriseCue, staging: RevealStaging, rarity: string): void {
+    switch (name) {
+      case "duck":
+        this.audio.duck(200);
+        break;
+      case "claim":
+        this.sfx("summon_claim", { volume: staging === "quick" ? 0.45 : 0.6, rate: 1.25 });
+        break;
+      case "drone":
+        this.sfx(staging === "legendary" ? "bind_drone_xl" : staging === "epic" ? "bind_drone_l" : staging === "rare" ? "bind_drone_m" : "bind_drone_s", { volume: 0.9 });
+        break;
+      case "oath":
+        this.sfx("bind_oath", { volume: staging === "quick" ? 0.6 : 0.95, rate: oathRate(rarity) });
+        break;
+      case "pad":
+        this.sfx("bind_pad", { volume: 0.8 });
+        this.sfx("summon_first", { volume: 0.5 });
+        break;
+      case "vibrate":
+        try {
+          if (typeof navigator !== "undefined" && "vibrate" in navigator) navigator.vibrate(20);
+        } catch {
+          /* not supported */
+        }
+        break;
+      case "fail":
+        this.sfx("bind_fail", { volume: 0.9 });
+        break;
+    }
   }
 
   /** Called when the player closes the reveal. New summons auto-deploy when the tutorial is behind us and a slot is free. */

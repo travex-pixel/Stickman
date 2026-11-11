@@ -213,7 +213,7 @@ describe("combo swings and contact timing", () => {
     expect(strikeWindow(1.0)).toBeCloseTo(0.14, 6);
     const make = (state: PoseInput["state"], t: number, duration: number): Float32Array => {
       const out = new Float32Array(CHANNELS);
-      computePose(out, { style: "warrior", kit: "combo", state, t, duration, seed: 0.3, clock: 1, speedFrac: 0, variant: 0, death: 0 });
+      computePose(out, { style: "warrior", kit: "combo", state, t, duration, seed: 0.3, clock: 1, speedFrac: 0, variant: 0, death: 0, idle: "" });
       return out;
     };
     // End of the wind-up and the first frame of the attack are the same pose: the blade is at the target.

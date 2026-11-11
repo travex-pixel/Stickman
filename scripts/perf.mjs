@@ -77,6 +77,7 @@ for (const speed of [1, 2]) {
     perf.frame.length = 0;
     perf.draw.length = 0;
     perf.freeze = 0;
+    if (perf.sections) for (const k of Object.keys(perf.sections)) perf.sections[k].length = 0;
   });
   await cdp.send("Emulation.setCPUThrottlingRate", { rate: THROTTLE });
   await page.waitForTimeout(SECONDS * 1000);
@@ -84,7 +85,9 @@ for (const speed of [1, 2]) {
   const raw = await page.evaluate(() => {
     clearInterval(window.__PEAK_T__);
     const p = window.__ASCEND_PERF__;
-    return { sim: [...p.sim], render: [...p.render], frame: [...p.frame], draw: [...p.draw], freeze: p.freeze, peak: window.__PEAK__ };
+    const sections = {};
+    for (const [k, v] of Object.entries(p.sections ?? {})) sections[k] = [...v];
+    return { sim: [...p.sim], render: [...p.render], frame: [...p.frame], draw: [...p.draw], freeze: p.freeze, peak: window.__PEAK__, sections };
   });
   const total = raw.sim.map((v, i) => v + raw.render[i]);
   const wall = raw.frame.reduce((a, b) => a + b, 0) / 1000;
@@ -99,6 +102,8 @@ for (const speed of [1, 2]) {
     over24ms: total.filter((v) => v > 24).length,
     freezeShare: +(raw.freeze / Math.max(1e-6, wall)).toFixed(4),
     peaks: raw.peak,
+    // The renderer's own JS by part of the frame (absent on builds without the breakdown).
+    sections: Object.fromEntries(Object.entries(raw.sections).map(([k, v]) => [k, stats(v)])),
   };
 }
 

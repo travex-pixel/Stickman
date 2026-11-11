@@ -113,6 +113,36 @@ function rng(seed: number) {
   };
 }
 
+/**
+ * Painted layers are kept under this many bytes of texture (RGBA). The paint resolution starts
+ * at the device ratio x 1.3 (headroom for the camera's zoom) and steps down to x1.15, then x1.0,
+ * when a tall or dense screen would take the layers past it.
+ */
+export const BACKDROP_TEXTURE_CAP = 16 * 1024 * 1024;
+const HEADROOMS = [1.3, 1.15, 1.0];
+
+/** Bytes the four painted layers take at a paint resolution (each cropped to what it covers). */
+export function backdropBytes(width: number, height: number, groundTop: number, bleed: number, res: number, dpr = 2): number {
+  const W = (width + bleed * 2) * res;
+  const top = (groundTop + bleed) * res;
+  const H = (height + bleed * 2) * res;
+  const sky = W * (top + 2 * res);
+  const layers = 2 * W * 1.06 * (top + 3 * res);
+  const ground = W * (H - top + 32 * res);
+  // The screen vignette is painted at the device ratio, outside the headroom.
+  const vignette = width * height * dpr * dpr;
+  return Math.round((sky + layers + ground + vignette) * 4);
+}
+
+/** The highest paint resolution (device ratio x headroom) whose layers fit the cap. */
+export function backdropResolution(width: number, height: number, groundTop: number, bleed: number, dpr: number): number {
+  for (const h of HEADROOMS) {
+    const res = dpr * h;
+    if (backdropBytes(width, height, groundTop, bleed, res, dpr) <= BACKDROP_TEXTURE_CAP) return res;
+  }
+  return dpr;
+}
+
 function canvas(w: number, h: number): [HTMLCanvasElement, CanvasRenderingContext2D] {
   const c = document.createElement("canvas");
   c.width = Math.max(1, Math.round(w));
@@ -314,8 +344,10 @@ function deadTree(ctx: CanvasRenderingContext2D, x: number, baseY: number, h: nu
   ctx.globalAlpha = 1;
 }
 
-function paintGround(sc: Scene, w: number, h: number, groundTop: number, seed: number): HTMLCanvasElement {
-  const [c, ctx] = canvas(w, h);
+/** The ground is painted from `top` down only (the sky covers everything above it). */
+function paintGround(sc: Scene, w: number, h: number, groundTop: number, seed: number, top: number): HTMLCanvasElement {
+  const [c, ctx] = canvas(w, h - top);
+  ctx.translate(0, -top);
   const r = rng(seed);
   const g = ctx.createLinearGradient(0, groundTop, 0, h);
   g.addColorStop(0, sc.groundFar);
@@ -432,7 +464,9 @@ export class Background {
   private fissure = new Graphics();
   private fissureGlow = new Graphics();
   private fogLayers: Sprite[] = [];
-  private motes: { s: Sprite; vx: number; vy: number; life: number; total: number }[] = [];
+  /** Dust motes, pooled: sprites are made once and reused. */
+  private motes: { s: Sprite; vx: number; vy: number; life: number; total: number; live: boolean }[] = [];
+  private liveMotes = 0;
   private textures: Texture[] = [];
   private width = 0;
   private height = 0;
@@ -505,23 +539,29 @@ export class Background {
     const W = fw * res;
     const H = fh * res;
     const GT = (groundTop + b) * res;
-    const make = (c: HTMLCanvasElement, sprite: Sprite, dispW: number, dispH: number, x: number, y: number) => {
+    const make = (c: HTMLCanvasElement, sprite: Sprite, dispW: number, x: number, y: number) => {
       const t = Texture.from(c);
       this.textures.push(t);
       sprite.texture = t;
       sprite.width = dispW;
-      sprite.height = dispH;
+      sprite.height = c.height / res;
       sprite.position.set(x, y);
     };
     const sc = this.scene;
-    make(paintSky(sc, W, H, GT, 11), this.sky, fw, fh, -b, -b);
+    // Each layer is cropped to what it covers: the sky and the skylines stop at the horizon, the
+    // ground starts just above it. That is about half the texture memory of full-height layers.
+    const skyH = Math.ceil(GT + 2 * res);
+    const layerH = Math.ceil(GT + 3 * res);
+    make(paintSky(sc, W, skyH, GT, 11), this.sky, fw, -b, -b);
     // Parallax layers are painted slightly wider than the view so they can drift.
-    make(skyline(sc, W * 1.06, H, GT * 0.98, sc.far, res, 23, 0.85, "far"), this.far, fw * 1.06, fh, -b - width * 0.03, -b);
-    make(skyline(sc, W * 1.06, H, GT + 2 * res, sc.mid, res, 37, 0.95, "mid"), this.mid, fw * 1.06, fh, -b - width * 0.03, -b);
-    make(paintGround(sc, W, H, GT, 53), this.ground, fw, fh, -b, -b);
+    make(skyline(sc, W * 1.06, layerH, GT * 0.98, sc.far, res, 23, 0.85, "far"), this.far, fw * 1.06, -b - width * 0.03, -b);
+    make(skyline(sc, W * 1.06, layerH, GT + 2 * res, sc.mid, res, 37, 0.95, "mid"), this.mid, fw * 1.06, -b - width * 0.03, -b);
+    const groundFrom = Math.max(0, Math.floor(GT - 32 * res));
+    make(paintGround(sc, W, H, GT, 53, groundFrom), this.ground, fw, -b, -b + groundFrom / res);
     // The vignette frames the screen, not the scene: canvas size, screen space.
     const vr = Math.min(2, typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1);
-    make(paintVignette(sc, width * vr, height * vr, groundTop * vr), this.vignette, width, height, 0, 0);
+    make(paintVignette(sc, width * vr, height * vr, groundTop * vr), this.vignette, width, 0, 0);
+    this.vignette.height = height;
     this.paintFissure(width, groundTop);
     this.fogLayers.forEach((s, i) => {
       s.width = width * (0.9 + i * 0.25);
@@ -529,6 +569,21 @@ export class Background {
       s.y = groundTop - 4 + i * 10;
       s.x = (width / 3) * i + width * 0.2;
     });
+  }
+
+  /** Paint resolution in use (device pixels per CSS pixel, including the zoom headroom). */
+  get resolution(): number {
+    return this.res;
+  }
+
+  /** Rough luminance of the ground (0 dark to 1 pale), for effects that must read on it. */
+  get groundLuminance(): number {
+    const hex = this.scene.groundFar;
+    const v = parseInt(hex.slice(1), 16);
+    const r = (v >> 16) & 255;
+    const g = (v >> 8) & 255;
+    const bl = v & 255;
+    return (0.2126 * r + 0.7152 * g + 0.0722 * bl) / 255;
   }
 
   /** Texture memory of the painted layers, in bytes (RGBA). */
@@ -579,30 +634,54 @@ export class Background {
       if (s.x < -s.width / 2) s.x = this.width + s.width / 2;
       s.alpha = 0.1 + Math.sin(this.time * 0.25 + i * 1.7) * 0.035;
     });
-    if (this.reduced) return;
-    // Dust motes drifting in the light: few, slow, soft.
-    if (this.motes.length < 14 && Math.random() < dt * 4) {
-      const s = new Sprite(softCircle());
-      s.anchor.set(0.5);
-      s.tint = this.scene.mote;
-      s.blendMode = "add";
-      s.x = Math.random() * this.width;
-      s.y = this.groundTop * (0.5 + Math.random() * 0.9);
-      s.scale.set(0.03 + Math.random() * 0.05);
-      this.container.addChild(s);
-      this.motes.push({ s, vx: 4 + Math.random() * 8, vy: -(2 + Math.random() * 6), life: 0, total: 5 + Math.random() * 4 });
+    if (this.reduced) {
+      if (this.liveMotes > 0) for (const m of this.motes) this.retire(m);
+      return;
     }
-    for (let i = this.motes.length - 1; i >= 0; i--) {
+    // Dust motes drifting in the light: few, slow, soft.
+    if (this.motes.length === 0) {
+      for (let i = 0; i < 14; i++) {
+        const s = new Sprite(softCircle());
+        s.anchor.set(0.5);
+        s.tint = this.scene.mote;
+        s.blendMode = "add";
+        s.visible = false;
+        this.container.addChild(s);
+        this.motes.push({ s, vx: 0, vy: 0, life: 0, total: 1, live: false });
+      }
+    }
+    if (this.liveMotes < 14 && Math.random() < dt * 4) {
+      for (const m of this.motes) {
+        if (m.live) continue;
+        m.live = true;
+        this.liveMotes += 1;
+        m.s.visible = true;
+        m.s.x = Math.random() * this.width;
+        m.s.y = this.groundTop * (0.5 + Math.random() * 0.9);
+        m.s.scale.set(0.03 + Math.random() * 0.05);
+        m.vx = 4 + Math.random() * 8;
+        m.vy = -(2 + Math.random() * 6);
+        m.life = 0;
+        m.total = 5 + Math.random() * 4;
+        break;
+      }
+    }
+    for (let i = 0; i < this.motes.length; i++) {
       const m = this.motes[i]!;
+      if (!m.live) continue;
       m.life += dt;
       m.s.x += (m.vx + Math.sin(this.time + i) * 3) * dt;
       m.s.y += m.vy * dt;
       m.s.alpha = Math.sin((m.life / m.total) * Math.PI) * 0.55;
-      if (m.life >= m.total) {
-        m.s.destroy();
-        this.motes.splice(i, 1);
-      }
+      if (m.life >= m.total) this.retire(m);
     }
+  }
+
+  private retire(m: { s: Sprite; live: boolean }): void {
+    if (!m.live) return;
+    m.live = false;
+    m.s.visible = false;
+    this.liveMotes -= 1;
   }
 
   destroy(): void {

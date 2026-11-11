@@ -31,6 +31,9 @@ export type Pose = Float32Array;
 export type BodyStyle = "warrior" | "lean" | "bulky" | "robed" | "archer" | "warden" | "reaper";
 export type WeaponType = "sword" | "greatsword" | "dagger" | "bow" | "staff" | "scythe" | "club" | "mace_shield" | "twin" | "tower" | "banner" | "none";
 
+/** A shadow's idle character, by army role ("" for everything else). */
+export type IdleRole = "" | "vanguard" | "reaper" | "ranger" | "arcanist" | "sentinel" | "support" | "sovereign" | "caller";
+
 /** How a rig fights in melee. `combo` cycles three swings; the others keep one signature move. */
 export type MeleeKit = "combo" | "heavy" | "thrust" | "archer" | "robed";
 
@@ -74,9 +77,12 @@ const k = (...v: number[]): Key => v;
 /** Three swings: 0 high to low forehand, 1 rising backhand, 2 overhead with a deeper step. */
 const COMBO: readonly { antic: Key; contact: Key; follow: Key }[] = [
   {
+    // Forehand: a downward diagonal cut. At contact the arm is already low and forward with the
+    // wrist cocked, so the blade crosses the line of the arm (not a thrust along it), and it
+    // follows through down past the hip.
     antic: k(-0.3, 0.2, -3, 1.5, 0.7, 0.5, -2.5, 0.35, 0.45, 0.3, -0.4, 0.25, 1.15, 1, 0),
-    contact: k(0.3, -0.1, 6, 2, -0.3, 0.5, -1.35, 0.15, 0.6, 0.2, -0.7, 0.55, 3.0, 1, 0),
-    follow: k(0.45, -0.05, 7, 2.5, -0.5, 0.4, -0.35, 0.3, 0.6, 0.2, -0.75, 0.6, 2.35, 1, 0),
+    contact: k(0.35, -0.1, 6, 2.5, -0.3, 0.5, -1.0, 0.25, 0.6, 0.2, -0.7, 0.55, 2.15, 1, 0),
+    follow: k(0.45, 0.05, 7, 3, -0.5, 0.4, -0.35, 0.3, 0.6, 0.2, -0.75, 0.6, 2.35, 1, 0),
   },
   {
     antic: k(0.3, 0.1, -2, 3, -0.4, 0.6, 0.55, 0.5, 0.5, 0.45, -0.35, 0.5, 2.35, 1, 0),
@@ -115,6 +121,84 @@ function mixKey(out: Pose, a: Key, b: Key, t: number): void {
 /** Blend the current contents of `out` toward a key. */
 function mixToward(out: Pose, b: Key, t: number): void {
   for (let i = 0; i < CHANNELS; i++) out[i] = out[i]! + (b[i]! - out[i]!) * t;
+}
+
+/**
+ * Role idles for the army, layered over the guard so each shadow reads as a character: the vanguard
+ * plants and rolls its shoulders, the reaper sways low, the ranger checks its string, the
+ * arcanist's staff orbits, the sentinel sets its shield. Periodic gestures use a slow cycle with a
+ * per-rig phase so a squad never moves in unison.
+ */
+function roleIdle(out: Pose, role: IdleRole, clock: number, seed: number): void {
+  const t = clock + seed * 17;
+  switch (role) {
+    case "vanguard": {
+      // Every ~4.5s: weight settles, the shoulders roll back and forward again.
+      const k = gesture(t, 4.5, 1.1);
+      out[Ch.Torso] = out[Ch.Torso]! - 0.12 * k;
+      out[Ch.ArmL0] = out[Ch.ArmL0]! + 0.35 * k;
+      out[Ch.ArmR0] = out[Ch.ArmR0]! - 0.3 * k;
+      out[Ch.HipsY] = out[Ch.HipsY]! + 1.5 * k;
+      out[Ch.LegL0] = out[Ch.LegL0]! + 0.12;
+      out[Ch.LegR0] = out[Ch.LegR0]! - 0.12;
+      return;
+    }
+    case "reaper": {
+      // Low and never still: a slow sway at the hips with the blade held back.
+      const sway = Math.sin(t * 1.9);
+      out[Ch.HipsX] = out[Ch.HipsX]! + sway * 2.2;
+      out[Ch.HipsY] = out[Ch.HipsY]! + 2.5;
+      out[Ch.Torso] = out[Ch.Torso]! + 0.12 + sway * 0.05;
+      out[Ch.LegL0] = out[Ch.LegL0]! + 0.25;
+      out[Ch.LegL1] = out[Ch.LegL1]! + 0.3;
+      out[Ch.LegR0] = out[Ch.LegR0]! - 0.25;
+      out[Ch.LegR1] = out[Ch.LegR1]! + 0.3;
+      out[Ch.Weapon] = out[Ch.Weapon]! + 0.5;
+      return;
+    }
+    case "ranger": {
+      // Every ~5s the drawing hand comes up to the string and plucks it.
+      const k = gesture(t, 5, 0.9);
+      out[Ch.ArmL0] = out[Ch.ArmL0]! - 1.1 * k;
+      out[Ch.ArmL1] = out[Ch.ArmL1]! + 0.9 * k;
+      out[Ch.Head] = out[Ch.Head]! + 0.18 * k;
+      return;
+    }
+    case "arcanist":
+    case "caller": {
+      // The staff head traces a small circle.
+      out[Ch.Weapon] = out[Ch.Weapon]! + Math.sin(t * 1.6) * 0.16;
+      out[Ch.ArmR0] = out[Ch.ArmR0]! + Math.cos(t * 1.6) * 0.1;
+      return;
+    }
+    case "sentinel": {
+      // Every ~5.5s the shield lifts and is set down hard.
+      const k = gesture(t, 5.5, 0.8);
+      out[Ch.ArmR0] = out[Ch.ArmR0]! - 0.55 * k;
+      out[Ch.ArmR1] = out[Ch.ArmR1]! - 0.3 * k;
+      out[Ch.HipsY] = out[Ch.HipsY]! + 1.2 * k;
+      return;
+    }
+    case "support":
+      // The banner leans with the wind.
+      out[Ch.Weapon] = out[Ch.Weapon]! - 0.25 + Math.sin(t * 0.9) * 0.08;
+      return;
+    case "sovereign":
+      // Still and tall: the blade grounded, a slow breath.
+      out[Ch.Weapon] = out[Ch.Weapon]! + 1.6;
+      out[Ch.ArmR0] = out[Ch.ArmR0]! + 0.25;
+      out[Ch.Torso] = out[Ch.Torso]! - 0.05;
+      return;
+    default:
+      return;
+  }
+}
+
+/** A one-shot gesture inside a repeating cycle: 0 most of the time, a smooth 0-1-0 hump `len` seconds long. */
+export function gesture(t: number, period: number, len: number): number {
+  const ph = ((t % period) + period) % period;
+  if (ph > len) return 0;
+  return Math.sin((ph / len) * Math.PI);
 }
 
 function setGuard(out: Pose, style: BodyStyle, clock: number, seed: number): void {
@@ -156,8 +240,10 @@ export interface PoseInput {
   clock: number;
   speedFrac: number;
   variant: number;
-  /** Death presentation: 0 collapse, 1 launch, 2 dissolve. */
+  /** Death presentation: 0 collapse, 1 launch, 2 dissolve, 3 sink (the army's pool). */
   death: number;
+  /** Role idle for the army ("" for none). */
+  idle: IdleRole;
 }
 
 /** Writes the target pose for this frame into `out`. Never allocates. */
@@ -170,6 +256,8 @@ export function computePose(out: Pose, p: PoseInput): void {
 
   switch (state) {
     case "idle":
+      if (p.idle) roleIdle(out, p.idle, p.clock, seed);
+      return;
     case "emerge":
       return;
     case "move": {
@@ -342,6 +430,25 @@ export function computePose(out: Pose, p: PoseInput): void {
       return;
     }
     case "dead": {
+      // The army's sink keeps its guard: the shadow goes down into its pool standing.
+      if (p.death === 3) return;
+      if (p.death === 4) {
+        // A boss's last kneel: the near knee down, the blade planted, the head bowed.
+        out[Ch.Torso] = 0.38;
+        out[Ch.Head] = 0.35;
+        out[Ch.HipsX] = 1;
+        out[Ch.HipsY] = 11;
+        out[Ch.ArmL0] = 0.35;
+        out[Ch.ArmL1] = 0.4;
+        out[Ch.ArmR0] = -0.55;
+        out[Ch.ArmR1] = 0.35;
+        out[Ch.LegL0] = 0.55;
+        out[Ch.LegL1] = 1.75;
+        out[Ch.LegR0] = -1.1;
+        out[Ch.LegR1] = 1.45;
+        out[Ch.Weapon] = 2.75;
+        return;
+      }
       if (p.death === 1) {
         // Thrown: limp, limbs trailing the flight.
         out[Ch.Torso] = -0.35;

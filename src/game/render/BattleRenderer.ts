@@ -1,20 +1,21 @@
 // CSP-safe Pixi: replaces the eval-generated shader and uniform code so the strict Content-Security-Policy holds.
 import "pixi.js/unsafe-eval";
-import { Application, Container, Graphics, Sprite } from "pixi.js";
+import { Application, Container, Graphics, Sprite, Texture } from "pixi.js";
+import type { EmitOptions } from "./Particles";
 import type { GameController } from "../GameController";
 import type { World } from "../engine/World";
 import { ARENA } from "../engine/World";
 import type { GameEvent } from "../engine/events";
 import type { PerfSamples } from "../engine/GameLoop";
 import type { Combatant } from "../entities/types";
-import { Rig, DEATH_LAUNCH } from "./rigs/Rig";
+import { Rig, DEATH_LAUNCH, clearRigCache, rigCacheSize } from "./rigs/Rig";
 import { eliteSpec, enemySpec, playerSpec, speciesAccent, summonSpec } from "./rigs/specs";
 import { strikeWindow, swingVariant } from "./rigs/pose";
 import { ELITES } from "../data/elites";
 import { ParticleSystem } from "./Particles";
 import { DamageNumbers, fmtNum } from "./DamageNumbers";
-import { Background } from "./Background";
-import { destroyTextures, hardCircle, ring, shard, softCircle, spark, vignette } from "./textures";
+import { Background, backdropResolution } from "./Background";
+import { destroyTextures, hardCircle, shard, softCircle, spark, vignette } from "./textures";
 import { regionForStage } from "../data/regions";
 import { TWISTS, depthForStage, twistForDepth } from "../data/depths";
 import { ABILITIES } from "../data/abilities";
@@ -25,11 +26,16 @@ import { summonDef } from "../data/summons";
 import { Camera, type Box } from "./Camera";
 import { ImpactDirector, elementColor, type ImpactHost, type ImpactState } from "./ImpactDirector";
 import { Trails, type Ribbon } from "./Trail";
+import { FlashState } from "./hitStop";
+import { BossDeath, BossEntrance, PHASE, type BossHost } from "./cinematics/boss";
+import { AriseCinematic, FailedBind, REDUCED_FADE, REVEAL_LENGTH, type AriseHost, type RevealStaging } from "./cinematics/arise";
 
 interface EntityView extends ImpactState {
   id: number;
   bar: Graphics;
-  barKey?: string;
+  barKey?: number;
+  /** Tinted down by a boss entrance (restored when it ends). */
+  dimmed?: boolean;
   lastHp: number;
   defId: string;
   kind: string;
@@ -80,6 +86,27 @@ interface TelegraphMark {
   ry: number;
 }
 
+/** Named parts of a frame, timed under `?perf=1` (see scripts/perf.mjs). */
+const SECTION_NAMES = ["background", "entities", "camera", "groundFx", "fx", "trails", "particles", "overlays"] as const;
+/** True when the combatant carries a status of this kind (no closure, no allocation). */
+function hasStatus(e: Combatant, kind: string): boolean {
+  const s = e.statuses;
+  for (let i = 0; i < s.length; i++) if (s[i]!.kind === kind) return true;
+  return false;
+}
+
+/** A pooled ground decal: an ink splatter that soaks in and fades. */
+interface Decal {
+  sprite: Sprite;
+  rx: number;
+  ry: number;
+  life: number;
+  total: number;
+  live: boolean;
+}
+const MAX_DECALS = 80;
+const WAKE_ANGLE: [number, number] = [-Math.PI, 0];
+
 const WORLD_W = ARENA.width;
 const WORLD_D = ARENA.depth;
 /** Figures are drawn larger than the simulation footprint so fighters dominate the frame. */
@@ -126,6 +153,16 @@ export class BattleRenderer implements ImpactHost {
   private root = new Container();
   private cameraLayer = new Container();
   private groundFx = new Graphics();
+  /** Ink splatters, as pooled sprites (no per-frame geometry). */
+  private decalLayer = new Container();
+  private readonly decalPool: Decal[] = [];
+  private decalNext = 0;
+  /** groundFx holds geometry from the last frame (cleared once when there is nothing to draw). */
+  private groundDirty = false;
+  private fxLive = 0;
+  private fxDirty = false;
+  private chevronsDrawn = false;
+  private focusKey = -1;
   private entityLayer = new Container();
   /** Gold corner ticks around the player's focus target. */
   private focusTicks = new Graphics();
@@ -144,7 +181,10 @@ export class BattleRenderer implements ImpactHost {
   private background: Background | null = null;
   views = new Map<number, EntityView>();
   private projectiles = new Map<number, Container>();
-  private orbs = new Map<number, { c: Container; core: Sprite; ring: Sprite; t: number; isBoss: boolean }>();
+  private orbs = new Map<number, { c: Container; core: Sprite; halo: Sprite; glint: Sprite; mote: Container; ring: Graphics; t: number; isBoss: boolean; color: number }>();
+  /** Reused emit options for per-frame wakes and projectile trails (no allocation per frame). */
+  private readonly trailEmit: EmitOptions = { x: 0, y: 0, count: 1, texture: Texture.EMPTY, color: 0xffffff, speed: [0, 0], life: [0, 0], scale: [0, 0], alpha: 1 };
+  private readonly orbEmit: EmitOptions = { x: 0, y: 0, count: 1, texture: Texture.EMPTY, color: 0xffffff, speed: [6, 22], angle: [-Math.PI * 0.8, -Math.PI * 0.2], life: [0.6, 1.1], scale: [0.08, 0.2], alpha: 0.85 };
   private fxPool: Fx[] = [];
   readonly camera = new Camera();
   private impact = new ImpactDirector(this);
@@ -168,7 +208,23 @@ export class BattleRenderer implements ImpactHost {
   private furyCount = 0;
   private furyAt = -10;
   private resizeObs: ResizeObserver | null = null;
-  private cinematic: { rig: Rig; x: number; y: number; t: number; first: boolean; overlay: Graphics; summonId: string; done: boolean; ending: boolean } | null = null;
+  /** The BIND / ARISE sequence while it runs, and failed binds collapsing. */
+  private arise: AriseCinematic | null = null;
+  private readonly fails: FailedBind[] = [];
+  /** A boss's entrance and deaths in progress; the field dim and the lasting phase tint. */
+  private bossIntro: BossEntrance | null = null;
+  private readonly bossDeaths: BossDeath[] = [];
+  private dimOthers = 0;
+  private bossTint = 0;
+  private bossTintColor = 0xffffff;
+  private letterboxTarget = 0;
+  /** The warrior holds the raised-hand claim pose. */
+  private claimHold = false;
+  /** Real seconds of the current frame (the claim pose animates while the fight is paused). */
+  private frameDt = 0;
+  /** A cinematic's wash over the backdrop (night for an epic bind). */
+  private cineTint = 0;
+  private cineTintColor = 0xffffff;
   private playerPath: string = "none";
   private lowHpPulse = 0;
   private resizeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -183,6 +239,9 @@ export class BattleRenderer implements ImpactHost {
   private readonly pt2 = { x: 0, y: 0 };
   private readonly seen = new Set<number>();
   private readonly view: BattleView;
+  private readonly perf: PerfSamples | null = typeof window !== "undefined" ? ((window as unknown as { __ASCEND_PERF__?: PerfSamples }).__ASCEND_PERF__ ?? null) : null;
+  private readonly secAcc = new Float64Array(SECTION_NAMES.length);
+  private secT = 0;
 
   constructor(private readonly controller: GameController) {
     this.view = {
@@ -229,7 +288,14 @@ export class BattleRenderer implements ImpactHost {
     // A render group: moving the camera is one transform on the GPU side, not a re-walk of every
     // fighter's transform.
     this.cameraLayer.isRenderGroup = true;
-    this.cameraLayer.addChild(this.groundFx, this.entityLayer, this.projectileLayer, this.orbLayer, this.trails.graphics, this.fxGraphics, this.particles.container, this.numbers.container, this.cinematicLayer);
+    for (let i = 0; i < MAX_DECALS; i++) {
+      const s = new Sprite(hardCircle());
+      s.anchor.set(0.5);
+      s.visible = false;
+      this.decalLayer.addChild(s);
+      this.decalPool.push({ sprite: s, rx: 0, ry: 0, life: 0, total: 1, live: false });
+    }
+    this.cameraLayer.addChild(this.decalLayer, this.groundFx, this.entityLayer, this.projectileLayer, this.orbLayer, this.trails.graphics, this.fxGraphics, this.particles.container, this.numbers.container, this.cinematicLayer);
     this.entityLayer.sortableChildren = true;
     this.entityLayer.addChild(this.focusTicks);
     this.focusTicks.zIndex = 9000;
@@ -258,11 +324,10 @@ export class BattleRenderer implements ImpactHost {
       v.bar.destroy();
     }
     this.views.clear();
-    if (this.cinematic) {
-      this.cinematic.rig.destroy();
-      this.cinematic.overlay.destroy();
-    }
-    this.cinematic = null;
+    this.disposeArise();
+    for (const f of this.fails) f.dispose();
+    this.fails.length = 0;
+    this.disposeBoss();
     this.particles.destroy();
     this.trails.destroy();
     this.numbers?.destroy();
@@ -271,6 +336,7 @@ export class BattleRenderer implements ImpactHost {
     this.fxPool = [];
     this.telegraphMarks.clear();
     destroyTextures();
+    clearRigCache();
     if (this.app) {
       this.app.destroy(true, { children: true, texture: true });
       this.app = null;
@@ -292,7 +358,10 @@ export class BattleRenderer implements ImpactHost {
     for (const f of this.fxPool) f.live = false;
     this.particles.clear();
     this.trails.clear();
-    this.decals.length = 0;
+    for (const d of this.decalPool) {
+      d.live = false;
+      d.sprite.visible = false;
+    }
     this.telegraphMarks.clear();
     this.lastTelegraphs.length = 0;
     this.impact.reset();
@@ -300,7 +369,12 @@ export class BattleRenderer implements ImpactHost {
     this.letterboxT = 0;
     this.skyDarken = 0;
     this.focusId = -1;
-    this.endCinematic();
+    this.disposeArise();
+    for (const f of this.fails) f.dispose();
+    this.fails.length = 0;
+    this.disposeBoss();
+    this.cineTint = 0;
+    this.bossTint = 0;
     this.syncBackground();
     if (this.width > 0) {
       this.frameCamera(world, 1);
@@ -349,6 +423,20 @@ export class BattleRenderer implements ImpactHost {
     return { particles: this.particles.count, entities: this.views.size, renderer: type, trails: this.trails.live };
   }
 
+  /**
+   * Diagnostics for leak checks and the perf report: display objects in the stage tree, the
+   * backdrop's texture bytes and paint resolution, shared rig parts, and whether a cinematic runs.
+   */
+  debugCounts(): { displayObjects: number; backdropBytes: number; backdropRes: number; rigParts: number; cinematic: boolean } {
+    let n = 0;
+    const walk = (c: Container): void => {
+      n += 1;
+      for (const ch of c.children) walk(ch);
+    };
+    if (this.app) walk(this.app.stage);
+    return { displayObjects: n, backdropBytes: this.background?.textureBytes ?? 0, backdropRes: this.background?.resolution ?? 0, rigParts: rigCacheSize(), cinematic: this.cinematicActive };
+  }
+
   // ---------------------------------------------------------------------
   // Layout & mapping
   // ---------------------------------------------------------------------
@@ -364,8 +452,10 @@ export class BattleRenderer implements ImpactHost {
     this.groundTop = Math.max(h * 0.36, (h - reserve) * 0.46);
     this.groundBottom = h - reserve;
     // Painted larger than the canvas so the zoomed camera stays sharp (capped for memory).
-    const res = Math.min(2, window.devicePixelRatio || 1) * 1.3;
+    // Painted larger than the canvas so the zoomed camera stays sharp, under a texture cap.
+    const res = backdropResolution(w, h, this.groundTop, BLEED, Math.min(2, window.devicePixelRatio || 1));
     this.background?.layout(w, h, this.groundTop, BLEED, res);
+    if (this.background) this.trails.setGroundLuminance(this.background.groundLuminance);
     this.flashRect.clear().rect(0, 0, w, h).fill(0xffffff);
     this.flashRect.alpha = 0;
     this.pulse.width = w;
@@ -482,7 +572,10 @@ export class BattleRenderer implements ImpactHost {
     const app = this.app;
     const world = this.world;
     if (!app || !world) return;
+    const perf = this.perf;
+    if (perf) this.secT = performance.now();
     this.time += dt;
+    this.frameDt = dt;
     this.impact.now += dt;
     const frozen = this.stopLeft > 0;
     if (frozen) this.stopLeft -= dt;
@@ -490,7 +583,9 @@ export class BattleRenderer implements ImpactHost {
     const fxDt = frozen ? 0 : dt;
     const entDt = paused || frozen ? 0 : dt;
     this.background?.update(paused ? dt * 0.3 : dt);
+    if (perf) this.sec(0);
     this.syncEntities(world, alpha, entDt, fxDt, paused ? 0 : dt);
+    if (perf) this.sec(1);
     if (!paused) this.frameCamera(world, alpha);
     this.camera.update(dt);
     const o = this.camera.out;
@@ -505,13 +600,19 @@ export class BattleRenderer implements ImpactHost {
     this.drawFocus(world, alpha, dt);
     this.syncProjectiles(world, alpha);
     this.syncOrbs(world, dt);
+    if (perf) this.sec(2);
     this.drawGroundFx(world, fxDt);
+    if (perf) this.sec(3);
     this.updateFx(fxDt);
+    if (perf) this.sec(4);
+    this.trails.setSpeed(this.speed());
     this.trails.update(fxDt);
+    if (perf) this.sec(5);
     this.particles.update(fxDt);
     this.numbers.setBounds(this.vis.minX, this.vis.maxX);
     this.numbers.setZoom(o.scale);
     this.numbers.update(dt);
+    if (perf) this.sec(6);
     this.updateCinematic(dt);
     this.drawChevrons(world);
     // Screen-space overlays.
@@ -526,12 +627,28 @@ export class BattleRenderer implements ImpactHost {
     const low = this.lowHpPulse > 0 ? 0.16 + 0.1 * Math.sin(this.lowHpPulse * 4) : 0;
     this.pulse.alpha = Math.max(hurt, low);
     this.drawLetterbox(dt);
-    const perf = (window as unknown as { __ASCEND_PERF__?: PerfSamples }).__ASCEND_PERF__;
+    if (perf) this.sec(7);
     if (perf) {
       const t0 = performance.now();
       app.render();
-      perf.draw.push(performance.now() - t0);
+      const d = performance.now() - t0;
+      perf.draw.push(d);
+      const s = perf.sections;
+      if (s) {
+        for (let i = 0; i < SECTION_NAMES.length; i++) {
+          const name = SECTION_NAMES[i]!;
+          (s[name] ??= []).push(this.secAcc[i]!);
+          this.secAcc[i] = 0;
+        }
+      }
     } else app.render();
+  }
+
+  /** Perf only: charge the time since the last mark to section `i`. */
+  private sec(i: number): void {
+    const now = performance.now();
+    this.secAcc[i] = this.secAcc[i]! + now - this.secT;
+    this.secT = now;
   }
 
   /**
@@ -556,7 +673,7 @@ export class BattleRenderer implements ImpactHost {
       const dx = e.pos.x - p.pos.x;
       const dy = e.pos.y - p.pos.y;
       if (!boss && dx * dx + dy * dy > r2) continue;
-      if (e.statuses.some((st) => st.kind === "submerged")) continue;
+      if (hasStatus(e, "submerged")) continue;
       const ex = this.sx(e.pos.x);
       const ey = this.sy(e.pos.y);
       const ev = this.views.get(e.id);
@@ -622,24 +739,48 @@ export class BattleRenderer implements ImpactHost {
       const moving = e.state === "move";
       const speedFrac = Math.min(1, Math.hypot(e.vel.x, e.vel.y) / 160);
       const variant = swingVariant(v.swings, e.state);
-      if (!held) rig.animate(e.state, e.stateTime, e.stateDuration, e.seed, e.facing, moving, speedFrac, e.deathTime, dt, variant);
+      const intro = this.bossIntro && this.bossIntro.bossId === e.id ? this.bossIntro : null;
+      if (intro) {
+        // The boss's entrance stages its rig (rise, descent, walk-out) over the normal pose.
+        rig.animate(intro.poseState, this.time, 0, e.seed, e.facing, intro.poseState === "move", 0.6, 0, this.frameDt, 0);
+      } else if (this.claimHold && e.id === player.id && !e.dead) {
+        // BIND: the warrior raises a hand to take the essence (the fight itself is paused).
+        rig.animate("cast", 0.5, 1, e.seed, e.facing, false, 0, 0, this.frameDt, 0);
+      } else if (!held) rig.animate(e.state, e.stateTime, e.stateDuration, e.seed, e.facing, moving, speedFrac, e.deathTime, dt, variant);
       rig.setHitFlash(e.hitFlash);
-      if (v.white > 0) {
-        rig.setWhite(true);
-        v.white -= 1;
-      } else rig.setWhite(false);
+      // Time-based impact flash: full white, a light tint, or nothing (FlashState decides).
+      rig.setWhite(v.flash.step(realDt > 0 ? realDt : this.frameDt));
       if (e.summon?.temporary) rig.root.alpha = Math.min(rig.root.alpha, 0.72);
-      const submerged = e.statuses.some((st) => st.kind === "submerged");
+      const submerged = hasStatus(e, "submerged");
       if (submerged) {
         // Sunk: only a dark wake and a pale ripple show where it glides.
         rig.root.alpha = 0.12;
         if (!this.reduced && fxDt > 0 && Math.random() < 0.3) {
-          this.particles.emit({ x: sx + (Math.random() - 0.5) * 30, y: sy, count: 1, texture: softCircle(), color: 0x8fc9c4, speed: [5, 20], angle: [-Math.PI, 0], life: [0.3, 0.6], scale: [0.2, 0.4], alpha: 0.6 });
+          const w = this.trailEmit;
+          w.x = sx + (Math.random() - 0.5) * 30;
+          w.y = sy;
+          w.texture = softCircle();
+          w.color = 0x8fc9c4;
+          w.speed[0] = 5;
+          w.speed[1] = 20;
+          w.life[0] = 0.3;
+          w.life[1] = 0.6;
+          w.scale[0] = 0.2;
+          w.scale[1] = 0.4;
+          w.alpha = 0.6;
+          w.angle = WAKE_ANGLE;
+          this.particles.emit(w);
         }
       }
       rig.shadow.position.set(sx + (v.slide + rig.deathShiftX) * ds, sy + 1);
       rig.shadow.scale.set(ds * rig.poolScale, ds * 0.9 * rig.poolScale);
       rig.shadow.zIndex = -1000 + y;
+      if (intro) {
+        intro.setPlace(sx, sy, ds, e.facing, rig.top);
+        intro.present(rig);
+      } else if (this.dimOthers > 0.005) rig.root.tint = mix(0xffffff, 0x000000, this.dimOthers);
+      else if (this.bossIntro === null && v.dimmed) rig.root.tint = 0xffffff;
+      v.dimmed = this.dimOthers > 0.005 && !intro;
       if (e.dead) {
         if (rig.deathVariant === DEATH_LAUNCH && !v.landed && e.deathTime >= 0.45) {
           v.landed = true;
@@ -658,6 +799,12 @@ export class BattleRenderer implements ImpactHost {
       }
       if (!held) this.syncTrail(v, e, e.id === player.id);
       this.drawBar(v, e, sx, sy, ds);
+      if (e.id === player.id) {
+        // The warrior's box: damage numbers keep out of it.
+        const hw = v.rig.top * 0.2 * ds;
+        const bx = sx + v.slide * ds;
+        this.numbers.setAvoid(bx - hw, sy - v.rig.top * ds, bx + hw, sy);
+      }
     }
     for (const [id, v] of this.views) {
       if (!seen.has(id)) {
@@ -699,6 +846,8 @@ export class BattleRenderer implements ImpactHost {
     const affix = e.enemy?.elite;
     if (affix) spec = eliteSpec(spec, ELITES[affix].color);
     const rig = new Rig(spec);
+    // The white impact copies of this kind are prepared now, not on the first blow.
+    rig.prewarmWhite();
     this.entityLayer.addChild(rig.shadow);
     this.entityLayer.addChild(rig.root);
     const bar = new Graphics();
@@ -718,7 +867,7 @@ export class BattleRenderer implements ImpactHost {
       lastHitAbility: false,
       lastHitElement: "physical",
       lastHitDir: 1,
-      white: 0,
+      flash: new FlashState(),
       squash: 0,
       slide: 0,
       trail: null,
@@ -738,7 +887,7 @@ export class BattleRenderer implements ImpactHost {
   private drawFocus(world: World, alpha: number, dt: number): void {
     const g = this.focusTicks;
     const f = world.focusId >= 0 ? world.entities.get(world.focusId) : undefined;
-    if (!f || f.dead || f.statuses.some((st) => st.kind === "submerged")) {
+    if (!f || f.dead || hasStatus(f, "submerged")) {
       g.visible = false;
       this.focusId = -1;
       return;
@@ -762,8 +911,12 @@ export class BattleRenderer implements ImpactHost {
     const hh = (h / 2 + 8) * grow;
     const t = 8;
     g.visible = true;
-    g.clear();
     g.position.set(cx, cy);
+    // Redraw only when the box or the fade changes (the ticks just follow the target otherwise).
+    const key = Math.round(hw * 2) * 1e6 + Math.round(hh * 2) * 1e2 + Math.round(k * 20);
+    if (key === this.focusKey) return;
+    this.focusKey = key;
+    g.clear();
     for (let i = 0; i < 4; i++) {
       const sxn = i & 1 ? 1 : -1;
       const syn = i & 2 ? 1 : -1;
@@ -789,7 +942,7 @@ export class BattleRenderer implements ImpactHost {
     let best: number | null = null;
     let bestD = Infinity;
     for (const e of world.entities.values()) {
-      if (e.dead || e.faction !== "enemy" || e.statuses.some((st) => st.kind === "submerged")) continue;
+      if (e.dead || e.faction !== "enemy" || hasStatus(e, "submerged")) continue;
       const ds = this.figureScale(e.pos.y);
       const v = this.views.get(e.id);
       const sx = this.sx(e.pos.x);
@@ -810,7 +963,7 @@ export class BattleRenderer implements ImpactHost {
     const bar = v.bar;
     const hurt = e.hp < e.stats.maxHp - 0.5 || e.shield > 0;
     const flagged = !!e.enemy?.elite || !!e.enemy?.eligible;
-    if (e.dead || e.kind === "boss" || (!hurt && !flagged) || e.statuses.some((st) => st.kind === "submerged")) {
+    if (e.dead || e.kind === "boss" || (!hurt && !flagged) || hasStatus(e, "submerged")) {
       bar.visible = false;
       return;
     }
@@ -820,8 +973,9 @@ export class BattleRenderer implements ImpactHost {
     const w = Math.round((e.kind === "player" ? 40 : e.kind === "summon" ? 30 : 28) * this.unit() * 1.6);
     const frac = clamp(e.hp / e.stats.maxHp, 0, 1);
     const sf = e.shield > 0 ? clamp(e.shield / e.stats.maxHp, 0, 1) : 0;
-    const marked = e.statuses.some((st) => st.kind === "mark");
-    const key = `${w}|${Math.round(frac * 60)}|${Math.round(sf * 30)}|${e.enemy?.elite ?? ""}|${e.enemy?.eligible ? 1 : 0}|${marked ? 1 : 0}|${hurt ? 1 : 0}`;
+    const marked = hasStatus(e, "mark");
+    // A numeric key (no string per entity per frame): redraw only when what the bar shows changes.
+    const key = w * 1e7 + Math.round(frac * 60) * 1e5 + Math.round(sf * 30) * 1e3 + (e.enemy?.elite ? 100 : 0) + (e.enemy?.eligible ? 10 : 0) + (marked ? 4 : 0) + (hurt ? 1 : 0);
     if (v.barKey === key) return;
     v.barKey = key;
     const h = 3;
@@ -880,7 +1034,20 @@ export class BattleRenderer implements ImpactHost {
       c.position.set(this.sx(x), this.sy(y) - CHEST * this.figureScale(y) - arcLift);
       c.rotation = Math.atan2(p.vel.y * 0.6, p.vel.x);
       if (p.kind !== "arrow" && !this.reduced && Math.random() < 0.5) {
-        this.particles.emit({ x: c.x, y: c.y, count: 1, texture: softCircle(), color: p.kind === "ember" ? 0xd9823f : 0xa9d0e6, speed: [2, 10], life: [0.2, 0.4], scale: [0.15, 0.3], alpha: 0.7 });
+        const w = this.trailEmit;
+        w.x = c.x;
+        w.y = c.y;
+        w.texture = softCircle();
+        w.color = p.kind === "ember" ? 0xd9823f : 0xa9d0e6;
+        w.speed[0] = 2;
+        w.speed[1] = 10;
+        w.life[0] = 0.2;
+        w.life[1] = 0.4;
+        w.scale[0] = 0.15;
+        w.scale[1] = 0.3;
+        w.alpha = 0.7;
+        w.angle = undefined;
+        this.particles.emit(w);
       }
     }
     for (const [id, c] of this.projectiles) {
@@ -899,33 +1066,72 @@ export class BattleRenderer implements ImpactHost {
       seen.add(o.id);
       let v = this.orbs.get(o.id);
       if (!v) {
+        // A hovering mote in the shadow's rarity colour, a glint on the ground under it, and for
+        // a boss's essence a larger mote inside a tilted ring that turns.
+        const color = RARITY_COLOR[summonDef(o.summonId).rarity] ?? 0xf0e6d0;
         const c = new Container();
-        const ringS = new Sprite(ring());
-        ringS.anchor.set(0.5);
-        ringS.tint = o.isBoss || o.elite ? 0xe9c56f : 0xf0e6d0;
-        ringS.blendMode = "add";
-        const core = new Sprite(softCircle());
+        const glint = new Sprite(softCircle());
+        glint.anchor.set(0.5);
+        glint.tint = color;
+        glint.blendMode = "add";
+        const mote = new Container();
+        const halo = new Sprite(softCircle());
+        halo.anchor.set(0.5);
+        halo.tint = color;
+        halo.blendMode = "add";
+        const core = new Sprite(hardCircle());
         core.anchor.set(0.5);
-        core.tint = o.isBoss || o.elite ? 0xe9c97a : 0xfff6e2;
+        core.tint = lighten(color, 0.75);
         core.blendMode = "add";
-        c.addChild(ringS, core);
+        const tilt = new Container();
+        tilt.scale.set(1, 0.32);
+        const ringG = new Graphics();
+        if (o.isBoss) {
+          const r = 30;
+          ringG.circle(0, 0, r).stroke({ width: 2, color: 0xe9c56f, alpha: 0.9 });
+          for (let i = 0; i < 6; i++) {
+            const a = (i / 6) * Math.PI * 2;
+            ringG.moveTo(Math.cos(a) * r * 0.86, Math.sin(a) * r * 0.86).lineTo(Math.cos(a) * r * 1.16, Math.sin(a) * r * 1.16).stroke({ width: 2, color: 0xfff1c9, alpha: 0.9 });
+          }
+        }
+        tilt.addChild(ringG);
+        tilt.visible = o.isBoss;
+        mote.addChild(halo, tilt, core);
+        c.addChild(glint, mote);
         this.orbLayer.addChild(c);
-        v = { c, core, ring: ringS, t: 0, isBoss: o.isBoss };
+        v = { c, core, halo, glint, mote, ring: ringG, t: Math.random() * 6, isBoss: o.isBoss, color };
         this.orbs.set(o.id, v);
       }
       v.t += dt;
       const u = this.unit();
+      const ds = this.depthScale(o.pos.y);
       const sx = this.sx(o.pos.x);
-      const sy = this.sy(o.pos.y) - 28 * u * FIGURE_SCALE * this.depthScale(o.pos.y) - Math.sin(v.t * 2.2) * 5;
-      v.c.position.set(sx, sy);
-      const pulse = 0.5 + Math.sin(v.t * 4) * 0.08;
+      const ground = this.sy(o.pos.y);
+      // A slow vertical bob above its ground glint.
+      const bob = Math.sin(v.t * 1.7) * 4 * u * ds;
+      const lift = 30 * u * FIGURE_SCALE * ds;
+      v.c.position.set(sx, ground);
+      v.mote.position.set(0, -lift + bob);
       const frac = o.remaining / o.total;
-      v.core.scale.set((o.isBoss ? 0.9 : 0.6) * pulse * (0.6 + frac * 0.4));
-      v.ring.scale.set((o.isBoss ? 0.7 : 0.45) * (0.9 + Math.sin(v.t * 3) * 0.1));
-      v.ring.rotation += dt;
-      v.ring.alpha = 0.5 + frac * 0.5;
-      if (!this.reduced && Math.random() < dt * 10) {
-        this.particles.emit({ x: sx, y: sy, count: 1, texture: softCircle(), color: o.isBoss || o.elite ? 0xe9c97a : 0xf0e6d0, speed: [6, 22], angle: [-Math.PI * 0.8, -Math.PI * 0.2], life: [0.6, 1.1], scale: [0.1, 0.25], alpha: 0.8 });
+      const big = v.isBoss ? 1.5 : 1;
+      const pulse = 1 + Math.sin(v.t * 3.4) * 0.07;
+      v.halo.scale.set(0.62 * big * pulse * (0.65 + frac * 0.35) * ds);
+      v.halo.alpha = 0.75;
+      v.core.scale.set(0.2 * big * ds);
+      v.glint.scale.set(0.9 * big * ds * (1 - bob / (40 * u)), 0.22 * big * ds);
+      v.glint.alpha = 0.32 + 0.12 * Math.sin(v.t * 1.7 + 1.2);
+      if (v.isBoss) {
+        v.ring.rotation += dt * 0.9;
+        v.ring.scale.set(ds * u * 1.6);
+        v.ring.alpha = 0.5 + frac * 0.5;
+      }
+      if (!this.reduced && Math.random() < dt * (v.isBoss ? 14 : 8)) {
+        const e = this.orbEmit;
+        e.x = sx;
+        e.y = ground - lift + bob;
+        e.color = v.color;
+        e.texture = softCircle();
+        this.particles.emit(e);
       }
     }
     for (const [id, v] of this.orbs) {
@@ -936,35 +1142,59 @@ export class BattleRenderer implements ImpactHost {
     }
   }
 
-  /** Ink splatters left by the fallen. They soak into the ground and fade. Capped. */
-  private decals: { x: number; y: number; rx: number; ry: number; life: number; total: number; color: number }[] = [];
-
+  /** Ink splatters left by the fallen. They soak into the ground and fade. Pooled and capped. */
   private splatter(x: number, y: number, big: boolean, color = 0x14110d): void {
     const u = this.unit();
     const n = big ? 16 : this.reduced ? 4 : 8;
     for (let i = 0; i < n; i++) {
       const a = Math.random() * Math.PI * 2;
-      const d = Math.random() * (big ? 70 : 26) * u;
+      const dist = Math.random() * (big ? 70 : 26) * u;
       const r = (2 + Math.random() * (big ? 12 : 7)) * u;
-      this.decals.push({ x: x + Math.cos(a) * d, y: y + Math.sin(a) * d * 0.4, rx: r, ry: r * 0.45, life: 2.4, total: 2.4, color });
+      // The ring of decals is reused oldest-first.
+      const d = this.decalPool[this.decalNext]!;
+      this.decalNext = (this.decalNext + 1) % MAX_DECALS;
+      d.live = true;
+      d.rx = r;
+      d.ry = r * 0.45;
+      d.life = d.total = 2.4;
+      d.sprite.tint = color;
+      d.sprite.position.set(x + Math.cos(a) * dist, y + Math.sin(a) * dist * 0.4);
+      d.sprite.visible = true;
     }
-    if (this.decals.length > 80) this.decals.splice(0, this.decals.length - 80);
   }
 
-  private drawGroundFx(world: World, dt: number): void {
-    const g = this.groundFx;
-    g.clear();
-    const u = this.unit();
-    for (let i = this.decals.length - 1; i >= 0; i--) {
-      const d = this.decals[i]!;
+  private updateDecals(dt: number): void {
+    // hardCircle is 32px across with a 1px margin: radius 15.
+    const inv = 1 / 15;
+    for (const d of this.decalPool) {
+      if (!d.live) continue;
       d.life -= dt;
       if (d.life <= 0) {
-        this.decals.splice(i, 1);
+        d.live = false;
+        d.sprite.visible = false;
         continue;
       }
       const k = d.life / d.total;
-      g.ellipse(d.x, d.y, d.rx * (1 + (1 - k) * 0.3), d.ry * (1 + (1 - k) * 0.3)).fill({ color: d.color, alpha: 0.55 * Math.min(1, k * 1.6) });
+      const grow = 1 + (1 - k) * 0.3;
+      d.sprite.scale.set(d.rx * grow * inv, d.ry * grow * inv);
+      d.sprite.alpha = 0.55 * Math.min(1, k * 1.6);
     }
+  }
+
+  private drawGroundFx(world: World, dt: number): void {
+    this.updateDecals(dt);
+    const g = this.groundFx;
+    // Geometry is rebuilt only while there is something to draw; an empty frame clears it once.
+    if (!this.groundNeeded(world)) {
+      if (this.groundDirty) {
+        g.clear();
+        this.groundDirty = false;
+      }
+      return;
+    }
+    g.clear();
+    this.groundDirty = true;
+    const u = this.unit();
     // Telegraphs keep their true size (the geometry the simulation tests): a thin rim that fills
     // inward as the time runs out, crimson when hostile, and a white flash on the frame it lands.
     const vy = this.depthUnit();
@@ -1074,16 +1304,29 @@ export class BattleRenderer implements ImpactHost {
     }
   }
 
+  /** Whether any telegraph, threat rim, banner aura, hazard or resolving flash needs drawing. */
+  private groundNeeded(world: World): boolean {
+    if (world.telegraphs.length > 0 || world.hazards.length > 0 || this.lastTelegraphs.length > 0) return true;
+    const pid = world.player.id;
+    for (const e of world.entities.values()) {
+      if (e.dead) continue;
+      if (e.faction === "enemy" && e.state === "windup" && e.pendingTargetId === pid) return true;
+      if (e.enemy?.archetype === "bannerman" || (e.kind === "summon" && e.summon?.role === "support")) return true;
+    }
+    return false;
+  }
+
   /** Off-screen hostiles: a small chevron at the edge, crimson when it is winding up at the warrior. */
   private drawChevrons(world: World): void {
     const g = this.chevrons;
-    g.clear();
+    if (this.chevronsDrawn) g.clear();
+    this.chevronsDrawn = false;
     const w = this.width;
     const h = this.height - this.camera.insetBottom;
     const player = world.player;
     for (const e of world.entities.values()) {
       if (e.dead || e.faction !== "enemy") continue;
-      if (e.statuses.some((st) => st.kind === "submerged")) continue;
+      if (hasStatus(e, "submerged")) continue;
       const by = this.sy(e.pos.y) - CHEST * this.figureScale(e.pos.y);
       const p = this.camera.project(this.sx(e.pos.x), by, this.pt);
       const m = 4;
@@ -1102,6 +1345,7 @@ export class BattleRenderer implements ImpactHost {
         .lineTo(tipX, tipY)
         .lineTo(tipX - c * 6 + s * 5, tipY - s * 6 - c * 5)
         .stroke({ width: 2, color, alpha: threat ? 1 : 0.85, cap: "round", join: "round" });
+      this.chevronsDrawn = true;
     }
   }
 
@@ -1109,7 +1353,7 @@ export class BattleRenderer implements ImpactHost {
     const g = this.letterbox;
     const on = this.letterboxT > 0;
     if (on) this.letterboxT -= dt;
-    const target = on && !this.reduced ? 20 : 0;
+    const target = this.reduced ? 0 : Math.max(on ? 20 : 0, this.letterboxTarget);
     const prev = this.letterboxH;
     this.letterboxH = damp(this.letterboxH, target, 14, dt);
     if (this.letterboxH < 0.5) {
@@ -1126,7 +1370,9 @@ export class BattleRenderer implements ImpactHost {
     const bg = this.background;
     if (!bg) return;
     this.skyDarken = damp(this.skyDarken, 0, 5, dt);
-    const tint = this.skyDarken > 0.01 ? mix(0xffffff, this.skyColor, this.skyDarken) : 0xffffff;
+    let tint = this.skyDarken > 0.01 ? mix(0xffffff, this.skyColor, this.skyDarken) : 0xffffff;
+    if (this.bossTint > 0) tint = mix(tint, this.bossTintColor, this.bossTint);
+    if (this.cineTint > 0.005) tint = mix(tint, this.cineTintColor, this.cineTint);
     // Setting a tint dirties the whole backdrop subtree, so only when it changes.
     if (tint !== this.skyTint || bg !== this.skyTintBg) {
       bg.container.tint = tint;
@@ -1152,6 +1398,7 @@ export class BattleRenderer implements ImpactHost {
         break;
       }
     }
+    this.fxLive += 1;
     if (!f) {
       if (this.fxPool.length >= MAX_FX) return null;
       f = { kind, x: 0, y: 0, x2: 0, y2: 0, r0: 0, r1: 0, life: 0, total: 0, delay: 0, color: 0, width: 1, sweep: 0, facing: 1, squash: 0.42, alpha: 1, pts: new Float32Array(24), npts: 0, live: false };
@@ -1245,7 +1492,16 @@ export class BattleRenderer implements ImpactHost {
 
   private updateFx(dt: number): void {
     const g = this.fxGraphics;
+    if (this.fxLive <= 0) {
+      if (this.fxDirty) {
+        g.clear();
+        this.fxDirty = false;
+      }
+      return;
+    }
     g.clear();
+    this.fxDirty = true;
+    let live = 0;
     for (const f of this.fxPool) {
       if (!f.live) continue;
       if (f.delay > 0) {
@@ -1257,6 +1513,7 @@ export class BattleRenderer implements ImpactHost {
         f.live = false;
         continue;
       }
+      live += 1;
       const k = 1 - f.life / f.total;
       const age = f.total - f.life;
       switch (f.kind) {
@@ -1273,15 +1530,22 @@ export class BattleRenderer implements ImpactHost {
         }
         case "crescent": {
           // A crescent that travels along the facing, growing 0.6 to 1.2; white for its first frames.
-          const e = easeOutCubic(k);
-          const cx = lerp(f.x, f.x2, e);
-          const r = f.r1 * (0.6 + 0.6 * e);
-          const color = age < 0.035 ? 0xffffff : f.color;
+          // Soft tapered layers (wide and faint, then the body, then a bright core along the
+          // leading edge) and two fading echoes behind it along its path: a blade of air, not a
+          // flat disc.
           const alpha = 1 - k * k;
           const a0 = f.facing === 1 ? -Math.PI * 0.42 : Math.PI * 0.58;
           const a1 = a0 + Math.PI * 0.84;
-          g.arc(cx, f.y, r, a0, a1).arc(cx - f.facing * r * 0.28, f.y, r * 0.86, a1, a0, true).closePath().fill({ color, alpha: alpha * 0.9 });
-          g.arc(cx, f.y, r * 1.03, a0 + 0.1, a1 - 0.1).stroke({ width: 2, color: 0xffffff, alpha: alpha * 0.8 });
+          for (let echo = 2; echo >= 0; echo--) {
+            const ee = easeOutCubic(Math.max(0, k - echo * 0.09));
+            const cx = lerp(f.x, f.x2, ee);
+            const r = f.r1 * (0.6 + 0.6 * ee);
+            const ea = alpha * (echo === 0 ? 1 : echo === 1 ? 0.35 : 0.15);
+            const col = age < 0.035 && echo === 0 ? 0xffffff : f.color;
+            this.crescent(g, cx, f.y, r * 1.04, a0, a1, 0.3, col, ea * 0.18);
+            this.crescent(g, cx, f.y, r, a0 + 0.05, a1 - 0.05, 0.16, col, ea * 0.6);
+            if (echo === 0) this.crescent(g, cx, f.y, r * 0.995, a0 + 0.14, a1 - 0.14, 0.05, 0xffffff, ea * 0.95);
+          }
           break;
         }
         case "bolt": {
@@ -1356,6 +1620,28 @@ export class BattleRenderer implements ImpactHost {
         }
       }
     }
+    // Delayed effects still waiting count as live too.
+    for (const f of this.fxPool) if (f.live && f.delay > 0) live += 1;
+    this.fxLive = live;
+  }
+
+  /** A crescent tapered to points at both tips: thickness `th` (fraction of r) at its middle. */
+  private crescent(g: Graphics, cx: number, cy: number, r: number, a0: number, a1: number, th: number, color: number, alpha: number): void {
+    const n = 14;
+    for (let i = 0; i <= n; i++) {
+      const a = a0 + ((a1 - a0) * i) / n;
+      const x = cx + Math.cos(a) * r;
+      const y = cy + Math.sin(a) * r;
+      if (i === 0) g.moveTo(x, y);
+      else g.lineTo(x, y);
+    }
+    for (let i = n - 1; i >= 1; i--) {
+      const t = i / n;
+      const a = a0 + (a1 - a0) * t;
+      const rr = r * (1 - th * Math.sin(t * Math.PI));
+      g.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
+    }
+    g.closePath().fill({ color, alpha });
   }
 
   handleEvents(events: GameEvent[]): void {
@@ -1383,7 +1669,12 @@ export class BattleRenderer implements ImpactHost {
             this.chest(target, this.pt);
             const taken = e.targetKind === "player";
             const col = taken ? 0xcc3f4b : e.crit ? 0xdab86c : e.element === "physical" ? 0xf3f0e9 : lighten(elementColor(e.element), 0.45);
-            this.numbers.spawn(this.pt.x, this.pt.y - 12, fmtNum(e.amount), col, taken ? "taken" : e.crit ? "crit" : "normal");
+            // Beside the target, on the side away from the attacker, never over the warrior.
+            const src = world.entities.get(e.sourceId);
+            const dir = src ? (target.pos.x >= src.pos.x ? 1 : -1) : target.facing === 1 ? -1 : 1;
+            const tv = this.views.get(target.id);
+            const halfW = (tv ? tv.rig.top * 0.2 : 16) * this.figureScale(target.pos.y);
+            this.numbers.hit(this.pt.x, this.pt.y - 6, halfW, dir, fmtNum(e.amount), col, taken ? "taken" : e.crit ? "crit" : "normal", !taken);
           }
           break;
         }
@@ -1405,10 +1696,18 @@ export class BattleRenderer implements ImpactHost {
           const isBoss = e.kind === "boss";
           if (e.kind !== "summon") this.splatter(sx, ground, isBoss);
           if (isBoss) {
-            const cy = ground - 60 * this.figureScale(e.pos.y);
-            this.particles.emit({ x: sx, y: cy, count: 70, texture: shard(), color: 0xa9d0e6, speed: [40, 420], life: [0.4, 1.6], scale: [0.25, 1.0], endScale: 0, gravity: 260, additive: false, alpha: 0.95, spin: 8 });
-            this.particles.emit({ x: sx, y: cy, count: 40, texture: softCircle(), color: 0xa9d0e6, speed: [10, 160], life: [0.5, 1.8], scale: [0.4, 1.6], endScale: 1.6, alpha: 0.5 });
-            this.ringFx(sx, ground, 20, this.width, 0.9, 0xa9d0e6, 6, 0.42);
+            // The death sequence takes over the body: it owns a copy of the rig from here on.
+            const v = this.views.get(e.id);
+            if (v) {
+              this.bossDeaths.push(new BossDeath(this.bossHost, e.defId, v.drawX + v.slide * this.figureScale(e.pos.y), v.drawY, this.figureScale(e.pos.y), world.entities.get(e.id)?.facing ?? -1));
+              v.rig.root.visible = false;
+              v.rig.shadow.visible = false;
+              if (v.trail) this.trails.release(v.trail);
+            }
+            if (this.bossIntro?.bossId === e.id) {
+              this.bossIntro.dispose();
+              this.bossIntro = null;
+            }
           } else {
             // A few flecks of ink; the body itself does the dying.
             this.particles.emit({ x: sx, y: ground - 30 * this.figureScale(e.pos.y), count: this.reduced ? 4 : 8, texture: shard(), color: e.kind === "summon" ? 0xe9c97a : 0x2c2b2a, speed: [40, 160], life: [0.3, 0.7], scale: [0.2, 0.45], endScale: 0, gravity: 300, additive: false, alpha: 0.9, spin: 8 });
@@ -1507,24 +1806,26 @@ export class BattleRenderer implements ImpactHost {
           break;
         }
         case "boss_intro": {
-          this.flash(0x7f9fd0, 0.35);
+          this.bossIntro?.dispose();
+          this.bossIntro = new BossEntrance(this.bossHost, e.id, e.defId);
           break;
         }
         case "tyrant_break": {
           const sx = this.sx(e.pos.x);
           const sy = this.sy(e.pos.y);
-          this.numbers.spawn(sx, sy - 160 * u, `BREAK ×${e.count}`, 0xdab86c, "crit");
+          this.numbers.spawn(sx, sy - 160 * u, `BREAK ×${e.count}`, 0xdab86c, "word");
           this.ringFx(sx, sy - 40 * u, 20 * u, 150 * u, 0.55, 0xe9c97a, 5, 0.55);
           this.ringFx(sx, sy - 40 * u, 10 * u, 95 * u, 0.4, 0xfff1c9, 3, 0.55);
-          this.camera.punch(0.03);
+          this.camera.punch(0.045);
           break;
         }
         case "perfect_dodge": {
           const sx = this.sx(e.pos.x);
           const sy = this.sy(e.pos.y);
-          this.numbers.spawn(sx, sy - 130 * u, "Perfect", 0xdab86c, "label");
+          this.numbers.spawn(sx, sy - 130 * u, "Perfect", 0xdab86c, "word");
           this.ringFx(sx, sy, 90 * u, 8, 0.4, 0xe9c97a, 3, 0.42);
-          this.camera.punch(0.03);
+          this.camera.punch(0.045);
+          this.goldAfterimage();
           this.flash(0xf0eadc, 0.12);
           break;
         }
@@ -1532,7 +1833,8 @@ export class BattleRenderer implements ImpactHost {
           const sx = this.sx(e.pos.x);
           const sy = this.sy(e.pos.y);
           this.ringFx(sx, sy, 10, (e.boss ? 260 : 120) * u, e.boss ? 1.1 : 0.6, 0xe9c97a, e.boss ? 6 : 3, 0.42);
-          this.flash(0xf0eadc, e.boss ? 0.45 : 0.16);
+          // A boss's finisher leaves the light to its death sequence (the inverted frame).
+          if (!e.boss) this.flash(0xf0eadc, 0.16);
           this.camera.punch(e.boss ? 0.05 : 0.02);
           break;
         }
@@ -1574,15 +1876,26 @@ export class BattleRenderer implements ImpactHost {
           break;
         }
         case "boss_phase": {
-          this.impact.phase();
-          this.flash(0xa9d0e6, 0.5);
-          this.camera.punch(0.03);
+          // A 350ms stop, one white frame, a shock ring to full width, and the backdrop shifts 20%
+          // toward the boss's glow for the rest of the fight.
           const b = world.entities.get(e.id);
+          const spec = b ? enemySpec(b.defId) : null;
+          const glow = spec ? (spec.glow ?? spec.eye) : 0xa9d0e6;
+          if (!this.reduced) {
+            this.impact.onAuthoredFreeze(PHASE.stop);
+            this.freeze(PHASE.stop);
+          }
+          this.flashRect.tint = 0xffffff;
+          this.flashAlpha = this.reduced ? 0.25 : 0.95;
+          this.flashTime = this.flashTotal = 1 / 60;
+          this.camera.punch(0.03);
+          this.bossTint = PHASE.tint;
+          this.bossTintColor = glow;
           if (b) {
             const sx = this.sx(b.pos.x);
             const sy = this.sy(b.pos.y);
-            this.ringFx(sx, sy, 20, 220 * u, 0.8, 0xa9d0e6, 6, 0.42);
-            this.particles.emit({ x: sx, y: sy - 60 * u, count: 50, texture: shard(), color: 0xa9d0e6, speed: [100, 400], life: [0.5, 1.2], scale: [0.3, 0.9], endScale: 0, gravity: 200, spin: 10 });
+            this.ringFx(sx, sy, 20, this.width * 1.1, 0.75, lighten(glow, 0.3), 6, 0.42);
+            this.particles.emit({ x: sx, y: sy - 60 * u, count: 40, texture: shard(), color: glow, speed: [100, 400], life: [0.5, 1.2], scale: [0.3, 0.9], endScale: 0, gravity: 200, spin: 10 });
           }
           break;
         }
@@ -1752,16 +2065,15 @@ export class BattleRenderer implements ImpactHost {
     this.flash(0xe9c97a, 0.12);
   }
 
-  /** The shadow tries to rise, flickers, and tears apart. */
+  /** A failed BIND: the pool opens under the essence and collapses inward with a dry crack (0.5s). */
   playExtractionFail(pos: { x: number; y: number }): void {
     const u = this.unit();
     const sx = this.sx(pos.x);
     const sy = this.sy(pos.y);
-    this.particles.emit({ x: sx, y: sy - 10 * u, count: 26, texture: softCircle(), color: 0xf0e6d0, speed: [10, 50], angle: [-Math.PI * 0.9, -Math.PI * 0.1], life: [0.4, 0.8], scale: [0.25, 0.55], endScale: 0, alpha: 0.7 });
-    this.particles.emit({ x: sx, y: sy - 40 * u, count: 22, texture: shard(), color: 0x2a2840, speed: [60, 200], life: [0.4, 0.9], scale: [0.25, 0.6], endScale: 0, gravity: 260, additive: false, spin: 8, alpha: 0.95 });
-    this.ringFx(sx, sy, 70 * u, 6, 0.45, 0x2a2620, 4, 0.42);
+    const r = 34 * u * FIGURE_SCALE * this.depthScale(pos.y);
+    this.fails.push(new FailedBind(this.cinematicLayer, sx, sy, r, () => this.controller.ariseCue("fail", "common", "common"), this.particles, this.reduced));
     this.numbers.spawn(sx, sy - 70 * u, "Refused", 0xd9cdb2, "label");
-    this.camera.shake(0.15);
+    this.camera.shake(0.12);
   }
 
   // ---------------------------------------------------------------------
@@ -1799,100 +2111,201 @@ export class BattleRenderer implements ImpactHost {
   }
 
   // ---------------------------------------------------------------------
-  // Summon cinematic. It lives inside the camera layer, above the fight, so its rings and motes
-  // share the fighters' space; its overlay is oversized so it covers the screen at any zoom.
+  // BIND / ARISE (cinematics/arise.ts). The sequence lives in the camera layer above the fight;
+  // the renderer only hosts it: it hands over the camera, the particles, the warrior's hand and
+  // the backdrop tint, and passes cues and the naming beat to the controller.
   // ---------------------------------------------------------------------
 
+  /** Legacy entry point: a new shadow, staged by its rarity. */
   playSummonCinematic(summonId: string, pos: { x: number; y: number }, first: boolean): void {
-    if (this.cinematic) {
-      this.cinematic.rig.destroy();
-      this.cinematic.overlay.destroy();
-      this.cinematic = null;
-    }
-    const overlay = new Graphics();
-    overlay.rect(-this.width, -this.height, this.width * 3, this.height * 3).fill({ color: 0x03040a, alpha: 1 });
-    overlay.alpha = 0;
-    const rig = new Rig(summonSpec(summonId));
-    rig.root.alpha = 0;
-    // Stage the figure where the camera is looking, so it is centred whatever the zoom.
-    this.camera.visible(this.vis);
-    const midX = (this.vis.minX + this.vis.maxX) / 2;
-    const span = this.vis.maxX - this.vis.minX;
-    const sx = clamp(this.sx(pos.x), midX - span * 0.25, midX + span * 0.25);
-    const sy = clamp(this.sy(pos.y), this.groundTop + 30, Math.max(this.groundTop + 30, Math.min(this.groundBottom, this.vis.maxY - 40)));
-    rig.root.position.set(sx, sy);
-    rig.shadow.position.set(sx, sy + 1);
-    const ds = this.unit() * FIGURE_SCALE * 1.25 * (first ? 1.12 : 1);
-    rig.root.scale.set(ds);
-    rig.shadow.scale.set(ds, ds * 0.9);
-    rig.shadow.alpha = 0;
-    this.cinematicLayer.addChild(overlay, rig.shadow, rig.root);
-    this.cinematic = { rig, x: sx, y: sy, t: 0, first, overlay, summonId, done: false, ending: false };
+    this.playArise({ summonId, pos, first, duplicate: false });
   }
 
+  /**
+   * Start a reveal. Returns the staging chosen and its length to the naming beat (seconds), or
+   * null when there is no scene to stage it in.
+   */
+  playArise(o: { summonId: string; pos: { x: number; y: number }; first: boolean; duplicate: boolean; owned?: boolean; quickReveals?: boolean; boss?: boolean }): { staging: RevealStaging; length: number } | null {
+    this.disposeArise();
+    if (!this.app || !this.world || this.width <= 0) return null;
+    const def = summonDef(o.summonId);
+    const rarity = def.rarity;
+    const boss = o.boss ?? def.role === "sovereign";
+    const orbY = this.sy(o.pos.y) - 28 * this.unit() * FIGURE_SCALE * this.depthScale(o.pos.y);
+    this.arise = new AriseCinematic(this.ariseHost, {
+      summonId: o.summonId,
+      rarity,
+      first: o.first,
+      duplicate: o.duplicate,
+      owned: o.owned,
+      quickReveals: o.quickReveals,
+      boss,
+      orbX: this.sx(o.pos.x),
+      orbY,
+      reduced: this.reduced,
+    });
+    return { staging: this.arise.staging, length: this.reduced ? REDUCED_FADE : REVEAL_LENGTH[this.arise.staging] };
+  }
+
+  /**
+   * A tap on the reveal: skip to the naming beat (refused in the first 0.4s). Returns true when
+   * the reveal is now at or past its naming beat (or there is none), so the name may show.
+   */
+  skipCinematic(): boolean {
+    const a = this.arise;
+    if (!a || a.done) return true;
+    a.skip();
+    return a.tl.t >= REVEAL_LENGTH[a.staging] || this.reduced;
+  }
+
+  get cinematicActive(): boolean {
+    return this.arise !== null;
+  }
+
+  /** The reveal was closed: the figure fades out and the sequence disposes itself. */
   endCinematic(): void {
-    if (!this.cinematic) return;
-    this.cinematic.ending = true;
+    this.arise?.end();
+  }
+
+  private disposeArise(): void {
+    this.arise?.dispose();
+    this.arise = null;
+    this.claimHold = false;
   }
 
   private updateCinematic(dt: number): void {
-    const c = this.cinematic;
-    if (!c) return;
-    c.t += dt;
-    const u = this.unit();
-    const def = summonDef(c.summonId);
-    const glow = def.palette.glow;
-    const rarityColor = RARITY_COLOR[def.rarity] ?? 0xffffff;
-    if (c.ending) {
-      c.overlay.alpha = Math.max(0, c.overlay.alpha - dt * 2.5);
-      c.rig.root.alpha = Math.max(0, c.rig.root.alpha - dt * 3);
-      c.rig.shadow.alpha = c.rig.root.alpha;
-      if (c.overlay.alpha <= 0) {
-        c.rig.destroy();
-        c.overlay.destroy();
-        this.cinematic = null;
-      }
-      return;
+    this.updateBoss(dt);
+    this.updateGhost(dt);
+    const a = this.arise;
+    if (a) {
+      a.update(dt);
+      if (a.done) this.arise = null;
     }
-    // Timeline (first: 4.6s, else 1.5s): gather -> form -> eyes -> reveal
-    const gather = c.first ? 1.6 : 0.5;
-    const form = c.first ? 1.4 : 0.5;
-    const eyes = c.first ? 0.6 : 0.2;
-    const t = c.t;
-    const top = c.rig.top * c.rig.root.scale.y;
-    c.overlay.alpha = Math.min(0.72, t * 1.5);
-    if (t < gather) {
-      if (!this.reduced || Math.random() < 0.3) {
-        const ang = Math.random() * Math.PI * 2;
-        const dist = 90 + Math.random() * 180;
-        this.particles.emit({ x: c.x + Math.cos(ang) * dist, y: c.y - top * 0.5 + Math.sin(ang) * dist * 0.6, count: 2, texture: softCircle(), color: glow, speed: [0, 10], life: [0.7, 1.2], scale: [0.2, 0.5], endScale: 0.05, alpha: 0.9, target: { x: c.x, y: c.y - top * 0.55, strength: 9 } });
-      }
-      c.rig.root.alpha = 0;
-    } else if (t < gather + form) {
-      const k = (t - gather) / form;
-      c.rig.shadow.alpha = k;
-      c.rig.animate("emerge", k * form, form, 0.3, 1, false, 0, 0, dt);
-      c.rig.root.alpha = k; // silhouette
-      c.rig.root.tint = 0x000000;
-      if (Math.random() < 0.6) this.particles.emit({ x: c.x + (Math.random() - 0.5) * 50 * u, y: c.y - Math.random() * top, count: 1, texture: softCircle(), color: glow, speed: [5, 30], angle: [-Math.PI * 0.8, -Math.PI * 0.2], life: [0.4, 0.9], scale: [0.15, 0.4], endScale: 0, alpha: 0.8 });
-    } else if (t < gather + form + eyes) {
-      const k = (t - gather - form) / eyes;
-      c.rig.root.tint = mix(0x000000, 0xffffff, easeOutCubic(k));
-      c.rig.animate("idle", t, 0, 0.3, 1, false, 0, 0, dt);
-      if (!c.done && k > 0.3) {
-        c.done = true;
-        this.ringFx(c.x, c.y, 10, 160 * u, 0.9, rarityColor, 6, 0.42);
-        this.beamFx(c.x, c.y, 0.9, glow, this.height * 1.5);
-        this.particles.emit({ x: c.x, y: c.y - top * 0.55, count: c.first ? 70 : 30, texture: shard(), color: rarityColor, speed: [80, 320], life: [0.5, 1.4], scale: [0.3, 0.9], endScale: 0, gravity: 180, spin: 8 });
-        this.flash(glow, c.first ? 0.5 : 0.3);
-        this.camera.shake(c.first ? 0.35 : 0.2);
-      }
-    } else {
-      c.rig.root.tint = 0xffffff;
-      c.rig.animate("idle", t, 0, 0.3, 1, false, 0, 0, dt);
-      if (!this.reduced && Math.random() < 0.2) this.particles.emit({ x: c.x + (Math.random() - 0.5) * 60 * u, y: c.y, count: 1, texture: softCircle(), color: glow, speed: [10, 30], angle: [-Math.PI * 0.8, -Math.PI * 0.2], life: [0.8, 1.4], scale: [0.15, 0.35], endScale: 0, alpha: 0.7 });
+    for (let i = this.fails.length - 1; i >= 0; i--) {
+      const f = this.fails[i]!;
+      f.update(dt);
+      if (f.done) this.fails.splice(i, 1);
     }
   }
+
+  /** Perfect dodge: a gold afterimage of the warrior where the blow would have landed. */
+  private ghost: { rig: Rig; path: string; t: number } | null = null;
+
+  private goldAfterimage(): void {
+    const world = this.world;
+    if (!world || this.reduced) return;
+    const p = world.player;
+    const v = this.views.get(p.id);
+    if (!v) return;
+    const path = world.loadout.weaponPath;
+    if (!this.ghost || this.ghost.path !== path) {
+      this.ghost?.rig.destroy();
+      const rig = new Rig(playerSpec(path));
+      rig.root.tint = 0xe9c56f;
+      rig.root.blendMode = "add";
+      this.entityLayer.addChild(rig.root);
+      this.ghost = { rig, path, t: 1 };
+    }
+    const g = this.ghost;
+    g.t = 0;
+    g.rig.root.visible = true;
+    g.rig.root.position.set(v.drawX, v.drawY);
+    g.rig.root.scale.set(v.rig.root.scale.x);
+    g.rig.root.zIndex = v.rig.root.zIndex - 0.5;
+    g.rig.animate("dodge", 0, 0.3, p.seed, p.facing, false, 0, 0, 0);
+  }
+
+  private updateGhost(dt: number): void {
+    const g = this.ghost;
+    if (!g || g.t >= 1) return;
+    g.t = Math.min(1, g.t + dt / 0.4);
+    g.rig.root.alpha = 0.7 * (1 - easeOutCubic(g.t));
+    g.rig.root.y -= dt * 12;
+    if (g.t >= 1) g.rig.root.visible = false;
+  }
+
+  private disposeBoss(): void {
+    this.ghost?.rig.destroy();
+    this.ghost = null;
+    this.bossIntro?.dispose();
+    this.bossIntro = null;
+    for (const d of this.bossDeaths) d.dispose();
+    this.bossDeaths.length = 0;
+    this.dimOthers = 0;
+    this.letterboxTarget = 0;
+    this.camera.hold.weight = 0;
+  }
+
+  private updateBoss(dt: number): void {
+    const b = this.bossIntro;
+    if (b) {
+      b.update(dt);
+      if (b.done) {
+        this.bossIntro = null;
+        this.dimOthers = 0;
+      }
+    }
+    for (let i = this.bossDeaths.length - 1; i >= 0; i--) {
+      const d = this.bossDeaths[i]!;
+      d.update(dt);
+      if (d.done) this.bossDeaths.splice(i, 1);
+    }
+  }
+
+  private readonly bossHost: BossHost = {
+    camera: this.camera,
+    particles: this.particles,
+    layer: this.cinematicLayer,
+    isReduced: () => this.reduced,
+    freeze: (seconds) => {
+      if (this.reduced) return;
+      this.impact.onAuthoredFreeze(seconds);
+      this.freeze(seconds);
+    },
+    letterbox: (px) => {
+      this.letterboxTarget = px;
+    },
+    dimOthers: (amount) => {
+      this.dimOthers = amount;
+    },
+    ring: (x, y, r0, r1, life, color, width) => this.ringFx(x, y, r0, r1, life, color, width, 0.42),
+    viewWidth: () => this.width,
+    cue: (name) => this.controller.bossCue(name),
+  };
+
+  private readonly ariseHost: AriseHost = {
+    camera: this.camera,
+    particles: this.particles,
+    layer: this.cinematicLayer,
+    viewSize: (out) => {
+      out.w = this.width;
+      out.h = this.height;
+      out.inset = this.camera.insetBottom;
+    },
+    normalFigureScale: () => this.figureScale(WORLD_D * 0.5),
+    warriorHand: (out) => {
+      const p = this.world?.player;
+      const v = p ? this.views.get(p.id) : undefined;
+      if (!p || !v || p.dead) return false;
+      v.rig.handPoint(out);
+      return true;
+    },
+    claimPose: (on) => {
+      this.claimHold = on;
+    },
+    freeze: (seconds) => {
+      if (this.reduced) return;
+      this.impact.onAuthoredFreeze(seconds);
+      this.freeze(seconds);
+    },
+    flash: (color, alpha, duration) => this.flash(color, alpha, duration),
+    tintBackdrop: (color, amount) => {
+      this.cineTintColor = color;
+      this.cineTint = amount;
+    },
+    cue: (name, staging, rarity) => this.controller.ariseCue(name, staging, rarity),
+    named: () => this.controller.revealNamed(),
+  };
 }
 
 function pathColor(path: string): number {

@@ -3,9 +3,9 @@ import type { GameEvent } from "../engine/events";
 import type { Combatant } from "../entities/types";
 import type { Camera } from "./Camera";
 import type { EmitOptions, ParticleSystem } from "./Particles";
-import { HitStopPolicy, type HitClass } from "./hitStop";
+import { FlashState, HitStopPolicy, type FlashSource, type FlashTarget, type HitClass } from "./hitStop";
 import { hardCircle, softCircle, spark } from "./textures";
-import { DEATH_COLLAPSE, DEATH_DISSOLVE, DEATH_LAUNCH, type Rig } from "./rigs/Rig";
+import { DEATH_COLLAPSE, DEATH_DISSOLVE, DEATH_LAUNCH, DEATH_SINK, type Rig } from "./rigs/Rig";
 import { swingVariant } from "./rigs/pose";
 
 type HitEvent = Extract<GameEvent, { type: "hit" }>;
@@ -23,8 +23,8 @@ export interface ImpactState {
   lastHitAbility: boolean;
   lastHitElement: string;
   lastHitDir: 1 | -1;
-  /** Frames of white silhouette left. */
-  white: number;
+  /** The impact flash (seconds of white or tint left; see FlashState). */
+  flash: FlashState;
   /** Squash (0..1) and slide (rig units, signed) from the last impact; both decay. */
   squash: number;
   slide: number;
@@ -130,6 +130,11 @@ export class ImpactDirector {
       tv.lastHitAbility = ability || (e.element !== "physical" && !sv?.swungThisBatch);
       tv.lastHitElement = e.element;
       tv.lastHitDir = dir;
+      // The flash is time-based and decided by one rule (FlashState): bosses and elites only go
+      // fully white on a warrior crit, heavy or ability hit, the army never whitens anything.
+      const tcls: FlashTarget = onWarrior ? "warrior" : target.kind === "boss" || !!target.enemy?.elite ? "boss" : target.faction === "ally" ? "ally" : "foe";
+      const scls: FlashSource = byWarrior ? "warrior" : byArmy ? "army" : "other";
+      tv.flash.hit(tcls, scls, e.crit, e.heavy || ability, this.now);
     }
     h.chest(target, this.p);
     const x = this.p.x;
@@ -175,7 +180,7 @@ export class ImpactDirector {
       this.impact(heavy ? "takenHeavy" : "taken", e.targetId, e.sourceId, "taken", 0.25);
       h.camera.shake(heavy ? 0.45 : 0.2);
       h.crimsonPulse();
-      if (tv) tv.white = Math.max(tv.white, 1);
+
       this.sparks(x, y, ang, heavy ? 8 : 4, 0xd95a66, 0.8);
       return;
     }
@@ -196,7 +201,8 @@ export class ImpactDirector {
     const target = h.entity(e.id);
     if (!v) return DEATH_COLLAPSE;
     let variant = DEATH_COLLAPSE;
-    if (e.kind !== "boss") {
+    if (e.kind === "summon") variant = DEATH_SINK;
+    else if (e.kind !== "boss") {
       if (v.lastHitAbility || v.lastHitElement === "fire") variant = DEATH_DISSOLVE;
       else if (v.lastHitCrit || v.lastHitHeavy) variant = DEATH_LAUNCH;
     }
@@ -251,14 +257,11 @@ export class ImpactDirector {
     return true;
   }
 
-  private react(v: ImpactState | undefined, target: Combatant, dir: 1 | -1, squash: number, slide: number, white: number): void {
-    if (!v || target.dead) {
-      if (v) v.white = Math.max(v.white, white);
-      return;
-    }
+  private react(v: ImpactState | undefined, target: Combatant, dir: 1 | -1, squash: number, slide: number, _white: number): void {
+    void _white;
+    if (!v || target.dead) return;
     v.squash = Math.max(v.squash, squash);
     v.slide = dir * Math.max(Math.abs(v.slide), slide);
-    v.white = Math.max(v.white, white);
   }
 
   private sparks(x: number, y: number, ang: number, count: number, color: number, size: number): void {

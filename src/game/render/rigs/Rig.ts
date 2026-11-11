@@ -1,9 +1,9 @@
-import { Container, Graphics, type GraphicsContext } from "pixi.js";
+import { Container, Graphics, GraphicsContext } from "pixi.js";
 import type { ActionState } from "../../entities/types";
 import { darken, lighten } from "../colors";
 import { clamp } from "../../engine/math";
 import { damp, easeInCubic, easeOutCubic, rand2, span } from "../anim/ease";
-import { CHANNELS, Ch, computePose, meleeKit, snapsOnEnter, stateLambda, type BodyStyle, type MeleeKit, type Pose, type PoseInput, type WeaponType } from "./pose";
+import { CHANNELS, Ch, computePose, meleeKit, snapsOnEnter, stateLambda, strikeWindow, type BodyStyle, type IdleRole, type MeleeKit, type Pose, type PoseInput, type WeaponType } from "./pose";
 
 export type { BodyStyle, WeaponType } from "./pose";
 
@@ -25,15 +25,60 @@ export interface RigSpec {
   floating?: boolean;
   /** ivory = the hero, ink = enemies, shadow = the player's summoned army. */
   finish?: "ivory" | "ink" | "shadow";
+  /** The army's role idle. */
+  idle?: IdleRole;
 }
 
 /** Blade length (rig units at scale 1) by weapon, for trails. */
 const BLADE: Record<WeaponType, number> = { sword: 50, greatsword: 70, dagger: 25, twin: 31, scythe: 62, banner: 76, club: 62, mace_shield: 53, tower: 36, staff: 64, bow: 34, none: 18 };
 
+/**
+ * Drawn parts are shared by every rig of the same spec: the first rig of a kind draws its parts
+ * into contexts kept here, later ones reuse them, so spawning a pack builds no geometry and the
+ * GPU keeps one copy per kind. White impact copies are cached per part the same way.
+ */
+const PART_CACHE = new Map<string, GraphicsContext[]>();
+const WHITE_CACHE = new WeakMap<GraphicsContext, GraphicsContext>();
+const WHITE_LIST: GraphicsContext[] = [];
+
+/** Release every shared part (the renderer calls this when it unmounts). */
+export function clearRigCache(): void {
+  for (const list of PART_CACHE.values()) for (const c of list) c.destroy();
+  PART_CACHE.clear();
+  for (const c of WHITE_LIST) c.destroy();
+  WHITE_LIST.length = 0;
+}
+
+/** Shared part contexts currently cached, for diagnostics. */
+export function rigCacheSize(): number {
+  let n = WHITE_LIST.length;
+  for (const list of PART_CACHE.values()) n += list.length;
+  return n;
+}
+
+function whiteOf(ctx: GraphicsContext): GraphicsContext {
+  let w = WHITE_CACHE.get(ctx);
+  if (w) return w;
+  w = ctx.clone();
+  w.instructions = w.instructions.map((ins) => {
+    const data = ins.data as unknown as { style?: { color: number; alpha: number } };
+    if (!data.style) return ins;
+    const alpha = data.style.alpha >= 0.5 ? 1 : data.style.alpha;
+    return { ...ins, data: { ...ins.data, style: { ...data.style, color: 0xffffff, alpha } } } as typeof ins;
+  });
+  WHITE_CACHE.set(ctx, w);
+  WHITE_LIST.push(w);
+  return w;
+}
+
 /** Death presentation, chosen by the killing blow. */
 export const DEATH_COLLAPSE = 0;
 export const DEATH_LAUNCH = 1;
 export const DEATH_DISSOLVE = 2;
+/** The army's fall: the shadow sinks down into its pool (and re-forms from it on return). */
+export const DEATH_SINK = 3;
+/** A boss's kneel before it breaks (the death sequence drives the rest). */
+export const DEATH_KNEEL = 4;
 
 /**
  * Procedural humanoid rig built from container "bones". Each body part is drawn once, then
@@ -47,23 +92,28 @@ export class Rig {
   private readonly hips = new Container();
   private readonly torso = new Container();
   private readonly head = new Container();
-  private readonly eyes = new Graphics();
+  private eyes!: Graphics;
   private readonly armL = { upper: new Container(), lower: new Container() };
   private readonly armR = { upper: new Container(), lower: new Container() };
   private readonly legL = { upper: new Container(), lower: new Container() };
   private readonly legR = { upper: new Container(), lower: new Container() };
   private readonly weapon = new Container();
-  private readonly weaponGlow = new Graphics();
-  private readonly cape = new Graphics();
-  private readonly aura = new Graphics();
-  readonly shadow = new Graphics();
+  private weaponGlow!: Graphics;
+  private cape!: Graphics;
+  private aura!: Graphics;
+  shadow!: Graphics;
+  /** Shared part contexts for this spec, and the next one to hand out while building. */
+  private parts: GraphicsContext[] = [];
+  private partIndex = 0;
+  private partsCached = false;
+  private eyeY = 0;
+  private headR = 0;
   private readonly target: Pose = new Float32Array(CHANNELS);
   private readonly current: Pose = new Float32Array(CHANNELS);
   private readonly input: PoseInput;
   private readonly kit: MeleeKit;
   private readonly flashParts: Graphics[] = [];
   private readonly flashOrig: Graphics[] = [];
-  private readonly flashContexts: GraphicsContext[] = [];
   private readonly u: number;
   private spec: RigSpec;
   private fresh = true;
@@ -74,7 +124,15 @@ export class Rig {
   private blinkLeft = 0;
   private blinks = 0;
   private flashOn = false;
+  private flashLevel = 1;
   private legLen = 0;
+  private upperLeg = 0;
+  private lowerLeg = 0;
+  /** Lead-foot plant during the strike: the sole's ground point (parent space) and its weight. */
+  private plantX = 0;
+  private plantY = 0;
+  private planted = false;
+  private plantW = 0;
   private torsoH = 0;
   private armX = 0;
   private upperArm = 0;
@@ -98,8 +156,29 @@ export class Rig {
     this.spec = spec;
     this.u = spec.height / 100;
     this.kit = meleeKit(spec.style, spec.weapon);
-    this.input = { style: spec.style, kit: this.kit, state: "idle", t: 0, duration: 0, seed: 0, clock: 0, speedFrac: 0, variant: 0, death: 0 };
+    this.input = { style: spec.style, kit: this.kit, state: "idle", t: 0, duration: 0, seed: 0, clock: 0, speedFrac: 0, variant: 0, death: 0, idle: spec.idle ?? "" };
+    const key = JSON.stringify(spec);
+    const cached = PART_CACHE.get(key);
+    if (cached) {
+      this.parts = cached;
+      this.partsCached = true;
+    } else PART_CACHE.set(key, this.parts);
     this.build();
+  }
+
+  /**
+   * A body part: drawn by `draw` the first time this spec is built, reused afterwards. Parts must
+   * be requested in the same order on every build of a spec (the build is deterministic).
+   */
+  private part(draw: (c: GraphicsContext) => void): Graphics {
+    let ctx = this.partsCached ? this.parts[this.partIndex] : undefined;
+    if (!ctx) {
+      ctx = new GraphicsContext();
+      draw(ctx);
+      this.parts[this.partIndex] = ctx;
+    }
+    this.partIndex += 1;
+    return new Graphics(ctx);
   }
 
   get unit(): number {
@@ -130,6 +209,8 @@ export class Rig {
     const lowerLeg = (bulky ? 17 : 17) * u;
     const headR = (bulky ? 9 : 8.2) * u;
     this.legLen = upperLeg + lowerLeg + 2.6 * u;
+    this.upperLeg = upperLeg;
+    this.lowerLeg = lowerLeg + 2.6 * u;
     this.top = this.legLen + torsoH + headR * 1.8;
     this.torsoH = torsoH;
     this.armX = torsoW * 0.36;
@@ -137,15 +218,13 @@ export class Rig {
     this.lowerArm = lowerArm;
 
     // Ground shadow lives outside the body so it never rotates with it.
-    this.shadow.ellipse(0, 0, (bulky ? 26 : 17) * u, (bulky ? 8 : 5.5) * u).fill({ color: 0x0a0806, alpha: 0.38 });
+    this.shadow = this.part((c) => c.ellipse(0, 0, (bulky ? 26 : 17) * u, (bulky ? 8 : 5.5) * u).fill({ color: 0x0a0806, alpha: 0.38 }));
 
     // Shadow-army glow: a soft pool of light under summons, ring for evolved and legendary forms.
-    if (finish === "shadow") {
-      this.aura.ellipse(0, 0, 22 * u, 7 * u).fill({ color: s.glow ?? s.eye, alpha: 0.12 });
-    }
-    if (s.aura && s.aura > 0) {
-      this.aura.ellipse(0, 0, s.aura * u * 1.1, s.aura * u * 0.36).stroke({ width: 1.6 * u, color: s.glow ?? s.accent, alpha: 0.5 });
-    }
+    this.aura = this.part((c) => {
+      if (finish === "shadow") c.ellipse(0, 0, 22 * u, 7 * u).fill({ color: s.glow ?? s.eye, alpha: 0.12 });
+      if (s.aura && s.aura > 0) c.ellipse(0, 0, s.aura * u * 1.1, s.aura * u * 0.36).stroke({ width: 1.6 * u, color: s.glow ?? s.accent, alpha: 0.5 });
+    });
     if (finish === "shadow" || (s.aura && s.aura > 0)) this.root.addChild(this.aura);
 
     this.root.addChild(this.body);
@@ -153,25 +232,26 @@ export class Rig {
 
     // The Oathbound carry a thin gold edge so they read against both the ink horde and the ground.
     const edge = finish === "shadow" ? { width: 1.1 * u, color: s.accent, alpha: 0.55 } : null;
-    const limb = (len: number, w: number, color: number, taper = 0.82) => {
-      const g = new Graphics();
+    const limbShape = (g: GraphicsContext, len: number, w: number, color: number, taper: number) => {
       if (edge) {
         g.poly([-w / 2, 0, w / 2, 0, (w / 2) * taper, len, (-w / 2) * taper, len]).stroke(edge);
       }
-      return g
-        .poly([-w / 2, 0, w / 2, 0, (w / 2) * taper, len, (-w / 2) * taper, len])
+      g.poly([-w / 2, 0, w / 2, 0, (w / 2) * taper, len, (-w / 2) * taper, len])
         .fill(color)
         .circle(0, 0, w / 2)
         .fill(color)
         .circle(0, len, (w / 2) * taper)
         .fill(color);
     };
+    const limb = (len: number, w: number, color: number, taper = 0.82) => this.part((g) => limbShape(g, len, w, color, taper));
 
     const leg = (side: { upper: Container; lower: Container }, x: number, color: number) => {
       side.upper.addChild(limb(upperLeg, limbW * 1.05, color));
-      const low = limb(lowerLeg, limbW * 0.9, color, 0.9);
-      // Foot: a small wedge pointing forward gives the stance weight.
-      low.poly([-limbW * 0.4, lowerLeg - 1 * u, limbW * 1.3, lowerLeg + 0.5 * u, limbW * 1.1, lowerLeg + 2.6 * u, -limbW * 0.5, lowerLeg + 2.6 * u]).fill(color);
+      const low = this.part((g) => {
+        limbShape(g, lowerLeg, limbW * 0.9, color, 0.9);
+        // Foot: a small wedge pointing forward gives the stance weight.
+        g.poly([-limbW * 0.4, lowerLeg - 1 * u, limbW * 1.3, lowerLeg + 0.5 * u, limbW * 1.1, lowerLeg + 2.6 * u, -limbW * 0.5, lowerLeg + 2.6 * u]).fill(color);
+      });
       side.lower.addChild(low);
       side.lower.y = upperLeg;
       side.upper.addChild(side.lower);
@@ -182,14 +262,14 @@ export class Rig {
     leg(this.legR, torsoW * 0.22, body);
 
     // Cape / scarf: the warrior's only colour accent besides the blade.
-    if (s.cape) {
-      const capeColor = finish === "ivory" ? s.accent : darken(s.accent, 0.55);
-      this.cape.poly([-torsoW * 0.42, 0, torsoW * 0.3, 0, -torsoW * 0.2, torsoH * 1.45, -torsoW * 0.95, torsoH * 1.3]).fill({ color: capeColor, alpha: finish === "ivory" ? 0.95 : 0.85 });
-      this.cape.y = -torsoH * 0.95;
-    }
+    const capeColor = finish === "ivory" ? s.accent : darken(s.accent, 0.55);
+    this.cape = this.part((c) => {
+      if (s.cape) c.poly([-torsoW * 0.42, 0, torsoW * 0.3, 0, -torsoW * 0.2, torsoH * 1.45, -torsoW * 0.95, torsoH * 1.3]).fill({ color: capeColor, alpha: finish === "ivory" ? 0.95 : 0.85 });
+    });
+    this.cape.y = -torsoH * 0.95;
 
     this.hips.addChild(this.torso);
-    const torsoG = new Graphics();
+    const torsoG = this.part((torsoG) => {
     if (style === "robed") {
       torsoG.poly([-torsoW * 0.5, -torsoH, torsoW * 0.5, -torsoH, torsoW * 1.05, torsoH * 0.95, -torsoW * 1.05, torsoH * 0.95]).fill(body);
       torsoG.poly([-torsoW * 0.08, -torsoH * 0.7, torsoW * 0.08, -torsoH * 0.7, torsoW * 0.16, torsoH * 0.9, -torsoW * 0.16, torsoH * 0.9]).fill({ color: s.accent, alpha: 0.55 });
@@ -209,12 +289,14 @@ export class Rig {
         torsoG.poly([-torsoW * 0.46, -torsoH * 0.92, -torsoW * 0.32, -torsoH * 0.98, torsoW * 0.4, -torsoH * 0.2, torsoW * 0.26, -torsoH * 0.14]).fill({ color: s.accent, alpha: 0.85 });
       }
     }
+    });
     if (edge) {
       // Trace the torso once more as an outline for the Oathbound's gilt edge.
-      const outline = new Graphics();
-      if (style === "robed") outline.poly([-torsoW * 0.5, -torsoH, torsoW * 0.5, -torsoH, torsoW * 1.05, torsoH * 0.95, -torsoW * 1.05, torsoH * 0.95]).stroke(edge);
-      else if (bulky) outline.poly([-torsoW * 0.62, -torsoH, torsoW * 0.62, -torsoH, torsoW * 0.38, 0, -torsoW * 0.38, 0]).stroke(edge);
-      else outline.poly([-torsoW * 0.5, -torsoH, torsoW * 0.5, -torsoH, torsoW * 0.32, 0, -torsoW * 0.32, 0]).stroke(edge);
+      const outline = this.part((outline) => {
+        if (style === "robed") outline.poly([-torsoW * 0.5, -torsoH, torsoW * 0.5, -torsoH, torsoW * 1.05, torsoH * 0.95, -torsoW * 1.05, torsoH * 0.95]).stroke(edge);
+        else if (bulky) outline.poly([-torsoW * 0.62, -torsoH, torsoW * 0.62, -torsoH, torsoW * 0.38, 0, -torsoW * 0.38, 0]).stroke(edge);
+        else outline.poly([-torsoW * 0.5, -torsoH, torsoW * 0.5, -torsoH, torsoW * 0.32, 0, -torsoW * 0.32, 0]).stroke(edge);
+      });
       this.torso.addChild(outline);
     }
     if (s.cape) this.torso.addChild(this.cape);
@@ -222,7 +304,7 @@ export class Rig {
 
     // Head
     this.head.y = -torsoH - headR * 0.75;
-    const headG = new Graphics();
+    const headG = this.part((headG) => {
     if (s.hood) {
       headG.poly([-headR * 1.15, headR * 1.0, -headR * 0.2, -headR * 1.6, headR * 1.15, headR * 1.0]).fill(body);
       headG.circle(headR * 0.1, headR * 0.15, headR * 0.72).fill(darken(body, 0.5));
@@ -253,16 +335,21 @@ export class Rig {
         .fill(gold);
       headG.rect(-headR * 0.95, cy - headR * 0.08, headR * 1.9, headR * 0.28).fill(darken(gold, 0.25));
     }
+    });
     this.head.addChild(headG);
-    this.head.addChild(this.eyes);
     // Eyes: the brightest pixels on every figure. Enemies glare, summons glow, the hero is calm.
     const eyeY = s.hood ? headR * 0.15 : -headR * 0.05;
-    if (finish === "ivory") {
-      this.eyes.roundRect(headR * 0.15, eyeY - headR * 0.1, headR * 0.5, headR * 0.2, headR * 0.1).fill(darken(body, 0.75));
-    } else {
-      this.eyes.poly([headR * 0.05, eyeY - headR * 0.18, headR * 0.75, eyeY - headR * 0.02, headR * 0.1, eyeY + headR * 0.12]).fill(s.eye);
-      this.eyes.circle(headR * 0.4, eyeY, headR * 0.65).fill({ color: s.eye, alpha: finish === "shadow" ? 0.28 : 0.16 });
-    }
+    this.eyeY = eyeY;
+    this.headR = headR;
+    this.eyes = this.part((eyes) => {
+      if (finish === "ivory") {
+        eyes.roundRect(headR * 0.15, eyeY - headR * 0.1, headR * 0.5, headR * 0.2, headR * 0.1).fill(darken(body, 0.75));
+      } else {
+        eyes.poly([headR * 0.05, eyeY - headR * 0.18, headR * 0.75, eyeY - headR * 0.02, headR * 0.1, eyeY + headR * 0.12]).fill(s.eye);
+        eyes.circle(headR * 0.4, eyeY, headR * 0.65).fill({ color: s.eye, alpha: finish === "shadow" ? 0.28 : 0.16 });
+      }
+    });
+    this.head.addChild(this.eyes);
     this.torso.addChild(this.head);
 
     const arm = (side: { upper: Container; lower: Container }, x: number, color: number) => {
@@ -290,11 +377,12 @@ export class Rig {
   private buildWeapon(limbW: number): void {
     const s = this.spec;
     const u = this.u;
-    const g = new Graphics();
+    // The blade and its glow are two shared parts; `draw` fills whichever one is being built.
     const steel = s.finish === "ivory" ? 0xe7e2d6 : s.finish === "shadow" ? 0x5b5f86 : 0x3a3a40;
     const steelDark = s.finish === "ivory" ? 0x9a927f : 0x24242a;
     const accent = s.accent;
     this.bladeLen = BLADE[s.weapon] * u;
+    const draw = (g: GraphicsContext, glow: GraphicsContext): void => {
     switch (s.weapon) {
       case "sword":
         g.rect(-1.6 * u, -44 * u, 3.2 * u, 46 * u).fill(steel);
@@ -302,7 +390,7 @@ export class Rig {
         g.poly([-1.6 * u, -44 * u, 1.6 * u, -44 * u, 0, -50 * u]).fill(steel);
         g.rect(-6 * u, 0, 12 * u, 2.2 * u).fill(darken(accent, 0.3));
         g.rect(-1.4 * u, 2 * u, 2.8 * u, 7 * u).fill(0x2a2d3a);
-        this.weaponGlow.rect(-4 * u, -46 * u, 8 * u, 48 * u).fill({ color: accent, alpha: 0.35 });
+        glow.rect(-4 * u, -46 * u, 8 * u, 48 * u).fill({ color: accent, alpha: 0.35 });
         break;
       case "greatsword":
         g.rect(-3 * u, -62 * u, 6 * u, 64 * u).fill(steel);
@@ -310,7 +398,7 @@ export class Rig {
         g.poly([-3 * u, -62 * u, 3 * u, -62 * u, 0, -70 * u]).fill(steel);
         g.rect(-10 * u, 0, 20 * u, 3 * u).fill(darken(accent, 0.3));
         g.rect(-2 * u, 3 * u, 4 * u, 12 * u).fill(0x2a2d3a);
-        this.weaponGlow.rect(-6 * u, -66 * u, 12 * u, 68 * u).fill({ color: accent, alpha: 0.35 });
+        glow.rect(-6 * u, -66 * u, 12 * u, 68 * u).fill({ color: accent, alpha: 0.35 });
         break;
       case "dagger":
         g.rect(-1.2 * u, -20 * u, 2.4 * u, 22 * u).fill(steel);
@@ -322,7 +410,7 @@ export class Rig {
         g.poly([-1.2 * u, -26 * u, 1.2 * u, -26 * u, 0, -31 * u]).fill(steel);
         g.rect(-0.5 * u, -24 * u, 1 * u, 22 * u).fill({ color: accent, alpha: 0.9 });
         g.rect(-3.5 * u, 0, 7 * u, 1.8 * u).fill(darken(accent, 0.3));
-        this.weaponGlow.rect(-3 * u, -28 * u, 6 * u, 30 * u).fill({ color: accent, alpha: 0.4 });
+        glow.rect(-3 * u, -28 * u, 6 * u, 30 * u).fill({ color: accent, alpha: 0.4 });
         break;
       case "bow":
         g.moveTo(0, -34 * u).quadraticCurveTo(14 * u, 0, 0, 34 * u).stroke({ width: 2.6 * u, color: darken(accent, 0.4) });
@@ -332,7 +420,7 @@ export class Rig {
       case "staff":
         g.rect(-1.6 * u, -56 * u, 3.2 * u, 68 * u).fill(0x3a2d2a);
         g.circle(0, -60 * u, 6 * u).fill({ color: accent, alpha: 0.95 });
-        this.weaponGlow.circle(0, -60 * u, 12 * u).fill({ color: accent, alpha: 0.35 });
+        glow.circle(0, -60 * u, 12 * u).fill({ color: accent, alpha: 0.35 });
         break;
       case "banner": {
         // A war banner: a tall pole and a swallow-tailed cloth in the bearer's colour.
@@ -340,14 +428,14 @@ export class Rig {
         g.poly([1.5 * u, -72 * u, 26 * u, -70 * u, 20 * u, -58 * u, 27 * u, -46 * u, 1.5 * u, -48 * u]).fill({ color: accent, alpha: 0.95 });
         g.poly([1.5 * u, -72 * u, 26 * u, -70 * u, 20 * u, -58 * u, 27 * u, -46 * u, 1.5 * u, -48 * u]).stroke({ width: 1 * u, color: darken(accent, 0.4), alpha: 0.9 });
         g.circle(0, -76 * u, 3 * u).fill(0xc9a24f);
-        this.weaponGlow.circle(14 * u, -60 * u, 16 * u).fill({ color: accent, alpha: 0.18 });
+        glow.circle(14 * u, -60 * u, 16 * u).fill({ color: accent, alpha: 0.18 });
         break;
       }
       case "scythe":
         g.rect(-1.5 * u, -62 * u, 3 * u, 72 * u).fill(0x2a2a33);
         g.moveTo(0, -62 * u).quadraticCurveTo(28 * u, -70 * u, 34 * u, -44 * u).quadraticCurveTo(22 * u, -58 * u, 0, -56 * u).fill(steel);
         g.moveTo(0, -62 * u).quadraticCurveTo(28 * u, -70 * u, 34 * u, -44 * u).stroke({ width: 1.2 * u, color: accent, alpha: 0.9 });
-        this.weaponGlow.moveTo(0, -62 * u).quadraticCurveTo(28 * u, -70 * u, 34 * u, -44 * u).stroke({ width: 6 * u, color: accent, alpha: 0.3 });
+        glow.moveTo(0, -62 * u).quadraticCurveTo(28 * u, -70 * u, 34 * u, -44 * u).stroke({ width: 6 * u, color: accent, alpha: 0.3 });
         break;
       case "club": {
         // A bone-and-stone maul, in the same ink as its bearer, studded with embers.
@@ -363,7 +451,7 @@ export class Rig {
         g.roundRect(-4 * u, -34 * u, 15 * u, 44 * u, 3 * u).fill(sh);
         g.rect(1 * u, -30 * u, 2 * u, 36 * u).fill({ color: s.eye, alpha: 0.35 });
         g.circle(4 * u, -12 * u, 2.6 * u).fill({ color: s.eye, alpha: 0.8 });
-        this.weaponGlow.roundRect(-6 * u, -36 * u, 19 * u, 48 * u, 4 * u).fill({ color: s.glow ?? s.eye, alpha: 0.25 });
+        glow.roundRect(-6 * u, -36 * u, 19 * u, 48 * u, 4 * u).fill({ color: s.glow ?? s.eye, alpha: 0.25 });
         break;
       }
       case "mace_shield": {
@@ -375,22 +463,30 @@ export class Rig {
           g.poly([Math.cos(a) * 5 * u, -46 * u + Math.sin(a) * 5 * u, Math.cos(a + 0.25) * 11 * u, -46 * u + Math.sin(a + 0.25) * 11 * u, Math.cos(a + 0.5) * 5 * u, -46 * u + Math.sin(a + 0.5) * 5 * u]).fill(steel);
         }
         g.circle(0, -46 * u, 2.4 * u).fill({ color: s.eye, alpha: 0.9 });
-        this.weaponGlow.circle(0, -46 * u, 14 * u).fill({ color: s.glow ?? accent, alpha: 0.3 });
+        glow.circle(0, -46 * u, 14 * u).fill({ color: s.glow ?? accent, alpha: 0.3 });
         break;
       }
       default:
         break;
     }
+    };
+    const scratch = (fn: (c: GraphicsContext) => void) => {
+      const c = new GraphicsContext();
+      fn(c);
+      c.destroy();
+    };
+    this.weaponGlow = this.part((c) => scratch((g) => draw(g, c)));
     this.weaponGlow.alpha = 0;
     this.weaponGlow.blendMode = "add";
     this.weapon.addChild(this.weaponGlow);
-    this.weapon.addChild(g);
+    this.weapon.addChild(this.part((c) => scratch((glow) => draw(c, glow))));
     if (s.weapon === "mace_shield") {
       // Kite shield on the far forearm: a tall heater shape with a single raised boss.
-      const sh = new Graphics();
+      const sh = this.part((sh) => {
       sh.poly([-11 * u, -2 * u, 11 * u, -2 * u, 12 * u, 14 * u, 0, 30 * u, -12 * u, 14 * u]).fill(lighten(s.body, 0.08));
       sh.poly([-8 * u, 1 * u, 8 * u, 1 * u, 9 * u, 13 * u, 0, 25 * u, -9 * u, 13 * u]).stroke({ width: 1.2 * u, color: s.glow ?? accent, alpha: 0.55 });
       sh.circle(0, 11 * u, 2.6 * u).fill({ color: s.eye, alpha: 0.85 });
+      });
       sh.y = 4 * u;
       this.armL.lower.addChild(sh);
     }
@@ -406,21 +502,13 @@ export class Rig {
     for (const child of kids) {
       if (child === this.weaponGlow || child === this.aura || child === this.eyes) continue;
       if (child instanceof Graphics) {
-        const ctx = child.context.clone();
-        ctx.instructions = ctx.instructions.map((ins) => {
-          const data = ins.data as unknown as { style?: { color: number; alpha: number } };
-          if (!data.style) return ins;
-          const alpha = data.style.alpha >= 0.5 ? 1 : data.style.alpha;
-          return { ...ins, data: { ...ins.data, style: { ...data.style, color: 0xffffff, alpha } } } as typeof ins;
-        });
-        const white = new Graphics(ctx);
+        const white = new Graphics(whiteOf(child.context));
         white.position.copyFrom(child.position);
         white.rotation = child.rotation;
         white.scale.copyFrom(child.scale);
         if (child === this.cape) this.capeWhite = white;
         this.flashParts.push(white);
         this.flashOrig.push(child);
-        this.flashContexts.push(ctx);
       } else this.buildFlash(child);
     }
   }
@@ -440,7 +528,14 @@ export class Rig {
    * The white impact silhouette, on for a frame or two. The copies are built on the first hit and
    * are only in the display tree while showing, so they cost nothing between hits.
    */
-  setWhite(on: boolean): void {
+  setWhite(level: number | boolean): void {
+    const a = level === true ? 1 : level === false ? 0 : level;
+    const on = a > 0;
+    if (on && a !== this.flashLevel) {
+      this.flashLevel = a;
+      if (this.flashParts.length === 0) this.buildFlash(this.body);
+      for (const w of this.flashParts) w.alpha = a;
+    }
     if (on === this.flashOn) return;
     this.flashOn = on;
     if (on && this.flashParts.length === 0) this.buildFlash(this.body);
@@ -507,12 +602,13 @@ export class Rig {
       }
     }
     this.lastState = state;
+    this.plantLeadFoot(state, t, duration, dt);
     this.applyPose();
     this.secondary(dt, state, speedFrac, moving);
 
     const body = this.body;
     if (s.aura) {
-      this.aura.rotation += dt * 0.6;
+      // The aura is a ground ellipse: it breathes, it does not spin (a spun ellipse tilts off the ground).
       this.aura.alpha = 0.6 + Math.sin(this.clock * 3) * 0.2;
     }
     const glow = state === "cast" ? 0.8 : state === "windup" ? 0.5 : state === "attack" ? 1 : 0;
@@ -528,9 +624,21 @@ export class Rig {
       const k = clamp(t / Math.max(0.01, duration), 0, 1);
       body.rotation = 0;
       body.x = 0;
+      body.y = s.floating ? -8 * this.u : 0;
+      if (s.finish === "shadow") {
+        // A shadow re-forms from its pool: the pool opens first, then the figure rises out of it.
+        const pool = easeOutCubic(span(k, 0, 0.35));
+        const rise = easeOutCubic(span(k, 0.25, 1));
+        this.poolScale = 0.2 + 1.3 * pool - 0.5 * rise;
+        this.root.alpha = rise > 0 ? 1 : 0;
+        body.alpha = Math.min(1, rise * 1.6);
+        body.scale.set(facing * (1 - 0.25 * (1 - rise)), Math.max(0.02, rise));
+        this.eyes.alpha = rise * rise;
+        this.shadow.alpha = 1;
+        return;
+      }
       this.root.alpha = k;
       body.scale.set(facing, 0.3 + 0.7 * easeOutCubic(k));
-      body.y = s.floating ? -8 * this.u : 0;
       this.eyes.alpha = k * k;
       this.shadow.alpha = k;
       return;
@@ -596,6 +704,33 @@ export class Rig {
       this.root.alpha = sink >= 1 ? 0 : 1;
       return;
     }
+    if (this.death === DEATH_KNEEL) {
+      body.x = 0;
+      body.y = 0;
+      body.rotation = 0;
+      body.scale.set(facing, 1);
+      this.deathShiftX = 0;
+      this.poolScale = 1;
+      this.eyes.alpha = 1;
+      this.root.alpha = 1;
+      return;
+    }
+    if (this.death === DEATH_SINK) {
+      // The shadow sinks straight down into its pool, which widens as it takes the body and then
+      // lingers faintly until the shadow returns.
+      const k = easeInCubic(span(deathT, 0, 0.6));
+      body.x = 0;
+      body.y = 0;
+      body.rotation = 0;
+      body.scale.set(facing * (1 + 0.15 * k), Math.max(0.01, 1 - k));
+      body.alpha = 1 - 0.4 * k;
+      this.deathShiftX = 0;
+      const fade = span(deathT, 1.2, 2.2);
+      this.poolScale = (1 + 0.7 * easeOutCubic(span(deathT, 0, 0.5))) * (1 - 0.6 * fade);
+      this.shadow.alpha = 1 - 0.5 * fade;
+      this.root.alpha = k >= 1 ? 0 : 1;
+      return;
+    }
     if (this.death === DEATH_DISSOLVE) {
       // The silhouette breaks upward into shards (the renderer emits them); the body thins away.
       const k = span(deathT, 0, 0.45);
@@ -609,17 +744,84 @@ export class Rig {
       this.root.alpha = k >= 1 ? 0 : 1;
       return;
     }
-    // Collapse: the pose folds over 0.5s, then the body sinks into an ink pool that shrinks away.
-    const fold = easeOutCubic(span(deathT, 0, 0.5));
-    const sink = easeInCubic(span(deathT, 0.5, 1.0));
+    // Collapse: the pose folds fast (0.28s) while the ink pool spreads from the moment of the
+    // blow, then the body sinks into it and the pool shrinks away. The folded lump never sits.
+    const fold = easeOutCubic(span(deathT, 0, 0.28));
+    const sink = easeInCubic(span(deathT, 0.24, 0.75));
+    const spread = easeOutCubic(span(deathT, 0, 0.35));
     body.x = 0;
     body.y = 0;
     body.rotation = facing * fold * 0.2;
-    body.scale.set(facing, 1 - sink);
+    body.scale.set(facing, Math.max(0.01, 1 - sink));
     this.deathShiftX = 0;
-    this.poolScale = sink > 0 ? 1.8 * (1 - sink) + 0.1 : 1 + fold * 0.8;
+    this.poolScale = (1 + 1.0 * spread) * (1 - 0.9 * easeInCubic(span(deathT, 0.6, 1.0)));
     this.root.alpha = sink >= 1 ? 0 : 1;
   }
+
+  /**
+   * The lead foot holds its ground point from the strike through the contact hold while the hips
+   * travel (two-bone IK on the near leg), and lets go over 80ms in the follow-through. Melee
+   * combo and heavy kits only.
+   */
+  private plantLeadFoot(state: ActionState, t: number, duration: number, dt: number): void {
+    if (this.kit !== "combo" && this.kit !== "heavy") return;
+    const striking = (state === "windup" && t >= duration - strikeWindow(duration)) || (state === "attack" && t < duration * 0.6);
+    if (striking && !this.planted) {
+      this.planted = true;
+      this.footPoint(this.pt);
+      this.plantX = this.pt.x;
+      this.plantY = this.pt.y;
+    } else if (!striking) this.planted = false;
+    this.plantW = this.planted ? 1 : dt > 0 ? damp(this.plantW, 0, 30, dt) : this.plantW;
+    if (this.plantW < 0.01 || !this.root.scale.x) return;
+    // The planted point in body space.
+    const b = this.body;
+    const rs = this.root.scale.x;
+    let lx = (this.plantX - this.root.x) / rs - b.x;
+    let ly = (this.plantY - this.root.y) / rs - b.y;
+    const c = Math.cos(-b.rotation);
+    const s = Math.sin(-b.rotation);
+    const rx = lx * c - ly * s;
+    const ry = lx * s + ly * c;
+    lx = rx / (b.scale.x || 1);
+    ly = ry / (b.scale.y || 1);
+    const cur = this.current;
+    const hipX = cur[Ch.HipsX]! * this.u + this.legR.upper.x;
+    const hipY = cur[Ch.HipsY]! * this.u - this.legLen;
+    const dx = lx - hipX;
+    const dy = ly - hipY;
+    const L1 = this.upperLeg;
+    const L2 = this.lowerLeg;
+    const D = clamp(Math.hypot(dx, dy), Math.abs(L1 - L2) + 0.01, L1 + L2 - 0.01);
+    const theta = Math.atan2(-dx, dy);
+    const alpha = Math.acos(clamp((L1 * L1 + D * D - L2 * L2) / (2 * L1 * D), -1, 1));
+    // Knee forward: the thigh turns toward +x (a smaller angle).
+    const a0 = theta - alpha;
+    const kx = -Math.sin(a0) * L1;
+    const ky = Math.cos(a0) * L1;
+    const fx = (dx / (Math.hypot(dx, dy) || 1)) * D;
+    const fy = (dy / (Math.hypot(dx, dy) || 1)) * D;
+    const a1 = Math.atan2(-(fx - kx), fy - ky) - a0;
+    const w = this.plantW;
+    cur[Ch.LegR0] = cur[Ch.LegR0]! + (a0 - cur[Ch.LegR0]!) * w;
+    cur[Ch.LegR1] = cur[Ch.LegR1]! + (a1 - cur[Ch.LegR1]!) * w;
+  }
+
+  /** The near (lead) foot's sole in the rig's parent space, from the current pose. */
+  private footPoint(out: { x: number; y: number }): void {
+    const p = this.current;
+    let x = p[Ch.HipsX]! * this.u + this.legR.upper.x;
+    let y = p[Ch.HipsY]! * this.u - this.legLen;
+    const a0 = p[Ch.LegR0]!;
+    x += -Math.sin(a0) * this.upperLeg;
+    y += Math.cos(a0) * this.upperLeg;
+    const a1 = a0 + p[Ch.LegR1]!;
+    x += -Math.sin(a1) * this.lowerLeg;
+    y += Math.cos(a1) * this.lowerLeg;
+    this.toParent(x, y, out);
+  }
+
+  private readonly pt = { x: 0, y: 0 };
 
   private resetDeath(): void {
     this.deathShiftX = 0;
@@ -692,11 +894,74 @@ export class Rig {
     mid.y = this.root.y + (b.y + px * s + py * c) * rs;
   }
 
+  /** Body-local point to the rig's parent space (through body and root transforms). */
+  private toParent(x: number, y: number, out: { x: number; y: number }): void {
+    const b = this.body;
+    const r = b.rotation;
+    const c = Math.cos(r);
+    const s = Math.sin(r);
+    const px = x * b.scale.x;
+    const py = y * b.scale.y;
+    const rs = this.root.scale.x;
+    out.x = this.root.x + (b.x + px * c - py * s) * rs;
+    out.y = this.root.y + (b.y + px * s + py * c) * rs;
+  }
+
+  /** The point between the eyes, in the rig's parent space (for glows that sit on the face). */
+  eyePoint(out: { x: number; y: number }): void {
+    const p = this.current;
+    const ta = p[Ch.Torso]! + p[Ch.Lean]!;
+    const hx = p[Ch.HipsX]! * this.u;
+    const hy = p[Ch.HipsY]! * this.u - this.legLen;
+    const nx = 0;
+    const ny = -this.torsoH - this.headR * 0.75;
+    const ct = Math.cos(ta);
+    const st = Math.sin(ta);
+    let x = hx + nx * ct - ny * st;
+    let y = hy + nx * st + ny * ct;
+    const ha = ta + p[Ch.Head]!;
+    const ex = this.headR * 0.4;
+    const ey = this.eyeY;
+    x += ex * Math.cos(ha) - ey * Math.sin(ha);
+    y += ex * Math.sin(ha) + ey * Math.cos(ha);
+    this.toParent(x, y, out);
+  }
+
+  /** The weapon hand (end of the right forearm), in the rig's parent space. */
+  handPoint(out: { x: number; y: number }): void {
+    const p = this.current;
+    const ta = p[Ch.Torso]! + p[Ch.Lean]!;
+    const hx = p[Ch.HipsX]! * this.u;
+    const hy = p[Ch.HipsY]! * this.u - this.legLen;
+    const shX = this.armX;
+    const shY = -this.torsoH * 0.92;
+    const ct = Math.cos(ta);
+    const st = Math.sin(ta);
+    let x = hx + shX * ct - shY * st;
+    let y = hy + shX * st + shY * ct;
+    let a = ta + p[Ch.ArmR0]!;
+    x += -Math.sin(a) * this.upperArm;
+    y += Math.cos(a) * this.upperArm;
+    a += p[Ch.ArmR1]!;
+    x += -Math.sin(a) * this.lowerArm;
+    y += Math.cos(a) * this.lowerArm;
+    this.toParent(x, y, out);
+  }
+
+  /** Prepare the white impact copies of this kind's parts (cached per kind; cheap after the first). */
+  prewarmWhite(): void {
+    for (const c of this.parts) whiteOf(c);
+  }
+
+  /** Eye alpha, applied after `animate` (a silhouette rising from its pool keeps them dark). */
+  setEyes(alpha: number): void {
+    this.eyes.alpha = alpha;
+  }
+
   destroy(): void {
     if (!this.root.destroyed) this.root.destroy({ children: true });
     if (!this.shadow.destroyed) this.shadow.destroy();
     for (const g of this.flashParts) if (!g.destroyed) g.destroy();
-    for (const c of this.flashContexts) c.destroy();
-    this.flashContexts.length = 0;
+    this.flashParts.length = 0;
   }
 }

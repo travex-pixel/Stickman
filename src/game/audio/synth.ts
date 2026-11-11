@@ -25,7 +25,15 @@ export type SfxName =
   | "boss_intro"
   | "ui_tap"
   | "error"
-  | "quest";
+  | "quest"
+  | "bind_drone_s"
+  | "bind_drone_m"
+  | "bind_drone_l"
+  | "bind_drone_xl"
+  | "bind_oath"
+  | "bind_pad"
+  | "bind_fail"
+  | "boss_impact";
 
 const SAMPLE_RATE = 22050;
 
@@ -233,7 +241,52 @@ const RECIPES: Record<SfxName, Voice[]> = {
     { type: "sine", freqStart: 1175, freqEnd: 1175, duration: 0.3, gain: 0.25, decay: 0.7, delay: 0.1 },
     { type: "triangle", freqStart: 1568, freqEnd: 1568, duration: 0.3, gain: 0.1, decay: 0.7, delay: 0.1 },
   ],
+  // BIND: a low drone that rises through the draw and the rise; one length per rarity.
+  bind_drone_s: drone(0.8, 55, 82),
+  bind_drone_m: drone(1.4, 52, 92),
+  bind_drone_l: drone(1.9, 49, 98),
+  bind_drone_xl: drone(2.9, 41, 110),
+  // The oath: a struck tone (the controller pitches it by rarity, common lowest).
+  bind_oath: [
+    { type: "noise", freqStart: 0, freqEnd: 0, duration: 0.035, gain: 0.35, lp: 0.7, attack: 0.001, decay: 0.9 },
+    { type: "sine", freqStart: 392, freqEnd: 390, duration: 1.4, gain: 0.42, attack: 0.002, decay: 0.97 },
+    { type: "sine", freqStart: 784, freqEnd: 781, duration: 0.9, gain: 0.16, attack: 0.002, decay: 0.95 },
+    { type: "sine", freqStart: 1231, freqEnd: 1229, duration: 0.5, gain: 0.08, attack: 0.002, decay: 0.95 },
+    { type: "triangle", freqStart: 196, freqEnd: 196, duration: 1.0, gain: 0.12, attack: 0.01, decay: 0.9 },
+  ],
+  // A soft choir-like pad under the legendary oath: detuned pairs on a major chord.
+  bind_pad: [
+    { type: "sine", freqStart: 220, freqEnd: 220, duration: 2.8, gain: 0.13, attack: 0.7, decay: 0.55 },
+    { type: "sine", freqStart: 221.3, freqEnd: 221.3, duration: 2.8, gain: 0.1, attack: 0.8, decay: 0.55 },
+    { type: "sine", freqStart: 277.2, freqEnd: 277.2, duration: 2.6, gain: 0.1, attack: 0.8, decay: 0.55, delay: 0.1 },
+    { type: "sine", freqStart: 329.6, freqEnd: 329.6, duration: 2.6, gain: 0.1, attack: 0.9, decay: 0.55, delay: 0.15 },
+    { type: "sine", freqStart: 331.2, freqEnd: 331.2, duration: 2.6, gain: 0.07, attack: 0.9, decay: 0.55, delay: 0.15 },
+    { type: "sine", freqStart: 440, freqEnd: 440, duration: 2.4, gain: 0.07, attack: 1.0, decay: 0.55, delay: 0.25 },
+    { type: "noise", freqStart: 0, freqEnd: 0, duration: 2.6, gain: 0.08, lp: 0.04, attack: 1.0, decay: 0.5 },
+  ],
+  // A failed BIND: a dry crack and the pool closing.
+  bind_fail: [
+    { type: "noise", freqStart: 0, freqEnd: 0, duration: 0.04, gain: 0.6, lp: 0.95, attack: 0.001, decay: 0.95 },
+    { type: "noise", freqStart: 0, freqEnd: 0, duration: 0.14, gain: 0.32, lp: 0.3, attack: 0.002, decay: 0.85, delay: 0.025 },
+    { type: "sine", freqStart: 150, freqEnd: 55, duration: 0.22, gain: 0.32, attack: 0.002, decay: 0.8 },
+  ],
+  // A boss lands: a deep thud with a dust tail.
+  boss_impact: [
+    { type: "sine", freqStart: 80, freqEnd: 30, duration: 0.7, gain: 0.85, attack: 0.002, decay: 0.85 },
+    { type: "noise", freqStart: 0, freqEnd: 0, duration: 0.6, gain: 0.45, lp: 0.12, attack: 0.002, decay: 0.85 },
+    { type: "noise", freqStart: 0, freqEnd: 0, duration: 0.05, gain: 0.4, lp: 0.8, attack: 0.001, decay: 0.9 },
+  ],
 };
+
+/** A rising low drone of `seconds`: a fundamental gliding up, a fifth and a dark noise bed. */
+function drone(seconds: number, from: number, to: number): Voice[] {
+  return [
+    { type: "sine", freqStart: from, freqEnd: to, duration: seconds, gain: 0.5, attack: seconds * 0.35, decay: 0.3 },
+    { type: "triangle", freqStart: from * 1.5, freqEnd: to * 1.5, duration: seconds, gain: 0.12, attack: seconds * 0.5, decay: 0.3 },
+    { type: "saw", freqStart: from * 2, freqEnd: to * 2, duration: seconds * 0.9, gain: 0.04, attack: seconds * 0.6, decay: 0.3 },
+    { type: "noise", freqStart: 0, freqEnd: 0, duration: seconds, gain: 0.18, lp: 0.05, attack: seconds * 0.5, decay: 0.3 },
+  ];
+}
 
 const cache = new Map<SfxName, string>();
 

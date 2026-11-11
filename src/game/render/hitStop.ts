@@ -104,3 +104,62 @@ export class HitStopPolicy {
     this.head = (this.head + 1) % LEDGER;
   }
 }
+
+/**
+ * The impact flash, in seconds (never frames, so a slow device does not hold a body white for
+ * longer). Two levels: a full white silhouette, and a light tint toward white (35%).
+ *
+ *  - Ordinary foes struck by the warrior: full white for 40ms (60ms on a crit).
+ *  - Bosses and elites: a 40ms tint on ordinary hits; full white only for a warrior crit, heavy
+ *    or ability hit, at most once per 300ms on the same body.
+ *  - The army's hits: the tint only, never white.
+ *  - The warrior being hit: the tint only (the crimson screen pulse carries the hurt).
+ *  - Anything else (foes hitting the army, burns): the tint only.
+ */
+export const FLASH_NORMAL = 0.04;
+export const FLASH_CRIT = 0.06;
+export const FLASH_TINT = 0.04;
+/** Alpha of the white copy for the light tint. */
+export const FLASH_TINT_LEVEL = 0.35;
+/** Least time between two full white flashes on one boss or elite. */
+export const FLASH_BIG_COOLDOWN = 0.3;
+
+export type FlashTarget = "warrior" | "boss" | "foe" | "ally";
+export type FlashSource = "warrior" | "army" | "other";
+
+/** Per-body flash state (lives on the entity view). */
+export class FlashState {
+  /** Seconds of full white left, and of tint left. */
+  full = 0;
+  tint = 0;
+  /** Time of the last full flash (for the boss cooldown). */
+  lastFull = -Infinity;
+
+  /** A hit landed at real time `now`. */
+  hit(target: FlashTarget, source: FlashSource, crit: boolean, heavy: boolean, now: number): void {
+    let full = 0;
+    if (source === "warrior" && target === "foe") full = crit || heavy ? FLASH_CRIT : FLASH_NORMAL;
+    else if (source === "warrior" && target === "boss" && (crit || heavy) && now - this.lastFull >= FLASH_BIG_COOLDOWN) full = crit ? FLASH_CRIT : FLASH_NORMAL;
+    if (full > 0) {
+      this.full = Math.max(this.full, full);
+      this.lastFull = now;
+    } else this.tint = Math.max(this.tint, FLASH_TINT);
+  }
+
+  /** Advance by real seconds; returns the white level to show this frame (0 to 1; the tint is 0.35). */
+  step(dt: number): number {
+    // A flash shorter than the frame shows at the share of the frame it covers, so the white a
+    // player sees adds up to the same time at 10 fps as at 60.
+    const cover = (left: number) => (left <= 0 ? 0 : dt <= 0 ? 1 : Math.min(1, left / dt));
+    const level = Math.max(cover(this.full), FLASH_TINT_LEVEL * cover(this.tint));
+    this.full = Math.max(0, this.full - dt);
+    this.tint = Math.max(0, this.tint - dt);
+    return level;
+  }
+
+  reset(): void {
+    this.full = 0;
+    this.tint = 0;
+    this.lastFull = -Infinity;
+  }
+}

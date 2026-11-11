@@ -1,17 +1,29 @@
 import { BitmapText, Container } from "pixi.js";
-import { easeOutBack, easeOutCubic } from "./anim/ease";
+import { easeOutCubic } from "./anim/ease";
 
 /** The static numeral cut (Instrument Sans, width 78, weight 700), shipped under public/fonts. */
 export const NUMERAL_FAMILY = "Ascend Numerals";
 const NUMERAL_URL = "/fonts/ascend-numerals.woff2";
 
-export type NumberStyle = "normal" | "crit" | "taken" | "heal" | "label";
+/**
+ * normal / crit / taken / heal: damage figures in the numeral face. word: a short call-out in the
+ * numeral face ("Perfect", "BREAK ×3"). label: words in the interface face (ability names, Blocked).
+ */
+export type NumberStyle = "normal" | "crit" | "taken" | "heal" | "label" | "word";
 
 /** Screen sizes in px (before the camera's zoom, which the pool cancels out). */
-const SIZE: Record<NumberStyle, number> = { normal: 30, crit: 44, taken: 26, heal: 26, label: 17 };
+const SIZE: Record<NumberStyle, number> = { normal: 30, crit: 44, taken: 26, heal: 26, label: 17, word: 30 };
 /** Glyphs are rasterised once at this size and scaled per style. */
 const BASE = 44;
 const LABEL_BASE = 24;
+/** Every glyph the pool can show, rasterised at mount so no atlas work lands mid-fight. */
+const NUMERAL_CHARS = "0123456789.,+-×xKMBTQ ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+const LABEL_CHARS = NUMERAL_CHARS + "'’:!?()";
+/** Pop on spawn: 1.25 to 1 over 80ms. */
+const POP_FROM = 1.25;
+const POP_TIME = 0.08;
+/** Numbers that land together within this long stack upward instead of overlapping. */
+const STACK_WINDOW = 0.22;
 
 interface Num {
   holder: Container;
@@ -20,21 +32,39 @@ interface Num {
   suffix: BitmapText;
   life: number;
   total: number;
+  age: number;
   vx: number;
   vy: number;
+  gravity: number;
   active: boolean;
   size: number;
   style: NumberStyle;
-  /** Unscaled width, measured once at spawn. */
+  /** Unscaled width and height, from the cached glyph advances. */
   w: number;
+  h: number;
+  /** Side it drifts toward (away from the attacker), and whether it must keep clear of the avoid box. */
+  dir: number;
+  avoid: boolean;
+}
+
+interface Recent {
+  t: number;
+  x: number;
+  y: number;
+  n: number;
 }
 
 let numeralFamily = "";
 
 /**
- * Pooled floating numbers using BitmapText so updating text is cheap. Damage is set in the numeral
- * face; words (Perfect, Blocked, ability names) in the interface face. They live in the camera
- * layer, so they stick to the fight, but cancel the zoom to keep their designed screen size.
+ * Pooled floating numbers. Damage is set beside the target on the side away from the attacker:
+ * it pops (1.25 to 1 in 80ms), then drifts up and out. Numbers that land together stack, and none
+ * may sit over the warrior (the renderer hands in the warrior's box each frame). Words use the
+ * numeral face for call-outs and the interface face for labels. They live in the camera layer, so
+ * they stick to the fight, but cancel the zoom to keep their designed screen size.
+ *
+ * Widths come from glyph advances measured once at mount, so spawning never asks Pixi to lay out
+ * text; the glyph atlases are filled at mount for the same reason.
  */
 export class DamageNumbers {
   readonly container = new Container();
@@ -42,6 +72,14 @@ export class DamageNumbers {
   private minX = -Infinity;
   private maxX = Infinity;
   private zoom = 1;
+  private now = 0;
+  private readonly recent: Recent[] = [];
+  private readonly numAdv = new Map<string, number>();
+  private readonly labelAdv = new Map<string, number>();
+  private numH = BASE;
+  private labelH = LABEL_BASE;
+  /** The warrior's box in base px; numbers are kept out of it. */
+  private readonly avoidBox = { minX: 0, minY: 0, maxX: 0, maxY: 0, on: false };
 
   /**
    * Load the numeral face before any BitmapText is built (glyphs rasterise on first use). Falls
@@ -68,21 +106,58 @@ export class DamageNumbers {
     const ui = uiFamily();
     const num = numeralFamily ? `"${numeralFamily}", ${ui}` : ui;
     const shadow = { color: 0x000000, alpha: 0.55, blur: 0, distance: 2, angle: Math.PI / 2 };
+    const numStyle = { fontFamily: num, fontSize: BASE, fontWeight: "700" as const, fill: 0xffffff, dropShadow: shadow };
+    const labelStyle = { fontFamily: ui, fontSize: LABEL_BASE, fontWeight: "600" as const, fill: 0xffffff, dropShadow: shadow };
     for (let i = 0; i < size; i++) {
       const holder = new Container();
-      const text = new BitmapText({ text: "0", style: { fontFamily: num, fontSize: BASE, fontWeight: "700", fill: 0xffffff, dropShadow: shadow } });
+      const text = new BitmapText({ text: "0", style: numStyle });
       text.anchor.set(0.5);
-      const suffix = new BitmapText({ text: "CRIT", style: { fontFamily: num, fontSize: BASE, fontWeight: "700", fill: 0xffffff, dropShadow: shadow } });
+      const suffix = new BitmapText({ text: "CRIT", style: numStyle });
       suffix.anchor.set(0, 0.5);
       suffix.visible = false;
-      const label = new BitmapText({ text: "", style: { fontFamily: ui, fontSize: LABEL_BASE, fontWeight: "600", fill: 0xffffff, dropShadow: shadow } });
+      const label = new BitmapText({ text: "", style: labelStyle });
       label.anchor.set(0.5);
       label.visible = false;
       holder.addChild(text, suffix, label);
       holder.visible = false;
       this.container.addChild(holder);
-      this.pool.push({ holder, text, label, suffix, life: 0, total: 1, vx: 0, vy: 0, active: false, size: 1, style: "normal", w: 0 });
+      this.pool.push({ holder, text, label, suffix, life: 0, total: 1, age: 0, vx: 0, vy: 0, gravity: 0, active: false, size: 1, style: "normal", w: 0, h: 0, dir: 1, avoid: false });
     }
+    this.prewarm(numStyle, labelStyle);
+  }
+
+  /** Fill both glyph atlases and measure every glyph once (mount time, never mid-fight). */
+  private prewarm(numStyle: object, labelStyle: object): void {
+    const probe = new BitmapText({ text: NUMERAL_CHARS, style: numStyle });
+    const lprobe = new BitmapText({ text: LABEL_CHARS, style: labelStyle });
+    try {
+      // Reading the size lays the text out, which rasterises the glyphs into the atlas.
+      void probe.width;
+      void lprobe.width;
+      for (const ch of NUMERAL_CHARS) {
+        probe.text = ch;
+        this.numAdv.set(ch, probe.width);
+      }
+      probe.text = "0";
+      this.numH = probe.height || BASE;
+      for (const ch of LABEL_CHARS) {
+        lprobe.text = ch;
+        this.labelAdv.set(ch, lprobe.width);
+      }
+      lprobe.text = "A";
+      this.labelH = lprobe.height || LABEL_BASE;
+    } finally {
+      probe.destroy();
+      lprobe.destroy();
+    }
+  }
+
+  private measure(s: string, label: boolean): number {
+    const adv = label ? this.labelAdv : this.numAdv;
+    const fallback = label ? LABEL_BASE * 0.55 : BASE * 0.6;
+    let w = 0;
+    for (let i = 0; i < s.length; i++) w += adv.get(s[i]!) ?? fallback;
+    return w;
   }
 
   /** The visible horizontal span (base px): numbers near an edge are nudged back into view. */
@@ -96,7 +171,60 @@ export class DamageNumbers {
     this.zoom = z > 0 ? z : 1;
   }
 
+  /** The warrior's drawn box (base px). Numbers never sit over it. */
+  setAvoid(minX: number, minY: number, maxX: number, maxY: number): void {
+    const a = this.avoidBox;
+    a.minX = minX;
+    a.minY = minY;
+    a.maxX = maxX;
+    a.maxY = maxY;
+    a.on = maxX > minX;
+  }
+
+  /**
+   * A damage figure beside a target. (x, y) is the target's chest, `halfW` half its drawn width,
+   * `dir` the side away from the attacker (+1 right, -1 left). `avoid` keeps it off the warrior.
+   */
+  hit(x: number, y: number, halfW: number, dir: number, value: string, color: number, style: NumberStyle, avoid = true): void {
+    const n = this.take();
+    if (!n) return;
+    this.fill(n, value, color, style);
+    const d = dir >= 0 ? 1 : -1;
+    const scale = n.size / this.zoom;
+    const half = (n.w * scale) / 2;
+    const px = x + d * (halfW + half + 4 / this.zoom);
+    let py = y - (n.h * scale) * 0.2;
+    // Stack: a number landing beside another one just placed there sits a line above it.
+    const line = n.h * scale * 0.82;
+    let k = 0;
+    for (const r of this.recent) {
+      if (this.now - r.t > STACK_WINDOW) continue;
+      if (Math.abs(r.x - px) < half * 2 + 6 && Math.abs(r.y - py) < line * (r.n + 1)) k = Math.max(k, r.n + 1);
+    }
+    py -= k * line;
+    this.remember(px, py, k);
+    n.dir = d;
+    n.avoid = avoid;
+    n.vx = d * (style === "crit" ? 34 : 26);
+    n.vy = style === "crit" ? -58 : style === "taken" ? -40 : -50;
+    n.gravity = 30;
+    this.place(n, px, py);
+  }
+
+  /** A free-floating figure or word at (x, y), rising (heals, labels, call-outs). */
   spawn(x: number, y: number, value: string, color: number, style: NumberStyle = "normal"): void {
+    const n = this.take();
+    if (!n) return;
+    this.fill(n, value, color, style);
+    n.dir = 0;
+    n.avoid = style !== "taken";
+    n.vx = 0;
+    n.vy = style === "word" ? -36 : style === "label" ? -40 : -60;
+    n.gravity = style === "word" ? 0 : 40;
+    this.place(n, x, y);
+  }
+
+  private take(): Num | null {
     let slot: Num | null = null;
     for (const n of this.pool) {
       if (!n.active) {
@@ -108,76 +236,133 @@ export class DamageNumbers {
       // Recycle the one nearest its end.
       for (const n of this.pool) if (!slot || n.life < slot.life) slot = n;
     }
-    if (!slot) return;
+    return slot;
+  }
+
+  private fill(slot: Num, value: string, color: number, style: NumberStyle): void {
     const isLabel = style === "label";
     slot.style = style;
     slot.text.visible = !isLabel;
     slot.label.visible = isLabel;
-    slot.suffix.visible = style === "crit" && /^[0-9.,KMBTQaiSxpOcNoD]+$/.test(value);
+    slot.suffix.visible = style === "crit" && isFigure(value);
     if (isLabel) {
       slot.label.text = value;
       slot.label.tint = color;
       slot.size = SIZE.label / LABEL_BASE;
+      slot.w = this.measure(value, true);
+      slot.h = this.labelH;
     } else {
       slot.text.text = value;
       slot.text.tint = color;
       slot.size = SIZE[style] / BASE;
+      slot.w = this.measure(value, false);
+      slot.h = this.numH;
     }
     if (slot.suffix.visible) {
       // A small "CRIT" at half size after the number.
+      const sw = this.measure("CRIT", false) * 0.5;
       slot.suffix.tint = color;
       slot.suffix.scale.set(0.5);
-      slot.suffix.x = slot.text.width / 2 + 3;
+      slot.text.x = -(sw + 3) / 2;
+      slot.suffix.x = slot.text.x + slot.w / 2 + 3;
       slot.suffix.y = 4;
-      slot.text.x = -(slot.suffix.width + 3) / 2;
-      slot.suffix.x += slot.text.x;
+      slot.w += sw + 3;
     } else slot.text.x = 0;
-    slot.w = isLabel ? slot.label.width : slot.text.width + (slot.suffix.visible ? slot.suffix.width + 3 : 0);
-    slot.holder.position.set(x + (Math.random() - 0.5) * 14, y);
-    slot.holder.alpha = 1;
-    slot.total = style === "crit" ? 0.95 : isLabel ? 1.0 : 0.72;
+    slot.total = style === "crit" ? 0.95 : style === "word" ? 1.0 : isLabel ? 1.0 : 0.72;
     slot.life = slot.total;
-    slot.vx = (Math.random() - 0.5) * (style === "crit" ? 30 : 46);
-    slot.vy = style === "crit" ? -120 : style === "taken" ? -70 : -90;
-    slot.active = true;
-    slot.holder.visible = true;
-    this.applyScale(slot, 0);
+    slot.age = 0;
   }
 
-  private applyScale(n: Num, k: number): void {
-    // Pop in: crits overshoot from 1.6, the rest settle from 1.25.
-    let pop: number;
-    if (n.style === "crit") pop = k < 0.22 ? 1.6 - 0.6 * easeOutBack(k / 0.22, 2.2) : 1;
-    else pop = k < 0.16 ? 1.25 - 0.25 * easeOutCubic(k / 0.16) : 1;
+  private place(n: Num, x: number, y: number): void {
+    n.holder.position.set(x, y);
+    n.holder.alpha = 1;
+    n.active = true;
+    n.holder.visible = true;
+    this.applyScale(n);
+    this.keepClear(n);
+  }
+
+  private remember(x: number, y: number, k: number): void {
+    if (this.recent.length < 12) {
+      this.recent.push({ t: this.now, x, y, n: k });
+      return;
+    }
+    let oldest = this.recent[0]!;
+    for (const r of this.recent) if (r.t < oldest.t) oldest = r;
+    oldest.t = this.now;
+    oldest.x = x;
+    oldest.y = y;
+    oldest.n = k;
+  }
+
+  private applyScale(n: Num): void {
+    const pop = n.age < POP_TIME ? POP_FROM - (POP_FROM - 1) * easeOutCubic(n.age / POP_TIME) : 1;
     n.holder.scale.set((n.size * pop) / this.zoom);
   }
 
+  /** Push a number out of the warrior's box along its drift side (or upward when it has none). */
+  private keepClear(n: Num): void {
+    const a = this.avoidBox;
+    if (!n.avoid || !a.on) return;
+    const s = n.holder.scale.x;
+    const hw = (n.w * s) / 2 + 3;
+    const hh = (n.h * s) / 2;
+    const x = n.holder.x;
+    const y = n.holder.y;
+    if (x + hw < a.minX || x - hw > a.maxX || y + hh < a.minY || y - hh > a.maxY) return;
+    if (n.dir > 0) n.holder.x = a.maxX + hw;
+    else if (n.dir < 0) n.holder.x = a.minX - hw;
+    else n.holder.y = a.minY - hh;
+  }
+
   update(dt: number): void {
+    this.now += dt;
     for (const n of this.pool) {
       if (!n.active) continue;
       n.life -= dt;
+      n.age += dt;
       if (n.life <= 0) {
         n.active = false;
         n.holder.visible = false;
         continue;
       }
       const k = 1 - n.life / n.total;
-      n.vy += 220 * dt;
-      n.holder.x += n.vx * dt;
-      n.holder.y += n.vy * dt;
-      this.applyScale(n, k);
+      // The pop holds the number in place; then it drifts up and out.
+      if (n.age > POP_TIME) {
+        n.vy += n.gravity * dt;
+        n.holder.x += (n.vx * dt) / this.zoom;
+        n.holder.y += (n.vy * dt) / this.zoom;
+      }
+      this.applyScale(n);
       if (this.maxX > this.minX) {
         const half = (n.w * n.holder.scale.x) / 2 + 4;
         n.holder.x = Math.min(this.maxX - half, Math.max(this.minX + half, n.holder.x));
       }
-      n.holder.alpha = k > 0.62 ? 1 - easeOutCubic((k - 0.62) / 0.38) : 1;
+      this.keepClear(n);
+      n.holder.alpha = k > 0.6 ? 1 - easeOutCubic((k - 0.6) / 0.4) : 1;
     }
+  }
+
+  clear(): void {
+    for (const n of this.pool) {
+      n.active = false;
+      n.holder.visible = false;
+    }
+    this.recent.length = 0;
   }
 
   destroy(): void {
     this.container.destroy({ children: true });
     this.pool = [];
   }
+}
+
+function isFigure(s: string): boolean {
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    if (!((c >= 48 && c <= 57) || c === 46 || c === 44 || c === 75 || c === 77 || c === 66)) return false;
+  }
+  return s.length > 0;
 }
 
 /** The interface sans, resolved from the CSS variables next/font sets, with safe fallbacks. */

@@ -22,7 +22,7 @@ export class GameLoop {
     private readonly maxSteps = 5,
   ) {
     if (typeof window !== "undefined" && typeof location !== "undefined" && /[?&]perf=1\b/.test(location.search)) {
-      this.perf = { sim: [], render: [], frame: [], draw: [], freeze: 0 };
+      this.perf = { sim: [], render: [], frame: [], draw: [], freeze: 0, sections: {} };
       (window as unknown as { __ASCEND_PERF__?: PerfSamples }).__ASCEND_PERF__ = this.perf;
     }
   }
@@ -115,4 +115,6 @@ export interface PerfSamples {
   draw: number[];
   /** Seconds spent in impact freeze since the last reset. */
   freeze: number;
+  /** Per-section renderer JS (ms per frame), keyed by section name. */
+  sections?: Record<string, number[]>;
 }

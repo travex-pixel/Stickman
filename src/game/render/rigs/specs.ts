@@ -1,4 +1,5 @@
 import type { RigSpec } from "./Rig";
+import type { IdleRole } from "./pose";
 import { ENEMIES } from "../../data/enemies";
 import { SUMMONS } from "../../data/summons";
 import type { WeaponPath } from "../../data/ids";
@@ -84,7 +85,7 @@ export function summonSpec(defId: string): RigSpec {
   const legendary = d?.rarity === "legendary";
   const accent = speciesAccent(defId);
   const eye = legendary ? 0xfff0c2 : lightenHex(accent, 0.35);
-  const base = { body: legendary ? 0x404657 : SHADOW_BODY, accent, eye, glow: SHADOW_GLOW, finish: "shadow" as const };
+  const base = { body: legendary ? 0x404657 : SHADOW_BODY, accent, eye, glow: SHADOW_GLOW, finish: "shadow" as const, idle: (d?.role ?? "") as IdleRole };
   switch (d?.role) {
     case "vanguard":
       return { ...base, style: "bulky", weapon: "mace_shield", height: 126, horns: true };
