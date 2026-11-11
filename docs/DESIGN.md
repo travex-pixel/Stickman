@@ -67,6 +67,7 @@ Shadows are earned in combat, which ties the collection directly to the fighting
 | Ascension (prestige for Aether) | Working | `src/game/progression/ascension.ts` |
 | Boss Hunts (rematch cleared bosses) | Working | `src/game/data/modes.ts`, `GameController.startHunt` |
 | Aether tree (Might, Vigor, Fortune, Insight, Treasury, Oathbinder, Patience, Command) | Working | `src/game/progression/ascension.ts` |
+| Army synergies: seven named role pairings that raise the fielded army; advice in the boss sheet | Working | `src/game/data/synergies.ts`, `progression/synergyAdvice.ts` |
 | Rift Tyrant: weekly rotating boss, one-minute bar-breaking score, seven weekly tiers | Working | `src/game/progression/tyrant.ts`, `World.tyrantBreak` |
 | Rift Memory: remembered gates stay open after an ascension; surges up to 5 stages a cycle | Working | `src/game/progression/campaign.ts` (`isRemembered`, `surgeLeap`) |
 | Rift Depths: regions cycle every 30 stages from 31 with a twist each (Frenzied, Bloodbound, Volatile, Swarming, Elite Tide), tinted backdrops, +20% rewards and +1 boss core per depth | Working | `src/game/data/depths.ts`, `World.twist` |
@@ -137,6 +138,22 @@ over an hour of farming per gate through 42 to 48, reached after 3 to 5 hours of
 Ascension is the answer to the late ceiling: in eight simulated hours the same player stalls at
 stage 51 without it and reaches stage 66 ascending whenever stuck for 30 minutes
 (`ASCEND_AFTER=30` in the simulator).
+
+### Army synergies
+
+Measured with the simulator's player following the boss sheet's synergy advice, eight seeds per
+condition (`SEEDS=1,...,8 MAXMIN=200 STOPGATE=48 WALL=45`, `ASCEND_SYNERGY=0` vs `1`):
+
+| Gate | Median minutes to reach, off | On |
+|---|---|---|
+| 24 | 31.0 | 30.4 |
+| 30 | 43.4 | 42.8 |
+| 36 | 58.2 | 55.5 |
+| 39 | 67.6 | 60.7 |
+| 42 | 93.2 | 87.8 |
+
+Median deepest stage in the window is 44 either way (on: up to 48). A reward for building a good
+army that is felt mid-game without reshaping the curve.
 
 ### The weeks-long curve
 
