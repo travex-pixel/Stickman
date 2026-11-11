@@ -11,28 +11,56 @@ npm install
 npm run dev        # http://localhost:3000, open in a phone-sized viewport
 ```
 
-The whole game fits one phone screen with no scrolling:
+The whole game fits one phone screen with no scrolling, from 320x568 to 430x932:
 
-- **Top**: level, gold, essence, Rift Cores, stage and wave progress, menu.
-- **Battlefield**: the live PixiJS fight. Boss bar, essence claim prompts, summon command bar, quest banner.
-- **Ability bar**: AUTO toggle, five ability slots (Arc Slash, Dash, Thunder, Soul Burst, Void Nova) and the Ascendant Fury ultimate.
-- **Panel**: Hero (hold-to-upgrade stats), Summons (collection, deploy, bond, evolve), Gear (six slots, compare, equip, upgrade, salvage), Skills (three branches plus weapon paths), Rift (stage select, bestiary, achievements, journal).
+- **Top**: level, gold, essence, stage and wave progress, battle speed, menu.
+- **Battlefield**: the live PixiJS fight, with the boss bar, BIND prompts, army commands and the quest pill.
+  Six round medallions sit on the battlefield itself: AUTO, five abilities and the Ascendant Fury ultimate.
+- **Panel**: Hero (hold-to-upgrade stats, Ascendant rank), Summons (the Oathbound army), Gear, Skills (three seal paths plus Arts) and Rift (game modes, journal, bestiary).
 
-Combat is hybrid: basic attacks are automatic, you choose when to use abilities and when to dodge. AUTO can take over the abilities once the tutorial has taught them. Clearing stage 3 unlocks a 2x battle speed toggle in the top bar (it runs more simulation steps per frame, never a different simulation). Stage clears auto-advance after a short countdown unless you choose Replay; this can be turned off in the menu.
+Combat is hybrid. Basic attacks are automatic; you choose when to cast and when to dodge. A manual dodge in the last instant before an enemy blow lands is a **perfect dodge**: a moment of slow motion, ultimate energy and a guaranteed critical on your next strike. AUTO can take over abilities once the tutorial has taught them, but it never earns perfect dodges.
 
-Stages 1 to 6 are The Ashen Verge. Stage 7 opens The Drowned Hollow: a new palette, four enemy variants with different stats and essence, and the Drowned Warden, whose sigils also count toward recruiting the Warden.
+Stages 1 to 6 are The Ashen Verge, where each stage introduces one new idea (brutes, elite champions, shieldbearers, summoners). Stage 7 opens The Drowned Hollow and the Drowned Warden, whose Undertow and Riptide moves ask you to read the field rather than outlast it. Every boss shows a one-line counter at its entrance.
 
-## The ECLIPSE summoning system
+## Oathbound: the summoning system
 
-Enemies marked with a soul light leave their essence behind when they fall. Claim it before it fades and the creature joins your collection as a permanent companion. The first claim is a cinematic; later ones are quick.
+Enemies marked with a pale light leave their oath behind when they fall. Tap **BIND** before it fades. Binding is a roll: the chance depends on rarity, your Ascendant rank, elite status and your build, and every failure builds pity toward a guaranteed bind. Bosses give three attempts. Your first bind always succeeds and plays the full cinematic.
 
-- Roles: Vanguard (frontline), Reaper (hunts weakened enemies), Ranger (marks dangerous targets), Arcanist (burning ground), Sovereign (the Hollow Warden).
-- Deploy two companions to start; a Command skill unlocks a third.
-- Commands: Follow, Attack, Guard. They change positioning and target selection immediately.
-- Progression: companions earn XP from every kill while deployed, Bond is raised with Essence (hold-to-upgrade), duplicate essence becomes shards, and the Husk Blade evolves into the Gravewalker with shards and a Rift Core.
-- The Hollow Warden drops a sigil on every defeat. Three sigils and it kneels.
+- **Roles**: Vanguard, Reaper, Ranger, Arcanist, Sentinel (guards the warrior), Caller (raises temporary shades mid-fight) and Sovereign (the Hollow Warden).
+- **Army**: deploy two to start, a third at rank C and a fourth at rank S. Commands (Follow, Attack, Guard) change positioning and targeting immediately.
+- **Growth**: deployed shadows earn XP, benched ones a share. Bond is raised with essence. Binding a species you already own gives shards, and shards plus Rift Cores raise **stars**. Evolution needs stars and level.
+- **Oath Codex**: every species you own grants a small permanent bonus to the warrior, so collecting widely matters, not just the strongest summon.
 
-Synergies are unlocked through the skill tree: Arc Slash drags enemies to your Vanguard, Thunder Strike chains through Ranger marks, Void Nova opens enemies to Reaper damage, Soul Burst mends companions.
+## Progression
+
+- **Stats**: hold-to-upgrade, unlocking one at a time.
+- **Ascendant rank E to S**: Rank Trials against an empowered Warden at level milestones raise stats, BIND chance and army size.
+- **Gear**: six slots. Epic and legendary drops can carry build-defining effects such as Thunderclap, Bloodthirst, Executioner and Shadowbound.
+- **Skills**: three seal paths (Power, Soul, Command) bought with skill points, and a weapon path choice.
+- **Arts**: each ability ranks from I to V with gold, gated by level, for +18% power and -5% cooldown per rank.
+- **Perks** on level-up, quests, achievements, a journal and a bestiary.
+
+## Game modes
+
+| Mode | Unlocks | What it is for |
+|---|---|---|
+| Campaign | Start | Push through regions and bosses |
+| Gold Vault | After stage 2 | 45 seconds of sevenfold gold, 3 keys a day |
+| Essence Rift | After stage 3 | Every foe drops an oath, shards for the army, 3 keys a day |
+| Endless Ascent | After stage 5 | Climb waves until you fall, records kept |
+| Rank Trial | Level milestones | The breakthrough fight for the next Ascendant rank |
+
+Daily keys refill each day and never stack into an obligation.
+
+## Gift codes
+
+Players redeem codes from the menu, once per save. `WELCOME`, `ASCENDANT`, `QUIETSOLDIER` and `OATHKEEPER` are built in. Signed one-off codes are generated with:
+
+```bash
+npm run code -- --gold 2000 --essence 200 --summon veilshot --count 5
+```
+
+Signed codes need `NEXT_PUBLIC_ASCEND_CODE_SECRET` set at build time (on Vercel, as a project environment variable). Production builds without it accept only the named codes. The secret ships inside the client bundle, so treat codes as gifts between friends, not as a security boundary.
 
 ## Architecture
 
@@ -41,15 +69,15 @@ src/game/engine        fixed-timestep loop, World simulation, events, RNG
 src/game/entities      Combatant model shared by player, summons, enemies and bosses
 src/game/combat        damage, statuses, targeting
 src/game/abilities     player abilities
-src/game/enemies       archetype AI (grunt, brute, ranger, arcanist)
-src/game/bosses        the Hollow Warden, two phases
-src/game/summons       role AI, recruitment, progression, evolution
-src/game/progression   profile model, derived stats, upgrades, skills, perks, quests, loadout
-src/game/economy       loot generation and item economy
+src/game/enemies       archetype AI (grunt, brute, ranger, arcanist, shieldbearer, summoner)
+src/game/bosses        the Wardens: two phases, region-specific moves
+src/game/summons       role AI, BIND extraction, recruitment, stars, evolution
+src/game/progression   profile model, derived stats, upgrades, skills, arts, ranks, perks, quests, loadout
+src/game/economy       loot, stage rewards, gift codes
 src/game/data          all content as data: abilities, enemies, summons, regions, skills, perks, lore
 src/game/render        PixiJS presentation: procedural rigs, particles, effects, background
 src/game/audio         runtime-synthesised sound (no licensed assets) through Howler
-src/persistence        IndexedDB saves, validation, migrations, offline rewards
+src/persistence        IndexedDB saves, validation, migrations, unload safety, offline rewards
 src/components         React HUD, panels, guidance (HandGuide), modals, settings
 ```
 
@@ -71,22 +99,23 @@ npm run test:e2e      # Playwright on a Pixel 5 profile plus six phone viewports
 BALANCE_PRINT=1 npx vitest run tests/unit/balance.print.test.ts   # prints the balance table
 ```
 
-Playwright uses the preinstalled Chromium at `/opt/pw-browsers/chromium` with software WebGL. Remove `launchOptions` in `playwright.config.ts` to use a normal browser locally.
+Playwright uses the preinstalled Chromium at `/opt/pw-browsers/chromium` with software WebGL. Remove `launchOptions` in `playwright.config.ts` to use a normal browser locally. An opt-in progression simulator runs with `PROGRESSION_SIM=1 npx vitest run tests/unit/progression.sim.test.ts`.
 
 ## Deployment
 
-The app is a static Next.js build with no server code, secrets or environment variables.
+The app is a static Next.js build with no server code.
 
 1. Push this repository to GitHub.
-2. In Vercel, import the repository. Framework preset: Next.js. No environment variables are needed.
-3. Deploy. `vercel.json` sets immutable caching for static chunks.
+2. In Vercel, import the repository. Framework preset: Next.js.
+3. Optional: set `NEXT_PUBLIC_ASCEND_CODE_SECRET` to enable signed gift codes.
+4. Deploy. `vercel.json` sets immutable caching for static chunks, and `next.config.ts` sends a Content Security Policy and other security headers.
 
-Verify on a real phone: open the production URL, play through the first stage, lock and unlock the screen (audio resumes on the next tap), reload (progress restored, offline reward offered after 90 seconds away).
+Verify on a real phone: open the production URL, play through the first stage, lock and unlock the screen (audio resumes on the next tap), and reload (progress restored, offline reward offered after 90 seconds away).
 
 ## Design notes
 
-- No ads, no purchases, no timers, no streaks. Offline rewards are a capped courtesy, not a simulation.
-- Every currency has one job: Gold for stats, gear and items; Essence for companion bonds; Rift Cores for evolution.
+- No ads, no purchases, no streaks. Daily keys refill without stacking. Offline rewards are a capped courtesy.
+- No pay-to-win. Every currency has one job: gold for stats, gear and arts; essence for bonds; Rift Cores for stars and evolution.
 - Stats unlock progressively so the first screen is two choices, not six.
 - The quest banner always shows the next concrete goal and a reward you tap to collect.
 - The hand guide is one instruction at a time, teaches through real play, and persists completion. It can be replayed from the menu.

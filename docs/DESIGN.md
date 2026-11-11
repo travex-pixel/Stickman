@@ -33,11 +33,11 @@ Shadows are earned in combat, which ties the collection directly to the fighting
 ## Core loop
 
 1. Fight a stage: three waves and the region's Warden. Basic attacks are automatic; abilities,
-   dodge and ARISE are the player's decisions. AUTO takes over abilities once taught.
-2. Enemies marked with pale light leave a shadow. ARISE shows its success chance before the tap.
+   dodge and BIND are the player's decisions. AUTO takes over abilities once taught.
+2. Enemies marked with pale light leave a shadow. BIND shows its success chance before the tap.
 3. Spend gold on stats (hold to upgrade), essence on shadow bonds, Rift Cores on evolution.
 4. Level ups offer a choice of three perks. Clearing stages unlocks modes, ranks and regions.
-5. Rank Trials turn levels into breakthroughs (E to S), each raising stats, ARISE chance and,
+5. Rank Trials turn levels into breakthroughs (E to S), each raising stats, BIND chance and,
    at C and S, the size of the army.
 
 ## Systems inventory
@@ -48,8 +48,11 @@ Shadows are earned in combat, which ties the collection directly to the fighting
 | Six abilities incl. ultimate with time dilation, dodge with i-frames | Working | `src/game/abilities/execute.ts` |
 | Enemy archetypes: grunt, brute, ranger, arcanist, shieldbearer, summoner | Working | `src/game/enemies/ai.ts` |
 | Elite affixes (Brutal, Armored, Hasted, Vampiric), stage 4+ mini-boss | Working | `src/game/data/elites.ts` |
-| Two-phase Warden boss, region variant, empowered trial version | Working | `src/game/bosses/hollowWarden.ts` |
-| ARISE extraction with chance, pity, boss attempts, failure feedback | Working | `src/game/summons/extraction.ts` |
+| Two-phase Warden boss; Drowned Warden with Undertow and Riptide; empowered trial version | Working | `src/game/bosses/hollowWarden.ts` |
+| Perfect dodge (manual only), kill chain, finisher slow-mo | Working | `src/game/engine/World.ts` |
+| Ability ranks (Arts) I to V | Working | `src/game/progression/abilityRanks.ts` |
+| Reward presentation: count-ups, loot cards, tiered summon reveals | Working | `src/components/rewards/` |
+| BIND extraction with chance, pity, boss attempts, failure feedback | Working | `src/game/summons/extraction.ts` |
 | Shadow roles: reaper, vanguard, ranger, arcanist, sentinel, caller, sovereign | Working | `src/game/summons/ai.ts` |
 | Shadow progression: XP, bond, shards, evolution, Codex | Working | `src/game/summons/progression.ts` |
 | Stats, gear with build-defining effects, skills, weapon paths, perks | Working | `src/game/progression/` |
@@ -57,7 +60,7 @@ Shadows are earned in combat, which ties the collection directly to the fighting
 | Modes: campaign, Gold Vault, Essence Rift, Endless Ascent, Rank Trial | Working | `src/game/data/modes.ts` |
 | Quests, achievements, journal, bestiary | Working | `src/game/progression/quests.ts` |
 | Gift codes (signed, once per save) | Working | `src/game/economy/codes.ts`, `scripts/make-code.mjs` |
-| IndexedDB saves: versioned, validated, backed up, migrated | Working | `src/persistence/` |
+| IndexedDB saves: versioned (v7), validated, backed up, migrated, unload-safe | Working | `src/persistence/` |
 | Capped offline rewards | Working | `src/persistence/OfflineRewards.ts` |
 | Runtime-synthesised audio | Working, untested on devices | `src/game/audio/` |
 
@@ -75,17 +78,22 @@ Shadows are earned in combat, which ties the collection directly to the fighting
   uploaded as textures. Per frame we move sprites, so the cost stays low on mid-range phones.
 - **Fonts are self-hosted** (SIL OFL) so builds never depend on a font CDN.
 - **Saves never regress.** Every load runs migrations then field-by-field validation; a bad field
-  falls back alone. Each write keeps the previous save as a backup.
+  falls back alone. Each write keeps the previous save as a backup. Because browsers do not wait
+  for async IndexedDB writes during unload, the latest unwritten profile is also copied
+  synchronously to localStorage on pagehide; the next load prefers it only if valid and newer.
+- **Sim timers belong to the World.** Delayed effects (telegraphed hits, minion calls, tide pools)
+  are scheduled on the World and die with it, so no callback can leak into the next run.
 - **Gift codes are signed, not secret.** The verifying secret ships to the client, which means a
   determined player could forge one. ASCEND sells nothing, so the only thing at stake is their
   own fun; the trade-off buys a serverless deployment.
 
 ## Art direction: "Ink and Gilt"
 
-- Palette: charcoal ink surfaces, antique gold trim, jade for life and essence, violet for the
-  shadow army, crimson for threat. No neon, no gradients for their own sake.
+- Palette: charcoal ink surfaces, antique gold trim, jade for life and essence, slate and gold
+  for the shadow army, crimson for threat, a muted teal only in the Drowned Hollow. No neon and no
+  purple gradients.
 - The hero is the only pale figure on the field. Enemies are ink; their eyes carry the archetype
-  colour. Shadows are indigo with a violet glow; rare ones gain a coloured edge.
+  colour. Shadows are slate with a gold edge and glow.
 - Type: Marcellus for display and numbers, Manrope for body text.
 - Spectacle scales with significance: duplicates resolve quickly, first and rare shadows get the
   full rite, rank-ups and boss kills get slow motion and a ceremony.
