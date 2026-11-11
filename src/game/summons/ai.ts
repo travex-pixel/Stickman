@@ -86,8 +86,7 @@ export function updateSummonAi(world: World, s: Combatant, dt: number): void {
     s.facing = target.pos.x >= s.pos.x ? 1 : -1;
     if (s.attackCooldown <= 0) {
       world.beginAttack(s, target, 0.25, 0.1, 0.2);
-      const ext = s as Combatant & { _onHit?: () => void };
-      ext._onHit = () => {
+      world.setAttackHit(s, () => {
         const t = world.entities.get(s.pendingTargetId) ?? target;
         if (sum.role === "ranger") {
           const p = world.spawnProjectile(s, { x: t.pos.x, y: t.pos.y }, 640, "arrow", 1);
@@ -97,7 +96,7 @@ export function updateSummonAi(world: World, s: Combatant, dt: number): void {
         } else {
           world.spawnProjectile(s, { x: t.pos.x, y: t.pos.y }, 330, "ember", 1, 1);
         }
-      };
+      });
     }
     return;
   }

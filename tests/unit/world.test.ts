@@ -512,3 +512,19 @@ describe("Drowned Warden", () => {
     expect(slowed).toBe(true);
   });
 });
+
+describe("attack payloads", () => {
+  it("an interrupted attack's payload never fires on a later attack", () => {
+    const w = freshWorld(1, 3);
+    step(w, 1);
+    const e = w.spawnEnemy("husk", { pos: { x: w.player.pos.x + 30, y: w.player.pos.y } });
+    let fired = 0;
+    w.beginAttack(e, w.player, 0.5, 0.1, 0.1);
+    w.setAttackHit(e, () => fired++);
+    w.setState(e, "stagger", 0.2); // interrupted before the strike
+    w.beginAttack(e, w.player, 0.01, 0.1, 0.1);
+    e.stateTime = 1;
+    w.progressAttack(e);
+    expect(fired).toBe(0);
+  });
+});

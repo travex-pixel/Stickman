@@ -752,7 +752,7 @@ export class World {
   }
 
   /** Begins a basic attack: windup -> hit -> recover. */
-  beginAttack(e: Combatant, target: Combatant, windup: number, strike: number, recover: number): void {
+  beginAttack(e: Combatant, target: Combatant, windup: number, strike: number, recover: number, onHit?: () => void): void {
     e.vel.x = 0;
     e.vel.y = 0;
     e.pendingTargetId = target.id;
@@ -760,18 +760,22 @@ export class World {
     e.facing = target.pos.x >= e.pos.x ? 1 : -1;
     e.attackCooldown = 1 / Math.max(0.1, e.stats.attackSpeed * (1 + statusValue(e, "haste")));
     this.setState(e, "windup", windup);
-    (e as Combatant & { _strike?: number; _recover?: number })._strike = strike;
-    (e as Combatant & { _strike?: number; _recover?: number })._recover = recover;
+    // A fresh record: a payload from an interrupted attack can never fire on a later one.
+    e.attack = { strike, recover, onHit };
+  }
+
+  /** Attach the strike payload to the attack that was just begun. */
+  setAttackHit(e: Combatant, fn: () => void): void {
+    if (e.attack) e.attack.onHit = fn;
   }
 
   progressAttack(e: Combatant): void {
-    const ext = e as Combatant & { _strike?: number; _recover?: number };
     if (e.state === "windup" && e.stateTime >= e.stateDuration) {
-      this.setState(e, "attack", ext._strike ?? 0.12);
+      this.setState(e, "attack", e.attack?.strike ?? 0.12);
       this.events.push({ type: "attack_swing", id: e.id, kind: e.kind, heavy: e.enemy?.archetype === "brute" || e.kind === "boss", pos: { ...e.pos }, facing: e.facing });
       this.landBasicHit(e);
     } else if (e.state === "attack" && e.stateTime >= e.stateDuration) {
-      this.setState(e, "recover", ext._recover ?? 0.1);
+      this.setState(e, "recover", e.attack?.recover ?? 0.1);
     } else if (e.state === "recover" && e.stateTime >= e.stateDuration) {
       this.setState(e, "idle");
     }
@@ -781,11 +785,10 @@ export class World {
     if (e.pendingHitLanded) return;
     e.pendingHitLanded = true;
     const target = this.entities.get(e.pendingTargetId);
-    const ext = e as Combatant & { _onHit?: () => void };
     const ranged = isRangedAttacker(e);
-    if (ext._onHit) {
-      const fn = ext._onHit;
-      ext._onHit = undefined;
+    const fn = e.attack?.onHit;
+    if (fn) {
+      e.attack!.onHit = undefined;
       fn();
       if (ranged) return;
     }

@@ -58,6 +58,10 @@ export interface EnemyState {
   ownerId: number;
   /** Seconds until a summoner may call again. */
   callTimer: number;
+  /** Where a summoner's minions will rise (telegraphed during the call). */
+  callPoints?: Vec2[];
+  /** Ranged repositioning target. */
+  dest?: Vec2;
 }
 
 export interface BossState {
@@ -65,6 +69,11 @@ export interface BossState {
   patternTimer: number;
   pattern: "idle" | "swing" | "charge" | "slam" | "volley" | "undertow" | "riptide";
   patternStep: number;
+  /** Charge: who has already been hit this charge. */
+  chargeHit?: Set<number>;
+  /** Volley and Riptide: seconds until the next shot or pool, and how many have gone out. */
+  burstNext?: number;
+  burstCount?: number;
   introTimer: number;
   enraged: boolean;
 }
@@ -93,6 +102,8 @@ export interface Combatant {
   pendingTargetId: number;
   pendingAbility: AbilityId | null;
   pendingHitLanded: boolean;
+  /** The basic attack in progress: phase timings and an optional payload run at the strike. */
+  attack?: { strike: number; recover: number; onHit?: () => void };
   targetId: number;
   statuses: Status[];
   knockback: Vec2;

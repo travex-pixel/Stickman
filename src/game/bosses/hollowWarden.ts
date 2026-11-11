@@ -98,7 +98,7 @@ export function updateBossAi(world: World, b: Combatant, dt: number): void {
       break;
     case "charge": {
       bs.patternTimer -= dt;
-      const ext = b as Combatant & { _chargeT?: number; _chargeHit?: Set<number> };
+      const ext = bs;
       if (bs.patternTimer > 0.9) {
         // telegraph
         world.stop(b);
@@ -107,11 +107,11 @@ export function updateBossAi(world: World, b: Combatant, dt: number): void {
         b.state = "dodge";
         b.vel.x = b.facing * 620;
         b.vel.y = 0;
-        ext._chargeHit = ext._chargeHit ?? new Set();
+        ext.chargeHit = ext.chargeHit ?? new Set();
         for (const e of world.entities.values()) {
-          if (e.dead || e.faction === b.faction || ext._chargeHit.has(e.id)) continue;
+          if (e.dead || e.faction === b.faction || ext.chargeHit.has(e.id)) continue;
           if (Math.abs(e.pos.x - b.pos.x) < b.radius + e.radius && Math.abs(e.pos.y - b.pos.y) < 46) {
-            ext._chargeHit.add(e.id);
+            ext.chargeHit.add(e.id);
             world.dealDamage(b, e, 1.3, "physical", true);
             world.applyKnockback(e, { x: b.pos.x - b.facing * 20, y: b.pos.y }, 300);
           }
@@ -123,7 +123,7 @@ export function updateBossAi(world: World, b: Combatant, dt: number): void {
         b.vel.y = 0;
         b.state = "recover";
         if (bs.patternTimer <= 0) {
-          ext._chargeHit = undefined;
+          ext.chargeHit = undefined;
           world.setState(b, "stagger", bs.phase === 2 ? 0.9 : 1.4);
           bs.pattern = "idle";
           bs.patternTimer = 0.6;
@@ -156,18 +156,18 @@ export function updateBossAi(world: World, b: Combatant, dt: number): void {
       bs.patternTimer -= dt;
       world.stop(b);
       b.state = "cast";
-      const ext = b as Combatant & { _volleyNext?: number; _volleyCount?: number };
-      ext._volleyNext = (ext._volleyNext ?? 0) - dt;
-      if (ext._volleyNext <= 0 && (ext._volleyCount ?? 0) < 5) {
-        ext._volleyNext = 0.22;
-        ext._volleyCount = (ext._volleyCount ?? 0) + 1;
-        const spread = (ext._volleyCount - 3) * 22;
+      const ext = bs;
+      ext.burstNext = (ext.burstNext ?? 0) - dt;
+      if (ext.burstNext <= 0 && (ext.burstCount ?? 0) < 5) {
+        ext.burstNext = 0.22;
+        ext.burstCount = (ext.burstCount ?? 0) + 1;
+        const spread = (ext.burstCount - 3) * 22;
         const aim = { x: target.pos.x, y: Math.max(ARENA.minY, Math.min(ARENA.maxY, target.pos.y + spread)) };
         const p = world.spawnProjectile(b, aim, 420, "warden_bolt", 0.8);
         p.radius = 12;
       }
       if (bs.patternTimer <= 0) {
-        ext._volleyCount = 0;
+        ext.burstCount = 0;
         world.setState(b, "recover", 0.6);
         bs.pattern = "idle";
         bs.patternTimer = 0.9;
@@ -200,11 +200,11 @@ export function updateBossAi(world: World, b: Combatant, dt: number): void {
       bs.patternTimer -= dt;
       world.stop(b);
       b.state = "cast";
-      const ext = b as Combatant & { _tideNext?: number; _tideCount?: number };
-      ext._tideNext = (ext._tideNext ?? 0) - dt;
-      if (ext._tideNext <= 0 && (ext._tideCount ?? 0) < 3) {
-        ext._tideNext = 0.4;
-        ext._tideCount = (ext._tideCount ?? 0) + 1;
+      const ext = bs;
+      ext.burstNext = (ext.burstNext ?? 0) - dt;
+      if (ext.burstNext <= 0 && (ext.burstCount ?? 0) < 3) {
+        ext.burstNext = 0.4;
+        ext.burstCount = (ext.burstCount ?? 0) + 1;
         const at = { x: target.pos.x + target.vel.x * 0.35, y: Math.max(ARENA.minY, Math.min(ARENA.maxY, target.pos.y + target.vel.y * 0.35)) };
         world.addTelegraph(at, RIPTIDE_RADIUS, RIPTIDE_DELAY, "circle", 1, 0, 0x8fc9c4);
         const power = b.stats.attack;
@@ -219,7 +219,7 @@ export function updateBossAi(world: World, b: Combatant, dt: number): void {
         });
       }
       if (bs.patternTimer <= 0) {
-        ext._tideCount = 0;
+        ext.burstCount = 0;
         world.setState(b, "recover", 0.8);
         bs.pattern = "idle";
         bs.patternTimer = 1.0;
@@ -246,9 +246,9 @@ function startUndertow(world: World, b: Combatant, target: Combatant): void {
 function startRiptide(world: World, b: Combatant): void {
   b.boss!.pattern = "riptide";
   b.boss!.patternTimer = 1.5;
-  const ext = b as Combatant & { _tideNext?: number; _tideCount?: number };
-  ext._tideNext = 0.2;
-  ext._tideCount = 0;
+  const ext = b.boss!;
+  ext.burstNext = 0.2;
+  ext.burstCount = 0;
 }
 
 function startSwing(world: World, b: Combatant, target: Combatant, windupOverride?: number): void {
@@ -276,8 +276,8 @@ function startVolley(world: World, b: Combatant, target: Combatant): void {
   b.boss!.pattern = "volley";
   b.boss!.patternTimer = 1.6;
   b.facing = target.pos.x >= b.pos.x ? 1 : -1;
-  const ext = b as Combatant & { _volleyNext?: number; _volleyCount?: number };
-  ext._volleyNext = 0.45;
-  ext._volleyCount = 0;
+  const ext = b.boss!;
+  ext.burstNext = 0.45;
+  ext.burstCount = 0;
   world.addTelegraph({ x: target.pos.x, y: target.pos.y }, 60, 0.45, "circle", 1, 0, 0x7cf6ff);
 }

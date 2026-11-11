@@ -79,7 +79,7 @@ function summonerBehaviour(world: World, e: Combatant, target: Combatant, d: num
     // Telegraph where the dead will rise, so the player can read it and act.
     const pts = callPoints(e);
     for (const p of pts) world.addTelegraph(p, 26, windup, "circle", 1, 0, 0xb48cff);
-    (e as Combatant & { _callPts?: { x: number; y: number }[] })._callPts = pts;
+    if (e.enemy) e.enemy.callPoints = pts;
     return;
   }
   rangedBehaviour(world, e, target, d, dt, windup * 0.6, "shard");
@@ -94,9 +94,8 @@ function callPoints(e: Combatant): { x: number; y: number }[] {
 }
 
 function finishCall(world: World, e: Combatant): void {
-  const ext = e as Combatant & { _callPts?: { x: number; y: number }[] };
-  const pts = ext._callPts ?? callPoints(e);
-  ext._callPts = undefined;
+  const pts = e.enemy?.callPoints ?? callPoints(e);
+  if (e.enemy) e.enemy.callPoints = undefined;
   for (const p of pts) world.spawnEnemy(world.stage >= 7 ? "drowned_husk" : "husk", { pos: p, minion: true, ownerId: e.id });
   world.events.push({ type: "minion_called", id: e.id, pos: { ...e.pos } });
   world.setState(e, "recover", 0.5);
@@ -130,11 +129,10 @@ function bruteBehaviour(world: World, e: Combatant, target: Combatant, d: number
     world.beginAttack(e, target, windup, 0.16, 0.5);
     world.addTelegraph({ x: e.pos.x + e.facing * 40, y: e.pos.y }, 58, windup, "circle", e.facing, 0, 0xff7a3d);
     // Brute hits knock back; handled on hit via heavy flag plus explicit knockback after windup.
-    const ext = e as Combatant & { _onHit?: () => void };
-    ext._onHit = () => {
+    world.setAttackHit(e, () => {
       const t = world.entities.get(e.pendingTargetId);
       if (t && !t.dead && dist(t.pos, e.pos) < e.stats.range + t.radius + 30) world.applyKnockback(t, e.pos, 220);
-    };
+    });
   }
 }
 
@@ -155,9 +153,9 @@ function rangedBehaviour(world: World, e: Combatant, target: Combatant, d: numbe
     es.repositionTimer = 2.5 + world.rng.range(0, 1.5);
     const ny = world.rng.range(ARENA.minY + 10, ARENA.maxY - 10);
     const nx = Math.max(ARENA.minX + 20, Math.min(ARENA.maxX - 20, e.pos.x + world.rng.range(-50, 50)));
-    (e as Combatant & { _dest?: { x: number; y: number } })._dest = { x: nx, y: ny };
+    es.dest = { x: nx, y: ny };
   }
-  const dest = (e as Combatant & { _dest?: { x: number; y: number } })._dest;
+  const dest = es.dest;
   if (dest && dist(e.pos, dest) > 8 && e.attackCooldown > 0.3) {
     world.moveToward(e, dest, dt, 0.8);
     e.facing = target.pos.x >= e.pos.x ? 1 : -1;
@@ -167,8 +165,7 @@ function rangedBehaviour(world: World, e: Combatant, target: Combatant, d: numbe
   e.facing = target.pos.x >= e.pos.x ? 1 : -1;
   if (e.attackCooldown <= 0) {
     world.beginAttack(e, target, windup, 0.12, 0.3);
-    const ext = e as Combatant & { _onHit?: () => void };
-    ext._onHit = () => {
+    world.setAttackHit(e, () => {
       const t = world.entities.get(e.pendingTargetId) ?? target;
       const aim = { x: t.pos.x + t.vel.x * 0.25, y: t.pos.y };
       if (kind === "ember") {
@@ -181,7 +178,7 @@ function rangedBehaviour(world: World, e: Combatant, target: Combatant, d: numbe
       } else {
         world.spawnProjectile(e, aim, 520, "arrow", 1);
       }
-    };
+    });
   }
 }
 
