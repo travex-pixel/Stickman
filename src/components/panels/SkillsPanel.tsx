@@ -9,10 +9,11 @@ import { computeModifiers } from "@/game/progression/stats";
 import { weaponPathDef } from "@/game/progression/weaponPaths";
 import { cn } from "@/lib/cn";
 import { fmt } from "@/lib/format";
-import { ABILITIES, ABILITY_SLOTS, ULTIMATE_ID } from "@/game/data/abilities";
+import { ABILITIES, ABILITY_SLOTS, ULTIMATE_ID, TECHNIQUE_OWNED_ATTACK, techniquesFor } from "@/game/data/abilities";
 import type { AbilityId } from "@/game/data/ids";
 import { ABILITY_RANK_MAX, RANK_COOLDOWN_STEP, RANK_NUMERALS, RANK_POWER_STEP, abilityRank, anyAbilityRankReady, canRankAbility } from "@/game/progression/abilityRanks";
-import type { IconName } from "@/components/ui/Icon";
+import { ABILITY_ICON } from "@/components/ui/abilityIcons";
+import { slotForm } from "@/game/progression/techniques";
 
 const BRANCHES: SkillBranch[] = ["power", "soul", "command"];
 
@@ -135,14 +136,16 @@ function SealsView({ branch, setView }: { branch: SkillBranch; setView: (v: Skil
   );
 }
 
-const ART_ICON: Record<AbilityId, IconName> = { arc_slash: "arc", shadow_dash: "dodge", thunder_strike: "bolt", soul_burst: "soul", void_nova: "nova", ascendant_fury: "fury" };
+const ART_ICON = ABILITY_ICON;
 const ARTS: AbilityId[] = [...ABILITY_SLOTS, ULTIMATE_ID].sort((a, b) => ABILITIES[a].unlockLevel - ABILITIES[b].unlockLevel);
 
 /** Arts: every ability ranks from I to V with gold, gated by level. */
 function ArtsView({ setView }: { setView: (v: SkillBranch | "arts") => void }) {
   const c = useController();
   const profile = useProfileRef();
-  const [selectedId, setSelectedId] = useState<AbilityId>(() => ARTS.find((id) => canRankAbility(profile, id).ok) ?? "arc_slash");
+  const [selectedSlot, setSelectedId] = useState<AbilityId>(() => ARTS.find((id) => canRankAbility(profile, slotForm(profile, id)).ok) ?? "arc_slash");
+  const selectedId = slotForm(profile, selectedSlot);
+  const forms = [selectedSlot, ...techniquesFor(selectedSlot)];
   const def = ABILITIES[selectedId];
   const rank = abilityRank(profile, selectedId);
   const check = canRankAbility(profile, selectedId);
@@ -153,18 +156,19 @@ function ArtsView({ setView }: { setView: (v: SkillBranch | "arts") => void }) {
     <div className="flex flex-col h-full min-h-0 px-2 pt-1.5 pb-1.5 gap-1">
       <Tabs view="arts" setView={setView} />
       <div className="flex items-center justify-between px-1 py-0.5 shrink-0">
-        {ARTS.map((id) => {
+        {ARTS.map((slot) => {
+          const id = slotForm(profile, slot);
           const r = abilityRank(profile, id);
           const isLocked = profile.player.level < ABILITIES[id].unlockLevel;
           const ready = canRankAbility(profile, id).ok;
-          const isSel = id === selectedId;
+          const isSel = slot === selectedSlot;
           return (
             <button
-              key={id}
+              key={slot}
               className={cn("relative h-10 w-10 rounded-full flex items-center justify-center border-2 transition-transform", isSel && "scale-110", isLocked ? "border-white/10 text-mist/50" : "border-gold/60 text-gold-2")}
               style={{ background: isLocked ? "radial-gradient(circle at 50% 35%, #2a241b, #15120e 75%)" : "radial-gradient(circle at 50% 35%, #3a2f1c, #15120e 75%)", boxShadow: isSel ? "0 0 0 3px rgba(17,15,12,1), 0 0 0 4px rgba(233,211,154,0.6)" : undefined }}
-              onClick={() => setSelectedId(id)}
-              data-testid={`art-${id}`}
+              onClick={() => setSelectedId(slot)}
+              data-testid={`art-${slot}`}
               aria-label={`${ABILITIES[id].name}, rank ${RANK_NUMERALS[r]}`}
             >
               {isLocked ? <Icon name="lock" size={14} /> : <Icon name={ART_ICON[id]} size={17} />}
@@ -183,7 +187,30 @@ function ArtsView({ setView }: { setView: (v: SkillBranch | "arts") => void }) {
             ))}
           </span>
         </div>
-        <p className="text-[11px] leading-snug text-parch line-clamp-2">{def.description}</p>
+        {forms.length > 1 && (
+          <div className="flex gap-1 shrink-0" data-testid="art-forms">
+            {forms.map((f) => {
+              const learned = f === selectedSlot || profile.player.techniques.includes(f);
+              const active = f === selectedId;
+              return (
+                <button
+                  key={f}
+                  className={cn("flex-1 min-w-0 h-7 rounded-md border px-1.5 flex items-center gap-1 text-[11px]", active ? "border-gold bg-gold/10 text-gold-2" : learned ? "border-white/15 text-parch" : "border-dashed border-white/10 text-mist")}
+                  onClick={() => (learned ? c.setArtForm(selectedSlot, f) : c.toast(`${ABILITIES[f].name}: ${ABILITIES[f].learn ?? "not yet learned"}`, "info"))}
+                  data-testid={`form-${f}`}
+                  aria-pressed={active}
+                >
+                  <Icon name={learned ? ART_ICON[f] : "lock"} size={12} />
+                  <span className="truncate">{learned ? ABILITIES[f].name : ABILITIES[f].learn}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+        <p className="text-[11px] leading-snug text-parch line-clamp-2">
+          {def.description}
+          {def.slot && <span className="text-gold/90"> Owned: +{Math.round(TECHNIQUE_OWNED_ATTACK * 100)}% attack.</span>}
+        </p>
         <div className="text-[11px] text-mist">
           {locked ? (
             `Unlocks at level ${def.unlockLevel}`

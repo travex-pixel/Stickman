@@ -56,6 +56,10 @@ export interface Profile {
     rank: number;
     /** Bonus ranks per ability: 0 = rank I, 4 = rank V. */
     abilityRanks: Partial<Record<AbilityId, number>>;
+    /** Techniques learned (alternate ability forms). */
+    techniques: AbilityId[];
+    /** Which form each base slot uses; missing = the base ability. */
+    artForms: Partial<Record<AbilityId, AbilityId>>;
   };
   equipment: {
     equipped: Partial<Record<EquipSlot, string>>;
@@ -97,7 +101,7 @@ export interface Profile {
   settings: { music: number; sfx: number; reducedEffects: boolean; diagnostics: boolean; battleSpeed: 1 | 2; autoAdvance: boolean };
 }
 
-export const PROFILE_VERSION = 7;
+export const PROFILE_VERSION = 8;
 
 export function createDefaultProfile(now = Date.now()): Profile {
   return {
@@ -118,6 +122,8 @@ export function createDefaultProfile(now = Date.now()): Profile {
       autoCast: false,
       rank: 0,
       abilityRanks: {},
+      techniques: [],
+      artForms: {},
     },
     equipment: { equipped: {}, inventory: [] },
     skills: { unlocked: [] },

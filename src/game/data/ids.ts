@@ -16,7 +16,10 @@ export type AbilityId =
   | "shadow_dash"
   | "soul_burst"
   | "void_nova"
-  | "ascendant_fury";
+  | "ascendant_fury"
+  | "blade_tempest"
+  | "chain_hook"
+  | "blood_pact";
 
 export type StatKey =
   | "maxHp"

@@ -68,6 +68,14 @@ export const MIGRATIONS: Migration[] = [
       return { ...raw, version: 7, player: { ...player, abilityRanks: player.abilityRanks ?? {} } };
     },
   },
+  {
+    from: 7,
+    to: 8,
+    migrate: (raw) => {
+      const player = (raw.player as Record<string, unknown> | undefined) ?? {};
+      return { ...raw, version: 8, player: { ...player, techniques: player.techniques ?? [], artForms: player.artForms ?? {} } };
+    },
+  },
 ];
 
 export function runMigrations(raw: Record<string, unknown>, targetVersion: number): { raw: Record<string, unknown>; migrated: boolean } {

@@ -18,6 +18,8 @@ import { fmtDuration } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import { SettingsModal } from "@/components/settings/SettingsModal";
 import { CountUp, LootCard } from "@/components/rewards/RewardFx";
+import { ABILITIES, TECHNIQUE_OWNED_ATTACK } from "@/game/data/abilities";
+import { ABILITY_ICON } from "@/components/ui/abilityIcons";
 
 export function ModalHost() {
   const modal = useUi((u) => u.modal);
@@ -49,6 +51,8 @@ function ModalBody({ modal }: { modal: Modal }) {
       return <Journal />;
     case "rank_up":
       return <RankUp modal={modal} />;
+    case "technique":
+      return <TechniqueLearned modal={modal} />;
     default:
       return null;
   }
@@ -398,6 +402,41 @@ export function ModeResult({ modal }: { modal: Extract<Modal, { kind: "mode_resu
           </button>
         </div>
         <div className="text-[10px] text-mist">{MODES[modal.mode].name}</div>
+      </div>
+    </Card>
+  );
+}
+
+function TechniqueLearned({ modal }: { modal: Extract<Modal, { kind: "technique" }> }) {
+  const c = useController();
+  const def = ABILITIES[modal.id];
+  const base = def.slot ? ABILITIES[def.slot] : null;
+  return (
+    <Card>
+      <div className="px-5 pt-5 pb-4 flex flex-col items-center gap-2 text-center" data-testid="technique-learned">
+        <div className="caps text-gold-2">Technique learned</div>
+        <motion.div initial={{ scale: 0.4, rotate: -30, opacity: 0 }} animate={{ scale: 1, rotate: 0, opacity: 1 }} transition={{ type: "spring", stiffness: 260, damping: 14 }} className="medal medal-lg text-gold-2" data-ready="true" style={{ ["--m" as string]: "52px" }}>
+          <Icon name={ABILITY_ICON[modal.id]} size={28} />
+        </motion.div>
+        <div className="font-display text-[20px] text-ivory leading-none">{def.name}</div>
+        <p className="text-[12px] text-parch leading-snug">{def.description}</p>
+        <div className="text-[11px] text-gold/90">Owned forever: +{Math.round(TECHNIQUE_OWNED_ATTACK * 100)}% attack, equipped or not.</div>
+        {base && <div className="text-[11px] text-mist">It can take the place of {base.name}. Switch any time in Skills, Arts.</div>}
+        <div className="flex gap-2 w-full mt-1">
+          <button className="btn-ghost flex-1" onClick={() => c.closeModal()} data-testid="technique-later">
+            Keep {base?.name ?? "current"}
+          </button>
+          <button
+            className="btn-primary flex-1"
+            onClick={() => {
+              if (def.slot) c.setArtForm(def.slot, modal.id);
+              c.closeModal();
+            }}
+            data-testid="technique-equip"
+          >
+            Equip
+          </button>
+        </div>
       </div>
     </Card>
   );

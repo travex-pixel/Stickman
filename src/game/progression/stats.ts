@@ -4,6 +4,7 @@ import type { EquipmentItem, Profile } from "./profile";
 import { SKILLS } from "../data/skills";
 import { PERKS } from "../data/perks";
 import { codexBonus } from "../summons/extraction";
+import { TECHNIQUE_OWNED_ATTACK } from "../data/abilities";
 import type { GearEffectId } from "../data/gearEffects";
 
 /** Each Ascendant rank multiplies core stats. Rank is earned in Rank Trials, not bought. */
@@ -257,6 +258,8 @@ export function computePlayerStats(profile: Profile): CombatStats {
   for (const [k, v] of Object.entries(weaponPathBonuses(profile.player.weaponPath)) as [StatKey, number][]) addPct(k, v);
   const codex = codexBonus(profile);
   for (const [k, v] of Object.entries(codex) as [StatKey, number][]) if (v) addPct(k, v);
+  // Techniques are owned power: every one learned adds attack, equipped or not.
+  if (profile.player.techniques.length) addPct("attack", profile.player.techniques.length * TECHNIQUE_OWNED_ATTACK);
   const rankMult = 1 + profile.player.rank * RANK_STAT_STEP;
   addPct("attack", rankMult - 1);
   addPct("maxHp", rankMult - 1);

@@ -16,6 +16,10 @@ export interface AbilityDef {
   /** Player level at which the ability unlocks. */
   unlockLevel: number;
   color: number;
+  /** Techniques are alternate forms: the base slot they can occupy instead of its default. */
+  slot?: AbilityId;
+  /** How a technique is learned (shown while it is still locked). */
+  learn?: string;
 }
 
 export const ABILITIES: Record<AbilityId, AbilityDef> = {
@@ -103,7 +107,64 @@ export const ABILITIES: Record<AbilityId, AbilityDef> = {
     unlockLevel: 3,
     color: 0xe9c97a,
   },
+  blade_tempest: {
+    id: "blade_tempest",
+    name: "Blade Tempest",
+    short: "Tempest",
+    description: "Spin into a whirlwind of steel that follows you, striking everything around you four times.",
+    element: "physical",
+    cooldown: 6,
+    castTime: 0.35,
+    power: 0.6,
+    radius: 130,
+    ultimate: false,
+    unlockLevel: 1,
+    color: 0xf0eadc,
+    slot: "arc_slash",
+    learn: "Clear stage 4",
+  },
+  chain_hook: {
+    id: "chain_hook",
+    name: "Chain Hook",
+    short: "Hook",
+    description: "Hurl a chain at the most dangerous enemy in range and drag it to your blade, stunned.",
+    element: "physical",
+    cooldown: 7,
+    castTime: 0.4,
+    power: 1.4,
+    radius: 360,
+    ultimate: false,
+    unlockLevel: 2,
+    color: 0xcfa95e,
+    slot: "thunder_strike",
+    learn: "Defeat a Crypt Keeper",
+  },
+  blood_pact: {
+    id: "blood_pact",
+    name: "Blood Pact",
+    short: "Pact",
+    description: "For six seconds your strikes come faster and every one of them heals you for a quarter of its damage.",
+    element: "physical",
+    cooldown: 14,
+    castTime: 0.4,
+    power: 0,
+    radius: 0,
+    ultimate: false,
+    unlockLevel: 4,
+    color: 0xc4453f,
+    slot: "soul_burst",
+    learn: "Reach Ascendant rank C",
+  },
 };
+
+/** Alternate forms that can replace a base ability in its slot once learned. */
+export const TECHNIQUES: AbilityId[] = ["blade_tempest", "chain_hook", "blood_pact"];
+/** Every technique learned, equipped or not, permanently adds this much attack. */
+export const TECHNIQUE_OWNED_ATTACK = 0.04;
+
+export function techniquesFor(slot: AbilityId): AbilityId[] {
+  return TECHNIQUES.filter((t) => ABILITIES[t].slot === slot);
+}
 
 export const ABILITY_SLOTS: AbilityId[] = ["arc_slash", "shadow_dash", "thunder_strike", "soul_burst", "void_nova"];
 export const ULTIMATE_ID: AbilityId = "ascendant_fury";

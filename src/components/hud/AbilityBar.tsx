@@ -1,12 +1,14 @@
 "use client";
 
-import { Icon, type IconName } from "@/components/ui/Icon";
+import { Icon } from "@/components/ui/Icon";
 import { useController, useHud, useProfile } from "@/hooks/useGame";
 import { ABILITIES, ABILITY_SLOTS, ULTIMATE_ENERGY_COST, ULTIMATE_ID } from "@/game/data/abilities";
 import type { AbilityId } from "@/game/data/ids";
 import { cn } from "@/lib/cn";
+import { ABILITY_ICON } from "@/components/ui/abilityIcons";
+import { slotForm } from "@/game/progression/techniques";
 
-const ICONS: Record<AbilityId, IconName> = { arc_slash: "arc", thunder_strike: "bolt", shadow_dash: "dodge", soul_burst: "soul", void_nova: "nova", ascendant_fury: "fury" };
+const ICONS = ABILITY_ICON;
 
 /** Unlocks shown in the order they arrive, so the bar fills left to right as the warrior grows. */
 const SLOTS = [...ABILITY_SLOTS].sort((a, b) => ABILITIES[a].unlockLevel - ABILITIES[b].unlockLevel);
@@ -20,6 +22,9 @@ export function AbilityBar() {
   const level = useProfile((p) => p.player.level);
   const autoCast = useProfile((p) => p.player.autoCast);
   const tutorialFinished = useProfile((p) => p.tutorial.finished || p.tutorial.completed.includes("ability"));
+  // A string selector so a form swap (mutated in place) still re-renders the bar.
+  const formKey = useProfile((p) => SLOTS.map((s) => slotForm(p, s)).join(","));
+  const forms = formKey.split(",") as AbilityId[];
   const cooldowns = useHud((s) => s?.cooldowns);
   const cooldownMax = useHud((s) => s?.cooldownMax);
   const energy = useHud((s) => s?.player.energy ?? 0);
@@ -42,9 +47,10 @@ export function AbilityBar() {
         <span className="text-[10px] font-extrabold leading-none mt-0.5">{autoCast ? "ON" : "OFF"}</span>
       </button>
       <div className="flex-1 min-w-0 flex items-end justify-center gap-1.5">
-        {SLOTS.map((id) => {
+        {SLOTS.map((slot, i) => {
+          const id = forms[i] ?? slot;
           const def = ABILITIES[id];
-          const unlocked = def.unlockLevel <= level;
+          const unlocked = ABILITIES[slot].unlockLevel <= level;
           const cd = cooldowns?.[id] ?? 0;
           const max = cooldownMax?.[id] ?? def.cooldown;
           const frac = max > 0 ? Math.min(1, cd / max) : 0;
@@ -52,11 +58,12 @@ export function AbilityBar() {
           const isDodge = id === "shadow_dash";
           return (
             <button
-              key={id}
+              key={slot}
               className={cn("medal", ready ? "text-ivory" : "text-mist", !unlocked && "medal-locked")}
               data-ready={ready}
-              data-guide={isDodge ? "ability-dodge" : `ability-${id}`}
-              data-testid={`ability-${id}`}
+              data-guide={isDodge ? "ability-dodge" : `ability-${slot}`}
+              data-testid={`ability-${slot}`}
+              data-form={id}
               onClick={() => (isDodge ? c.dodge() : c.castAbility(id))}
               aria-label={unlocked ? `${def.name}${ready ? ", ready" : `, ${cd.toFixed(1)} seconds`}` : `${def.name}, unlocks at level ${def.unlockLevel}`}
               disabled={!unlocked}

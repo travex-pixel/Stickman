@@ -10,6 +10,7 @@ import { applyXp } from "./progression/xp";
 import { upgradeStat as doUpgradeStat, type UpgradeAttempt } from "./progression/upgrades";
 import { unlockSkill as doUnlockSkill } from "./progression/skills";
 import { anyAbilityRankReady, rankAbility as doRankAbility } from "./progression/abilityRanks";
+import { learnTechniques, setSlotForm } from "./progression/techniques";
 import { offerPerks, takePerk as doTakePerk } from "./progression/perks";
 import { claimQuest as doClaimQuest, currentQuest, isQuestComplete } from "./progression/quests";
 import { evaluateAchievements, evaluateJournal } from "./progression/achievements";
@@ -52,6 +53,7 @@ export type Modal =
   | { kind: "weapon_path" }
   | { kind: "journal" }
   | { kind: "boss_intro"; defId: string }
+  | { kind: "technique"; id: AbilityId }
   | { kind: "mode_result"; mode: ModeId; title: string; subtitle: string; lines: { label: string; value: string; tone?: "gold" | "jade" | "violet" }[]; success: boolean; record?: boolean; items?: EquipmentItem[] }
   | { kind: "rank_up"; from: number; to: number; rewards: string[] };
 
@@ -641,6 +643,7 @@ export class GameController {
       const affordable = (["attack", "maxHp", "defense", "attackSpeed", "critChance", "critDamage"] as const).some((st) => isStatUnlocked(p, st) && statUpgradeCost(st, p.player.statLevels[st]) <= p.player.gold);
       if (affordable) this.uiStore.update((u) => ({ ...u, newBadges: { ...u.newBadges, hero: true } }));
     }
+    this.revealTechniques(learnTechniques(p));
     if (ui.panel !== "skills" && !this.rankBadgeShown && anyAbilityRankReady(p)) {
       this.rankBadgeShown = true;
       this.uiStore.update((u) => ({ ...u, newBadges: { ...u.newBadges, skills: true } }));
@@ -728,6 +731,7 @@ export class GameController {
     if (mode === "crypt") {
       const items = [...this.run.items].sort((a, b) => RARITY_ORDER.indexOf(b.rarity) - RARITY_ORDER.indexOf(a.rarity));
       const best = items[0]?.rarity ?? "none";
+      this.revealTechniques(learnTechniques(p, { keeperDefeated: true }));
       this.enqueueModal({ kind: "mode_result", mode, title: "Crypt plundered", subtitle: `${SLOT_LABEL[this.world?.cryptSlot ?? "weapon"]} relics`, lines: [{ label: "Relics", value: `${items.length}`, tone: "gold" }, { label: "Best", value: best }, { label: "Gold", value: `+${this.run.gold}`, tone: "gold" }], success: true, items });
       return;
     }
@@ -1008,6 +1012,32 @@ export class GameController {
     this.renderer?.flash(check.def.palette.glow, 0.5);
     this.refreshLoadout();
     this.afterProgression();
+    this.commit();
+    return true;
+  }
+
+  private revealTechniques(ids: AbilityId[]): void {
+    for (const id of ids) {
+      this.sfx("quest", { volume: 0.6 });
+      this.enqueueModal({ kind: "technique", id });
+      this.uiStore.update((u) => ({ ...u, newBadges: { ...u.newBadges, skills: true } }));
+    }
+    if (ids.length) {
+      this.refreshLoadout();
+      this.commitSoon();
+    }
+  }
+
+  /** Swap a slot between its base ability and a learned technique. */
+  setArtForm(slot: AbilityId, form: AbilityId): boolean {
+    this.userGesture();
+    const ok = setSlotForm(this.profile, slot, form);
+    if (!ok) {
+      this.sfx("error", { volume: 0.3 });
+      return false;
+    }
+    this.sfx("equip", { volume: 0.5 });
+    this.refreshLoadout();
     this.commit();
     return true;
   }
@@ -1404,6 +1434,12 @@ function castSfx(ability: AbilityId): SfxName {
       return "void_nova";
     case "ascendant_fury":
       return "ultimate";
+    case "blade_tempest":
+      return "arc_slash";
+    case "chain_hook":
+      return "command";
+    case "blood_pact":
+      return "soul_burst";
     default:
       return "dodge";
   }

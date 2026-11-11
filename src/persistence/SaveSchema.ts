@@ -1,7 +1,7 @@
 import { createDefaultProfile, PROFILE_VERSION, type Profile } from "@/game/progression/profile";
 import { SUMMONS } from "@/game/data/summons";
 import { EQUIP_SLOTS, type AbilityId } from "@/game/data/ids";
-import { ABILITIES } from "@/game/data/abilities";
+import { ABILITIES, TECHNIQUES } from "@/game/data/abilities";
 import { ABILITY_RANK_MAX } from "@/game/progression/abilityRanks";
 import { EQUIPMENT_TEMPLATES } from "@/game/data/equipment";
 import { SKILLS } from "@/game/data/skills";
@@ -119,6 +119,7 @@ export function sanitizeProfile(raw: unknown): { profile: Profile; repaired: boo
       autoCast: p.autoCast === true,
       rank: num(p.rank, 0, 0, 5),
       abilityRanks: sanitizeAbilityRanks(p.abilityRanks),
+      ...sanitizeTechniques(p.techniques, p.artForms),
     },
     equipment: { equipped, inventory },
     skills: { unlocked: Array.isArray(sk.unlocked) ? sk.unlocked.filter((id): id is string => isStr(id) && SKILLS.some((n) => n.id === id)) : [] },
@@ -183,4 +184,18 @@ function sanitizeAbilityRanks(v: unknown): Partial<Record<AbilityId, number>> {
     if (typeof r === "number" && Number.isFinite(r) && r > 0) out[id] = Math.min(ABILITY_RANK_MAX, Math.floor(r));
   }
   return out;
+}
+
+function sanitizeTechniques(t: unknown, f: unknown): { techniques: AbilityId[]; artForms: Partial<Record<AbilityId, AbilityId>> } {
+  const techniques = Array.isArray(t) ? Array.from(new Set(t.filter((id): id is AbilityId => isStr(id) && TECHNIQUES.includes(id as AbilityId)))) : [];
+  const artForms: Partial<Record<AbilityId, AbilityId>> = {};
+  if (isObj(f)) {
+    for (const [slot, form] of Object.entries(f)) {
+      if (!isStr(form)) continue;
+      const def = ABILITIES[form as AbilityId];
+      // A form is kept only if it is a learned technique for exactly that slot.
+      if (def && def.slot === slot && techniques.includes(form as AbilityId)) artForms[slot as AbilityId] = form as AbilityId;
+    }
+  }
+  return { techniques, artForms };
 }

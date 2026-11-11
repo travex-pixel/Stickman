@@ -42,6 +42,7 @@ export function canRankAbility(profile: Profile, id: AbilityId): RankCheck {
   const cost = abilityRankCost(id, rank);
   const level = abilityRankLevel(id, rank);
   if (profile.player.level < ABILITIES[id].unlockLevel) return { ok: false, reason: "locked", cost, level };
+  if (ABILITIES[id].slot && !profile.player.techniques.includes(id)) return { ok: false, reason: "locked", cost, level };
   if (rank >= ABILITY_RANK_MAX) return { ok: false, reason: "max", cost, level };
   if (profile.player.level < level) return { ok: false, reason: "level", cost, level };
   if (profile.player.gold < cost) return { ok: false, reason: "gold", cost, level };

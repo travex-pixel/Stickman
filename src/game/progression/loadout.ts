@@ -6,6 +6,7 @@ import { computeModifiers, computePlayerStats, type PlayerModifiers } from "./st
 import { summonStats } from "../summons/progression";
 import { summonDef } from "../data/summons";
 import { ownedSpecies } from "../summons/extraction";
+import { slotForm } from "./techniques";
 
 export interface DeployedSummonLoadout {
   instanceId: string;
@@ -32,6 +33,8 @@ export interface PlayerLoadout {
   bestStage: number;
   /** Bonus rank per ability (0 = rank I). */
   abilityRanks: Partial<Record<AbilityId, number>>;
+  /** Which ability fills each base slot (the base itself or a learned technique). */
+  slots: Partial<Record<AbilityId, AbilityId>>;
 }
 
 export function buildLoadout(profile: Profile): PlayerLoadout {
@@ -39,7 +42,8 @@ export function buildLoadout(profile: Profile): PlayerLoadout {
   const deployed = profile.summons.collection.filter((s) => s.deployed).slice(0, mods.deploySlots);
   return {
     stats: computePlayerStats(profile),
-    abilities: ABILITY_SLOTS.filter((id) => ABILITIES[id].unlockLevel <= profile.player.level),
+    abilities: ABILITY_SLOTS.filter((id) => ABILITIES[id].unlockLevel <= profile.player.level).map((id) => slotForm(profile, id)),
+    slots: Object.fromEntries(ABILITY_SLOTS.map((id) => [id, slotForm(profile, id)])),
     ultimateUnlocked: ABILITIES[ULTIMATE_ID].unlockLevel <= profile.player.level,
     weaponPath: profile.player.weaponPath,
     mods,

@@ -3,7 +3,8 @@ import type { SVGProps } from "react";
 export type IconName =
   | "sword" | "heart" | "speed" | "crit" | "critdmg" | "shield" | "coin" | "essence" | "core" | "skull" | "menu" | "lock" | "check"
   | "hero" | "summons" | "gear" | "skills" | "rift" | "dodge" | "bolt" | "nova" | "soul" | "fury" | "arc" | "follow" | "aggressive" | "guard"
-  | "star" | "book" | "chevron" | "close" | "auto" | "level" | "sparkle" | "helm" | "chest" | "gloves" | "boots" | "relic" | "move" | "regen" | "xp";
+  | "star" | "book" | "chevron" | "close" | "auto" | "level" | "sparkle" | "helm" | "chest" | "gloves" | "boots" | "relic" | "move" | "regen" | "xp"
+  | "tempest" | "hook" | "pact";
 
 const PATHS: Record<IconName, string> = {
   sword: "M14.5 3.5 20.5 9.5 11 19l-2 2-3-3 2-2zM4 20l1.5-1.5M3 15l6 6",
@@ -48,6 +49,9 @@ const PATHS: Record<IconName, string> = {
   move: "M5 12h14M13 6l6 6-6 6",
   regen: "M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10zM12 8v6m-3-3h6",
   xp: "M12 2 15 9h7l-5.5 4 2 7L12 16l-6.5 4 2-7L2 9h7z",
+  tempest: "M12 4a8 8 0 0 1 8 8M12 20a8 8 0 0 1-8-8M17 7a5 5 0 0 1-5 9M7 17a5 5 0 0 1 5-9M12 11v2",
+  hook: "M7 3v4M7 7a3 3 0 1 0 0 6M7 13h3a6 6 0 0 0 6-6V5M16 5l3-2M16 5l-3-2M9 16l3 5M14 21h-5",
+  pact: "M12 3c3 4.5 5.5 7.6 5.5 10.6A5.5 5.5 0 0 1 6.5 13.6C6.5 10.6 9 7.5 12 3zM9 14l2 2 4-4",
 };
 
 export function Icon({ name, size = 18, className, ...rest }: { name: IconName; size?: number } & SVGProps<SVGSVGElement>) {

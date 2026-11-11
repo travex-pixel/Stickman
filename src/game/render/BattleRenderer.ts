@@ -849,6 +849,23 @@ export class BattleRenderer {
         this.fx.push({ kind: "ring", x: sx, y: sy, r0: 10, r1: 100 * u, life: 0.5, total: 0.5, color: 0xe9c97a, width: 4, squash: 0.42 });
         break;
       }
+      case "blade_tempest":
+        // A whirlwind: full-circle slashes that linger for the four pulses.
+        this.fx.push({ kind: "slash", x: sx, y: bodyY, facing: 1, radius: 118 * u, life: 1.0, total: 1.0, color: 0xf0eadc, width: 10 * u, sweep: Math.PI * 2 });
+        this.fx.push({ kind: "slash", x: sx, y: bodyY + 8 * u, facing: -1, radius: 88 * u, life: 0.8, total: 0.8, color: 0xe9c97a, width: 4 * u, sweep: Math.PI * 2 });
+        this.fx.push({ kind: "ring", x: sx, y: sy, r0: 20, r1: 130 * u, life: 0.9, total: 0.9, color: 0xd9cdb2, width: 3, squash: 0.42 });
+        this.particles.emit({ x: sx, y: bodyY, count: this.reduced ? 10 : 28, texture: spark(), color: 0xffffff, speed: [120, 320], life: [0.2, 0.5], scale: [0.3, 0.8], endScale: 0.1, spin: 12 });
+        break;
+      case "chain_hook": {
+        const t = target ?? pos;
+        this.particles.emit({ x: this.sx(t.x), y: this.sy(t.y) - 40 * u, count: this.reduced ? 5 : 12, texture: spark(), color, speed: [60, 200], life: [0.15, 0.35], scale: [0.3, 0.8], endScale: 0.1 });
+        break;
+      }
+      case "blood_pact":
+        this.fx.push({ kind: "ring", x: sx, y: sy, r0: 60 * u, r1: 8, life: 0.5, total: 0.5, color, width: 5, squash: 0.42 });
+        this.particles.emit({ x: sx, y: bodyY, count: this.reduced ? 8 : 24, texture: softCircle(), color, speed: [30, 110], angle: [-Math.PI * 0.9, -Math.PI * 0.1], life: [0.5, 1.0], scale: [0.25, 0.55], endScale: 0, alpha: 0.85 });
+        this.flash(color, 0.12);
+        break;
       case "shadow_dash":
         break;
       default:

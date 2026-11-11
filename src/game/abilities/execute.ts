@@ -4,7 +4,7 @@ import type { AbilityId } from "../data/ids";
 import { ABILITIES } from "../data/abilities";
 import { clamp, dist } from "../engine/math";
 import { addStatus, hasStatus } from "../combat/statuses";
-import { factionWithin, hostilesWithin, nearestHostile } from "../combat/targeting";
+import { factionWithin, hostilesWithin, mostDangerous, nearestHostile } from "../combat/targeting";
 import { ARENA } from "../engine/World";
 
 /**
@@ -16,6 +16,7 @@ export function castPlayerAbility(world: World, id: AbilityId): boolean {
   const def = ABILITIES[id];
   const target = nearestHostile(p, world.entities.values(), id === "thunder_strike" ? 320 : 9999);
   if (id === "thunder_strike" && !target) return false;
+  if (id === "chain_hook" && !mostDangerous(p, hostilesWithin(p, world.entities.values(), ABILITIES.chain_hook.radius))) return false;
   if (def.ultimate) {
     if (world.enemies().length === 0) return false;
     world.setState(p, "cast", def.castTime);
@@ -56,6 +57,15 @@ export function resolvePlayerAbility(world: World): void {
       break;
     case "void_nova":
       voidNova(world, p);
+      break;
+    case "blade_tempest":
+      bladeTempest(world, p);
+      break;
+    case "chain_hook":
+      chainHook(world, p);
+      break;
+    case "blood_pact":
+      bloodPact(world, p);
       break;
     default:
       break;
@@ -152,6 +162,50 @@ function voidNova(world: World, p: Combatant): void {
   world.events.push({ type: "shake", strength: 10 });
   world.events.push({ type: "freeze", duration: 0.08 });
   world.gainEnergy(4 + hits.length * 2);
+}
+
+/** Blade Tempest: a whirlwind centred on the warrior, four pulses that follow wherever they move. */
+function bladeTempest(world: World, p: Combatant): void {
+  const def = ABILITIES.blade_tempest;
+  const pulse = (i: number) => {
+    if (p.dead) return;
+    const hits = hostilesWithin(p, world.entities.values(), def.radius);
+    for (const e of hits) {
+      world.dealDamage(p, e, def.power * world.abilityPower(def.id), "physical", i === 3);
+      if (i === 3) world.applyKnockback(e, p.pos, 160);
+    }
+    world.events.push({ type: "attack_swing", id: p.id, kind: "player", heavy: i === 3, pos: { ...p.pos }, facing: p.facing });
+    if (hits.length > 0) world.gainEnergy(1 + hits.length);
+  };
+  pulse(0);
+  for (let i = 1; i < 4; i++) world.schedule(i * 0.25, () => pulse(i));
+  world.events.push({ type: "shake", strength: 3 });
+}
+
+/** Chain Hook: drag the most dangerous enemy in range to the warrior's blade and stun it. */
+function chainHook(world: World, p: Combatant): void {
+  const def = ABILITIES.chain_hook;
+  const victim = mostDangerous(p, hostilesWithin(p, world.entities.values(), def.radius));
+  if (!victim) return;
+  world.events.push({ type: "chain", from: { ...p.pos }, to: { ...victim.pos }, color: def.color });
+  if (victim.kind !== "boss" && !(victim.enemy?.elite === "armored")) {
+    const side = victim.pos.x >= p.pos.x ? 1 : -1;
+    victim.pos.x = clamp(p.pos.x + side * (p.radius + victim.radius + 8), ARENA.minX, ARENA.maxX);
+    victim.pos.y = p.pos.y;
+    victim.prevPos = { ...victim.pos };
+  }
+  world.dealDamage(p, victim, def.power * world.abilityPower(def.id), "physical", true);
+  addStatus(victim, { kind: "stun", remaining: victim.kind === "boss" ? 0.4 : 1.2, value: 1, sourceId: p.id });
+  world.events.push({ type: "shake", strength: 5 });
+  world.gainEnergy(5);
+}
+
+/** Blood Pact: six seconds of faster strikes that heal for a quarter of their damage. */
+function bloodPact(world: World, p: Combatant): void {
+  addStatus(p, { kind: "haste", remaining: 6, value: 0.25, sourceId: p.id });
+  world.pactUntil = world.time + 6;
+  world.events.push({ type: "heal", targetId: p.id, amount: 0, pos: { ...p.pos } });
+  world.gainEnergy(4);
 }
 
 /** Shadow Dash: short invulnerable blink through the nearest enemy, or away if cornered. */

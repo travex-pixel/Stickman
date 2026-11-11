@@ -10,7 +10,7 @@ import { BOSS_ATTEMPTS } from "../summons/extraction";
 import { MODES, VAULT_GOLD_MULT, cryptWaves, endlessStage, endlessWave, riftWaves, vaultWaves, type ModeDef, type ModeId } from "../data/modes";
 import type { PlayerLoadout, DeployedSummonLoadout } from "../progression/loadout";
 import type { AbilityId, SummonCommand, Element } from "../data/ids";
-import { ABILITIES, ULTIMATE_ENERGY_COST, ULTIMATE_ID } from "../data/abilities";
+import { ABILITIES, ABILITY_SLOTS, ULTIMATE_ENERGY_COST, ULTIMATE_ID } from "../data/abilities";
 import { enemyDef } from "../data/enemies";
 import { isBossStage, regionForStage, stageScale, type WaveDef } from "../data/regions";
 import { computeDamage } from "../combat/damage";
@@ -89,6 +89,8 @@ export class World {
   readonly stage: number;
   loadout: PlayerLoadout;
   time = 0;
+  /** Blood Pact: basic hits heal until this world time. */
+  pactUntil = -1;
   timeScale = 1;
   phase: RunPhase = "intro";
   phaseTimer = 0.9;
@@ -133,7 +135,7 @@ export class World {
     this.regionWaves =
       this.mode === "vault" ? vaultWaves() : this.mode === "rift" ? riftWaves(this.stage) : this.mode === "crypt" ? cryptWaves(this.stage) : this.mode === "trial" ? regionForStage(this.stage).waves(this.stage).slice(0, 1) : regionForStage(this.stage).waves(this.stage);
     if (this.mode === "vault") this.modeGoldMult = VAULT_GOLD_MULT;
-    this.cooldowns = { arc_slash: 0, thunder_strike: 0, shadow_dash: 0, soul_burst: 0, void_nova: 0, ascendant_fury: 0 };
+    this.cooldowns = { arc_slash: 0, thunder_strike: 0, shadow_dash: 0, soul_burst: 0, void_nova: 0, ascendant_fury: 0, blade_tempest: 0, chain_hook: 0, blood_pact: 0 };
     this.player = createPlayer(this.allocId(), opts.loadout, { x: ARENA.homeX, y: ARENA.homeY });
     this.entities.set(this.player.id, this.player);
     this.events.push({ type: "spawn", id: this.player.id, kind: "player", defId: "ascendant", pos: { ...this.player.pos } });
@@ -160,6 +162,12 @@ export class World {
   setLoadout(loadout: PlayerLoadout): void {
     // Keep the warrior's health fraction so mid-run upgrades feel rewarding without a free heal.
     const frac = this.player.hp / this.player.stats.maxHp;
+    // Swapping a slot's form mid-fight carries the slot's cooldown over: no free casts.
+    for (const base of ABILITY_SLOTS) {
+      const before = this.slot(base);
+      const after = loadout.slots?.[base] ?? base;
+      if (before !== after) this.cooldowns[after] = Math.max(this.cooldowns[after], this.cooldowns[before]);
+    }
     this.loadout = loadout;
     this.player.stats = { ...loadout.stats };
     this.player.hp = Math.min(this.player.stats.maxHp, Math.max(1, Math.round(this.player.stats.maxHp * frac)));
@@ -363,6 +371,11 @@ export class World {
   get boss(): Combatant | undefined {
     const b = this.entities.get(this.bossId);
     return b && !b.dead ? b : undefined;
+  }
+
+  /** The ability occupying a base slot in this run's loadout. */
+  slot(base: AbilityId): AbilityId {
+    return this.loadout.slots?.[base] ?? base;
   }
 
   /** Rank multiplier on an ability's damage. */
@@ -707,11 +720,17 @@ export class World {
     if (this.loadout.ultimateUnlocked && this.energy >= ULTIMATE_ENERGY_COST && (enemies.length >= 3 || this.boss)) {
       if (this.castAbility(ULTIMATE_ID)) return;
     }
-    if (p.hp / p.stats.maxHp < 0.55 && this.cooldowns.soul_burst <= 0 && near > 0 && this.castAbility("soul_burst")) return;
-    if (near >= 3 && this.cooldowns.void_nova <= 0 && this.castAbility("void_nova")) return;
-    if (near >= 2 && this.cooldowns.arc_slash <= 0 && this.castAbility("arc_slash")) return;
-    if (near >= 1 && this.cooldowns.thunder_strike <= 0 && this.castAbility("thunder_strike")) return;
-    if (near >= 1 && this.cooldowns.arc_slash <= 0 && enemies.length >= 1 && this.castAbility("arc_slash")) return;
+    const soul = this.slot("soul_burst");
+    const arc = this.slot("arc_slash");
+    const bolt = this.slot("thunder_strike");
+    const ready = (id: AbilityId) => this.cooldowns[id] <= 0;
+    if (soul === "soul_burst" && p.hp / p.stats.maxHp < 0.55 && ready(soul) && near > 0 && this.castAbility(soul)) return;
+    if (soul === "blood_pact" && near >= 1 && ready(soul) && (p.hp / p.stats.maxHp < 0.7 || near >= 3) && this.castAbility(soul)) return;
+    if (near >= 3 && ready("void_nova") && this.castAbility("void_nova")) return;
+    if (near >= 2 && ready(arc) && this.castAbility(arc)) return;
+    if (bolt === "chain_hook" && ready(bolt) && enemies.some((e) => e.enemy && (e.enemy.archetype === "ranger" || e.enemy.archetype === "arcanist" || e.enemy.archetype === "summoner")) && this.castAbility(bolt)) return;
+    if (near >= 1 && ready(bolt) && this.castAbility(bolt)) return;
+    if (near >= 1 && ready(arc) && enemies.length >= 1 && this.castAbility(arc)) return;
   }
 
   // ---------------------------------------------------------------------
@@ -821,6 +840,13 @@ export class World {
     if (!res) return;
     this.gainEnergy(6);
     this.basicHits += 1;
+    if (this.time < this.pactUntil && !p.dead) {
+      const heal = Math.round(res.amount * 0.25);
+      if (heal > 0) {
+        p.hp = Math.min(p.stats.maxHp, p.hp + heal);
+        this.events.push({ type: "heal", targetId: p.id, amount: heal, pos: { ...p.pos } });
+      }
+    }
     if (fx.has("bloodthirst") && !p.dead) {
       const heal = res.amount * 0.06;
       p.hp = Math.min(p.stats.maxHp, p.hp + heal);
