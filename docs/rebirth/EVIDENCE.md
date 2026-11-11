@@ -213,6 +213,11 @@ A correction kept on the record: the bot's first report on both builds was inval
 on the first summon reveal because it timed open cards in game time, which stops while a card is
 open, yet it printed a full report). Fixed; runs that stop early now say so.
 
+**Re-measured with the Vault advice followed (phase-1 build, `VAULT=1`):** longest quiet stretch
+**55s** (stage 2 cleared at 108s, first Vault run at 163s): H5 is met when the player follows the
+boss sheet. The cost: two Vault runs in the window (102 upgrades bought against 67) and the
+stage-3 boss not yet challenged by 240s. A newcomer trades waiting for a new, rewarding activity.
+
 **Long-term pacing (economy simulator).** A 100-hour run found a wall: stage 386 to 395 for the
 last 30 hours, Attack and Health pinned at their level cap. Limit Break now goes to 25 levels;
 the same player reaches 449 at 60 hours and 503 at 97. Details in `docs/DESIGN.md`.
