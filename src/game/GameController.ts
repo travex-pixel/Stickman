@@ -1217,6 +1217,13 @@ export class GameController {
     setTimeout(() => this.uiStore.update((u) => ({ ...u, toasts: u.toasts.filter((t) => t.id !== id) })), 2200);
   }
 
+  /** UI-side reward cues (count-ups, card reveals). Throttled so a fast count never turns into noise. */
+  rewardCue(kind: "tick" | "card" | "rare"): void {
+    if (kind === "tick") this.sfx("gold", { volume: 0.18, minInterval: 70, rate: 1.1 + Math.random() * 0.15 });
+    else if (kind === "card") this.sfx("equip", { volume: 0.3, rate: 1.1 });
+    else this.sfx("quest", { volume: 0.4 });
+  }
+
   private sfx(name: SfxName, opts?: { volume?: number; rate?: number; minInterval?: number }): void {
     this.audio.play(name, opts);
   }

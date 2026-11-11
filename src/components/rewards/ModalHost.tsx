@@ -6,19 +6,18 @@ import { Icon } from "@/components/ui/Icon";
 import { SummonPortrait } from "@/components/ui/Portrait";
 import { useController, useProfileRef, useUi } from "@/hooks/useGame";
 import type { Modal } from "@/game/GameController";
-import { itemName } from "@/game/GameController";
 import { ROLE_INFO, summonDef, type SummonDef } from "@/game/data/summons";
 import { STAT_LABEL } from "@/game/data/equipment";
 import { ACHIEVEMENTS, JOURNAL } from "@/game/data/lore";
 import { ENEMIES } from "@/game/data/enemies";
-import { GEAR_EFFECTS } from "@/game/data/gearEffects";
 import { RANKS } from "@/game/progression/ranks";
 import { MODES } from "@/game/data/modes";
 import { isBossStage } from "@/game/data/regions";
 import { WEAPON_PATHS } from "@/game/progression/weaponPaths";
-import { fmt, fmtDuration } from "@/lib/format";
+import { fmtDuration } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import { SettingsModal } from "@/components/settings/SettingsModal";
+import { CountUp, LootCard } from "@/components/rewards/RewardFx";
 
 export function ModalHost() {
   const modal = useUi((u) => u.modal);
@@ -146,7 +145,7 @@ function PerkChoice({ modal }: { modal: Extract<Modal, { kind: "perk_choice" }> 
 export function StageClear({ modal }: { modal: Extract<Modal, { kind: "stage_clear" }> }) {
   const c = useController();
   const auto = useProfileRef().settings.autoAdvance;
-  const [left, setLeft] = useState(auto ? 6 : -1);
+  const [left, setLeft] = useState(auto ? 6 + Math.min(3, modal.items.length) : -1);
   useEffect(() => {
     if (!auto) return;
     if (left <= 0) {
@@ -158,31 +157,38 @@ export function StageClear({ modal }: { modal: Extract<Modal, { kind: "stage_cle
   }, [left, auto, c]);
   return (
     <Card>
-      <div className="px-4 pt-3 pb-3 text-center flex flex-col gap-1.5 items-center">
+      <div className="px-4 pt-3 pb-3 text-center flex flex-col gap-1.5 items-center short-tight">
         <div className="caps text-jade-2">{isBossStage(modal.stage) ? "The Warden falls" : "The champion falls"}</div>
         <div className="font-display text-[20px] text-ivory text-glow-gold leading-none">Stage {modal.stage} cleared</div>
-        <div className="flex gap-3 mt-1 text-[12px] font-bold">
-          <span className="flex items-center gap-1 text-gold"><Icon name="coin" size={14} />+{fmt(modal.gold)}</span>
-          <span className="flex items-center gap-1 text-gold-2"><Icon name="xp" size={14} />+{fmt(modal.xp)} XP</span>
-          {modal.riftCores > 0 && <span className="flex items-center gap-1 text-violet"><Icon name="core" size={14} />+{modal.riftCores}</span>}
+        <div className="flex gap-3 mt-1 text-[13px] font-bold">
+          <motion.span initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="flex items-center gap-1 text-gold" data-testid="clear-gold">
+            <Icon name="coin" size={14} /><CountUp prefix="+" value={modal.gold} delay={120} onTick={() => c.rewardCue("tick")} />
+          </motion.span>
+          <motion.span initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }} className="flex items-center gap-1 text-gold-2">
+            <Icon name="xp" size={14} /><CountUp prefix="+" value={modal.xp} delay={240} /> XP
+          </motion.span>
+          {modal.riftCores > 0 && (
+            <motion.span initial={{ opacity: 0, scale: 1.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.45, type: "spring", stiffness: 300, damping: 14 }} className="flex items-center gap-1 text-parch">
+              <Icon name="core" size={14} className="text-gold-2" />+{modal.riftCores}
+            </motion.span>
+          )}
         </div>
         {modal.items.length > 0 && (
-          <div className="w-full card p-2 flex flex-col gap-1">
-            {modal.items.map((it) => (
-              <div key={it.uid} className={cn("text-[11px] font-semibold", `rarity-${it.rarity}`)}>
-                {itemName(it)} <span className="text-mist font-normal">· {it.rarity}</span>
-                {it.effect && <span className="block text-[10px] text-gold-2 font-normal">✦ {GEAR_EFFECTS[it.effect].name}</span>}
-              </div>
+          <div className="w-full flex flex-col gap-1" style={{ perspective: 600 }}>
+            {modal.items.slice(0, 3).map((it, i) => (
+              <LootCard key={it.uid} item={it} index={i} className={i >= 2 ? "short-hide" : undefined} onReveal={(rare) => c.rewardCue(rare ? "rare" : "card")} />
             ))}
+            {modal.items.length > 3 && <div className="text-[10px] text-mist short-hide">and {modal.items.length - 3} more in your satchel</div>}
+            {modal.items.length > 2 && <div className="text-[10px] text-mist short-only">and {modal.items.length - 2} more in your satchel</div>}
           </div>
         )}
         <div className="flex gap-2 w-full mt-1">
           <button className="btn-ghost flex-1" onClick={() => { setLeft(-1); c.updateSettings({ autoAdvance: false }); c.replayStage(modal.stage); }} data-testid="replay-stage">Replay</button>
           <button className="btn-primary flex-1" onClick={() => c.advanceStage()} data-testid="advance-stage">
-            Stage {modal.nextStage} →{left > 0 ? ` ${left}` : ""}
+            Stage {modal.nextStage} →{left > 0 && <span className="ml-1.5 inline-block rounded-full bg-black/25 px-1.5 text-[11px] font-sans font-bold tabular-nums align-middle">{left}s</span>}
           </button>
         </div>
-        {left > 0 && <div className="text-[10px] text-mist">Advancing automatically. Replay to stay.</div>}
+        {left > 0 && <div className="text-[10px] text-mist short-hide">Advancing automatically. Replay to stay.</div>}
       </div>
     </Card>
   );
@@ -214,8 +220,8 @@ function Offline({ modal }: { modal: Extract<Modal, { kind: "offline" }> }) {
         <div className="caps">While you were away</div>
         <div className="font-display text-[18px] text-ivory">{fmtDuration(r.seconds)}{r.capped ? " (max)" : ""}</div>
         <div className="flex gap-3 text-[13px] font-bold">
-          <span className="flex items-center gap-1 text-gold"><Icon name="coin" size={14} />+{fmt(r.gold)}</span>
-          {r.essence > 0 && <span className="flex items-center gap-1 text-jade-2"><Icon name="essence" size={14} />+{fmt(r.essence)}</span>}
+          <span className="flex items-center gap-1 text-gold"><Icon name="coin" size={14} /><CountUp prefix="+" value={r.gold} delay={250} duration={1100} onTick={() => c.rewardCue("tick")} /></span>
+          {r.essence > 0 && <span className="flex items-center gap-1 text-jade-2"><Icon name="essence" size={14} /><CountUp prefix="+" value={r.essence} delay={400} duration={900} /></span>}
         </div>
         <p className="text-[10px] text-mist">Your companions kept the Verge quiet. Rewards are capped at 8 hours.</p>
         <button className="btn-primary w-full" onClick={() => c.dismissOffline()} data-testid="offline-collect">Collect</button>
@@ -367,11 +373,11 @@ export function ModeResult({ modal }: { modal: Extract<Modal, { kind: "mode_resu
         <div className="font-display text-[20px] text-ivory leading-none">{modal.title}</div>
         {modal.record && <div className="text-[10px] font-bold text-gold-2 tracking-[0.2em]">NEW BEST</div>}
         <div className="w-full grid grid-cols-3 gap-1 mt-1">
-          {modal.lines.map((l) => (
-            <div key={l.label} className="card px-1.5 py-1.5">
+          {modal.lines.map((l, i) => (
+            <motion.div key={l.label} className="card px-1.5 py-1.5" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 + i * 0.12 }}>
               <div className="caps !text-[10px]">{l.label}</div>
               <div className={cn("font-display text-[15px]", l.tone ? tone[l.tone] : "text-ivory")}>{l.value}</div>
-            </div>
+            </motion.div>
           ))}
         </div>
         <div className="flex gap-2 w-full mt-1">

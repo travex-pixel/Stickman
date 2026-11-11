@@ -480,3 +480,12 @@ button {
 }
 
 }
+
+/* Short screens (320x568 and similar): reward cards trade extras for fitting the battlefield. */
+.short-only { display: none; }
+@media (max-height: 640px) {
+  .short-hide { display: none !important; }
+  .short-only { display: block; }
+  .short-tight { padding-top: 0.5rem; padding-bottom: 0.5rem; gap: 0.25rem; }
+  .loot-card { padding-top: 0.2rem; padding-bottom: 0.2rem; }
+}
