@@ -124,7 +124,7 @@ export interface Profile {
     vaultBest: number;
   };
   tutorial: { completed: string[]; finished: boolean };
-  settings: { music: number; sfx: number; reducedEffects: boolean; diagnostics: boolean; battleSpeed: 1 | 2; autoAdvance: boolean };
+  settings: { music: number; sfx: number; reducedEffects: boolean; diagnostics: boolean; battleSpeed: 1 | 2; autoAdvance: boolean; /** Shadows of a species already owned skip the full BIND sequence. */ quickReveals: boolean };
 }
 
 export const PROFILE_VERSION = 12;
@@ -177,6 +177,6 @@ export function createDefaultProfile(now = Date.now()): Profile {
     tyrant: { week: "", best: 0, claimed: 0, allTimeBest: 0 },
     modes: { keyDay: "", keys: { vault: 3, rift: 3, crypt: 3, hunt: 3, tyrant: 2 }, endlessBest: 0, vaultBest: 0 },
     tutorial: { completed: [], finished: false },
-    settings: { music: 0.6, sfx: 0.8, reducedEffects: false, diagnostics: false, battleSpeed: 1, autoAdvance: true },
+    settings: { music: 0.6, sfx: 0.8, reducedEffects: false, diagnostics: false, battleSpeed: 1, autoAdvance: true, quickReveals: false },
   };
 }

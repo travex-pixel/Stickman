@@ -186,6 +186,7 @@ export function sanitizeProfile(raw: unknown): { profile: Profile; repaired: boo
       diagnostics: st.diagnostics === true,
       battleSpeed: st.battleSpeed === 2 ? 2 : 1,
       autoAdvance: st.autoAdvance !== false,
+      quickReveals: st.quickReveals === true,
     },
   };
   // Deployed summons cannot exceed what the save could legitimately hold.
