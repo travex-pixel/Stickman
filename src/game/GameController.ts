@@ -773,6 +773,8 @@ export class GameController {
       const affordable = (["attack", "maxHp", "defense", "attackSpeed", "critChance", "critDamage"] as const).some((st) => isStatUnlocked(p, st) && statUpgradeCost(st, p.player.statLevels[st]) <= p.player.gold);
       if (affordable) this.uiStore.update((u) => ({ ...u, newBadges: { ...u.newBadges, hero: true } }));
     }
+    // The plaque's readiness follows the build: re-forecast when something that matters changed.
+    if (p.progress.bossGate && this.world?.farming) this.requestForecast(false);
     // New techniques are revealed with a card: never in the middle of a boss fight or a mode.
     if (this.world?.farming) this.revealTechniques(learnTechniques(p));
     if (ui.panel !== "skills" && !this.rankBadgeShown && anyAbilityRankReady(p)) {
@@ -895,6 +897,7 @@ export class GameController {
 
   private forecastTimer: ReturnType<typeof setTimeout> | null = null;
   private forecastKey = "";
+  private pendingForecastKey = "";
 
   /** What the forecast depends on: if none of it changed, the old forecast still stands. */
   private forecastSignature(): string {
@@ -919,7 +922,10 @@ export class GameController {
     }
     const key = this.forecastSignature();
     if (!force && key === this.forecastKey && this.forecast?.stage === gate) return;
+    // Already scheduled for this exact build: let it run rather than pushing it back again.
+    if (!force && this.forecastTimer && key === this.pendingForecastKey) return;
     if (this.forecastTimer) clearTimeout(this.forecastTimer);
+    this.pendingForecastKey = key;
     this.forecastTimer = setTimeout(() => this.runForecast(gate, key), force ? 0 : 900);
   }
 
