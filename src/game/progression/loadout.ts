@@ -7,6 +7,7 @@ import { summonStats } from "../summons/progression";
 import { summonDef } from "../data/summons";
 import { ownedSpecies } from "../summons/extraction";
 import { slotForm } from "./techniques";
+import { activeSynergies, synergyTotals, type SynergyDef } from "../data/synergies";
 
 export interface DeployedSummonLoadout {
   instanceId: string;
@@ -37,9 +38,21 @@ export interface PlayerLoadout {
   slots: Partial<Record<AbilityId, AbilityId>>;
 }
 
+/** The deployed shadows that actually take the field (never more than the army's slots). */
+export function fieldedSummons(profile: Profile, slots = computeModifiers(profile).deploySlots) {
+  return profile.summons.collection.filter((s) => s.deployed).slice(0, slots);
+}
+
+/** The synergies the fielded army has active. */
+export function armySynergies(profile: Profile): SynergyDef[] {
+  return activeSynergies(fieldedSummons(profile).map((s) => summonDef(s.defId).role));
+}
+
 export function buildLoadout(profile: Profile): PlayerLoadout {
   const mods = computeModifiers(profile);
-  const deployed = profile.summons.collection.filter((s) => s.deployed).slice(0, mods.deploySlots);
+  const deployed = fieldedSummons(profile, mods.deploySlots);
+  const syn = synergyTotals(activeSynergies(deployed.map((s) => summonDef(s.defId).role)));
+  const armyMods = { damageMult: mods.summonDamageMult + syn.attack, defenseMult: mods.summonDefenseMult + syn.defense, hpMult: mods.summonHpMult + syn.hp };
   return {
     stats: computePlayerStats(profile),
     abilities: ABILITY_SLOTS.filter((id) => ABILITIES[id].unlockLevel <= profile.player.level).map((id) => slotForm(profile, id)),
@@ -51,7 +64,7 @@ export function buildLoadout(profile: Profile): PlayerLoadout {
       instanceId: s.instanceId,
       defId: s.defId,
       level: s.level,
-      stats: summonStats(s, { damageMult: mods.summonDamageMult, defenseMult: mods.summonDefenseMult, hpMult: mods.summonHpMult }),
+      stats: summonStats(s, armyMods),
     })),
     command: profile.summons.command,
     autoCast: profile.player.autoCast,

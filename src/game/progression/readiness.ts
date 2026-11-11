@@ -9,6 +9,7 @@ import type { Profile } from "./profile";
 import { computeModifiers, isStatUnlocked, statCap, statUpgradeCost } from "./stats";
 import { anyAbilityRankReady } from "./abilityRanks";
 import { canStarUp } from "../summons/progression";
+import { bestSynergyMove } from "./synergyAdvice";
 
 /**
  * Boss readiness. The forecast is not a formula: it fights the real boss, with the real
@@ -158,6 +159,12 @@ export function readinessTips(p: Profile, stage: number): ReadinessTip[] {
     return role === "vanguard" || role === "sentinel";
   });
   if (deployed.length > 0 && !frontline && p.summons.collection.some((s) => ["vanguard", "sentinel"].includes(SUMMONS[s.defId]?.role ?? ""))) tips.push({ text: "Your army has no frontline: deploy a Vanguard or Sentinel to take the blows.", panel: "summons" });
+  const move = bestSynergyMove(p);
+  if (move && move.gains.length > 0) {
+    const name = (id: string) => SUMMONS[id]?.name ?? "a shadow";
+    const g = move.gains[0]!;
+    tips.push({ text: move.replace ? `Field ${name(move.bring.defId)} in place of ${name(move.replace.defId)}: ${g.name}.` : `Field ${name(move.bring.defId)}: ${g.name}.`, panel: "summons" });
+  }
   if (deployed.length > 0 && p.summons.command !== "guard") tips.push({ text: "Against a boss, the Guard command keeps your shadows between you and its blows.", panel: "summons" });
   if (p.summons.collection.some((s) => canStarUp(s, p.player.riftCores))) tips.push({ text: "A shadow is ready to gain a star.", panel: "summons" });
   if (anyAbilityRankReady(p)) tips.push({ text: "An ability can be ranked up in Skills, Arts.", panel: "skills" });

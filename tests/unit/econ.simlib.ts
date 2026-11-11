@@ -2,6 +2,7 @@
  * Review simulator: plays the NEW campaign flow headlessly (farming world in cycles, boss gates,
  * forecast-driven challenges), mirroring GameController's reward handling.
  */
+import { bestSynergyMove } from "@/game/progression/synergyAdvice";
 import { World, FIXED_DT } from "@/game/engine/World";
 import { buildLoadout } from "@/game/progression/loadout";
 import { createDefaultProfile, type Profile } from "@/game/progression/profile";
@@ -283,6 +284,15 @@ export class Sim {
     }
     const slots = computeModifiers(p).deploySlots;
     [...p.summons.collection].sort((a, b) => summonPower(b) - summonPower(a)).forEach((s, i) => (s.deployed = i < slots));
+    // Follow the synergy advice the boss sheet gives (at most two swaps a visit).
+    for (let k = 0; k < 2; k++) {
+      const move = bestSynergyMove(p);
+      if (!move) break;
+      if (move.replace) move.replace.deployed = false;
+      move.bring.deployed = true;
+      // Keep the fielded shadows first so the loadout's slot cut keeps them.
+      p.summons.collection.sort((a, b) => Number(b.deployed) - Number(a.deployed));
+    }
     let guard = 0;
     while (guard++ < 500) {
       const dep = p.summons.collection.filter((s) => s.deployed).sort((a, b) => a.bond - b.bond)[0];
