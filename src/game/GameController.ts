@@ -22,7 +22,7 @@ import { bondCost, BOND_CAP, canStarUp, checkEvolution, evolveSummon, grantSummo
 import { enemyDef } from "./data/enemies";
 import { MODES, RIFT_ESSENCE_PER_KILL, cryptSlot, isKeyedMode, type ModeId } from "./data/modes";
 import { RARITY_ORDER } from "./data/ids";
-import { REPEAT_BOSS_CORE_CHANCE, shadowXpShare, skillPointsBetween } from "./economy/rewards";
+import { REPEAT_BOSS_CORE_CHANCE, shadowXpShare, skillPointsBetween, stageClearGold, stageClearXp } from "./economy/rewards";
 import { RANK_STEPS, nextRankStep, promote } from "./progression/ranks";
 import { ELITES } from "./data/elites";
 import { GEAR_EFFECTS } from "./data/gearEffects";
@@ -41,7 +41,7 @@ import { WEAPON_PATHS } from "./progression/weaponPaths";
 import { describeReward, verifyCode } from "./economy/codes";
 import { generateItem } from "./economy/loot";
 import { ABILITIES } from "./data/abilities";
-import { bossForStage, regionForStage } from "./data/regions";
+import { bossForStage, isBossStage, regionForStage } from "./data/regions";
 import { clampFarmStage, frontierStage, normalizeCampaign, resolveBossDefeat, resolveBossVictory, resolveCycle, resolveFarmingDefeat } from "./progression/campaign";
 import { bossFightStepper, readinessTips, summarizeForecast, FORECAST_SEEDS, type BossForecast, type FightResult, type ReadinessTip } from "./progression/readiness";
 import { ascend as doAscend, romanAscension } from "./progression/ascension";
@@ -73,7 +73,8 @@ export type Modal =
   | { kind: "summon_reveal"; outcome: ClaimOutcome; summonId: string; first: boolean; cinematicDone: boolean }
   | { kind: "perk_choice"; perks: PerkDef[] }
   | { kind: "boss_ready"; stage: number }
-  | { kind: "boss_victory"; stage: number; defId: string; gold: number; xp: number; cores: number; items: EquipmentItem[]; nextStage: number; unlocks: string[]; seconds: number; firstWin: boolean; orbId?: number }
+  | { kind: "boss_victory"; stage: number; defId: string; gold: number; xp: number; cores: number; items: EquipmentItem[]; nextStage: number; unlocks: string[]; seconds: number; firstWin: boolean; orbId?: number; hunt?: boolean }
+  | { kind: "hunt_pick" }
   | { kind: "boss_defeat"; stage: number; defId: string; bossHpLeft: number; bossPhase: number; seconds: number; casts: number; dodges: number; perfect: number; summonsLost: number; farmStage: number; tips: ReadinessTip[] }
   | { kind: "offline"; summary: OfflineSummary; levels: number }
   | { kind: "settings" }
@@ -402,7 +403,7 @@ export class GameController {
     const m = this.profile.modes;
     if (m.keyDay !== day) {
       m.keyDay = day;
-      m.keys = { vault: MODES.vault.dailyKeys ?? 3, rift: MODES.rift.dailyKeys ?? 3, crypt: MODES.crypt.dailyKeys ?? 3 };
+      m.keys = { vault: MODES.vault.dailyKeys ?? 3, rift: MODES.rift.dailyKeys ?? 3, crypt: MODES.crypt.dailyKeys ?? 3, hunt: MODES.hunt.dailyKeys ?? 3 };
       this.commit();
     }
   }
@@ -428,6 +429,12 @@ export class GameController {
       this.toast("Your warrior is regrouping", "warn");
       return false;
     }
+    if (mode === "hunt") {
+      // A hunt needs a chosen boss: show the list instead.
+      if (this.modeAvailability(mode).ok) this.openHunts();
+      else this.toast(this.modeAvailability(mode).reason ?? "Locked", "warn");
+      return false;
+    }
     this.refreshKeys();
     const avail = this.modeAvailability(mode);
     if (!avail.ok) {
@@ -450,7 +457,7 @@ export class GameController {
   /** Leave a mode early or after its result and return to the campaign frontier. */
   returnToCampaign(): void {
     this.userGesture();
-    const retreat = this.world?.mode === "boss" && this.world.phase !== "victory" && this.world.phase !== "defeat";
+    const retreat = (this.world?.mode === "boss" || this.world?.mode === "hunt") && this.world.phase !== "victory" && this.world.phase !== "defeat";
     this.closeModal();
     this.startRun(this.profile.progress.currentStage, "campaign");
     if (retreat) this.toast("You withdrew. The boss waits for your return.", "info");
@@ -754,12 +761,13 @@ export class GameController {
     if (loot.length > 0) {
       for (const l of loot) {
         this.addItem(l.item);
-        if (this.run.mode === "crypt" || this.run.mode === "boss") this.run.items.push(l.item);
+        if (this.run.mode === "crypt" || this.run.mode === "boss" || this.run.mode === "hunt") this.run.items.push(l.item);
       }
       dirty = true;
     }
     if (cleared) {
       if (cleared.mode === "boss") this.onBossVictory(cleared.stage);
+      else if (cleared.mode === "hunt") this.onHuntVictory(cleared.stage);
       else this.onModeCleared(cleared.mode as ModeId, cleared.wave, cleared.time);
     }
     if (dirty) {
@@ -1093,6 +1101,56 @@ export class GameController {
     const next: Modal = { ...victory, orbId: still };
     if (this.uiStore.get().modal) this.modalQueue.unshift(next);
     else this.uiStore.update((u) => ({ ...u, modal: next }));
+  }
+
+  /** The Boss Hunt list: cleared bosses to rematch. */
+  openHunts(): void {
+    this.userGesture();
+    this.refreshKeys();
+    this.uiStore.update((u) => ({ ...u, modal: { kind: "hunt_pick" } }));
+  }
+
+  /** Rematch a cleared boss. Spends a hunt key; never changes campaign progress. */
+  startHunt(stage: number): boolean {
+    this.userGesture();
+    const p = this.profile;
+    this.refreshKeys();
+    const world = this.world;
+    const ok = isBossStage(stage) && stage <= p.progress.bestStage && p.progress.bestStage >= MODES.hunt.unlockAfterStage && p.modes.keys.hunt > 0 && !!world?.farming && !world.player.dead && !this.pending;
+    if (!ok) {
+      this.sfx("error", { volume: 0.4 });
+      this.toast(p.modes.keys.hunt <= 0 ? "Hunts refill tomorrow" : "Not available right now", "warn");
+      return false;
+    }
+    p.modes.keys.hunt -= 1;
+    this.closeModal();
+    this.commit();
+    this.startRun(stage, "hunt");
+    this.sfx("boss_intro", { volume: 0.7, rate: 1.1 });
+    return true;
+  }
+
+  private onHuntVictory(stage: number): void {
+    if (this.run.resolved) return;
+    this.run.resolved = true;
+    const p = this.profile;
+    const goldFind = computeModifiers(p).goldFind;
+    const gold = Math.round(stageClearGold(stage, goldFind) * 0.5);
+    const xp = Math.round(stageClearXp(stage) * 0.5);
+    p.player.gold += gold;
+    const lv = applyXp(p.player.level, p.player.xp, xp);
+    p.player.level = lv.level;
+    p.player.xp = lv.xp;
+    const late = (this.world?.takeLoot() ?? []).map((l) => l.item);
+    for (const it of late) this.addItem(it);
+    this.objectiveEvent("bossWins", 1);
+    const bossOrb = this.world?.orbs.find((o) => o.isBoss && !o.claimed);
+    this.sfx("level_up", { volume: 0.9, rate: 0.9 });
+    this.renderer?.flash(0xe9c97a, 0.3);
+    this.enqueueModal({ kind: "boss_victory", stage, defId: bossForStage(stage), gold: gold + this.run.gold, xp, cores: 0, items: [...this.run.items, ...late], nextStage: p.progress.currentStage, unlocks: [], seconds: Math.round(this.world?.time ?? 0), firstWin: false, orbId: bossOrb?.id, hunt: true });
+    if (lv.levelsGained > 0) this.onLevelUp(lv.levelsGained);
+    this.afterProgression();
+    this.commit();
   }
 
   /** After the victory card: farming resumes at the next stage. */

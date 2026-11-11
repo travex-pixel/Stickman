@@ -11,7 +11,7 @@ import { cn } from "@/lib/cn";
 import { useShortScreen } from "@/hooks/useShortScreen";
 import { claimableObjectives } from "@/game/progression/objectives";
 
-const MODE_ICON: Record<Exclude<ModeId, "campaign">, IconName> = { boss: "skull", vault: "coin", rift: "summons", crypt: "relic", endless: "level", trial: "star" };
+const MODE_ICON: Record<Exclude<ModeId, "campaign">, IconName> = { boss: "skull", hunt: "skull", vault: "coin", rift: "summons", crypt: "relic", endless: "level", trial: "star" };
 
 /** The journey: where you are on the campaign, and the trials that sit beside it. */
 export default function RiftPanel() {
@@ -26,7 +26,7 @@ export default function RiftPanel() {
   const short = useShortScreen();
   const claimable = claimableObjectives(profile);
   const step = nextRankStep(profile);
-  const modes: Exclude<ModeId, "campaign">[] = ["trial", "vault", "rift", "crypt", "endless"];
+  const modes: Exclude<ModeId, "campaign" | "boss">[] = ["trial", "hunt", "vault", "rift", "crypt", "endless"];
   const today = cryptSlot();
   return (
     <div className="flex flex-col h-full min-h-0 px-2 pt-1.5 pb-1.5 gap-1.5">
@@ -66,12 +66,12 @@ export default function RiftPanel() {
           const avail = c.modeAvailability(m);
           const keys = isKeyedMode(m) ? profile.modes.keys[m] : null;
           const title = m === "trial" ? (step ? `Rank Trial ${rankLetter(step.to - 1)} → ${rankLetter(step.to)}` : "Rank S") : def.name;
-          const sub = m === "trial" ? (step ? (avail.ok ? "Your breakthrough awaits." : avail.reason) : "Nothing above you.") : m === "endless" && profile.modes.endlessBest > 0 ? `Best: wave ${profile.modes.endlessBest}` : m === "crypt" && avail.ok ? `Today: ${SLOT_LABEL[today]} relics from every elite.` : avail.ok ? def.tagline : avail.reason;
+          const sub = m === "hunt" && avail.ok ? "Rematch a fallen boss" : m === "trial" ? (step ? (avail.ok ? "Your breakthrough awaits." : avail.reason) : "Nothing above you.") : m === "endless" && profile.modes.endlessBest > 0 ? `Best: wave ${profile.modes.endlessBest}` : m === "crypt" && avail.ok ? `Today: ${SLOT_LABEL[today]} relics from every elite.` : avail.ok ? def.tagline : avail.reason;
           return (
             <button
               key={m}
-              className={cn("card text-left px-2 py-1 flex flex-col justify-center gap-0.5 min-h-0 overflow-hidden", m === "trial" && "col-span-2", avail.ok ? (m === "trial" ? "card-active" : "") : "card-locked opacity-75")}
-              onClick={() => c.startMode(m)}
+              className={cn("card text-left px-2 py-1 flex flex-col justify-center gap-0.5 min-h-0 overflow-hidden", avail.ok ? (m === "trial" ? "card-active" : "") : "card-locked opacity-75")}
+              onClick={() => (m === "hunt" && avail.ok ? c.openHunts() : c.startMode(m))}
               data-testid={`mode-${m}`}
               aria-label={`${title}${avail.ok ? "" : `, ${avail.reason}`}`}
             >

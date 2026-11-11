@@ -121,3 +121,37 @@ describe("Relic Crypt", () => {
     expect(items.every((i) => i.rarity !== "common")).toBe(true);
   });
 });
+
+describe("Boss Hunt", () => {
+  it("lists cleared boss stages, newest first", async () => {
+    const { huntableStages } = await import("@/game/data/modes");
+    const { isBossStage } = await import("@/game/data/regions");
+    expect(huntableStages(0, isBossStage)).toEqual([]);
+    expect(huntableStages(7, isBossStage)).toEqual([6, 3, 1]);
+    expect(huntableStages(30, isBossStage, 3)).toEqual([30, 27, 24]);
+  });
+  it("a hunt world opens on the boss and resolves as a hunt, leaving its essence", async () => {
+    const { World, FIXED_DT } = await import("@/game/engine/World");
+    const { buildLoadout } = await import("@/game/progression/loadout");
+    const { createDefaultProfile } = await import("@/game/progression/profile");
+    const p = createDefaultProfile();
+    p.player.level = 20;
+    p.player.autoCast = true;
+    p.player.statLevels = { attack: 90, maxHp: 90, attackSpeed: 40, critChance: 20, critDamage: 20, defense: 50 };
+    const w = new World({ stage: 3, loadout: buildLoadout(p), seed: 4, mode: "hunt" });
+    let cleared = "";
+    let orb = false;
+    for (let i = 0; i < 60 * 200 && w.phase !== "victory" && w.phase !== "defeat"; i++) {
+      w.update(FIXED_DT);
+      for (const e of w.drainEvents()) {
+        if (e.type === "stage_cleared") cleared = e.mode;
+        if (e.type === "essence_available" && e.isBoss) orb = true;
+        if (e.type === "wave_start") throw new Error("a hunt has no waves");
+      }
+      w.takeLoot();
+    }
+    expect(w.phase).toBe("victory");
+    expect(cleared).toBe("hunt");
+    expect(orb).toBe(true);
+  });
+});

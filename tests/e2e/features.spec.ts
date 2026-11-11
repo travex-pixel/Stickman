@@ -151,3 +151,22 @@ test.describe("ascension", () => {
     expect(await game<number>(page, "c => c.world.stage")).toBe(1);
   });
 });
+
+test.describe("boss hunts", () => {
+  test("a cleared boss can be hunted from the Rift panel, spending a hunt key", async ({ page }) => {
+    await waitForGame(page);
+    await game(page, "c => { const p = c.profile; p.tutorial.finished = true; p.progress.bestStage = 7; p.progress.currentStage = 8; c['commit'](); }");
+    await page.getByTestId("tab-rift").click();
+    await page.getByTestId("mode-hunt").click();
+    await expect(page.getByTestId("hunt-pick")).toBeVisible();
+    await expect(page.getByTestId("hunt-6")).toBeVisible();
+    await page.getByTestId("hunt-3").click();
+    expect(await game<string>(page, "c => c.world.mode")).toBe("hunt");
+    expect(await game<number>(page, "c => c.world.stage")).toBe(3);
+    expect(await game<number>(page, "c => c.profile.modes.keys.hunt")).toBe(2);
+    // Progress is never at stake.
+    expect(await game<number>(page, "c => c.profile.progress.bestStage")).toBe(7);
+    await page.getByTestId("mode-leave").click();
+    expect(await game<string>(page, "c => c.world.mode")).toBe("campaign");
+  });
+});

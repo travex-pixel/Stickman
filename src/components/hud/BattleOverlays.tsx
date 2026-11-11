@@ -69,7 +69,7 @@ function ModeHud() {
   const total = useHud((s) => s?.wavesTotal ?? 0);
   const hasBoss = useHud((s) => !!s?.boss);
   if (mode === "campaign") return null;
-  if (mode === "boss") {
+  if (mode === "boss" || mode === "hunt") {
     // The boss bar already names the fight: only a quiet way out, clear of the army strip.
     return (
       <button className="absolute right-2 bottom-[84px] z-20 rounded-full border border-white/15 bg-ink/80 px-3 py-1.5 text-[11px] font-bold text-mist" onClick={() => c.returnToCampaign()} data-testid="mode-leave" aria-label="Retreat to farming; the boss keeps waiting">
@@ -428,7 +428,7 @@ function QuestBanner() {
   const panel = QUEST_PANEL[quest.goal.kind];
   // A guide label shares this corner: step aside while it teaches, unless it is pointing at us.
   // In a boss fight the pill would sit where the boss stands: it waits until the fight is over.
-  const hidden = (!!guide && guide.target !== "quest-claim") || mode === "boss";
+  const hidden = (!!guide && guide.target !== "quest-claim") || mode === "boss" || mode === "hunt";
   return (
     <motion.div layout className={cn("absolute right-2 bottom-[84px] z-10 max-w-[64%] transition-opacity", hidden && "opacity-0 pointer-events-none")} data-testid="quest-banner">
       <button

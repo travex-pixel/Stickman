@@ -170,10 +170,10 @@ export function BossVictory({ modal }: { modal: Extract<Modal, { kind: "boss_vic
     <Sheet testId="boss-victory" tone="gold">
       <div className="px-4 pt-3 pb-3 text-center flex flex-col gap-1.5 items-center short-tight">
         <motion.div initial={{ letterSpacing: "0.6em", opacity: 0 }} animate={{ letterSpacing: "0.32em", opacity: 1 }} transition={{ duration: 0.6 }} className="caps !text-[11px] text-gold-2">
-          Victory
+          {modal.hunt ? "Hunt complete" : "Victory"}
         </motion.div>
         <div className="font-display text-[20px] text-ivory text-glow-gold leading-none">{boss?.name ?? "The Warden"} falls</div>
-        <div className="text-[11px] text-mist">Stage {modal.stage} cleared in {modal.seconds}s</div>
+        <div className="text-[11px] text-mist">{modal.hunt ? `Stage ${modal.stage} boss, felled again in ${modal.seconds}s` : `Stage ${modal.stage} cleared in ${modal.seconds}s`}</div>
         <div className="flex gap-3 mt-0.5 text-[13px] font-bold">
           <span className="flex items-center gap-1 text-gold" data-testid="victory-gold">
             <Icon name="coin" size={14} />
@@ -217,7 +217,7 @@ export function BossVictory({ modal }: { modal: Extract<Modal, { kind: "boss_vic
           </div>
         )}
         <button className="btn-primary w-full mt-1" onClick={() => c.continueAfterVictory()} data-testid="victory-continue">
-          Onward to stage {modal.nextStage}
+          {modal.hunt ? "Back to farming" : `Onward to stage ${modal.nextStage}`}
           {auto && left > 0 && <span className="ml-1.5 inline-block rounded-full bg-black/25 px-1.5 text-[11px] font-sans font-bold tabular-nums align-middle">{left}s</span>}
         </button>
       </div>

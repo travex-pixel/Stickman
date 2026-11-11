@@ -1,12 +1,12 @@
 import type { WaveDef } from "./regions";
 import { EQUIP_SLOTS, type EquipSlot } from "./ids";
 
-export type ModeId = "campaign" | "boss" | "vault" | "rift" | "crypt" | "endless" | "trial";
+export type ModeId = "campaign" | "boss" | "hunt" | "vault" | "rift" | "crypt" | "endless" | "trial";
 /** Modes that spend a daily key. */
-export type KeyedMode = "vault" | "rift" | "crypt";
-export const KEYED_MODES: KeyedMode[] = ["vault", "rift", "crypt"];
+export type KeyedMode = "vault" | "rift" | "crypt" | "hunt";
+export const KEYED_MODES: KeyedMode[] = ["vault", "rift", "crypt", "hunt"];
 export function isKeyedMode(m: ModeId): m is KeyedMode {
-  return m === "vault" || m === "rift" || m === "crypt";
+  return m === "vault" || m === "rift" || m === "crypt" || m === "hunt";
 }
 
 export interface ModeDef {
@@ -31,6 +31,8 @@ export const MODES: Record<ModeId, ModeDef> = {
   boss: { id: "boss", name: "Boss Challenge", tagline: "A deliberate fight against the stage's guardian.", unlockAfterStage: 0, waves: 0, boss: true },
   vault: { id: "vault", name: "Gold Vault", tagline: "45 seconds. Everything that falls drops seven times the gold.", unlockAfterStage: 2, dailyKeys: 3, duration: 45, waves: 1, boss: false },
   rift: { id: "rift", name: "Essence Rift", tagline: "Every foe swears an oath. Double shards for your army.", unlockAfterStage: 3, dailyKeys: 3, waves: 3, boss: false },
+  // A rematch with a boss already beaten: rewards without progress, three a day.
+  hunt: { id: "hunt", name: "Boss Hunt", tagline: "Rematch a fallen boss for gear, Rift Cores and another chance at its shadow.", unlockAfterStage: 3, dailyKeys: 3, waves: 0, boss: true },
   crypt: { id: "crypt", name: "Relic Crypt", tagline: "Elites guard today's relics. Each one drops gear for the featured slot.", unlockAfterStage: 4, dailyKeys: 3, waves: 3, boss: false },
   endless: { id: "endless", name: "Endless Ascent", tagline: "How far can your army climb?", unlockAfterStage: 5, waves: Infinity, boss: false },
   trial: { id: "trial", name: "Rank Trial", tagline: "Prove yourself against an empowered Warden.", unlockAfterStage: 0, waves: 1, boss: true },
@@ -100,4 +102,11 @@ export function cryptWaves(stage: number): WaveDef[] {
     { spawns: [{ enemyId: husk, count: 3, interval: 1.2, delay: 0.5 }, { enemyId: "bastion_husk", count: 1, interval: 1, delay: 1.5, elite: "vampiric" }, { enemyId: brute, count: 1, interval: 1, delay: 4, elite: "brutal" }] },
     { spawns: [{ enemyId: husk, count: 3, interval: 1.2, delay: 0.5 }, { enemyId: ranged, count: 1, interval: 1, delay: 2, elite: "hasted" }, { enemyId: brute, count: 1, interval: 1, delay: 4.5, elite: "armored", keeper: true }] },
   ];
+}
+
+/** Boss stages already cleared, newest first: what a Boss Hunt can rematch. */
+export function huntableStages(bestStage: number, isBoss: (s: number) => boolean, limit = 6): number[] {
+  const out: number[] = [];
+  for (let s = bestStage; s >= 1 && out.length < limit; s--) if (isBoss(s)) out.push(s);
+  return out;
 }

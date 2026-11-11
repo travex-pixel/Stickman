@@ -157,7 +157,7 @@ export function sanitizeProfile(raw: unknown): { profile: Profile; repaired: boo
     })(),
     modes: {
       keyDay: isStr(md.keyDay) ? md.keyDay : "",
-      keys: { vault: num(mk.vault, 3, 0, 3), rift: num(mk.rift, 3, 0, 3), crypt: num(mk.crypt, 3, 0, 3) },
+      keys: { vault: num(mk.vault, 3, 0, 3), rift: num(mk.rift, 3, 0, 3), crypt: num(mk.crypt, 3, 0, 3), hunt: num(mk.hunt, 3, 0, 3) },
       endlessBest: num(md.endlessBest, 0),
       vaultBest: num(md.vaultBest, 0),
     },

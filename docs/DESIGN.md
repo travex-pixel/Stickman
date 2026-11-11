@@ -63,6 +63,9 @@ Shadows are earned in combat, which ties the collection directly to the fighting
 | Daily and weekly objectives | Working | `src/game/progression/objectives.ts` |
 | Gear sets (2 and 4 piece) | Working | `src/game/data/gearSets.ts` |
 | Focus targeting (tap an enemy) | Working | `World.setFocus`, `BattleRenderer.pickEnemy` |
+| Third region, The Shattered Crown (Bannerman rally, Crownless King, Support role) | Working | `src/game/data/regions.ts`, `src/game/enemies/ai.ts`, `src/game/bosses/hollowWarden.ts` |
+| Ascension (prestige for Aether) | Working | `src/game/progression/ascension.ts` |
+| Boss Hunts (rematch cleared bosses) | Working | `src/game/data/modes.ts`, `GameController.startHunt` |
 | Six abilities incl. ultimate with time dilation, dodge with i-frames | Working | `src/game/abilities/execute.ts` |
 | Enemy archetypes: grunt, brute, ranger, arcanist, shieldbearer, summoner | Working | `src/game/enemies/ai.ts` |
 | Elite affixes (Brutal, Armored, Hasted, Vampiric), stage 4+ mini-boss | Working | `src/game/data/elites.ts` |
@@ -81,7 +84,7 @@ Shadows are earned in combat, which ties the collection directly to the fighting
 | Modes: campaign, Gold Vault, Essence Rift, Endless Ascent, Rank Trial | Working | `src/game/data/modes.ts` |
 | Quests, achievements, journal, bestiary | Working | `src/game/progression/quests.ts` |
 | Gift codes (signed, once per save) | Working | `src/game/economy/codes.ts`, `scripts/make-code.mjs` |
-| IndexedDB saves: versioned (v9), validated, backed up, migrated, unload-safe | Working | `src/persistence/` |
+| IndexedDB saves: versioned (v10), validated, backed up, migrated, unload-safe | Working | `src/persistence/` |
 | Capped offline rewards | Working | `src/persistence/OfflineRewards.ts` |
 | Runtime-synthesised audio | Working, untested on devices | `src/game/audio/` |
 
@@ -125,9 +128,11 @@ and each gate challenged once the real forecast wins 2 of 4.
 - Offline: up to 2 hours on a new save, +30 minutes per boss won, to 8 hours; the warrior fights
   40% of it, sampled from real cycles, and never passes a gate.
 
-Measured (two seeds): gates 1 to 30 in about 40 minutes with a short wait at gate 3, then a few to
-about 40 minutes of farming per gate through 45 to 48, reached after 2.5 to 5 hours of engaged
-play. Beyond about stage 50 the current content asks for long, idle farming.
+Measured (two seeds): gates 1 to 30 in about 40 minutes with short waits, then a few minutes to
+over an hour of farming per gate through 42 to 48, reached after 3 to 5 hours of engaged play.
+Ascension is the answer to the late ceiling: in eight simulated hours the same player stalls at
+stage 51 without it and reaches stage 66 ascending whenever stuck for 30 minutes
+(`ASCEND_AFTER=30` in the simulator).
 
 ## Studio review, round 3 (the always-on loop)
 

@@ -11,10 +11,10 @@ import { STAT_LABEL } from "@/game/data/equipment";
 import { ACHIEVEMENTS, JOURNAL } from "@/game/data/lore";
 import { ENEMIES } from "@/game/data/enemies";
 import { RANKS } from "@/game/progression/ranks";
-import { MODES, isKeyedMode } from "@/game/data/modes";
+import { MODES, huntableStages, isKeyedMode } from "@/game/data/modes";
 import { WEAPON_PATHS } from "@/game/progression/weaponPaths";
 import { fmt, fmtDuration } from "@/lib/format";
-import { bossForStage } from "@/game/data/regions";
+import { bossForStage, isBossStage } from "@/game/data/regions";
 import { affordableUpgrades } from "@/game/progression/readiness";
 import { nextMilestone } from "@/game/progression/milestones";
 import { AETHER_GOLD, AETHER_POWER, ASCEND_MIN_STAGE, aetherFor, canAscend, romanAscension } from "@/game/progression/ascension";
@@ -58,6 +58,8 @@ function ModalBody({ modal }: { modal: Modal }) {
       return <Objectives />;
     case "ascend":
       return <AscendSheet />;
+    case "hunt_pick":
+      return <HuntPick />;
     case "rank_up":
       return <RankUp modal={modal} />;
     case "technique":
@@ -610,5 +612,41 @@ function HoldConfirm({ disabled, onConfirm, label }: { disabled: boolean; onConf
       <span className="absolute inset-y-0 left-0 bg-white/30" style={{ width: `${progress * 100}%` }} />
       <span className="relative">{label}</span>
     </button>
+  );
+}
+
+function HuntPick() {
+  const c = useController();
+  const profile = useProfileRef();
+  const stages = huntableStages(profile.progress.bestStage, isBossStage);
+  const keys = profile.modes.keys.hunt;
+  return (
+    <Card>
+      <div className="px-3 pt-3 pb-3 flex flex-col gap-1.5" data-testid="hunt-pick">
+        <div className="flex items-baseline justify-between">
+          <span className="font-display text-[17px] text-ivory">Boss Hunt</span>
+          <span className="text-[11px] text-mist">{keys}/3 today</span>
+        </div>
+        <p className="text-[11px] text-mist leading-snug">Rematch a boss you have beaten: half its stage reward, boss gear, a chance at a Rift Core, and another chance to bind its shadow. Progress is never at stake.</p>
+        {stages.map((s) => {
+          const def = ENEMIES[bossForStage(s)];
+          return (
+            <button key={s} className="card flex items-center gap-2 px-2 py-1.5 text-left disabled:opacity-50" disabled={keys <= 0} onClick={() => c.startHunt(s)} data-testid={`hunt-${s}`}>
+              <span className="h-8 w-8 shrink-0 rounded-md overflow-hidden border border-crimson/40 bg-black/30">
+                <SummonPortrait defId={bossForStage(s)} size={32} enemy />
+              </span>
+              <span className="flex-1 min-w-0">
+                <span className="block text-[12px] font-semibold text-ivory truncate">{def?.name ?? "Boss"}</span>
+                <span className="block text-[10px] text-mist">Stage {s}</span>
+              </span>
+              <span className="font-display text-[12px] text-crimson-2 shrink-0">Hunt</span>
+            </button>
+          );
+        })}
+        <button className="btn-ghost w-full mt-1 !py-2" onClick={() => c.closeModal()} data-testid="hunt-close">
+          Close
+        </button>
+      </div>
+    </Card>
   );
 }

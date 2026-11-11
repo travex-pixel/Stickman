@@ -45,7 +45,9 @@ on their own, collect gold, XP, gear and shadow shards, and move on to the next 
 
 Combat is hybrid. Basic attacks are automatic; you choose when to cast and when to dodge. A manual dodge in the last instant before an enemy blow lands is a **perfect dodge**: a moment of slow motion, ultimate energy and a guaranteed critical on your next strike. AUTO unlocks once you have used an ability and dodged, and switches on when the tutorial ends; it never earns perfect dodges.
 
-Stages 1 to 6 are The Ashen Verge, where each stage introduces one new idea (brutes, elite champions, shieldbearers, summoners). Stage 7 opens The Drowned Hollow: the Drowned Lurker sinks out of reach and surfaces under its prey, and the Drowned Warden's Undertow and Riptide ask you to read the field rather than outlast it. Every boss shows a one-line counter at its entrance.
+Stages 1 to 6 are The Ashen Verge, where each stage introduces one new idea (brutes, elite champions, shieldbearers, summoners). Stage 7 opens The Drowned Hollow: the Drowned Lurker sinks out of reach and surfaces under its prey, and the Drowned Warden's Undertow and Riptide ask you to read the field rather than outlast it. Stage 16 opens The Shattered Crown, a ruined royal city in amber dusk: Ashen Runner packs, Gilded Sentries, Crown Arbalests, and the Bannerman, whose banner hastens and hardens every foe near it (tap it to focus it first). Its boss, the Crownless King, issues Royal Decrees (lanes across the whole field with gaps to dash into), sweeps his scepter, and calls his guard. Every boss shows a one-line counter at its entrance.
+
+**Ascension** opens at stage 20: start the climb over (campaign, gold and stat levels) for Aether, each point a permanent +2% Attack and Health and +1% gold. Everything collected is kept. Deeper climbs pay more Aether.
 
 ## Oathbound: the summoning system
 
@@ -76,6 +78,7 @@ Enemies marked with a pale light leave their oath behind when they fall. Tap **B
 | Essence Rift | After stage 3 | Every foe drops an oath, shards for the army, 3 keys a day |
 | Relic Crypt | After stage 4 | Elites drop gear for the day's featured slot, a tier up; a Crypt Keeper closes the run. 3 keys a day |
 | Endless Ascent | After stage 5 | Climb waves until you fall, records kept |
+| Boss Hunt | After stage 3 | Rematch a boss you have beaten: half its stage reward, boss gear, a Rift Core chance and another chance at its shadow. Progress is never at stake. 3 a day |
 | Rank Trial | Level milestones | The breakthrough fight for the next Ascendant rank |
 
 Daily keys refill each day and never stack into an obligation.

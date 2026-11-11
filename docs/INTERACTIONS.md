@@ -51,6 +51,9 @@ or error tone instead of silence when a press cannot succeed.
 | Arts rank / form switch | Rank an ability, choose a technique | Gold and level | Reason on the button | Rank or switch | Toast, medal change | Ability power and cooldown, slot form | – |
 | Perk chip | Choose a pending perk | Perks pending | Not shown | Opens the choice | – | Perk | – |
 | Quest pill | Claim or go to the objective | Always | – | Complete: claim. Incomplete: opens the panel the quest needs | Claim sound | Reward | – |
+| Ascend badge (Hero panel) | Open the Ascension sheet | From stage 20, or once ascended | Not shown before stage 20 | Opens the sheet | Shows the Aether on offer | – | – |
+| Hold to ascend (`ascend-confirm`) | Ascend: restart the climb for Aether | Stage 20 reached, farming, warrior standing | Disabled before stage 20 | Hold about a second (a tap does nothing) | Fill bar while held; gold flash and toast on ascending | Campaign, gold and stat levels reset; Aether added; saved at once | Mid-fight or while down: toast, nothing changes |
+| Boss Hunt tile and list (`mode-hunt`, `hunt-N`) | Rematch a cleared boss | After stage 3, a hunt key left | Locked tile with reason; list rows disabled with no keys | Starts a hunt world on that boss | Boss horn and intro | Rewards only; campaign progress untouched; key spent | No keys: toast |
 | Goals (Rift panel) | Daily and weekly objectives | Always | Badge when claimable | Opens objectives | – | – | – |
 | Claim (objective) | Collect an objective | Complete and unclaimed | "…" or Done | Claim | Toast with the payout | Gold, essence, cores (and the all-three bonus once a day) | Error tone |
 | Collect (offline card) | Close the return summary | Always | – | Close | Gold tone | Rewards were credited and saved before the card opened | – |
