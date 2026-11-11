@@ -319,8 +319,9 @@ function Journal() {
   );
 }
 
-export function fmtCodex(o: SummonDef["owned"]): string {
-  return o.stat === "critChance" ? `${(o.pct * 100).toFixed(0)}% ${STAT_LABEL[o.stat]}` : `${Math.round(o.pct * 100)}% ${STAT_LABEL[o.stat]}`;
+export function fmtCodex(o: SummonDef["owned"], mult = 1): string {
+  const pct = o.pct * mult * 100;
+  return `${pct < 10 && pct % 1 !== 0 ? pct.toFixed(1) : Math.round(pct)}% ${STAT_LABEL[o.stat]}`;
 }
 
 function RankUp({ modal }: { modal: Extract<Modal, { kind: "rank_up" }> }) {

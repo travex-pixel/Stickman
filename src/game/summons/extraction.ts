@@ -80,12 +80,35 @@ export interface CodexBonus {
   attackSpeed: number;
 }
 
+/**
+ * Collection depth is power: a species' Codex bonus grows with the highest star any of its
+ * shadows has reached, +50% of the base per star (x3.5 at five stars). Earlier forms of an
+ * evolved shadow keep the stars of the evolved one.
+ */
+export const CODEX_STAR_STEP = 0.5;
+
+export function codexMultiplier(stars: number): number {
+  return 1 + CODEX_STAR_STEP * Math.max(0, stars);
+}
+
+export function speciesStars(profile: Profile): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const s of profile.summons.collection) {
+    let id: string | undefined = s.defId;
+    while (id) {
+      out.set(id, Math.max(out.get(id) ?? 0, s.stars ?? 0));
+      id = SUMMONS[id]?.evolvedFrom;
+    }
+  }
+  return out;
+}
+
 export function codexBonus(profile: Profile): CodexBonus {
   const b: CodexBonus = { attack: 0, maxHp: 0, defense: 0, critChance: 0, critDamage: 0, attackSpeed: 0 };
-  for (const id of ownedSpecies(profile)) {
+  for (const [id, stars] of speciesStars(profile)) {
     const def = SUMMONS[id];
     if (!def || def.hidden) continue;
-    b[def.owned.stat] += def.owned.pct;
+    b[def.owned.stat] += def.owned.pct * codexMultiplier(stars);
   }
   return b;
 }

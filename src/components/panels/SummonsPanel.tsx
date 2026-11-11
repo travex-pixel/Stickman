@@ -6,7 +6,7 @@ import { HoldButton } from "@/components/ui/HoldButton";
 import { SummonPortrait } from "@/components/ui/Portrait";
 import { useController, useProfileRef, useUi } from "@/hooks/useGame";
 import { collectibleSummons, ROLE_INFO, summonDef } from "@/game/data/summons";
-import { codexBonus, ownedSpecies } from "@/game/summons/extraction";
+import { codexBonus, codexMultiplier, ownedSpecies, speciesStars } from "@/game/summons/extraction";
 import { fmtCodex } from "@/components/rewards/ModalHost";
 import { STAT_LABEL } from "@/game/data/equipment";
 import { computeModifiers } from "@/game/progression/stats";
@@ -105,7 +105,11 @@ function SummonDetail({ inst, slots }: { inst: ReturnType<typeof useProfileRef>[
         </div>
       </div>
       <div className="text-[11px] leading-snug text-ivory/85 truncate shrink-0" title={def.active.description}>
-        <span className="text-gold-2 font-semibold">{def.active.name}</span> · <span className="text-gold/90">Codex +{fmtCodex(def.owned)}</span>
+        <span className="text-gold-2 font-semibold">{def.active.name}</span> ·{" "}
+        <span className="text-gold/90" data-testid="codex-line">
+          Codex +{fmtCodex(def.owned, codexMultiplier(speciesStars(profile).get(inst.defId) ?? 0))}
+          {(inst.stars ?? 0) < 5 && <span className="text-jade-2"> · ★ next +{fmtCodex(def.owned, codexMultiplier((speciesStars(profile).get(inst.defId) ?? 0) + 1))}</span>}
+        </span>
       </div>
         <div className="mt-auto flex items-center gap-1.5">
           <button

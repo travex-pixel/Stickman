@@ -70,3 +70,17 @@ describe("Shadow Codex", () => {
     expect(computeModifiers(p).deploySlots).toBe(4);
   });
 });
+
+describe("codex depth", () => {
+  it("a species' codex bonus grows with its best star", async () => {
+    const { createDefaultProfile } = await import("@/game/progression/profile");
+    const { claimEssence } = await import("@/game/summons/recruitment");
+    const { codexBonus, codexMultiplier } = await import("@/game/summons/extraction");
+    const p = createDefaultProfile();
+    claimEssence(p, "husk_blade");
+    expect(codexBonus(p).attack).toBeCloseTo(0.04);
+    p.summons.collection[0]!.stars = 3;
+    expect(codexBonus(p).attack).toBeCloseTo(0.04 * codexMultiplier(3));
+    expect(codexMultiplier(5)).toBeCloseTo(3.5);
+  });
+});

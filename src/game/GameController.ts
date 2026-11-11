@@ -15,7 +15,8 @@ import { claimQuest as doClaimQuest, currentQuest, isQuestComplete } from "./pro
 import { evaluateAchievements, evaluateJournal } from "./progression/achievements";
 import { computeModifiers, isStatUnlocked, statUpgradeCost } from "./progression/stats";
 import { claimEssence as doClaimEssence, setDeployed, type ClaimOutcome } from "./summons/recruitment";
-import { resolveExtraction } from "./summons/extraction";
+import { CODEX_STAR_STEP, resolveExtraction, speciesStars } from "./summons/extraction";
+import { STAT_LABEL } from "./data/equipment";
 import { bondCost, BOND_CAP, canStarUp, checkEvolution, evolveSummon, grantSummonXp, starCost, starUp } from "./summons/progression";
 import { enemyDef } from "./data/enemies";
 import { MODES, RIFT_ESSENCE_PER_KILL, type ModeId } from "./data/modes";
@@ -1094,9 +1095,13 @@ export class GameController {
       if (c) this.toast(`Needs ${c.shards} shards${c.cores ? ` and ${c.cores} Rift Core${c.cores > 1 ? "s" : ""}` : ""}`, "warn");
       return false;
     }
+    const bestBefore = speciesStars(p).get(inst.defId) ?? 0;
     p.player.riftCores -= starUp(inst);
     this.sfx("level_up", { volume: 0.8, rate: 1.25 });
-    this.toast(`${summonDef(inst.defId).name} reached ★${inst.stars}`, "level");
+    const def = summonDef(inst.defId);
+    const gained = Math.max(0, (inst.stars ?? 0) - bestBefore);
+    const pct = Math.round(def.owned.pct * CODEX_STAR_STEP * gained * 1000) / 10;
+    this.toast(`${def.name} reached ★${inst.stars}${pct > 0 ? ` · Codex +${pct}% ${STAT_LABEL[def.owned.stat]}` : ""}`, "level");
     this.renderer?.flash(0xe9c97a, 0.2);
     this.refreshLoadout();
     this.commit();
