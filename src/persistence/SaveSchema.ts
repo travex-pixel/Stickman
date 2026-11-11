@@ -1,6 +1,8 @@
 import { createDefaultProfile, PROFILE_VERSION, type Profile } from "@/game/progression/profile";
 import { SUMMONS } from "@/game/data/summons";
-import { EQUIP_SLOTS } from "@/game/data/ids";
+import { EQUIP_SLOTS, type AbilityId } from "@/game/data/ids";
+import { ABILITIES } from "@/game/data/abilities";
+import { ABILITY_RANK_MAX } from "@/game/progression/abilityRanks";
 import { EQUIPMENT_TEMPLATES } from "@/game/data/equipment";
 import { SKILLS } from "@/game/data/skills";
 import { GEAR_EFFECTS, type GearEffectId } from "@/game/data/gearEffects";
@@ -116,6 +118,7 @@ export function sanitizeProfile(raw: unknown): { profile: Profile; repaired: boo
       pendingPerkChoices: num(p.pendingPerkChoices, 0, 0, 10),
       autoCast: p.autoCast === true,
       rank: num(p.rank, 0, 0, 5),
+      abilityRanks: sanitizeAbilityRanks(p.abilityRanks),
     },
     equipment: { equipped, inventory },
     skills: { unlocked: Array.isArray(sk.unlocked) ? sk.unlocked.filter((id): id is string => isStr(id) && SKILLS.some((n) => n.id === id)) : [] },
@@ -170,4 +173,14 @@ export function sanitizeProfile(raw: unknown): { profile: Profile; repaired: boo
     }
   }
   return { profile, repaired };
+}
+
+function sanitizeAbilityRanks(v: unknown): Partial<Record<AbilityId, number>> {
+  const out: Partial<Record<AbilityId, number>> = {};
+  if (!isObj(v)) return out;
+  for (const id of Object.keys(ABILITIES) as AbilityId[]) {
+    const r = v[id];
+    if (typeof r === "number" && Number.isFinite(r) && r > 0) out[id] = Math.min(ABILITY_RANK_MAX, Math.floor(r));
+  }
+  return out;
 }

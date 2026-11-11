@@ -17,6 +17,7 @@ import { addStatus, hasStatus, speedMultiplier, statusValue, tickStatuses } from
 import { nearestHostile, hostilesWithin, factionWithin } from "../combat/targeting";
 import { updateEnemyAi } from "../enemies/ai";
 import { updateBossAi } from "../bosses/hollowWarden";
+import { rankCooldownMult, rankPowerMult } from "../progression/abilityRanks";
 import { updateSummonAi } from "../summons/ai";
 import { castPlayerAbility, resolvePlayerAbility, playerDodge } from "../abilities/execute";
 import { STORMBLADE_CHAIN_CHANCE, INFERNAL_BURN_FRACTION, VOIDFANG_EXECUTE_THRESHOLD } from "../progression/weaponPaths";
@@ -228,7 +229,7 @@ export class World {
     const ok = castPlayerAbility(this, id);
     if (ok) {
       if (def.ultimate) this.energy = 0;
-      else this.cooldowns[id] = def.cooldown * this.loadout.mods.cooldownMult;
+      else this.cooldowns[id] = this.abilityCooldown(id);
     }
     return ok;
   }
@@ -277,7 +278,7 @@ export class World {
       this.finisher = { timer: 0.35 };
       this.events.push({ type: "perfect_dodge", pos: { ...p.pos } });
     }
-    this.dodgeCooldown = ABILITIES.shadow_dash.cooldown * this.loadout.mods.dodgeCooldownMult;
+    this.dodgeCooldown = this.abilityCooldown("shadow_dash");
     this.cooldowns.shadow_dash = this.dodgeCooldown;
     return true;
   }
@@ -359,11 +360,23 @@ export class World {
     return b && !b.dead ? b : undefined;
   }
 
+  /** Rank multiplier on an ability's damage. */
+  abilityPower(id: AbilityId): number {
+    return rankPowerMult(this.loadout.abilityRanks?.[id] ?? 0);
+  }
+
+  /** Full cooldown of an ability after gear, skills and rank. */
+  abilityCooldown(id: AbilityId): number {
+    const rank = rankCooldownMult(this.loadout.abilityRanks?.[id] ?? 0);
+    if (id === "shadow_dash") return ABILITIES.shadow_dash.cooldown * this.loadout.mods.dodgeCooldownMult * rank;
+    return ABILITIES[id].cooldown * this.loadout.mods.cooldownMult * rank;
+  }
+
   snapshot(): WorldSnapshot {
     const boss = this.entities.get(this.bossId);
     const cdMax = {} as Record<AbilityId, number>;
     for (const id of Object.keys(ABILITIES) as AbilityId[]) {
-      cdMax[id] = id === "shadow_dash" ? ABILITIES.shadow_dash.cooldown * this.loadout.mods.dodgeCooldownMult : ABILITIES[id].cooldown * this.loadout.mods.cooldownMult;
+      cdMax[id] = this.abilityCooldown(id);
     }
     return {
       mode: this.mode,
@@ -1225,7 +1238,7 @@ export class World {
       u.nextStrike = 0.16;
       const enemies = this.enemies();
       for (const e of enemies) {
-        this.dealDamage(this.player, e, ABILITIES.ascendant_fury.power, "soul", u.strikes === 7);
+        this.dealDamage(this.player, e, ABILITIES.ascendant_fury.power * this.abilityPower("ascendant_fury"), "soul", u.strikes === 7);
         if (u.strikes === 7) this.applyKnockback(e, this.player.pos, 260);
       }
       this.events.push({ type: "cast", id: this.player.id, ability: "ascendant_fury", pos: { ...this.player.pos }, facing: this.player.facing, targetPos: enemies[0] ? { ...enemies[0].pos } : null });

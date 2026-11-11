@@ -30,6 +30,8 @@ export interface PlayerLoadout {
   /** Species already sworn: ordinary kills of these convert straight to shards. */
   owned: string[];
   bestStage: number;
+  /** Bonus rank per ability (0 = rank I). */
+  abilityRanks: Partial<Record<AbilityId, number>>;
 }
 
 export function buildLoadout(profile: Profile): PlayerLoadout {
@@ -53,6 +55,7 @@ export function buildLoadout(profile: Profile): PlayerLoadout {
     hasSummons: profile.summons.collection.length > 0,
     owned: ownedSpecies(profile),
     bestStage: profile.progress.bestStage,
+    abilityRanks: { ...profile.player.abilityRanks },
   };
 }
 

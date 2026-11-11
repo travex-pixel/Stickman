@@ -27,7 +27,7 @@ export function AbilityBar() {
   const ultUnlocked = ABILITIES[ULTIMATE_ID].unlockLevel <= level;
   const ultReady = ultUnlocked && energy >= ULTIMATE_ENERGY_COST && !ultActive;
   return (
-    <div className="absolute inset-x-0 bottom-0 z-20 h-[78px] px-2 pb-2 pt-3 flex items-end gap-1.5 min-w-0" style={{ background: "linear-gradient(180deg, rgba(17,15,12,0) 0%, rgba(17,15,12,0.72) 42%, rgba(17,15,12,0.92) 100%)" }} data-testid="ability-bar">
+    <div className="medal-row absolute inset-x-0 bottom-0 z-20 h-[78px] px-2 pb-2 pt-3 flex items-end gap-1.5 min-w-0" style={{ background: "linear-gradient(180deg, rgba(17,15,12,0) 0%, rgba(17,15,12,0.72) 42%, rgba(17,15,12,0.92) 100%)" }} data-testid="ability-bar">
       <button
         className={cn("medal medal-sm shrink-0", autoCast ? "text-gold-2" : "text-mist")}
         data-ready={autoCast}

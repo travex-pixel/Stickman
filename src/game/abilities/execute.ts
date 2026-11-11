@@ -67,7 +67,7 @@ function arcSlash(world: World, p: Combatant): void {
   const hits = hostilesWithin(p, world.entities.values(), def.radius).filter((e) => (e.pos.x - p.pos.x) * p.facing > -30);
   const vanguard = world.summonEntities().find((s) => s.summon?.role === "vanguard" || s.summon?.role === "sovereign");
   for (const e of hits) {
-    world.dealDamage(p, e, def.power, "physical", true);
+    world.dealDamage(p, e, def.power * world.abilityPower(def.id), "physical", true);
     if (world.loadout.mods.synergies.has("arc_pull") && vanguard && e.kind !== "boss") {
       const dx = vanguard.pos.x - e.pos.x;
       const dy = vanguard.pos.y - e.pos.y;
@@ -92,14 +92,14 @@ function thunderStrike(world: World, p: Combatant): void {
   const maxChains = 2 + world.loadout.mods.chainTargetsBonus;
   const struck = new Set<number>([first.id]);
   world.events.push({ type: "chain", from: { x: first.pos.x, y: first.pos.y - 160 }, to: { ...first.pos }, color: def.color });
-  world.dealDamage(p, first, def.power, "lightning", true);
+  world.dealDamage(p, first, def.power * world.abilityPower(def.id), "lightning", true);
   let current = first;
   let chains = 0;
   // Chain to marked enemies first (Ranger synergy), then nearest.
   const marked = world.loadout.mods.synergies.has("thunder_mark") ? world.enemies().filter((e) => hasStatus(e, "mark") && !struck.has(e.id)) : [];
   for (const m of marked) {
     world.events.push({ type: "chain", from: { ...current.pos }, to: { ...m.pos }, color: def.color });
-    world.dealDamage(p, m, def.power * 0.85, "lightning", false);
+    world.dealDamage(p, m, def.power * world.abilityPower(def.id) * 0.85, "lightning", false);
     struck.add(m.id);
     current = m;
   }
@@ -107,7 +107,7 @@ function thunderStrike(world: World, p: Combatant): void {
     const next = factionWithin(current.pos, "enemy", world.entities.values(), def.radius).filter((e) => !struck.has(e.id))[0];
     if (!next) break;
     world.events.push({ type: "chain", from: { ...current.pos }, to: { ...next.pos }, color: def.color });
-    world.dealDamage(p, next, def.power * 0.75, "lightning", false);
+    world.dealDamage(p, next, def.power * world.abilityPower(def.id) * 0.75, "lightning", false);
     struck.add(next.id);
     current = next;
     chains += 1;
@@ -119,7 +119,7 @@ function thunderStrike(world: World, p: Combatant): void {
 function soulBurst(world: World, p: Combatant): void {
   const def = ABILITIES.soul_burst;
   const hits = hostilesWithin(p, world.entities.values(), def.radius);
-  for (const e of hits) world.dealDamage(p, e, def.power, "soul", false);
+  for (const e of hits) world.dealDamage(p, e, def.power * world.abilityPower(def.id), "soul", false);
   const heal = Math.round(p.stats.maxHp * (0.14 + Math.min(0.1, hits.length * 0.02)));
   p.hp = Math.min(p.stats.maxHp, p.hp + heal);
   world.events.push({ type: "heal", targetId: p.id, amount: heal, pos: { ...p.pos } });
@@ -144,7 +144,7 @@ function voidNova(world: World, p: Combatant): void {
   const def = ABILITIES.void_nova;
   const hits = hostilesWithin(p, world.entities.values(), def.radius);
   for (const e of hits) {
-    world.dealDamage(p, e, def.power, "void", true);
+    world.dealDamage(p, e, def.power * world.abilityPower(def.id), "void", true);
     world.applyKnockback(e, p.pos, 380);
     if (world.loadout.mods.synergies.has("nova_opening")) addStatus(e, { kind: "opening", remaining: 4, value: 0.5, sourceId: p.id });
     else addStatus(e, { kind: "slow", remaining: 2, value: 0.35, sourceId: p.id });

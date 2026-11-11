@@ -1,4 +1,4 @@
-import type { EquipSlot, Rarity, StatKey, SummonCommand, UpgradeableStat, WeaponPath } from "../data/ids";
+import type { AbilityId, EquipSlot, Rarity, StatKey, SummonCommand, UpgradeableStat, WeaponPath } from "../data/ids";
 import type { GearEffectId } from "../data/gearEffects";
 
 export interface EquipmentItem {
@@ -54,6 +54,8 @@ export interface Profile {
     autoCast: boolean;
     /** Ascendant rank: 0 = E, 1 = D, 2 = C, 3 = B, 4 = A, 5 = S. */
     rank: number;
+    /** Bonus ranks per ability: 0 = rank I, 4 = rank V. */
+    abilityRanks: Partial<Record<AbilityId, number>>;
   };
   equipment: {
     equipped: Partial<Record<EquipSlot, string>>;
@@ -95,7 +97,7 @@ export interface Profile {
   settings: { music: number; sfx: number; reducedEffects: boolean; diagnostics: boolean; battleSpeed: 1 | 2; autoAdvance: boolean };
 }
 
-export const PROFILE_VERSION = 6;
+export const PROFILE_VERSION = 7;
 
 export function createDefaultProfile(now = Date.now()): Profile {
   return {
@@ -115,6 +117,7 @@ export function createDefaultProfile(now = Date.now()): Profile {
       pendingPerkChoices: 0,
       autoCast: false,
       rank: 0,
+      abilityRanks: {},
     },
     equipment: { equipped: {}, inventory: [] },
     skills: { unlocked: [] },

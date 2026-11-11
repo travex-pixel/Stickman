@@ -9,6 +9,7 @@ import { buildLoadout } from "./progression/loadout";
 import { applyXp } from "./progression/xp";
 import { upgradeStat as doUpgradeStat, type UpgradeAttempt } from "./progression/upgrades";
 import { unlockSkill as doUnlockSkill } from "./progression/skills";
+import { anyAbilityRankReady, rankAbility as doRankAbility } from "./progression/abilityRanks";
 import { offerPerks, takePerk as doTakePerk } from "./progression/perks";
 import { claimQuest as doClaimQuest, currentQuest, isQuestComplete } from "./progression/quests";
 import { evaluateAchievements, evaluateJournal } from "./progression/achievements";
@@ -146,6 +147,7 @@ export class GameController {
   private hudAccum = 0;
   private toastId = 0;
   private modalQueue: Modal[] = [];
+  private rankBadgeShown = false;
   private tutorialElapsed = 0;
   private tutorialSubstep = 0;
   private enemyWindupNearPlayer = false;
@@ -632,6 +634,10 @@ export class GameController {
       const affordable = (["attack", "maxHp", "defense", "attackSpeed", "critChance", "critDamage"] as const).some((st) => isStatUnlocked(p, st) && statUpgradeCost(st, p.player.statLevels[st]) <= p.player.gold);
       if (affordable) this.uiStore.update((u) => ({ ...u, newBadges: { ...u.newBadges, hero: true } }));
     }
+    if (ui.panel !== "skills" && !this.rankBadgeShown && anyAbilityRankReady(p)) {
+      this.rankBadgeShown = true;
+      this.uiStore.update((u) => ({ ...u, newBadges: { ...u.newBadges, skills: true } }));
+    }
     const newAch = evaluateAchievements(p);
     for (const id of newAch) this.toast(`Achievement: ${id.replace(/_/g, " ")}`, "level");
     const newJournal = evaluateJournal(p);
@@ -971,6 +977,21 @@ export class GameController {
     this.afterProgression();
     this.commit();
     return true;
+  }
+
+  /** Spend gold to raise an ability one rank. */
+  rankAbility(id: AbilityId): boolean {
+    this.userGesture();
+    const ok = doRankAbility(this.profile, id);
+    if (ok) {
+      this.sfx("upgrade", { volume: 0.6, rate: 0.9 });
+      this.sfx("level_up", { volume: 0.35, rate: 1.4 });
+      this.rankBadgeShown = false;
+      this.refreshLoadout();
+      this.afterProgression();
+      this.commit();
+    } else this.sfx("error", { volume: 0.3 });
+    return ok;
   }
 
   unlockSkill(id: string): boolean {
