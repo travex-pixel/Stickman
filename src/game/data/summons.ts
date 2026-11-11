@@ -9,7 +9,7 @@ export interface SummonAbilityDef {
 export interface SummonEvolutionDef {
   toId: string;
   requiredLevel: number;
-  requiredShards: number;
+  requiredStars: number;
   requiredRiftCores: number;
 }
 
@@ -57,7 +57,7 @@ export const SUMMONS: Record<string, SummonDef> = {
     growth: 0.11,
     active: { name: "Culling Step", description: "Dashes to an enemy below 30% health and strikes for 250% damage.", cooldown: 6 },
     passive: { name: "Fast Hands", description: "Attack speed increases by 20% while fighting the same target.", cooldown: 0 },
-    evolution: { toId: "gravewalker", requiredLevel: 8, requiredShards: 4, requiredRiftCores: 1 },
+    evolution: { toId: "gravewalker", requiredLevel: 8, requiredStars: 2, requiredRiftCores: 1 },
     palette: { body: 0x1f2538, accent: 0x9fd9ff, eye: 0x4ee6ff, glow: 0x4ee6ff },
     scale: 0.92,
     aura: 0,

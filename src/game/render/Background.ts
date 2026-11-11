@@ -402,7 +402,8 @@ export class Background {
   }
 
   layout(width: number, height: number, groundTop: number): void {
-    if (width === this.width && height === this.height && groundTop === this.groundTop) return;
+    // Ignore sub-8px jitter (mobile URL bars, dvh rounding); repaint only on a real size change.
+    if (Math.abs(width - this.width) < 1 && Math.abs(height - this.height) < 8 && this.textures.length > 0) return;
     this.width = width;
     this.height = height;
     this.groundTop = groundTop;

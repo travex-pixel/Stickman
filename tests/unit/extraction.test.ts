@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createDefaultProfile } from "@/game/progression/profile";
-import { BASE_EXTRACTION, ELITE_BONUS, MAX_CHANCE, PITY_STEP, RANK_STEP, codexBonus, extractionChance, ownedSpecies, resolveExtraction } from "@/game/summons/extraction";
+import { BASE_EXTRACTION, ELITE_BONUS, HARD_PITY, MAX_CHANCE, PITY_BY_RARITY, RANK_STEP, codexBonus, extractionChance, ownedSpecies, resolveExtraction } from "@/game/summons/extraction";
 import { claimEssence } from "@/game/summons/recruitment";
 import { computePlayerStats, computeModifiers } from "@/game/progression/stats";
 
@@ -12,10 +12,12 @@ describe("ARISE extraction", () => {
     p.player.rank = 2;
     expect(extractionChance(p, "hollow_warden")).toBeCloseTo(BASE_EXTRACTION.legendary + 2 * RANK_STEP);
     p.summons.pity.hollow_warden = 3;
-    expect(extractionChance(p, "hollow_warden")).toBeCloseTo(BASE_EXTRACTION.legendary + 2 * RANK_STEP + 3 * PITY_STEP);
-    expect(extractionChance(p, "hollow_warden", { elite: true })).toBeCloseTo(BASE_EXTRACTION.legendary + 2 * RANK_STEP + 3 * PITY_STEP + ELITE_BONUS);
-    p.summons.pity.hollow_warden = 50;
-    expect(extractionChance(p, "hollow_warden")).toBe(MAX_CHANCE);
+    expect(extractionChance(p, "hollow_warden")).toBeCloseTo(BASE_EXTRACTION.legendary + 2 * RANK_STEP + 3 * PITY_BY_RARITY.legendary);
+    expect(extractionChance(p, "hollow_warden", { elite: true })).toBeCloseTo(BASE_EXTRACTION.legendary + 2 * RANK_STEP + 3 * PITY_BY_RARITY.legendary + ELITE_BONUS);
+    p.summons.pity.veilshot = 4;
+    expect(extractionChance(p, "veilshot", { elite: true, bonus: 0.5 })).toBe(MAX_CHANCE);
+    p.summons.pity.hollow_warden = HARD_PITY.legendary;
+    expect(extractionChance(p, "hollow_warden")).toBe(1);
   });
   it("failure grants essence and pity; success resets pity", () => {
     const p = createDefaultProfile();
@@ -34,10 +36,10 @@ describe("ARISE extraction", () => {
     let success = false;
     while (!success && attempts < 20) {
       attempts++;
-      success = resolveExtraction(p, "hollow_warden", 0.94).success;
+      success = resolveExtraction(p, "hollow_warden", 0.999).success;
     }
     expect(success).toBe(true);
-    expect(attempts).toBeLessThanOrEqual(8);
+    expect(attempts).toBeLessThanOrEqual(HARD_PITY.legendary + 1);
   });
   it("the Hungering Rift skill raises extraction chance", () => {
     const p = createDefaultProfile();

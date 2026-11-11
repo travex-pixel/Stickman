@@ -33,7 +33,10 @@ export function claimEssence(profile: Profile, summonId: string, now = Date.now(
     profile.player.essence += refund;
     return { kind: "duplicate", instance: existing, essenceGained: refund, shardsGained: 1 };
   }
-  const inst: SummonInstance = { instanceId: newInstanceId(now), defId: summonId, level: 1, xp: 0, bond: 1, shards: 0, deployed: false, recruitedAt: now };
+  // New recruits join near the army's level so they are useful the moment they arrive.
+  const deployedLevels = profile.summons.collection.filter((s) => s.deployed).map((s) => s.level);
+  const level = deployedLevels.length ? Math.max(1, Math.min(...deployedLevels) - 2) : 1;
+  const inst: SummonInstance = { instanceId: newInstanceId(now), defId: summonId, level, xp: 0, bond: 1, shards: 0, stars: 0, deployed: false, recruitedAt: now };
   profile.summons.collection.push(inst);
   return { kind: "new", instance: inst, essenceGained: 0, shardsGained: 0 };
 }

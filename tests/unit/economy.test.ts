@@ -55,3 +55,26 @@ describe("stage scaling", () => {
     expect(stageScale(5).attack).toBeGreaterThan(1);
   });
 });
+
+describe("gear effects", () => {
+  it("legendaries always carry an effect, commons never do", async () => {
+    const { generateItem } = await import("@/game/economy/loot");
+    const { Rng } = await import("@/game/engine/rng");
+    const rng = new Rng(4);
+    for (let i = 0; i < 30; i++) {
+      expect(generateItem(rng, 3, "legendary").effect).toBeDefined();
+      expect(generateItem(rng, 3, "common").effect).toBeUndefined();
+    }
+  });
+  it("equipped effects become modifiers that change combat", async () => {
+    const { createDefaultProfile } = await import("@/game/progression/profile");
+    const { computeModifiers } = await import("@/game/progression/stats");
+    const p = createDefaultProfile();
+    p.equipment.inventory.push({ uid: "x", templateId: "oathstone", slot: "relic", rarity: "legendary", level: 1, mainStat: "attack", mainValue: 10, substats: [], effect: "shadowbound" });
+    const before = computeModifiers(p).summonDamageMult;
+    p.equipment.equipped.relic = "x";
+    const m = computeModifiers(p);
+    expect(m.gearEffects.has("shadowbound")).toBe(true);
+    expect(m.summonDamageMult).toBeCloseTo(before + 0.25);
+  });
+});

@@ -9,7 +9,7 @@ export async function game<T>(page: Page, fn: string): Promise<T> {
 }
 
 export async function waitForGame(page: Page): Promise<void> {
-  await page.goto("/");
+  await page.goto("/?debug=1");
   await page.waitForSelector("[data-testid=app-shell]");
   await page.waitForSelector("canvas", { timeout: 30_000 });
   await page.waitForFunction(() => Boolean((window as unknown as { __ASCEND__?: { world: unknown } }).__ASCEND__?.world));

@@ -31,8 +31,15 @@ export const NAMED_CODES: Record<string, CodeReward> = {
 
 export const DEFAULT_CODE_SECRET = "ascend-dev-secret";
 
-export function codeSecret(): string {
-  return (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_ASCEND_CODE_SECRET) || DEFAULT_CODE_SECRET;
+/**
+ * The literal `process.env.NEXT_PUBLIC_…` access is required: Next inlines only that exact form.
+ * In production without a configured secret, signed codes are refused rather than verified with
+ * the public development secret (which anyone could use to mint codes). Named codes still work.
+ */
+export function codeSecret(): string | null {
+  const configured = process.env.NEXT_PUBLIC_ASCEND_CODE_SECRET;
+  if (configured) return configured;
+  return process.env.NODE_ENV === "production" ? null : DEFAULT_CODE_SECRET;
 }
 
 const SUMMON_SHORT: Record<string, string> = { husk_blade: "HB", gravewalker: "GW", ashborn_bulwark: "AB", veilshot: "VS", ember_acolyte: "EA", hollow_warden: "HW" };
@@ -123,14 +130,15 @@ export async function signPayload(payload: string, secret: string): Promise<stri
   return out;
 }
 
-export async function makeCode(reward: CodeReward, secret = codeSecret()): Promise<string> {
+export async function makeCode(reward: CodeReward, secret: string | null = codeSecret()): Promise<string> {
+  if (!secret) throw new Error("No code secret configured");
   const payload = encodePayload(reward);
   return `ASC-${payload}-${await signPayload(payload, secret)}`;
 }
 
-export type CodeCheck = { ok: true; reward: CodeReward; key: string } | { ok: false; reason: "format" | "signature" | "unknown" };
+export type CodeCheck = { ok: true; reward: CodeReward; key: string } | { ok: false; reason: "format" | "signature" | "unknown" | "disabled" };
 
-export async function verifyCode(input: string, secret = codeSecret()): Promise<CodeCheck> {
+export async function verifyCode(input: string, secret: string | null = codeSecret()): Promise<CodeCheck> {
   const code = normalizeCode(input);
   if (!code) return { ok: false, reason: "format" };
   const named = NAMED_CODES[code];
@@ -141,6 +149,7 @@ export async function verifyCode(input: string, secret = codeSecret()): Promise<
   const sig = m[2] as string;
   const reward = parsePayload(payload);
   if (!reward) return { ok: false, reason: "format" };
+  if (!secret) return { ok: false, reason: "disabled" };
   const expected = await signPayload(payload, secret);
   if (expected !== sig) return { ok: false, reason: "signature" };
   return { ok: true, reward, key: code };

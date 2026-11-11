@@ -15,7 +15,7 @@ export function summonStats(
 ): CombatStats {
   const def = summonDef(inst.defId);
   const lvMult = 1 + def.growth * (inst.level - 1);
-  const bondMult = 1 + 0.04 * (inst.bond - 1);
+  const bondMult = (1 + 0.04 * (inst.bond - 1)) * (1 + STAR_STAT_STEP * (inst.stars ?? 0));
   const b = def.base;
   return {
     maxHp: Math.round(b.hp * lvMult * bondMult * mods.hpMult),
@@ -59,7 +59,7 @@ export function checkEvolution(inst: SummonInstance, riftCores: number): Evoluti
   const ev = def.evolution;
   const reasons: string[] = [];
   if (inst.level < ev.requiredLevel) reasons.push(`Reach level ${ev.requiredLevel} (now ${inst.level})`);
-  if (inst.shards < ev.requiredShards) reasons.push(`${ev.requiredShards} shards (have ${inst.shards})`);
+  if ((inst.stars ?? 0) < ev.requiredStars) reasons.push(`${ev.requiredStars} stars (have ${inst.stars ?? 0})`);
   if (riftCores < ev.requiredRiftCores) reasons.push(`${ev.requiredRiftCores} Rift Core (have ${riftCores})`);
   return { possible: reasons.length === 0, def: summonDef(ev.toId), reasons };
 }
@@ -68,8 +68,36 @@ export function checkEvolution(inst: SummonInstance, riftCores: number): Evoluti
 export function evolveSummon(inst: SummonInstance): void {
   const def = summonDef(inst.defId);
   if (!def.evolution) throw new Error("Cannot evolve");
-  inst.shards -= def.evolution.requiredShards;
   inst.defId = def.evolution.toId;
   inst.level = Math.max(1, inst.level - 3);
   inst.xp = 0;
+}
+
+/** Star costs, indexed by the star being bought (0 = buying the first star). */
+export const STAR_COSTS: { shards: number; cores: number }[] = [
+  { shards: 2, cores: 0 },
+  { shards: 4, cores: 1 },
+  { shards: 8, cores: 1 },
+  { shards: 16, cores: 2 },
+  { shards: 30, cores: 3 },
+];
+export const STAR_STAT_STEP = 0.12;
+export const MAX_STARS = STAR_COSTS.length;
+
+export function starCost(inst: SummonInstance): { shards: number; cores: number } | null {
+  return STAR_COSTS[inst.stars ?? 0] ?? null;
+}
+
+export function canStarUp(inst: SummonInstance, riftCores: number): boolean {
+  const c = starCost(inst);
+  return !!c && inst.shards >= c.shards && riftCores >= c.cores;
+}
+
+/** Spends shards (and returns the cores the caller must deduct). */
+export function starUp(inst: SummonInstance): number {
+  const c = starCost(inst);
+  if (!c || inst.shards < c.shards) throw new Error("Cannot star up");
+  inst.shards -= c.shards;
+  inst.stars = (inst.stars ?? 0) + 1;
+  return c.cores;
 }

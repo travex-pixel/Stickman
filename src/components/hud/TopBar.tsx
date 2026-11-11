@@ -36,11 +36,11 @@ export function TopBar() {
           </div>
         </div>
       </div>
-      <div className="flex-1 flex items-center justify-start min-[360px]:justify-center gap-1 min-w-0 overflow-hidden">
+      <div className="flex-1 flex items-center justify-start min-[400px]:justify-center gap-1 min-w-0 overflow-hidden">
         <Stat icon="coin" value={fmt(gold)} color="text-gold-2" testId="gold" />
         <Stat icon="essence" value={fmt(essence)} color="text-jade-2" testId="essence" />
         {cores > 0 && (
-          <span className="hidden min-[360px]:flex">
+          <span className="hidden min-[400px]:flex">
             <Stat icon="core" value={fmt(cores)} color="text-violet" testId="cores" />
           </span>
         )}

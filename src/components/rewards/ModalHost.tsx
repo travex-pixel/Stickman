@@ -9,7 +9,12 @@ import type { Modal } from "@/game/GameController";
 import { itemName } from "@/game/GameController";
 import { ROLE_INFO, summonDef, type SummonDef } from "@/game/data/summons";
 import { STAT_LABEL } from "@/game/data/equipment";
-import { JOURNAL } from "@/game/data/lore";
+import { ACHIEVEMENTS, JOURNAL } from "@/game/data/lore";
+import { ENEMIES } from "@/game/data/enemies";
+import { GEAR_EFFECTS } from "@/game/data/gearEffects";
+import { RANKS } from "@/game/progression/ranks";
+import { MODES } from "@/game/data/modes";
+import { isBossStage } from "@/game/data/regions";
 import { WEAPON_PATHS } from "@/game/progression/weaponPaths";
 import { fmt, fmtDuration } from "@/lib/format";
 import { cn } from "@/lib/cn";
@@ -19,7 +24,7 @@ export function ModalHost() {
   const modal = useUi((u) => u.modal);
   return (
     <AnimatePresence>
-      {modal && modal.kind !== "boss_intro" && modal.kind !== "defeat" && modal.kind !== "stage_clear" && (
+      {modal && modal.kind !== "boss_intro" && modal.kind !== "defeat" && modal.kind !== "stage_clear" && modal.kind !== "mode_result" && (
         <motion.div key={modal.kind} className="fixed inset-0 z-50 flex items-center justify-center p-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} data-testid={`modal-${modal.kind}`} role="dialog" aria-modal="true">
           {modal.kind !== "summon_reveal" && <div className="scrim" />}
           <ModalBody modal={modal} />
@@ -43,6 +48,8 @@ function ModalBody({ modal }: { modal: Modal }) {
       return <WeaponPathChoice />;
     case "journal":
       return <Journal />;
+    case "rank_up":
+      return <RankUp modal={modal} />;
     default:
       return null;
   }
@@ -152,7 +159,7 @@ export function StageClear({ modal }: { modal: Extract<Modal, { kind: "stage_cle
   return (
     <Card>
       <div className="px-4 pt-3 pb-3 text-center flex flex-col gap-1.5 items-center">
-        <div className="caps text-jade-2">The Warden falls</div>
+        <div className="caps text-jade-2">{isBossStage(modal.stage) ? "The Warden falls" : "The champion falls"}</div>
         <div className="font-display text-[20px] text-ivory text-glow-gold leading-none">Stage {modal.stage} cleared</div>
         <div className="flex gap-3 mt-1 text-[12px] font-bold">
           <span className="flex items-center gap-1 text-gold"><Icon name="coin" size={14} />+{fmt(modal.gold)}</span>
@@ -162,7 +169,10 @@ export function StageClear({ modal }: { modal: Extract<Modal, { kind: "stage_cle
         {modal.items.length > 0 && (
           <div className="w-full card p-2 flex flex-col gap-1">
             {modal.items.map((it) => (
-              <div key={it.uid} className={cn("text-[11px] font-semibold", `rarity-${it.rarity}`)}>{itemName(it)} <span className="text-mist font-normal">· {it.rarity}</span></div>
+              <div key={it.uid} className={cn("text-[11px] font-semibold", `rarity-${it.rarity}`)}>
+                {itemName(it)} <span className="text-mist font-normal">· {it.rarity}</span>
+                {it.effect && <span className="block text-[10px] text-gold-2 font-normal">✦ {GEAR_EFFECTS[it.effect].name}</span>}
+              </div>
             ))}
           </div>
         )}
@@ -242,21 +252,61 @@ function WeaponPathChoice() {
 function Journal() {
   const c = useController();
   const profile = useProfileRef();
+  const [tab, setTab] = useState<"lore" | "bestiary" | "feats">("lore");
   const entries = JOURNAL.filter((j) => profile.progress.journal.includes(j.id));
+  const seen = Object.keys(profile.progress.killsByEnemy);
   return (
     <Card>
       <div className="px-4 pt-4 pb-2 flex items-center justify-between">
-        <div className="font-display text-[16px] text-ivory">Journal</div>
+        <div className="font-display text-[18px] text-ivory">Journal</div>
         <button className="h-8 w-8 flex items-center justify-center rounded-lg border border-white/10" onClick={() => c.closeModal()} aria-label="Close"><Icon name="close" size={14} /></button>
       </div>
-      <div className="px-4 pb-4 flex flex-col gap-2 overflow-y-auto" style={{ touchAction: "pan-y" }}>
-        {entries.map((j) => (
-          <div key={j.id} className="card p-2">
-            <div className="text-[11px] font-bold text-gold-2">{j.title}</div>
-            <div className="text-[11px] text-ivory/85 leading-snug mt-0.5">{j.body}</div>
-          </div>
+      <div className="px-4 flex gap-1">
+        {(["lore", "bestiary", "feats"] as const).map((t) => (
+          <button key={t} className={cn("px-2.5 py-1 rounded-md text-[11px] font-bold border", tab === t ? "border-gold/60 text-gold-2 bg-gold/10" : "border-white/10 text-mist")} onClick={() => setTab(t)} data-testid={`journal-${t}`}>
+            {t === "lore" ? "Lore" : t === "bestiary" ? "Bestiary" : "Feats"}
+          </button>
         ))}
-        <div className="text-[10px] text-mist text-center">{JOURNAL.length - entries.length} entries remain hidden in the Rift.</div>
+      </div>
+      <div className="px-4 py-3 flex flex-col gap-2 overflow-y-auto max-h-[60dvh]" style={{ touchAction: "pan-y" }}>
+        {tab === "lore" && (
+          <>
+            {entries.map((j) => (
+              <div key={j.id} className="card p-2.5">
+                <div className="font-display text-[13px] text-gold-2">{j.title}</div>
+                <div className="text-[11px] text-ivory/85 leading-snug mt-0.5">{j.body}</div>
+              </div>
+            ))}
+            <div className="text-[10px] text-mist text-center">{JOURNAL.length - entries.length} entries remain hidden in the Rift.</div>
+          </>
+        )}
+        {tab === "bestiary" &&
+          Object.values(ENEMIES).map((e) => {
+            const known = seen.includes(e.id);
+            return (
+              <div key={e.id} className={cn("card p-2 flex gap-2 items-center", !known && "opacity-50")}>
+                <SummonPortrait defId={e.id} size={40} enemy />
+                <div className="min-w-0">
+                  <div className="text-[12px] font-bold text-ivory">{known ? e.name : "Unknown"}</div>
+                  <div className="text-[10px] text-mist leading-snug line-clamp-2">{known ? e.lore : "Defeat it to learn more."}</div>
+                  {known && <div className="text-[9px] text-gold mt-0.5">Slain {profile.progress.killsByEnemy[e.id] ?? 0}{e.essenceSummonId ? " · leaves a shadow" : ""}</div>}
+                </div>
+              </div>
+            );
+          })}
+        {tab === "feats" &&
+          ACHIEVEMENTS.map((a) => {
+            const done = profile.progress.achievements.includes(a.id);
+            return (
+              <div key={a.id} className={cn("card p-2 flex items-center gap-2", done ? "card-active" : "opacity-70")}>
+                <Icon name={done ? "star" : "lock"} size={14} className={done ? "text-gold-2" : "text-mist"} />
+                <div>
+                  <div className="text-[12px] font-bold text-ivory">{a.name}</div>
+                  <div className="text-[10px] text-mist">{a.description}</div>
+                </div>
+              </div>
+            );
+          })}
       </div>
     </Card>
   );
@@ -264,4 +314,76 @@ function Journal() {
 
 export function fmtCodex(o: SummonDef["owned"]): string {
   return o.stat === "critChance" ? `${(o.pct * 100).toFixed(0)}% ${STAT_LABEL[o.stat]}` : `${Math.round(o.pct * 100)}% ${STAT_LABEL[o.stat]}`;
+}
+
+function RankUp({ modal }: { modal: Extract<Modal, { kind: "rank_up" }> }) {
+  const c = useController();
+  return (
+    <Card>
+      <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(60% 45% at 50% 32%, rgba(233,201,122,0.22), transparent)" }} />
+      <div className="relative px-5 pt-6 pb-4 flex flex-col items-center gap-2 text-center" data-testid="rank-up">
+        <div className="caps text-gold-2">Hunter rank</div>
+        <div className="relative h-[110px] w-[110px] flex items-center justify-center">
+          <motion.span className="absolute font-display text-[76px] text-mist" initial={{ opacity: 1, scale: 1 }} animate={{ opacity: 0, scale: 0.6, y: 20 }} transition={{ duration: 0.6, delay: 0.3 }}>
+            {RANKS[modal.from]}
+          </motion.span>
+          <motion.span
+            className="absolute font-display text-[92px] text-gold-2"
+            style={{ textShadow: "0 0 28px rgba(233,201,122,0.6), 0 3px 0 rgba(0,0,0,0.6)" }}
+            initial={{ opacity: 0, scale: 1.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.55, delay: 0.75, type: "spring", stiffness: 220, damping: 14 }}
+          >
+            {RANKS[modal.to]}
+          </motion.span>
+        </div>
+        <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1.2 }} className="font-display text-[20px] text-ivory">
+          {modal.to >= 5 ? "S rank. There is nothing above you now." : "You have broken through."}
+        </motion.div>
+        <motion.ul initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.4 }} className="w-full card p-2.5 flex flex-col gap-1 text-left">
+          {modal.rewards.map((r) => (
+            <li key={r} className="text-[12px] text-ivory flex items-center gap-2">
+              <Icon name="check" size={12} className="text-gold-2" />
+              {r}
+            </li>
+          ))}
+        </motion.ul>
+        <button className="btn-primary w-full mt-1" onClick={() => c.returnToCampaign()} data-testid="rank-up-continue">
+          Continue
+        </button>
+      </div>
+    </Card>
+  );
+}
+
+export function ModeResult({ modal }: { modal: Extract<Modal, { kind: "mode_result" }> }) {
+  const c = useController();
+  const again = c.modeAvailability(modal.mode);
+  const tone = { gold: "text-gold-2", jade: "text-jade-2", violet: "text-[#c2b6ff]" } as const;
+  return (
+    <Card>
+      <div className="px-4 pt-3 pb-3 text-center flex flex-col gap-1.5 items-center" data-testid="mode-result">
+        <div className={cn("caps", modal.success ? "text-gold-2" : "text-crimson-2")}>{modal.subtitle}</div>
+        <div className="font-display text-[20px] text-ivory leading-none">{modal.title}</div>
+        {modal.record && <div className="text-[10px] font-bold text-gold-2 tracking-[0.2em]">NEW BEST</div>}
+        <div className="w-full grid grid-cols-3 gap-1 mt-1">
+          {modal.lines.map((l) => (
+            <div key={l.label} className="card px-1.5 py-1.5">
+              <div className="caps !text-[8px]">{l.label}</div>
+              <div className={cn("font-display text-[15px]", l.tone ? tone[l.tone] : "text-ivory")}>{l.value}</div>
+            </div>
+          ))}
+        </div>
+        <div className="flex gap-2 w-full mt-1">
+          <button className="btn-ghost flex-1" onClick={() => c.returnToCampaign()} data-testid="mode-return">
+            Campaign
+          </button>
+          <button className="btn-primary flex-1" disabled={!again.ok} onClick={() => c.startMode(modal.mode)} data-testid="mode-again">
+            {again.ok ? `Again${modal.mode === "vault" || modal.mode === "rift" ? ` (${c.profile.modes.keys[modal.mode]})` : ""}` : again.reason}
+          </button>
+        </div>
+        <div className="text-[9px] text-mist">{MODES[modal.mode].name}</div>
+      </div>
+    </Card>
+  );
 }

@@ -45,6 +45,21 @@ export const MIGRATIONS: Migration[] = [
       };
     },
   },
+  {
+    from: 4,
+    to: 5,
+    migrate: (raw) => ({ ...raw, version: 5, modes: raw.modes ?? { keyDay: "", keys: { vault: 3, rift: 3 }, endlessBest: 0, vaultBest: 0 } }),
+  },
+  {
+    from: 5,
+    to: 6,
+    migrate: (raw) => {
+      // Stars arrive. Shards already banked stay banked, so veterans can star up immediately.
+      const summons = (raw.summons as Record<string, unknown> | undefined) ?? {};
+      const collection = Array.isArray(summons.collection) ? summons.collection.map((c) => ({ stars: 0, ...(c as object) })) : [];
+      return { ...raw, version: 6, summons: { ...summons, collection } };
+    },
+  },
 ];
 
 export function runMigrations(raw: Record<string, unknown>, targetVersion: number): { raw: Record<string, unknown>; migrated: boolean } {

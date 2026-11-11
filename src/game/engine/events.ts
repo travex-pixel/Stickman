@@ -21,8 +21,8 @@ export type GameEvent =
   | { type: "boss_intro"; id: number; defId: string }
   | { type: "boss_phase"; id: number; phase: number }
   | { type: "telegraph"; pos: Vec2; radius: number; duration: number }
-  | { type: "stage_cleared"; stage: number }
-  | { type: "player_defeated"; stage: number; wave: number }
+  | { type: "stage_cleared"; stage: number; mode: string; wave: number; time: number }
+  | { type: "player_defeated"; stage: number; wave: number; mode: string }
   | { type: "xp"; amount: number; pos: Vec2 }
   | { type: "gold"; amount: number; pos: Vec2 }
   | { type: "loot"; pos: Vec2 }
@@ -40,7 +40,9 @@ export type GameEvent =
   | { type: "elite_spawn"; id: number; affix: string; defId: string; pos: Vec2 }
   | { type: "minion_called"; id: number; pos: Vec2 }
   | { type: "extract_fail"; orbId: number; pos: Vec2; attemptsLeft: number }
-  | { type: "kill_streak"; count: number };
+  | { type: "kill_streak"; count: number }
+  | { type: "finisher"; pos: Vec2; boss: boolean }
+  | { type: "shard_gain"; summonId: string; amount: number; pos: Vec2 };
 
 export class EventQueue {
   private items: GameEvent[] = [];

@@ -3,6 +3,7 @@ import type { EquipSlot, Rarity, StatKey } from "../data/ids";
 import { RARITY_ORDER } from "../data/ids";
 import { EQUIPMENT_TEMPLATES, RARITY_MULT, RARITY_SUBSTATS, STAT_BASE } from "../data/equipment";
 import type { EquipmentItem } from "../progression/profile";
+import { GEAR_EFFECT_IDS } from "../data/gearEffects";
 
 let itemCounter = 0;
 export function newItemUid(now = Date.now()): string {
@@ -41,7 +42,8 @@ export function generateItem(rng: Rng, stage: number, rarity: Rarity, slot?: Equ
     const stat = rng.pick(available.filter((s) => !substats.some((x) => x.stat === s)));
     substats.push({ stat, value: round(STAT_BASE[stat] * 0.45 * RARITY_MULT[rarity] * stageMult * rng.range(0.8, 1.2), stat) });
   }
-  return { uid: newItemUid(now), templateId: template.id, slot: template.slot, rarity, level: 1, mainStat: template.mainStat, mainValue, substats };
+  const effect = rarity === "legendary" || (rarity === "epic" && rng.chance(0.5)) ? rng.pick(GEAR_EFFECT_IDS) : undefined;
+  return { uid: newItemUid(now), templateId: template.id, slot: template.slot, rarity, level: 1, mainStat: template.mainStat, mainValue, substats, ...(effect ? { effect } : {}) };
 }
 
 function round(v: number, stat: StatKey): number {
@@ -65,7 +67,7 @@ export function salvageValue(item: EquipmentItem): number {
 export function itemScore(item: EquipmentItem): number {
   const levelMult = 1 + (item.level - 1) * 0.1;
   const weight: Record<StatKey, number> = { attack: 10, maxHp: 1, attackSpeed: 400, critChance: 600, critDamage: 150, defense: 12, moveSpeed: 2 };
-  let score = item.mainValue * weight[item.mainStat];
+  let score = item.mainValue * weight[item.mainStat] + (item.effect ? 120 : 0);
   for (const s of item.substats) score += s.value * weight[s.stat];
   return Math.round(score * levelMult);
 }

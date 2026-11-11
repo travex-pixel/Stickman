@@ -10,7 +10,7 @@ import { codexBonus, ownedSpecies } from "@/game/summons/extraction";
 import { fmtCodex } from "@/components/rewards/ModalHost";
 import { STAT_LABEL } from "@/game/data/equipment";
 import { computeModifiers } from "@/game/progression/stats";
-import { bondCost, BOND_CAP, checkEvolution, summonPower, summonStats } from "@/game/summons/progression";
+import { bondCost, BOND_CAP, canStarUp, checkEvolution, starCost, summonStats } from "@/game/summons/progression";
 import { summonXpForLevel, SUMMON_LEVEL_CAP } from "@/game/progression/xp";
 import { fmt } from "@/lib/format";
 import { cn } from "@/lib/cn";
@@ -76,6 +76,8 @@ function SummonDetail({ inst, slots }: { inst: ReturnType<typeof useProfileRef>[
   const stats = summonStats(inst, { damageMult: mods.summonDamageMult, defenseMult: mods.summonDefenseMult, hpMult: mods.summonHpMult });
   const xpNeed = summonXpForLevel(inst.level);
   const evo = checkEvolution(inst, profile.player.riftCores);
+  const star = starCost(inst);
+  const starReady = canStarUp(inst, profile.player.riftCores);
   const cost = bondCost(inst.bond);
   const canBond = inst.bond < BOND_CAP && profile.player.essence >= cost;
   const deployedCount = profile.summons.collection.filter((s) => s.deployed).length;
@@ -98,7 +100,9 @@ function SummonDetail({ inst, slots }: { inst: ReturnType<typeof useProfileRef>[
         <div className="leading-tight">
           <div className="flex items-baseline justify-between gap-2">
             <span className="font-display text-[14px] text-ivory truncate">{def.name}</span>
-            <span className="text-[10px] text-mist shrink-0">{ROLE_INFO[def.role].label} · Lv {inst.level}</span>
+            <span className="text-[10px] text-mist shrink-0">
+              <span className="text-gold-2 tracking-tight">{"★".repeat(inst.stars ?? 0)}</span> {ROLE_INFO[def.role].label} · Lv {inst.level}
+            </span>
           </div>
           <div className="text-[9px] text-mist italic truncate">{def.title}</div>
         </div>
@@ -125,12 +129,32 @@ function SummonDetail({ inst, slots }: { inst: ReturnType<typeof useProfileRef>[
               </span>
             </span>
           </HoldButton>
+          <button
+            className={cn("h-[34px] px-2 rounded-lg border leading-tight shrink-0", star && starReady ? "border-gold/70 bg-gold/10 text-gold-2" : "border-white/10 bg-black/30 text-mist")}
+            onClick={() => c.starUp(inst.instanceId)}
+            disabled={!star}
+            data-testid="star-button"
+            aria-label={star ? `Star up for ${star.shards} shards${star.cores ? ` and ${star.cores} Rift Cores` : ""}` : "Max stars"}
+          >
+            <span className="block font-display text-[11px]">{star ? "★ Star" : "★ Max"}</span>
+            {star && (
+              <span className="block text-[9px] tabular-nums">
+                {inst.shards}/{star.shards}
+                {star.cores ? ` · ${star.cores}◆` : ""}
+              </span>
+            )}
+          </button>
           {def.evolution && (
-            <button className={cn("h-[34px] px-2 rounded-lg border text-[9px] font-bold leading-tight", evo.possible ? "bg-violet/25 border-violet text-ivory" : "bg-black/40 border-white/10 text-mist")} onClick={() => c.evolve(inst.instanceId)} title={evo.reasons.join(", ")} data-testid="evolve-button">
-              {evo.possible ? "EVOLVE" : <span>EVOLVE<br /><span className="text-[8px] font-normal">{inst.shards}/{def.evolution.requiredShards} shards</span></span>}
+            <button
+              className={cn("h-[34px] px-2 rounded-lg border leading-tight shrink-0", evo.possible ? "border-gold/70 bg-gold/15 text-gold-2" : "border-white/10 bg-black/30 text-mist")}
+              onClick={() => c.evolve(inst.instanceId)}
+              title={evo.reasons.join(", ")}
+              data-testid="evolve-button"
+            >
+              <span className="block font-display text-[11px]">Evolve</span>
+              <span className="block text-[9px]">{evo.possible ? "Ready" : `★${def.evolution.requiredStars} · Lv ${def.evolution.requiredLevel}`}</span>
             </button>
           )}
-          <span className="text-[9px] text-mist">⚡{fmt(summonPower(inst))}</span>
         </div>
       </div>
     </div>

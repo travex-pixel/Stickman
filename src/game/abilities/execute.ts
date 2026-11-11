@@ -4,7 +4,7 @@ import type { AbilityId } from "../data/ids";
 import { ABILITIES } from "../data/abilities";
 import { clamp, dist } from "../engine/math";
 import { addStatus, hasStatus } from "../combat/statuses";
-import { hostilesWithin, nearestHostile } from "../combat/targeting";
+import { factionWithin, hostilesWithin, nearestHostile } from "../combat/targeting";
 import { ARENA } from "../engine/World";
 
 /**
@@ -104,7 +104,7 @@ function thunderStrike(world: World, p: Combatant): void {
     current = m;
   }
   while (chains < maxChains) {
-    const next = hostilesWithin(current, world.entities.values(), def.radius).filter((e) => !struck.has(e.id))[0];
+    const next = factionWithin(current.pos, "enemy", world.entities.values(), def.radius).filter((e) => !struck.has(e.id))[0];
     if (!next) break;
     world.events.push({ type: "chain", from: { ...current.pos }, to: { ...next.pos }, color: def.color });
     world.dealDamage(p, next, def.power * 0.75, "lightning", false);

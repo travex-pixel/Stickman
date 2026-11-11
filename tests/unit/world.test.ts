@@ -204,12 +204,12 @@ describe("defeat", () => {
 });
 
 describe("second region", () => {
-  it("stage 7 spawns Drowned Hollow enemies and its Warden variant drops sigil essence", () => {
+  it("Drowned Hollow boss stages spawn its enemies and its Warden variant leaves an oath", () => {
     const p = createDefaultProfile();
     p.player.statLevels = { attack: 120, maxHp: 120, attackSpeed: 60, critChance: 30, critDamage: 30, defense: 60 };
     p.player.level = 20;
     p.player.autoCast = true;
-    const w = new World({ stage: 7, loadout: buildLoadout(p), seed: 4 });
+    const w = new World({ stage: 9, loadout: buildLoadout(p), seed: 4 });
     const ev: GameEvent[] = [];
     step(w, 240, ev);
     const spawned = new Set(ev.filter((e) => e.type === "spawn").map((e) => (e.type === "spawn" ? e.defId : "")));
@@ -312,5 +312,77 @@ describe("shadow army", () => {
     const ev: GameEvent[] = [];
     step(w, 25, ev);
     expect(ev.some((e) => e.type === "summon_ability" && e.ability === "Aegis")).toBe(true);
+  });
+});
+
+describe("combat feel", () => {
+  it("kills inside the window build a chain that resets when it lapses", () => {
+    const w = freshWorld(1, 3);
+    for (let i = 0; i < 6; i++) w.kill(w.spawnEnemy("husk", { pos: { x: 500, y: 20 + i * 10 } }), w.player.id);
+    expect(w.chain).toBe(6);
+    expect(w.drainEvents().some((e) => e.type === "kill_streak" && e.count === 5)).toBe(true);
+    step(w, 3);
+    expect(w.chain).toBe(0);
+  });
+  it("the executioner effect deals extra damage to weakened enemies", () => {
+    const p = createDefaultProfile();
+    p.equipment.inventory.push({ uid: "e", templateId: "edge_of_quiet", slot: "weapon", rarity: "legendary", level: 1, mainStat: "attack", mainValue: 1, substats: [], effect: "executioner" });
+    p.equipment.equipped.weapon = "e";
+    const w = new World({ stage: 1, loadout: buildLoadout(p), seed: 1 });
+    const plain = new World({ stage: 1, loadout: buildLoadout(createDefaultProfile()), seed: 1 });
+    const hitLow = (world: World) => {
+      const t = world.spawnEnemy("ashborn_brute", { pos: { x: 300, y: 80 } });
+      t.stats.maxHp = 1e6;
+      t.hp = t.stats.maxHp * 0.2;
+      let total = 0;
+      for (let i = 0; i < 40; i++) {
+        const before = t.hp;
+        world.dealDamage(world.player, t, 1, "physical", false);
+        total += before - t.hp;
+        t.hp = t.stats.maxHp * 0.2;
+      }
+      return total;
+    };
+    expect(hitLow(w)).toBeGreaterThan(hitLow(plain) * 1.2);
+  });
+});
+
+describe("faction invariant", () => {
+  it("no effect ever damages its own side across a long busy fight", () => {
+    const p = createDefaultProfile();
+    p.player.level = 8;
+    p.player.autoCast = true;
+    p.player.weaponPath = "stormblade";
+    claimEssence(p, "ember_acolyte");
+    claimEssence(p, "rift_caller");
+    for (const s of p.summons.collection) s.deployed = true;
+    p.equipment.inventory.push({ uid: "t", templateId: "edge_of_quiet", slot: "weapon", rarity: "legendary", level: 1, mainStat: "attack", mainValue: 1, substats: [], effect: "thunderclap" });
+    p.equipment.equipped.weapon = "t";
+    const w = new World({ stage: 4, loadout: buildLoadout(p), seed: 12 });
+    const ev: GameEvent[] = [];
+    step(w, 90, ev);
+    const factionOf = new Map<number, string>();
+    for (const e of ev) if (e.type === "spawn") factionOf.set(e.id, e.kind === "enemy" || e.kind === "boss" ? "enemy" : "ally");
+    for (const s of w.entities.values()) factionOf.set(s.id, s.faction);
+    for (const e of ev) {
+      if (e.type !== "hit" || e.sourceId < 0) continue;
+      const src = factionOf.get(e.sourceId);
+      if (src) expect(src, `source ${e.sourceId} hit its own side`).not.toBe(e.faction);
+    }
+  });
+  it("Thunder Strike chains through enemies only and the infernal splash lands", () => {
+    const p = createDefaultProfile();
+    p.player.level = 4;
+    p.player.weaponPath = "infernal";
+    const w = new World({ stage: 1, loadout: buildLoadout(p), seed: 3 });
+    for (let i = 0; i < 4; i++) w.spawnEnemy("husk", { pos: { x: w.player.pos.x + 40 + i * 25, y: w.player.pos.y } });
+    w.drainEvents();
+    const hp = w.player.hp;
+    expect(w.castAbility("thunder_strike")).toBe(true);
+    step(w, 0.6);
+    expect(w.player.hp).toBeGreaterThanOrEqual(hp);
+    const ev: GameEvent[] = [];
+    step(w, 4, ev);
+    expect(ev.filter((e) => e.type === "hit" && e.element === "fire").length).toBeGreaterThan(0);
   });
 });

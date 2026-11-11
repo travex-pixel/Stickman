@@ -3,7 +3,7 @@ import { ENEMIES } from "@/game/data/enemies";
 
 const hex = (c: number) => `#${c.toString(16).padStart(6, "0")}`;
 
-type Role = "vanguard" | "reaper" | "ranger" | "arcanist" | "sovereign" | "sentinel";
+type Role = "vanguard" | "reaper" | "ranger" | "arcanist" | "sovereign" | "sentinel" | "caller";
 
 /**
  * Portrait busts in the same language as the battlefield:
@@ -13,7 +13,7 @@ export function SummonPortrait({ defId, size = 56, enemy = false }: { defId: str
   const s = SUMMONS[defId];
   const e = ENEMIES[defId];
   const isEnemy = enemy || (!s && !!e);
-  const role: Role = (s?.role as Role) ?? (e?.archetype === "brute" ? "vanguard" : e?.archetype === "ranger" ? "ranger" : e?.archetype === "arcanist" ? "arcanist" : e?.archetype === "boss" ? "sovereign" : "reaper");
+  const role: Role = (s?.role as Role) ?? (e?.archetype === "brute" ? "vanguard" : e?.archetype === "ranger" ? "ranger" : e?.archetype === "arcanist" ? "arcanist" : e?.archetype === "shieldbearer" ? "sentinel" : e?.archetype === "summoner" ? "caller" : e?.archetype === "boss" ? "sovereign" : "reaper");
   const legendary = s?.rarity === "legendary";
   const body = isEnemy ? "#17171d" : "#262650";
   const rim = isEnemy ? "#3a3a44" : "#4a4790";
@@ -43,6 +43,21 @@ export function SummonPortrait({ defId, size = 56, enemy = false }: { defId: str
           <circle cx="32" cy="24" r="11" />
           <path d="M23 18 L13 4 L27 15 Z M41 18 L51 4 L37 15 Z" />
         </g>
+      ) : role === "sentinel" ? (
+        <g fill={`url(#${id}-b)`}>
+          <path d="M14 64 C16 46 22 38 32 38 C42 38 48 46 50 64 Z" />
+          <circle cx="32" cy="25" r="10" />
+          <rect x="38" y="26" width="18" height="34" rx="3" fill={rim} />
+          <rect x="45" y="30" width="3" height="26" fill={glow} opacity="0.5" />
+        </g>
+      ) : role === "caller" ? (
+        <g fill={`url(#${id}-b)`}>
+          <path d="M6 64 Q32 48 58 64 L46 34 Q32 28 18 34 Z" />
+          <path d="M31 4 L17 32 L45 32 Z" />
+          <path d="M12 20 L12 58" stroke={rim} strokeWidth="2" />
+          <circle cx="12" cy="18" r="4" fill={glow} opacity="0.9" />
+          <circle cx="12" cy="18" r="8" fill={glow} opacity="0.2" />
+        </g>
       ) : role === "ranger" ? (
         <g fill={`url(#${id}-b)`}>
           <path d="M14 64 C16 46 22 38 32 38 C42 38 48 46 50 64 Z" />
@@ -66,8 +81,8 @@ export function SummonPortrait({ defId, size = 56, enemy = false }: { defId: str
         </g>
       )}
       {/* Eyes are the brightest marks on the card. */}
-      <path d={role === "vanguard" || role === "sovereign" ? "M33 23 L41 24.5 L33 26 Z" : role === "ranger" || role === "arcanist" ? "M32 27 L39 28.3 L32 29.6 Z" : "M33 24 L41 25.4 L33 26.8 Z"} fill={eye} />
-      <circle cx={role === "ranger" || role === "arcanist" ? 35 : 37} cy={role === "ranger" || role === "arcanist" ? 28 : 25} r="6" fill={eye} opacity="0.18" />
+      <path d={role === "vanguard" || role === "sovereign" ? "M33 23 L41 24.5 L33 26 Z" : role === "ranger" || role === "arcanist" || role === "caller" ? "M32 27 L39 28.3 L32 29.6 Z" : "M33 24 L41 25.4 L33 26.8 Z"} fill={eye} />
+      <circle cx={role === "ranger" || role === "arcanist" || role === "caller" ? 35 : 37} cy={role === "ranger" || role === "arcanist" || role === "caller" ? 28 : 25} r="6" fill={eye} opacity="0.18" />
       {legendary && <rect x="1" y="1" width="62" height="62" rx="9.5" fill="none" stroke="#cfa95e" strokeOpacity="0.6" />}
     </svg>
   );

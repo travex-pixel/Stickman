@@ -3,14 +3,14 @@
 import { useState } from "react";
 import { motion } from "motion/react";
 import { Icon } from "@/components/ui/Icon";
-import { useController, useProfileRef, useUi } from "@/hooks/useGame";
+import { useController, useProfileRef } from "@/hooks/useGame";
+import { useStore } from "@/lib/store";
 import { cn } from "@/lib/cn";
 
 export function SettingsModal() {
   const c = useController();
   const profile = useProfileRef();
-  const fps = useUi((u) => u.fps);
-  const stats = useUi((u) => u.renderStats);
+  const stats = useStore(c.diagStore, (x) => x);
   const [confirmReset, setConfirmReset] = useState(false);
   const s = profile.settings;
   return (
@@ -31,7 +31,7 @@ export function SettingsModal() {
         <Toggle label="Diagnostics overlay" value={s.diagnostics} onChange={(v) => c.updateSettings({ diagnostics: v })} />
         {s.diagnostics && (
           <div className="text-[10px] font-mono text-jade-2">
-            {fps} fps · {stats.frameMs} ms · {stats.renderer} · particles {stats.particles}
+            {stats.fps} fps · {stats.frameMs} ms · {stats.renderer} · particles {stats.particles}
           </div>
         )}
         <div className="flex gap-2">

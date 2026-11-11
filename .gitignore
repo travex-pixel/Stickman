@@ -12,3 +12,7 @@ playwright-report/
 .vercel
 .DS_Store
 tsconfig.tsbuildinfo
+
+# local review and screenshot scripts
+.review-*.mjs
+.look.mjs

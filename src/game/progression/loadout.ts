@@ -5,6 +5,7 @@ import { ABILITIES, ABILITY_SLOTS, ULTIMATE_ID } from "../data/abilities";
 import { computeModifiers, computePlayerStats, type PlayerModifiers } from "./stats";
 import { summonStats } from "../summons/progression";
 import { summonDef } from "../data/summons";
+import { ownedSpecies } from "../summons/extraction";
 
 export interface DeployedSummonLoadout {
   instanceId: string;
@@ -26,6 +27,8 @@ export interface PlayerLoadout {
   level: number;
   /** True once the player owns any summon; the first-essence guarantee stops applying. */
   hasSummons: boolean;
+  /** Species already sworn: ordinary kills of these convert straight to shards. */
+  owned: string[];
 }
 
 export function buildLoadout(profile: Profile): PlayerLoadout {
@@ -47,6 +50,7 @@ export function buildLoadout(profile: Profile): PlayerLoadout {
     autoCast: profile.player.autoCast,
     level: profile.player.level,
     hasSummons: profile.summons.collection.length > 0,
+    owned: ownedSpecies(profile),
   };
 }
 

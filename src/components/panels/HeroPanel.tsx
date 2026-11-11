@@ -7,6 +7,7 @@ import type { UpgradeableStat } from "@/game/data/ids";
 import { STAT_LABEL } from "@/game/data/equipment";
 import { combatPower, computePlayerStats, isStatUnlocked, statUnlockRule, statUpgradeCost, STAT_UPGRADE_CAP } from "@/game/progression/stats";
 import type { Profile } from "@/game/progression/profile";
+import { canAttemptTrial, nextRankStep, rankLetter } from "@/game/progression/ranks";
 import { fmt, fmtStat } from "@/lib/format";
 import { cn } from "@/lib/cn";
 
@@ -31,10 +32,7 @@ export default function HeroPanel() {
           <span className="font-display text-[12px] tracking-[0.2em] text-mist">POWER</span>
           <span className="font-display text-[18px] text-gold-2 text-glow-gold tabular-nums" data-testid="combat-power">{fmt(power)}</span>
         </div>
-        <div className="flex items-center gap-3 text-[10px] text-mist">
-          <span className="flex items-center gap-1"><Icon name="move" size={11} />{Math.round(stats.moveSpeed)}</span>
-          <span className="flex items-center gap-1"><Icon name="regen" size={11} />{stats.hpRegen.toFixed(1)}/s</span>
-        </div>
+        <RankBadge />
       </div>
       <div className="grid grid-cols-2 grid-rows-3 gap-1.5 flex-1 min-h-0">
         {STATS.map((s) => (
@@ -94,5 +92,28 @@ function StatCard({ stat, icon, value, next, level, gold, unlocked, onUpgrade }:
         )}
       </HoldButton>
     </div>
+  );
+}
+
+function RankBadge() {
+  const c = useController();
+  const profile = useProfileRef();
+  const step = nextRankStep(profile);
+  const ready = canAttemptTrial(profile);
+  return (
+    <button
+      className={cn("flex items-center gap-1.5 rounded-lg border pl-1 pr-2 py-0.5", ready ? "border-gold/70 bg-gold/10" : "border-white/10 bg-black/20")}
+      onClick={() => (ready ? c.startMode("trial") : c.setPanel("rift"))}
+      data-testid="rank-badge"
+      aria-label={`Hunter rank ${rankLetter(profile.player.rank)}${ready ? ", trial ready" : ""}`}
+    >
+      <span className="h-6 w-6 rounded-md flex items-center justify-center font-display text-[15px] text-gold-2" style={{ background: "linear-gradient(180deg,#2c2414,#17130b)", boxShadow: "inset 0 0 0 1px rgba(207,169,94,0.5)" }}>
+        {rankLetter(profile.player.rank)}
+      </span>
+      <span className="text-[10px] leading-tight text-left">
+        <span className="block caps !text-[8px]">Rank</span>
+        <span className={cn("block font-semibold", ready ? "text-gold-2" : "text-mist")}>{step ? (ready ? "Trial ready" : `Trial at Lv ${step.level}`) : "Apex"}</span>
+      </span>
+    </button>
   );
 }

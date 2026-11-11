@@ -25,17 +25,17 @@ describe("balance curve", () => {
 
   it("moderately upgraded player with a deployed Vanguard clears stage 1", () => {
     const p = profileWithUpgrades({ attack: 8, maxHp: 8, defense: 3 }, { level: 3 });
-    p.summons.collection.push({ instanceId: newInstanceId(), defId: "ashborn_bulwark", level: 2, xp: 0, bond: 2, shards: 0, deployed: true, recruitedAt: 0 });
-    p.summons.collection.push({ instanceId: newInstanceId(), defId: "husk_blade", level: 2, xp: 0, bond: 1, shards: 0, deployed: true, recruitedAt: 0 });
+    p.summons.collection.push({ instanceId: newInstanceId(), defId: "ashborn_bulwark", level: 2, xp: 0, bond: 2, shards: 0, stars: 0, deployed: true, recruitedAt: 0 });
+    p.summons.collection.push({ instanceId: newInstanceId(), defId: "husk_blade", level: 2, xp: 0, bond: 1, shards: 0, stars: 0, deployed: true, recruitedAt: 0 });
     const results = [21, 22, 23].map((seed) => simulateRun(p, 1, seed, 300, "active"));
     const wins = results.filter((r) => r.outcome === "victory").length;
     expect(wins, JSON.stringify(results)).toBeGreaterThanOrEqual(2);
     for (const r of results) if (r.outcome === "victory") expect(r.seconds).toBeLessThan(300);
   });
 
-  it("stage scaling makes stage 4 lethal for a stage-1 build", () => {
+  it("stage scaling makes the stage 6 Warden lethal for a stage-1 build", () => {
     const p = profileWithUpgrades({ attack: 8, maxHp: 8, defense: 3 }, { level: 3 });
-    const r = simulateRun(p, 4, 31, 240, "active");
+    const r = simulateRun(p, 6, 31, 240, "active");
     expect(r.outcome).not.toBe("victory");
   });
 });

@@ -76,14 +76,13 @@ describe("summon progression", () => {
     const s = p.summons.collection[0]!;
     expect(checkEvolution(s, 0).possible).toBe(false);
     s.level = 8;
-    s.shards = 4;
+    s.stars = 2;
     expect(checkEvolution(s, 0).possible).toBe(false);
     const ok = checkEvolution(s, 1);
     expect(ok.possible).toBe(true);
     expect(ok.def?.id).toBe("gravewalker");
     evolveSummon(s);
     expect(s.defId).toBe("gravewalker");
-    expect(s.shards).toBe(0);
     expect(summonStats(s).attack).toBeGreaterThan(summonStats({ ...s, defId: "husk_blade" }).attack);
   });
 });

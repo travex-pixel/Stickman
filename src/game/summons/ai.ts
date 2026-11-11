@@ -3,7 +3,7 @@ import type { Combatant } from "../entities/types";
 import { clamp, dist } from "../engine/math";
 import { summonDef } from "../data/summons";
 import { addStatus } from "../combat/statuses";
-import { hostilesWithin, lowestHpFraction, mostDangerous, nearestHostile } from "../combat/targeting";
+import { factionWithin, hostilesWithin, lowestHpFraction, mostDangerous, nearestHostile } from "../combat/targeting";
 import { ARENA } from "../engine/World";
 
 /**
@@ -168,7 +168,7 @@ function tryActive(world: World, s: Combatant, target: Combatant, nearby: Combat
       return true;
     }
     case "ember_acolyte": {
-      const cluster = hostilesWithin(target, world.entities.values(), 70).filter((e) => e.faction === "enemy");
+      const cluster = factionWithin(target.pos, "enemy", world.entities.values(), 70);
       if (cluster.length < 2 && target.kind !== "boss") return false;
       world.addTelegraph(target.pos, 60, 0.5, "circle", 1, 0, 0xff9b3d);
       world.addHazard({ ...target.pos }, 60, 5, s.stats.attack * 0.8, "ally", s.id, "fire");

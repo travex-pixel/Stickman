@@ -4,6 +4,7 @@ import type { EquipmentItem, Profile } from "./profile";
 import { SKILLS } from "../data/skills";
 import { PERKS } from "../data/perks";
 import { codexBonus } from "../summons/extraction";
+import type { GearEffectId } from "../data/gearEffects";
 
 /** Each Hunter rank multiplies core stats. Rank is earned in Rank Trials, not bought. */
 export const RANK_STAT_STEP = 0.08;
@@ -85,6 +86,7 @@ export interface PlayerModifiers {
   summonXpMult: number;
   deploySlots: number;
   synergies: Set<"arc_pull" | "thunder_mark" | "nova_opening" | "soul_mend">;
+  gearEffects: Set<GearEffectId>;
   weaponPathUnlocked: boolean;
 }
 
@@ -121,6 +123,7 @@ export function computeModifiers(profile: Profile): PlayerModifiers {
     summonXpMult: 1,
     deploySlots: 2,
     synergies: new Set(),
+    gearEffects: new Set(),
     weaponPathUnlocked: false,
   };
   for (const id of profile.skills.unlocked) {
@@ -196,6 +199,12 @@ export function computeModifiers(profile: Profile): PlayerModifiers {
     }
   }
   if (profile.summons.collection.some((s) => s.deployed && s.defId === "hollow_warden")) m.summonDefenseMult += 0.15;
+  for (const item of equippedItems(profile)) if (item.effect) m.gearEffects.add(item.effect);
+  if (m.gearEffects.has("shadowbound")) {
+    m.summonDamageMult += 0.25;
+    m.extractionBonus += 0.05;
+  }
+  if (m.gearEffects.has("tempest")) m.cooldownMult *= 0.85;
   if (profile.player.rank >= 2) m.deploySlots += 1;
   if (profile.player.rank >= 5) m.deploySlots += 1;
   return m;

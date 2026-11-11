@@ -1,6 +1,6 @@
 /** XP required to go from `level` to `level + 1`. */
 export function xpForLevel(level: number): number {
-  return Math.round(60 * Math.pow(level, 1.55) + 40 * level);
+  return Math.round(60 * Math.pow(level, 1.85) + 40 * level);
 }
 
 export const PLAYER_LEVEL_CAP = 60;

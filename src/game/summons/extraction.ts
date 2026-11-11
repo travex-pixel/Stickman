@@ -12,11 +12,16 @@ import { SUMMONS, summonDef } from "../data/summons";
 export const BASE_EXTRACTION: Record<Rarity, number> = {
   common: 0.6,
   uncommon: 0.45,
-  rare: 0.32,
-  epic: 0.2,
-  legendary: 0.12,
+  rare: 0.3,
+  epic: 0.14,
+  legendary: 0.04,
 };
 
+/** Each failure on a species makes the next attempt likelier; rarer species climb more slowly. */
+export const PITY_BY_RARITY: Record<Rarity, number> = { common: 0.12, uncommon: 0.12, rare: 0.1, epic: 0.05, legendary: 0.025 };
+/** After this many consecutive failures on a species, the next attempt is certain. */
+export const HARD_PITY: Record<Rarity, number> = { common: 4, uncommon: 5, rare: 7, epic: 12, legendary: 18 };
+/** @deprecated use PITY_BY_RARITY */
 export const PITY_STEP = 0.12;
 export const RANK_STEP = 0.04;
 export const ELITE_BONUS = 0.15;
@@ -28,7 +33,8 @@ export const FAIL_ESSENCE: Record<Rarity, number> = { common: 4, uncommon: 8, ra
 export function extractionChance(profile: Profile, summonId: string, opts: { elite?: boolean; bonus?: number } = {}): number {
   const def = summonDef(summonId);
   const pity = profile.summons.pity[summonId] ?? 0;
-  const chance = BASE_EXTRACTION[def.rarity] + profile.player.rank * RANK_STEP + pity * PITY_STEP + (opts.elite ? ELITE_BONUS : 0) + (opts.bonus ?? 0);
+  if (pity >= HARD_PITY[def.rarity]) return 1;
+  const chance = BASE_EXTRACTION[def.rarity] + profile.player.rank * RANK_STEP + pity * PITY_BY_RARITY[def.rarity] + (opts.elite ? ELITE_BONUS : 0) + (opts.bonus ?? 0);
   return Math.min(MAX_CHANCE, Math.max(0.02, chance));
 }
 

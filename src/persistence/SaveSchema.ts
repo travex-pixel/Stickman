@@ -3,6 +3,7 @@ import { SUMMONS } from "@/game/data/summons";
 import { EQUIP_SLOTS } from "@/game/data/ids";
 import { EQUIPMENT_TEMPLATES } from "@/game/data/equipment";
 import { SKILLS } from "@/game/data/skills";
+import { GEAR_EFFECTS, type GearEffectId } from "@/game/data/gearEffects";
 
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 const isStr = (v: unknown): v is string => typeof v === "string";
@@ -46,6 +47,7 @@ export function sanitizeProfile(raw: unknown): { profile: Profile; repaired: boo
         level: num(it.level, 1, 1, 30),
         mainStat: template.mainStat,
         mainValue: numF(it.mainValue, 1, 0, 1e6),
+        ...(isStr(it.effect) && it.effect in GEAR_EFFECTS ? { effect: it.effect as GearEffectId } : {}),
         substats: Array.isArray(it.substats) ? it.substats.filter((s): s is { stat: Profile["equipment"]["inventory"][number]["mainStat"]; value: number } => isObj(s) && isStr(s.stat) && isNum(s.value)).slice(0, 3) : [],
       });
     }
@@ -74,6 +76,7 @@ export function sanitizeProfile(raw: unknown): { profile: Profile; repaired: boo
         xp: num(s.xp, 0),
         bond: num(s.bond, 1, 1, 50),
         shards: num(s.shards, 0),
+        stars: num(s.stars, 0, 0, 5),
         deployed: s.deployed === true,
         recruitedAt: num(s.recruitedAt, Date.now()),
       });
@@ -82,6 +85,8 @@ export function sanitizeProfile(raw: unknown): { profile: Profile; repaired: boo
   const pr = isObj(raw.progress) ? raw.progress : {};
   const quest = isObj(pr.quest) ? pr.quest : {};
   const tut = isObj(raw.tutorial) ? raw.tutorial : {};
+  const md = isObj(raw.modes) ? raw.modes : {};
+  const mk = isObj(md.keys) ? md.keys : {};
   const st = isObj(raw.settings) ? raw.settings : {};
   const sk = isObj(raw.skills) ? raw.skills : {};
   const command = sm.command === "aggressive" || sm.command === "guard" || sm.command === "follow" ? sm.command : "follow";
@@ -136,6 +141,12 @@ export function sanitizeProfile(raw: unknown): { profile: Profile; repaired: boo
       abilityCasts: num(pr.abilityCasts, 0),
       evolutions: num(pr.evolutions, 0),
       redeemedCodes: Array.isArray(pr.redeemedCodes) ? pr.redeemedCodes.filter(isStr).slice(0, 500) : [],
+    },
+    modes: {
+      keyDay: isStr(md.keyDay) ? md.keyDay : "",
+      keys: { vault: num(mk.vault, 3, 0, 3), rift: num(mk.rift, 3, 0, 3) },
+      endlessBest: num(md.endlessBest, 0),
+      vaultBest: num(md.vaultBest, 0),
     },
     tutorial: { completed: Array.isArray(tut.completed) ? tut.completed.filter(isStr) : [], finished: tut.finished === true },
     settings: {

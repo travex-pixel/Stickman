@@ -2,7 +2,7 @@
 
 import { AnimatePresence, motion } from "motion/react";
 import { Icon } from "@/components/ui/Icon";
-import { useController, useHud, useProfile, useUi } from "@/hooks/useGame";
+import { useController, useHud, useProfile, useProfileRef, useUi } from "@/hooks/useGame";
 import { SUMMONS } from "@/game/data/summons";
 import type { WorldSnapshot } from "@/game/engine/World";
 import { ENEMIES } from "@/game/data/enemies";
@@ -14,7 +14,8 @@ import type { SummonCommand } from "@/game/data/ids";
 import { cn } from "@/lib/cn";
 import { fmt } from "@/lib/format";
 import { SummonPortrait } from "@/components/ui/Portrait";
-import { Defeat, StageClear } from "@/components/rewards/ModalHost";
+import { Defeat, ModeResult, StageClear } from "@/components/rewards/ModalHost";
+import { MODES } from "@/game/data/modes";
 
 const EMPTY_ORBS: WorldSnapshot["orbs"] = [];
 const EMPTY_SUMMONS: WorldSnapshot["summons"] = [];
@@ -24,6 +25,9 @@ export function BattleOverlays() {
   return (
     <>
       <RunOutcome />
+      <ModeHud />
+      <ChainCounter />
+      <PerkChip />
       <BossBar />
       <WaveBanner />
       <EssencePrompts />
@@ -37,11 +41,76 @@ export function BattleOverlays() {
 /** Defeat and victory live over the battlefield so the panels below stay usable for upgrading. */
 function RunOutcome() {
   const modal = useUi((u) => u.modal);
-  if (!modal || (modal.kind !== "defeat" && modal.kind !== "stage_clear")) return null;
+  if (!modal || (modal.kind !== "defeat" && modal.kind !== "stage_clear" && modal.kind !== "mode_result")) return null;
   return (
     <div className="absolute inset-0 z-30 flex items-center justify-center p-3" data-testid={`modal-${modal.kind}`} role="dialog" aria-modal="false">
       <div className="absolute inset-0 bg-ink/60" />
-      <AnimatePresence>{modal.kind === "defeat" ? <Defeat modal={modal} /> : <StageClear modal={modal} />}</AnimatePresence>
+      <AnimatePresence>{modal.kind === "defeat" ? <Defeat modal={modal} /> : modal.kind === "mode_result" ? <ModeResult modal={modal} /> : <StageClear modal={modal} />}</AnimatePresence>
+    </div>
+  );
+}
+
+/** Outside the campaign: what mode this is, how it is going, and a way out. */
+function ModeHud() {
+  const c = useController();
+  const mode = useHud((s) => s?.mode ?? "campaign");
+  const timeLeft = useHud((s) => s?.timeLeft ?? null);
+  const wave = useHud((s) => s?.wave ?? 0);
+  const total = useHud((s) => s?.wavesTotal ?? 0);
+  const hasBoss = useHud((s) => !!s?.boss);
+  if (mode === "campaign") return null;
+  const status = timeLeft !== null ? `${Math.floor(timeLeft / 60)}:${String(Math.ceil(timeLeft % 60) === 60 ? 0 : Math.ceil(timeLeft % 60)).padStart(2, "0")}` : mode === "endless" ? `Wave ${Math.max(1, wave)}` : total ? `Wave ${Math.max(1, wave)}/${total}` : "";
+  return (
+    <div className={cn("absolute left-1/2 -translate-x-1/2 z-10 flex items-center gap-2 rounded-full bg-ink/80 border border-gold/40 pl-3 pr-1 py-0.5", hasBoss ? "top-10" : "top-1.5")} data-testid="mode-hud">
+      <span className="font-display text-[11px] tracking-[0.14em] text-gold-2 whitespace-nowrap">{MODES[mode].name}</span>
+      <span className={cn("text-[11px] font-extrabold tabular-nums", timeLeft !== null && timeLeft < 10 ? "text-crimson-2" : "text-ivory")}>{status}</span>
+      <button className="text-[9px] font-bold text-mist px-2 py-1 rounded-full border border-white/10" onClick={() => c.returnToCampaign()} data-testid="mode-leave">
+        Leave
+      </button>
+    </div>
+  );
+}
+
+function PerkChip() {
+  const c = useController();
+  const pending = useProfile((p) => p.player.pendingPerkChoices);
+  const modal = useUi((u) => u.modal);
+  if (pending <= 0 || modal) return null;
+  return (
+    <motion.button
+      initial={{ opacity: 0, y: -6 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="absolute left-2 bottom-2 z-20 flex items-center gap-1.5 rounded-full border border-gold/70 bg-[#231c0d]/95 pl-2.5 pr-3 py-1 shadow-[0_6px_16px_rgba(0,0,0,0.5)]"
+      onClick={() => c.openPerkChoice()}
+      data-testid="perk-chip"
+      aria-label="Choose an ascension perk"
+    >
+      <motion.span animate={{ scale: [1, 1.25, 1] }} transition={{ duration: 1.2, repeat: Infinity }} className="text-gold-2">
+        <Icon name="star" size={12} />
+      </motion.span>
+      <span className="font-display text-[12px] tracking-[0.08em] text-gold-2">Choose a perk{pending > 1 ? ` ×${pending}` : ""}</span>
+    </motion.button>
+  );
+}
+
+/** The kill chain: a quiet number that grows louder the longer you keep it alive. */
+function ChainCounter() {
+  const chain = useHud((s) => s?.chain ?? 0);
+  if (chain < 3) return null;
+  const hot = chain >= 10;
+  return (
+    <div className="absolute left-2 top-[46%] z-10 pointer-events-none flex flex-col items-start leading-none" data-testid="chain">
+      <motion.span
+        key={chain}
+        initial={{ scale: 1.35, opacity: 0.6 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ duration: 0.18 }}
+        className={cn("font-display tabular-nums", hot ? "text-gold-2 text-[30px]" : "text-ivory text-[24px]")}
+        style={{ textShadow: hot ? "0 0 18px rgba(233,201,122,0.55), 0 2px 0 rgba(0,0,0,0.6)" : "0 2px 0 rgba(0,0,0,0.6)" }}
+      >
+        {chain}
+      </motion.span>
+      <span className={cn("caps !text-[8px]", hot ? "!text-gold" : "")}>Chain</span>
     </div>
   );
 }
@@ -89,7 +158,7 @@ function WaveBanner() {
 function EssencePrompts() {
   const c = useController();
   const orbs = useHud((s) => s?.orbs ?? EMPTY_ORBS);
-  const profile = useProfile((p) => p);
+  const profile = useProfileRef();
   const bonus = computeModifiers(profile).extractionBonus;
   const firstEver = !profile.summons.firstSummonSeen;
   const view = c.view;
@@ -183,7 +252,7 @@ function SummonStrip() {
 
 function QuestBanner() {
   const c = useController();
-  const profile = useProfile((p) => p);
+  const profile = useProfileRef();
   const quest = currentQuest(profile);
   if (!quest) return null;
   const prog = questProgress(profile, quest);

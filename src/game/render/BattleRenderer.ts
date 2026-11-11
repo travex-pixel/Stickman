@@ -20,6 +20,7 @@ import { summonDef } from "../data/summons";
 interface EntityView {
   rig: Rig;
   bar: Graphics;
+  barKey?: string;
   lastHp: number;
   defId: string;
   kind: string;
@@ -74,6 +75,7 @@ export class BattleRenderer {
   private cinematic: { rig: Rig; x: number; y: number; t: number; first: boolean; overlay: Graphics; summonId: string; done: boolean; ending: boolean } | null = null;
   private playerPath: string = "none";
   private lowHpPulse = 0;
+  private resizeTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(private readonly controller: GameController) {}
 
@@ -110,12 +112,17 @@ export class BattleRenderer {
     this.entityLayer.sortableChildren = true;
     this.root.addChild(this.numbers.container, this.cinematicLayer, this.flashRect);
     this.flashRect.blendMode = "add";
-    this.resizeObs = new ResizeObserver(() => this.layout());
+    this.resizeObs = new ResizeObserver(() => {
+      // Repainting the watercolour layers is expensive; wait for the size to settle.
+      if (this.resizeTimer) clearTimeout(this.resizeTimer);
+      this.resizeTimer = setTimeout(() => this.layout(), 120);
+    });
     this.resizeObs.observe(host);
     this.layout();
   }
 
   unmount(): void {
+    if (this.resizeTimer) clearTimeout(this.resizeTimer);
     this.resizeObs?.disconnect();
     this.resizeObs = null;
     for (const v of this.views.values()) v.rig.destroy();
@@ -282,7 +289,9 @@ export class BattleRenderer {
         this.playerPath = world.loadout.weaponPath;
         v.rig.destroy();
         v.bar.destroy();
-        this.views.set(e.id, this.createView(e));
+        v = this.createView(e);
+        this.views.set(e.id, v);
+        continue;
       }
       this.drawBar(v, e, sx, sy, ds);
       void dt;
@@ -309,36 +318,48 @@ export class BattleRenderer {
     return { rig, bar, lastHp: -1, defId: e.defId, kind: e.kind };
   }
 
+  /**
+   * Health bars sit just above the head, appear only once a unit is hurt (or shielded, elite or
+   * markable), and are re-tessellated only when what they show changes. Movement is a position update.
+   */
   private drawBar(v: EntityView, e: Combatant, sx: number, sy: number, ds: number): void {
     const bar = v.bar;
-    if (e.dead || e.kind === "boss" || (e.kind === "player" && e.hp >= e.stats.maxHp && e.shield <= 0)) {
+    const hurt = e.hp < e.stats.maxHp - 0.5 || e.shield > 0;
+    const flagged = !!e.enemy?.elite || !!e.enemy?.eligible;
+    if (e.dead || e.kind === "boss" || (!hurt && !flagged)) {
       bar.visible = false;
       return;
     }
     bar.visible = true;
-    const w = (e.kind === "player" ? 46 : e.kind === "summon" ? 34 : 32) * this.unit() * 1.6;
-    const h = 4;
-    const top = sy - (v.rig.unit * 100 + 22) * ds;
+    const top = sy - (v.rig.unit * 100 + 10) * ds;
+    bar.position.set(sx, top);
+    const w = Math.round((e.kind === "player" ? 40 : e.kind === "summon" ? 30 : 28) * this.unit() * 1.6);
     const frac = clamp(e.hp / e.stats.maxHp, 0, 1);
+    const sf = e.shield > 0 ? clamp(e.shield / e.stats.maxHp, 0, 1) : 0;
+    const marked = e.statuses.some((st) => st.kind === "mark");
+    const key = `${w}|${Math.round(frac * 60)}|${Math.round(sf * 30)}|${e.enemy?.elite ?? ""}|${e.enemy?.eligible ? 1 : 0}|${marked ? 1 : 0}|${hurt ? 1 : 0}`;
+    if (v.barKey === key) return;
+    v.barKey = key;
+    const h = 3;
     bar.clear();
-    bar.roundRect(sx - w / 2 - 1, top - 1, w + 2, h + 2, 2).fill({ color: 0x000000, alpha: 0.6 });
-    const color = e.faction === "enemy" ? 0xd95a66 : e.kind === "summon" ? 0x8f7cff : 0x8fe0c4;
-    bar.roundRect(sx - w / 2, top, w * frac, h, 2).fill(color);
-    if (e.shield > 0) {
-      const sf = clamp(e.shield / e.stats.maxHp, 0, 1);
-      bar.roundRect(sx - w / 2, top - 3, w * sf, 2, 1).fill(0xe9c97a);
+    if (hurt) {
+      bar.roundRect(-w / 2 - 1, -1, w + 2, h + 2, 2).fill({ color: 0x0b0a08, alpha: 0.7 });
+      const color = e.faction === "enemy" ? 0xd95a66 : e.kind === "summon" ? 0xe9c97a : 0x8fe0c4;
+      bar.roundRect(-w / 2, 0, Math.max(1, w * frac), h, 1.5).fill(color);
+      if (sf > 0) bar.roundRect(-w / 2, -3, w * sf, 2, 1).fill(0xf0eadc);
     }
     if (e.enemy?.elite) {
       const c = ELITES[e.enemy.elite].color;
-      bar.poly([sx - w / 2 - 9, top + h / 2, sx - w / 2 - 5, top - 2, sx - w / 2 - 1, top + h / 2, sx - w / 2 - 5, top + h + 2]).fill(c);
+      bar.poly([-w / 2 - 9, h / 2, -w / 2 - 5, -2, -w / 2 - 1, h / 2, -w / 2 - 5, h + 2]).fill(c);
     }
     if (e.enemy?.eligible && e.faction === "enemy") {
-      // A faint soul mark above eligible enemies hints at the claim to come.
-      bar.circle(sx + w / 2 + 6, top + h / 2, 3).fill({ color: 0x8fe0c4, alpha: 0.6 + Math.sin(this.time * 6) * 0.3 });
+      // A small pale mark: this one will leave its oath behind.
+      bar.circle(w / 2 + 6, h / 2, 2.6).fill({ color: 0xf0d9a8, alpha: 0.95 });
+      bar.circle(w / 2 + 6, h / 2, 5).fill({ color: 0xf0d9a8, alpha: 0.2 });
     }
-    const mark = e.statuses.find((s) => s.kind === "mark");
-    if (mark) bar.poly([sx, top - 12, sx - 5, top - 5, sx + 5, top - 5]).fill({ color: 0xa48ee0, alpha: 0.9 });
+    if (marked) bar.poly([0, -12, -5, -5, 5, -5]).fill({ color: 0xe9c97a, alpha: 0.9 });
   }
+
 
   private syncProjectiles(world: World, alpha: number): void {
     const seen = new Set<number>();
@@ -671,6 +692,19 @@ export class BattleRenderer {
         }
         case "boss_intro": {
           this.flash(0x7f9fd0, 0.35);
+          break;
+        }
+        case "finisher": {
+          const sx = this.sx(e.pos.x);
+          const sy = this.sy(e.pos.y);
+          this.fx.push({ kind: "ring", x: sx, y: sy, r0: 10, r1: (e.boss ? 260 : 120) * u, life: e.boss ? 1.1 : 0.6, total: e.boss ? 1.1 : 0.6, color: 0xe9c97a, width: e.boss ? 6 : 3, squash: 0.42 });
+          this.flash(0xf0eadc, e.boss ? 0.45 : 0.16);
+          this.shake(e.boss ? 14 : 5);
+          break;
+        }
+        case "kill_streak": {
+          const p = world.player;
+          this.numbers.spawn(this.sx(p.pos.x), this.sy(p.pos.y) - 120 * u, `${e.count} Chain`, 0xe9c97a, 0.8, true);
           break;
         }
         case "blocked": {

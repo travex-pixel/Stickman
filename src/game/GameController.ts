@@ -15,9 +15,14 @@ import { evaluateAchievements, evaluateJournal } from "./progression/achievement
 import { computeModifiers } from "./progression/stats";
 import { claimEssence as doClaimEssence, setDeployed, type ClaimOutcome } from "./summons/recruitment";
 import { resolveExtraction } from "./summons/extraction";
-import { bondCost, BOND_CAP, checkEvolution, evolveSummon, grantSummonXp } from "./summons/progression";
+import { bondCost, BOND_CAP, canStarUp, checkEvolution, evolveSummon, grantSummonXp, starCost, starUp } from "./summons/progression";
 import { enemyDef } from "./data/enemies";
+import { MODES, RIFT_ESSENCE_PER_KILL, type ModeId } from "./data/modes";
+import { REPEAT_BOSS_CORE_CHANCE, shadowXpShare, skillPointsBetween, stageClearCores, stageClearGold, stageClearXp } from "./economy/rewards";
+import { isBossStage } from "./data/regions";
+import { RANK_STEPS, nextRankStep, promote } from "./progression/ranks";
 import { ELITES } from "./data/elites";
+import { GEAR_EFFECTS } from "./data/gearEffects";
 import { stageScale } from "./data/regions";
 import { EQUIPMENT_LEVEL_CAP, equipmentUpgradeCost, salvageValue } from "./economy/loot";
 import { INVENTORY_CAP } from "./data/equipment";
@@ -43,7 +48,9 @@ export type Modal =
   | { kind: "settings" }
   | { kind: "weapon_path" }
   | { kind: "journal" }
-  | { kind: "boss_intro"; defId: string };
+  | { kind: "boss_intro"; defId: string }
+  | { kind: "mode_result"; mode: ModeId; title: string; subtitle: string; lines: { label: string; value: string; tone?: "gold" | "jade" | "violet" }[]; success: boolean; record?: boolean }
+  | { kind: "rank_up"; from: number; to: number; rewards: string[] };
 
 export interface Toast {
   id: number;
@@ -63,8 +70,6 @@ export interface UiState {
   selectedSummon: string | null;
   selectedItem: string | null;
   paused: boolean;
-  fps: number;
-  renderStats: { particles: number; entities: number; renderer: string; frameMs: number };
 }
 
 export interface ViewTransform {
@@ -100,9 +105,10 @@ export class GameController {
     selectedSummon: null,
     selectedItem: null,
     paused: false,
-    fps: 0,
-    renderStats: { particles: 0, entities: 0, renderer: "", frameMs: 0 },
   });
+  /** Diagnostics live in their own store so the HUD never re-renders for them. */
+  readonly diagStore = new Store<{ fps: number; particles: number; entities: number; renderer: string; frameMs: number }>({ fps: 0, particles: 0, entities: 0, renderer: "", frameMs: 0 });
+  private diagAccum = 0;
   readonly audio = new AudioManager();
   readonly save = new IndexedDbSaveManager();
   world: World | null = null;
@@ -139,17 +145,22 @@ export class GameController {
     if (this.booted) return;
     this.booted = true;
     const result = await this.save.load();
+    if (this.disposed) return;
     const profile = result.profile;
     const now = Date.now();
     let note: string | null = null;
     if (result.repaired) note = "Your save was repaired.";
     if (result.migrated) note = "Your save was updated.";
+    if (result.fromBackup) note = "Your save was restored from its backup.";
+    if (result.readOnly) note = "Your save could not be read safely. It is untouched; progress this session will not be saved.";
     if (!result.fresh) {
       const reward = computeOfflineReward(profile.lastActive, now, profile.progress.currentStage, computeModifiers(profile).goldFind);
       if (reward && reward.gold > 0) this.enqueueModal({ kind: "offline", reward });
     }
     profile.lastActive = now;
     profile.progress.runs += 1;
+    this.profileStore.set({ profile, v: 1 });
+    this.refreshKeys();
     this.profileStore.set({ profile, v: 1 });
     this.audio.init();
     this.audio.setVolumes(profile.settings.music, profile.settings.sfx);
@@ -159,8 +170,10 @@ export class GameController {
       document.addEventListener("visibilitychange", this.visibilityHandler);
       window.addEventListener("pagehide", this.pageHideHandler);
     }
+    if (this.disposed) return;
     this.loop.start();
     this.flushModalQueue();
+    if (note) setTimeout(() => this.toast(note as string, result.readOnly ? "warn" : "info"), 1200);
   }
 
   private attaching = false;
@@ -198,6 +211,7 @@ export class GameController {
 
   dispose(): void {
     this.disposed = true;
+    if (this.commitTimer) clearTimeout(this.commitTimer);
     this.loop.stop();
     this.detachRenderer();
     this.world?.dispose();
@@ -234,15 +248,93 @@ export class GameController {
   // Run management
   // ---------------------------------------------------------------------
 
-  startRun(stage: number): void {
+  startRun(stage: number, mode: ModeId = "campaign"): void {
     this.world?.dispose();
     const loadout = buildLoadout(this.profile);
-    this.world = new World({ stage, loadout, seed: (Date.now() ^ (stage * 2654435761)) >>> 0 });
+    this.world = new World({ stage, loadout, mode, seed: (Date.now() ^ (stage * 2654435761)) >>> 0 });
+    this.run = { gold: 0, kills: 0, raised: 0, mode };
     this.renderer?.setWorld(this.world);
     this.hudStore.set(this.world.snapshot());
   }
 
+  /** Per-run tallies for the result screens. */
+  private run: { gold: number; kills: number; raised: number; mode: ModeId } = { gold: 0, kills: 0, raised: 0, mode: "campaign" };
+
+  get mode(): ModeId {
+    return this.world?.mode ?? "campaign";
+  }
+
+  /** Keys refill at local midnight. Missing a day never costs anything. */
+  refreshKeys(now = new Date()): void {
+    const day = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    const m = this.profile.modes;
+    if (m.keyDay !== day) {
+      m.keyDay = day;
+      m.keys = { vault: MODES.vault.dailyKeys ?? 3, rift: MODES.rift.dailyKeys ?? 3 };
+      this.commit();
+    }
+  }
+
+  modeAvailability(mode: ModeId): { ok: boolean; reason?: string } {
+    const p = this.profile;
+    const def = MODES[mode];
+    if (mode === "trial") {
+      const step = nextRankStep(p);
+      if (!step) return { ok: false, reason: "S rank reached" };
+      if (p.player.level < step.level) return { ok: false, reason: `Reach level ${step.level}` };
+      return { ok: true };
+    }
+    if (p.progress.bestStage < def.unlockAfterStage) return { ok: false, reason: `Clear stage ${def.unlockAfterStage}` };
+    if (mode === "vault" || mode === "rift") {
+      if (p.modes.keys[mode] <= 0) return { ok: false, reason: "Keys refill tomorrow" };
+    }
+    return { ok: true };
+  }
+
+  startMode(mode: ModeId): boolean {
+    this.userGesture();
+    this.refreshKeys();
+    const avail = this.modeAvailability(mode);
+    if (!avail.ok) {
+      this.sfx("error", { volume: 0.4 });
+      this.toast(avail.reason ?? "Locked", "warn");
+      return false;
+    }
+    const p = this.profile;
+    if (mode === "vault" || mode === "rift") p.modes.keys[mode] -= 1;
+    const frontier = Math.max(1, p.progress.bestStage);
+    const stage = mode === "trial" ? (nextRankStep(p)?.trialStage ?? frontier) : frontier;
+    this.closeModal();
+    this.commit();
+    this.startRun(stage, mode);
+    this.sfx("boss_intro", { volume: 0.45, rate: 1.4 });
+    this.toast(MODES[mode].name, "level");
+    return true;
+  }
+
+  /** Leave a mode early or after its result and return to the campaign frontier. */
+  returnToCampaign(): void {
+    this.userGesture();
+    this.closeModal();
+    this.startRun(this.profile.progress.currentStage, "campaign");
+  }
+
+  private commitTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** Combat produces a stream of small changes; publish them to React at most every 150 ms. */
+  private commitSoon(): void {
+    if (this.commitTimer) return;
+    this.commitTimer = setTimeout(() => {
+      this.commitTimer = null;
+      this.commit();
+    }, 150);
+  }
+
   private commit(): void {
+    if (this.commitTimer) {
+      clearTimeout(this.commitTimer);
+      this.commitTimer = null;
+    }
     const p = this.profile;
     p.lastActive = Date.now();
     this.profileStore.set({ profile: p, v: this.profileStore.get().v + 1 });
@@ -285,7 +377,7 @@ export class GameController {
     }
   }
 
-  private renderErrorLogged = false;
+  private lastRenderErrorAt = -Infinity;
 
   private render(alpha: number, dtReal: number): void {
     const r = this.renderer;
@@ -293,16 +385,17 @@ export class GameController {
       try {
         r.render(alpha, dtReal, this.paused);
       } catch (err) {
-        if (!this.renderErrorLogged) {
-          this.renderErrorLogged = true;
+        const now = performance.now();
+        if (now - this.lastRenderErrorAt > 5000) {
+          this.lastRenderErrorAt = now;
           console.error("[ASCEND] render error", err instanceof Error ? `${err.name}: ${err.message}\n${err.stack}` : err);
         }
         return;
       }
-      const ui = this.uiStore.get();
-      if (ui.fps !== this.loop.fps && Math.random() < 0.1) {
-        const stats = r.stats();
-        this.uiStore.set({ ...ui, fps: this.loop.fps, renderStats: { ...stats, frameMs: Math.round(this.loop.frameMs * 10) / 10 } });
+      this.diagAccum += dtReal;
+      if (this.diagAccum >= 0.5 && this.profile.settings.diagnostics) {
+        this.diagAccum = 0;
+        this.diagStore.set({ fps: this.loop.fps, ...r.stats(), frameMs: Math.round(this.loop.frameMs * 10) / 10 });
       }
     }
   }
@@ -335,19 +428,20 @@ export class GameController {
             this.sfx(e.kind === "boss" ? "boss_death" : "enemy_death", { volume: e.kind === "boss" ? 1 : 0.5, minInterval: 80, rate: 0.9 + Math.random() * 0.2 });
             if (e.kind === "boss") {
               p.progress.bossKills += 1;
-              if (p.progress.bossKills === 1 || this.rng.chance(0.35)) {
+              // First clears pay a core at the stage-clear screen; repeat kills have a chance here.
+              const repeat = (this.world?.stage ?? 1) <= p.progress.bestStage;
+              if (repeat && this.rng.chance(REPEAT_BOSS_CORE_CHANCE)) {
                 p.player.riftCores += 1;
                 this.toast("Rift Core recovered", "essence");
               }
             }
-            // Summons share experience from every kill while deployed.
+            // The whole army learns from every kill: deployed shadows fully, the bench at 40%.
             const def = enemyDef(e.defId);
-            const share = def.xp * stageScale(this.world?.stage ?? 1).reward * 0.6 * computeModifiers(p).summonXpMult;
+            const xpMult = computeModifiers(p).summonXpMult;
             for (const s of p.summons.collection) {
-              if (!s.deployed) continue;
               const before = s.level;
-              grantSummonXp(s, share);
-              if (s.level > before) this.toast(`${summonDef(s.defId).name} reached level ${s.level}`, "level");
+              grantSummonXp(s, shadowXpShare(def.xp, this.world?.scaleStage ?? 1, s.deployed, xpMult));
+              if (s.level > before && s.deployed) this.toast(`${summonDef(s.defId).name} reached level ${s.level}`, "level");
             }
             dirty = true;
           } else if (e.kind === "summon") {
@@ -393,12 +487,15 @@ export class GameController {
           this.toast("The Warden remembers its oath. Phase two.", "warn");
           break;
         case "stage_cleared":
-          this.onStageCleared(e.stage);
+          if (e.mode === "campaign") this.onStageCleared(e.stage);
+          else this.onModeCleared(e.mode as ModeId, e.wave, e.time);
           dirty = true;
           break;
         case "player_defeated":
           this.sfx("boss_intro", { volume: 0.6, rate: 1.6 });
-          this.enqueueModal({ kind: "defeat", stage: e.stage, wave: e.wave });
+          if (e.mode === "endless") this.onEndlessOver(e.wave);
+          else if (e.mode === "campaign") this.enqueueModal({ kind: "defeat", stage: e.stage, wave: e.wave });
+          else this.enqueueModal({ kind: "mode_result", mode: e.mode as ModeId, title: "You fell", subtitle: MODES[e.mode as ModeId].name, lines: [{ label: "Kills", value: `${this.run.kills}` }, { label: "Gold kept", value: `${this.run.gold}` }], success: false });
           break;
         case "loot":
           this.sfx("equip", { volume: 0.4 });
@@ -414,6 +511,21 @@ export class GameController {
           this.sfx("boss_intro", { volume: 0.35, rate: 1.8, minInterval: 800 });
           break;
         }
+        case "shard_gain": {
+          const inst = p.summons.collection.find((x) => x.defId === e.summonId || summonDef(x.defId).evolvedFrom === e.summonId);
+          if (inst) {
+            inst.shards += e.amount;
+            p.player.essence += 3 * e.amount;
+            dirty = true;
+          }
+          break;
+        }
+        case "kill_streak":
+          this.sfx("quest", { volume: 0.5, rate: 0.8 + Math.min(0.8, e.count / 25) });
+          break;
+        case "finisher":
+          this.sfx(e.boss ? "boss_death" : "hit_heavy", { volume: e.boss ? 0.6 : 0.8, rate: 0.7 });
+          break;
         case "guard_break":
           this.sfx("hit_heavy", { volume: 0.9, rate: 0.7, minInterval: 120 });
           break;
@@ -439,11 +551,16 @@ export class GameController {
     }
     if (gold > 0) {
       p.player.gold += gold;
+      this.run.gold += gold;
       this.sfx("gold", { volume: 0.35, minInterval: 120, rate: 0.95 + Math.random() * 0.2 });
       dirty = true;
     }
     if (kills > 0) {
       p.progress.totalKills += kills;
+      this.run.kills += kills;
+      if (this.mode === "rift") {
+        p.player.essence += kills * RIFT_ESSENCE_PER_KILL;
+      }
       dirty = true;
     }
     if (xp > 0) {
@@ -460,7 +577,7 @@ export class GameController {
     }
     if (dirty) {
       this.afterProgression();
-      this.commit();
+      this.commitSoon();
     }
   }
 
@@ -479,7 +596,7 @@ export class GameController {
 
   private onLevelUp(levels: number): void {
     const p = this.profile;
-    p.player.skillPoints += levels;
+    p.player.skillPoints += skillPointsBetween(p.player.level - levels, p.player.level);
     p.player.pendingPerkChoices += levels;
     this.sfx("level_up", { volume: 0.9 });
     this.toast(`Warrior level ${p.player.level}`, "level");
@@ -492,8 +609,14 @@ export class GameController {
     }
     this.uiStore.update((u) => ({ ...u, newBadges: { ...u.newBadges, skills: true } }));
     this.refreshLoadout();
-    if (!this.uiStore.get().modal || this.uiStore.get().modal?.kind === "boss_intro") this.offerPerkChoice();
-    else this.enqueueModal({ kind: "perk_choice", perks: offerPerks(p, this.rng) });
+    // Perks wait for the player: a chip pulses in the HUD instead of a modal freezing the fight.
+    this.toast("Ascension ready: choose a perk", "level");
+  }
+
+  /** Opens the perk choice when the player taps the HUD chip. */
+  openPerkChoice(): void {
+    this.userGesture();
+    this.offerPerkChoice();
   }
 
   private offerPerkChoice(): void {
@@ -503,9 +626,10 @@ export class GameController {
 
   private onStageCleared(stage: number): void {
     const p = this.profile;
-    const scale = stageScale(stage);
-    const gold = Math.round(60 * stage * scale.reward * computeModifiers(p).goldFind);
-    const xp = Math.round(90 * stage * scale.reward);
+    const firstClear = stage > p.progress.bestStage;
+    // Replays pay less, so pushing forward is always the better use of time.
+    const gold = Math.round(stageClearGold(stage, computeModifiers(p).goldFind) * (firstClear ? 1 : 0.5));
+    const xp = Math.round(stageClearXp(stage) * (firstClear ? 1 : 0.5));
     p.player.gold += gold;
     const res = applyXp(p.player.level, p.player.xp, xp);
     p.player.level = res.level;
@@ -514,14 +638,49 @@ export class GameController {
     p.progress.currentStage = Math.max(p.progress.currentStage, stage);
     const items = (this.world?.takeLoot() ?? []).map((l) => l.item);
     for (const it of items) this.addItem(it);
-    let riftCores = 0;
-    if (stage % 3 === 0) {
-      riftCores = 1;
-      p.player.riftCores += 1;
-    }
+    const riftCores = stageClearCores(stage, firstClear, isBossStage(stage));
+    p.player.riftCores += riftCores;
     this.sfx("level_up", { volume: 0.9, rate: 0.85 });
     this.enqueueModal({ kind: "stage_clear", stage, gold, xp, items, riftCores, nextStage: stage + 1 });
     if (res.levelsGained > 0) this.onLevelUp(res.levelsGained);
+  }
+
+  private onModeCleared(mode: ModeId, wave: number, time: number): void {
+    const p = this.profile;
+    this.sfx("level_up", { volume: 0.9, rate: 0.9 });
+    if (mode === "trial") {
+      const from = p.player.rank;
+      const to = promote(p);
+      this.refreshLoadout();
+      this.renderer?.flash(0xe9c97a, 0.5);
+      this.renderer?.levelUpBurst();
+      this.enqueueModal({ kind: "rank_up", from, to, rewards: RANK_STEPS.find((r) => r.to === to)?.rewards ?? [] });
+      return;
+    }
+    if (mode === "vault") {
+      const best = p.modes.vaultBest;
+      p.modes.vaultBest = Math.max(best, this.run.gold);
+      this.enqueueModal({ kind: "mode_result", mode, title: "Vault emptied", subtitle: `${Math.round(time)} seconds`, lines: [{ label: "Gold", value: `+${this.run.gold}`, tone: "gold" }, { label: "Kills", value: `${this.run.kills}` }, { label: "Best haul", value: `${p.modes.vaultBest}` }], success: true, record: this.run.gold > best });
+      return;
+    }
+    if (mode === "rift") {
+      this.enqueueModal({ kind: "mode_result", mode, title: "Rift sealed", subtitle: `${wave} waves`, lines: [{ label: "Essence", value: `+${this.run.kills * RIFT_ESSENCE_PER_KILL}`, tone: "jade" }, { label: "Shadows raised", value: `${this.run.raised}`, tone: "violet" }, { label: "Gold", value: `+${this.run.gold}`, tone: "gold" }], success: true });
+    }
+  }
+
+  private onEndlessOver(wave: number): void {
+    const p = this.profile;
+    const reached = Math.max(0, wave - 1);
+    const best = p.modes.endlessBest;
+    const scale = stageScale(Math.max(1, p.progress.bestStage)).reward;
+    const gold = Math.round(reached * 45 * scale);
+    const essence = reached * 6;
+    p.player.gold += gold;
+    p.player.essence += essence;
+    p.modes.endlessBest = Math.max(best, reached);
+    this.enqueueModal({ kind: "mode_result", mode: "endless", title: reached > best ? "New record" : "The climb ends", subtitle: `Wave ${reached} cleared`, lines: [{ label: "Gold", value: `+${gold + this.run.gold}`, tone: "gold" }, { label: "Essence", value: `+${essence}`, tone: "jade" }, { label: "Best", value: `Wave ${p.modes.endlessBest}` }], success: true, record: reached > best });
+    this.afterProgression();
+    this.commit();
   }
 
   private addItem(item: EquipmentItem): void {
@@ -532,7 +691,12 @@ export class GameController {
       return;
     }
     p.equipment.inventory.push(item);
-    this.toast(`Found: ${itemName(item)}`, "gold");
+    // Loot announces itself in proportion to its worth.
+    if (item.effect) {
+      this.toast(`${item.rarity === "legendary" ? "Legendary" : "Epic"}: ${itemName(item)} ✦ ${GEAR_EFFECTS[item.effect].name}`, "gold");
+      this.sfx("level_up", { volume: 0.7, rate: 1.15 });
+      this.renderer?.flash(item.rarity === "legendary" ? 0xe9c56f : 0xb595e6, 0.18);
+    } else this.toast(`Found: ${itemName(item)}`, "gold");
     this.uiStore.update((u) => ({ ...u, newBadges: { ...u.newBadges, gear: true } }));
   }
 
@@ -602,6 +766,13 @@ export class GameController {
     if (!orb) return;
     const outcome = doClaimEssence(p, orb.summonId);
     if (outcome.kind === "new") p.summons.firstSummonSeen = true;
+    this.run.raised += 1;
+    // The first shadow joins the fight at once: the player should see their army before learning menus.
+    if (first && outcome.kind === "new" && outcome.instance) {
+      setDeployed(p, outcome.instance.instanceId, true, computeModifiers(p).deploySlots);
+      this.refreshLoadout();
+      this.completeTutorialIf("deploy");
+    }
     const big = outcome.kind === "new" && (first || summonDef(orb.summonId).rarity === "legendary" || summonDef(orb.summonId).rarity === "epic");
     const modal: Modal = { kind: "summon_reveal", outcome, summonId: orb.summonId, first: first && outcome.kind === "new", cinematicDone: false };
     this.sfx(big ? "summon_first" : "summon_claim", { volume: 1 });
@@ -809,7 +980,8 @@ export class GameController {
     const check = await verifyCode(input);
     if (!check.ok) {
       this.sfx("error", { volume: 0.4 });
-      const message = check.reason === "signature" ? "That code is not valid." : check.reason === "format" ? "Codes look like ASC-G500-XXXXXX." : "Unknown code.";
+      const message =
+        check.reason === "signature" ? "That code is not valid." : check.reason === "format" ? "Codes look like ASC-G500-XXXXXX." : check.reason === "disabled" ? "Friend codes are not enabled on this build yet." : "Unknown code.";
       return { ok: false, message };
     }
     const p = this.profile;
@@ -835,6 +1007,25 @@ export class GameController {
     this.afterProgression();
     this.commit();
     return { ok: true, message: `Received ${describeReward(r)}.` };
+  }
+
+  starUp(instanceId: string): boolean {
+    this.userGesture();
+    const p = this.profile;
+    const inst = p.summons.collection.find((s) => s.instanceId === instanceId);
+    if (!inst || !canStarUp(inst, p.player.riftCores)) {
+      this.sfx("error", { volume: 0.3 });
+      const c = inst ? starCost(inst) : null;
+      if (c) this.toast(`Needs ${c.shards} shards${c.cores ? ` and ${c.cores} Rift Core${c.cores > 1 ? "s" : ""}` : ""}`, "warn");
+      return false;
+    }
+    p.player.riftCores -= starUp(inst);
+    this.sfx("level_up", { volume: 0.8, rate: 1.25 });
+    this.toast(`${summonDef(inst.defId).name} reached ★${inst.stars}`, "level");
+    this.renderer?.flash(0xe9c97a, 0.2);
+    this.refreshLoadout();
+    this.commit();
+    return true;
   }
 
   toggleBattleSpeed(): void {

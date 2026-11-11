@@ -1,4 +1,4 @@
-import { stageScale } from "@/game/data/regions";
+import { offlineGoldPerHour } from "@/game/economy/rewards";
 
 export const OFFLINE_CAP_SECONDS = 8 * 60 * 60;
 export const OFFLINE_MIN_SECONDS = 90;
@@ -19,10 +19,7 @@ export function computeOfflineReward(lastActive: number, now: number, currentSta
   if (!Number.isFinite(elapsed) || elapsed < OFFLINE_MIN_SECONDS) return null;
   const capped = elapsed > OFFLINE_CAP_SECONDS;
   const seconds = Math.min(OFFLINE_CAP_SECONDS, elapsed);
-  const scale = stageScale(Math.max(1, currentStage));
-  // ~ one wave's worth of gold every two minutes at the current stage, halved for being away.
-  const goldPerSecond = (34 * scale.reward * goldFind) / 120 / 2;
-  const gold = Math.floor(seconds * goldPerSecond);
-  const essence = Math.floor(seconds / 600) * Math.max(1, Math.floor(scale.reward));
+  const gold = Math.floor((seconds / 3600) * offlineGoldPerHour(currentStage, goldFind));
+  const essence = Math.floor(seconds / 600) * Math.max(1, Math.floor(currentStage / 2));
   return { seconds, gold, essence, capped };
 }

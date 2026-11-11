@@ -4,6 +4,8 @@ export interface WaveSpawn {
   enemyId: string;
   /** Forces the first enemy of this group to be an elite (used for mini-bosses). */
   elite?: EliteAffix;
+  /** Softens this group's attack (onboarding). */
+  attackMult?: number;
   count: number;
   /** Seconds between spawns inside this group. */
   interval: number;
@@ -50,7 +52,15 @@ const ashenVergeWaves = (stage: number): WaveDef[] => {
   };
   const wave3: WaveDef = {
     spawns: [
-      { enemyId: "ashborn_brute", count: 1 + Math.min(2, Math.floor(s / 3)), interval: 4, delay: early ? 5 : 1, elite: stage >= 4 ? (["brutal", "armored", "hasted", "vampiric"] as const)[stage % 4] : undefined },
+      {
+        enemyId: "ashborn_brute",
+        count: 1 + Math.min(2, Math.floor(s / 3)),
+        interval: 4,
+        delay: stage === 1 ? 12 : early ? 5 : 1,
+        // Non-boss stages end on an elite champion; boss stages save the spectacle for the Warden.
+        elite: !isBossStage(stage) || stage >= 4 ? (["brutal", "armored", "hasted", "vampiric"] as const)[stage % 4] : undefined,
+        attackMult: stage === 1 ? 0.7 : undefined,
+      },
       { enemyId: "husk", count: husks(3), interval: early ? 2.4 : 1.3, delay: 0.3 },
       { enemyId: "veilshot", count: 1 + Math.min(1, Math.floor(s / 4)), interval: 3, delay: 10 },
       ...(stage >= 3 ? [{ enemyId: "rift_caller", count: 1 + Math.min(1, Math.floor(s / 5)), interval: 6, delay: 4 }] : []),
@@ -119,14 +129,33 @@ export function regionForStage(stage: number): RegionDef {
   return found;
 }
 
-/** Multiplier on enemy health/attack for a stage. Gentle early, steeper later. */
+/**
+ * Enemy strength per stage. Exponential so that player power, which compounds through stats,
+ * level, gear, codex and rank, never permanently outruns the content. Rewards grow at a
+ * similar rate to upgrade costs (1.085 per stat level), so a stage's gold keeps buying a
+ * meaningful number of levels.
+ */
+export const HP_GROWTH = Number(process.env.ASCEND_HP_GROWTH ?? 1.27);
+export const ATK_GROWTH = Number(process.env.ASCEND_ATK_GROWTH ?? 1.16);
+export const REWARD_GROWTH = Number(process.env.ASCEND_REWARD_GROWTH ?? 1.075);
+
 export function stageScale(stage: number): { hp: number; attack: number; reward: number } {
   const s = Math.max(1, stage) - 1;
   return {
-    hp: 1 + s * 0.22 + Math.pow(s, 1.3) * 0.04,
-    attack: 1 + s * 0.12 + Math.pow(s, 1.2) * 0.025,
-    reward: 1 + s * 0.24,
+    hp: Math.pow(HP_GROWTH, s) * (1 + 0.06 * s),
+    attack: Math.pow(ATK_GROWTH, s) * (1 + 0.03 * s),
+    reward: Math.pow(REWARD_GROWTH, s),
   };
+}
+
+/** Bosses are events: the first stage, every third stage, and each region's last stage. */
+export function isBossStage(stage: number): boolean {
+  if (stage <= 1) return true;
+  if (stage % 3 === 0) return true;
+  return REGIONS.some((r, i) => {
+    const next = REGIONS[i + 1];
+    return next !== undefined && stage === next.firstStage - 1;
+  });
 }
 
 export const WAVES_PER_STAGE = 3;

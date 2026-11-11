@@ -6,6 +6,7 @@ import { HoldButton } from "@/components/ui/HoldButton";
 import { useController, useProfileRef, useUi } from "@/hooks/useGame";
 import { EQUIP_SLOTS, type EquipSlot } from "@/game/data/ids";
 import { EQUIPMENT_TEMPLATES, SLOT_LABEL, STAT_LABEL } from "@/game/data/equipment";
+import { GEAR_EFFECTS } from "@/game/data/gearEffects";
 import { EQUIPMENT_LEVEL_CAP, equipmentUpgradeCost, itemScore, salvageValue } from "@/game/economy/loot";
 import type { EquipmentItem } from "@/game/progression/profile";
 import { itemStatTotals } from "@/game/progression/stats";
@@ -69,6 +70,7 @@ export default function GearPanel() {
               <button key={item.uid} className={cn("card h-[34px] flex items-center justify-center relative", `border-rarity-${item.rarity}`, selectedUid === item.uid && "card-active")} onClick={() => c.selectItem(item.uid)} aria-label={templateName(item)} data-testid="bag-item">
                 <Icon name={SLOT_ICON[item.slot]} size={15} className={`rarity-${item.rarity}`} />
                 <span className="absolute bottom-0 right-1 text-[8px] text-mist">+{item.level}</span>
+                {item.effect && <span className="absolute top-0.5 left-1 text-[9px] text-gold-2">✦</span>}
               </button>
             ))}
           </div>
@@ -117,6 +119,11 @@ function ItemDetail({ item, equippedUid, inv, gold }: { item: EquipmentItem; equ
               </span>
             ))}
       </div>
+      {item.effect && (
+        <div className="text-[10px] leading-snug" data-testid="item-effect">
+          <span className="font-display text-[12px] text-gold-2">{GEAR_EFFECTS[item.effect].name}.</span> <span className="text-ivory/85">{GEAR_EFFECTS[item.effect].description}</span>
+        </div>
+      )}
       {template && <div className="text-[9px] italic text-mist truncate">{template.flavour}</div>}
       <div className="mt-auto flex items-center gap-1">
         {!isEquipped ? (

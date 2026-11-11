@@ -6,14 +6,15 @@ import { createPlayer, createEnemy, createSummon, makeElite } from "../entities/
 import { ELITES, ELITE_IDS, ELITE_REWARD_MULT, eliteChance } from "../data/elites";
 import type { EliteAffix } from "../data/ids";
 import { BOSS_ATTEMPTS } from "../summons/extraction";
+import { MODES, VAULT_GOLD_MULT, endlessStage, endlessWave, riftWaves, vaultWaves, type ModeDef, type ModeId } from "../data/modes";
 import type { PlayerLoadout, DeployedSummonLoadout } from "../progression/loadout";
 import type { AbilityId, SummonCommand, Element } from "../data/ids";
 import { ABILITIES, ULTIMATE_ENERGY_COST, ULTIMATE_ID } from "../data/abilities";
 import { enemyDef } from "../data/enemies";
-import { regionForStage, stageScale, WAVES_PER_STAGE, type WaveDef } from "../data/regions";
+import { isBossStage, regionForStage, stageScale, type WaveDef } from "../data/regions";
 import { computeDamage } from "../combat/damage";
 import { addStatus, hasStatus, speedMultiplier, statusValue, tickStatuses } from "../combat/statuses";
-import { nearestHostile, hostilesWithin } from "../combat/targeting";
+import { nearestHostile, hostilesWithin, factionWithin } from "../combat/targeting";
 import { updateEnemyAi, flushSimTimeouts, clearSimTimeouts } from "../enemies/ai";
 import { updateBossAi } from "../bosses/hollowWarden";
 import { updateSummonAi } from "../summons/ai";
@@ -24,10 +25,14 @@ import type { EquipmentItem } from "../progression/profile";
 
 export const ARENA = { minX: 44, maxX: 596, minY: 8, maxY: 142, width: 640, depth: 150, homeX: 190, homeY: 78 } as const;
 export const FIXED_DT = 1 / 60;
+export const CHAIN_WINDOW = 2.4;
 
 export type RunPhase = "intro" | "wave" | "between" | "boss_intro" | "boss" | "victory" | "defeat";
 
 export interface WorldSnapshot {
+  mode: ModeId;
+  /** Seconds left in timed modes, otherwise null. */
+  timeLeft: number | null;
   phase: RunPhase;
   stage: number;
   wave: number;
@@ -49,17 +54,19 @@ export interface WorldSnapshot {
   projectiles: number;
   ultimateActive: boolean;
   timeScale: number;
+  chain: number;
 }
 
 export interface WorldOptions {
   stage: number;
   loadout: PlayerLoadout;
   seed?: number;
+  mode?: ModeId;
 }
 
 interface WaveRunner {
   def: WaveDef;
-  spawnQueue: { enemyId: string; at: number; elite?: EliteAffix }[];
+  spawnQueue: { enemyId: string; at: number; elite?: EliteAffix; attackMult?: number }[];
   elapsed: number;
 }
 
@@ -98,13 +105,26 @@ export class World {
   private autoCastTimer = 0;
   private nextOrbExpiryWarned = new Set<number>();
   playerMoveLockTimer = 0;
+  private basicHits = 0;
+  /** Kill chain: kills landed within CHAIN_WINDOW of each other. Feeds the HUD and energy. */
+  chain = 0;
+  private chainTimer = 0;
   private guaranteedEssenceGiven = false;
+
+  readonly mode: ModeId;
+  readonly modeDef: ModeDef;
+  /** Seconds spent fighting in this run (drives the Gold Vault timer). */
+  modeTime = 0;
 
   constructor(opts: WorldOptions) {
     this.stage = Math.max(1, opts.stage);
     this.loadout = opts.loadout;
+    this.mode = opts.mode ?? "campaign";
+    this.modeDef = MODES[this.mode];
     this.rng = new Rng(opts.seed ?? (this.stage * 7919 + 17));
-    this.regionWaves = regionForStage(this.stage).waves(this.stage);
+    this.regionWaves =
+      this.mode === "vault" ? vaultWaves() : this.mode === "rift" ? riftWaves(this.stage) : this.mode === "trial" ? regionForStage(this.stage).waves(this.stage).slice(0, 1) : regionForStage(this.stage).waves(this.stage);
+    if (this.mode === "vault") this.modeGoldMult = VAULT_GOLD_MULT;
     this.cooldowns = { arc_slash: 0, thunder_strike: 0, shadow_dash: 0, soul_burst: 0, void_nova: 0, ascendant_fury: 0 };
     this.player = createPlayer(this.allocId(), opts.loadout, { x: ARENA.homeX, y: ARENA.homeY });
     this.entities.set(this.player.id, this.player);
@@ -279,6 +299,20 @@ export class World {
     return out;
   }
 
+  /** Difficulty stage for spawns. Endless climbs as waves pass; everything else uses the run's stage. */
+  get scaleStage(): number {
+    return this.mode === "endless" ? endlessStage(this.stage, Math.max(1, this.wave)) : this.stage;
+  }
+
+  get wavesTotal(): number {
+    return this.modeDef.waves;
+  }
+
+  /** Campaign bosses appear only on boss stages; trials always have one. */
+  get hasBoss(): boolean {
+    return this.mode === "campaign" ? isBossStage(this.stage) : this.modeDef.boss;
+  }
+
   get boss(): Combatant | undefined {
     const b = this.entities.get(this.bossId);
     return b && !b.dead ? b : undefined;
@@ -291,10 +325,12 @@ export class World {
       cdMax[id] = id === "shadow_dash" ? ABILITIES.shadow_dash.cooldown * this.loadout.mods.dodgeCooldownMult : ABILITIES[id].cooldown * this.loadout.mods.cooldownMult;
     }
     return {
+      mode: this.mode,
+      timeLeft: this.modeDef.duration ? Math.max(0, this.modeDef.duration - this.modeTime) : null,
       phase: this.phase,
       stage: this.stage,
       wave: this.wave,
-      wavesTotal: WAVES_PER_STAGE,
+      wavesTotal: Number.isFinite(this.wavesTotal) ? this.wavesTotal : 0,
       time: this.time,
       player: { hp: this.player.hp, maxHp: this.player.stats.maxHp, energy: this.energy, x: this.player.pos.x, y: this.player.pos.y, alive: !this.player.dead, level: this.player.level },
       cooldowns: { ...this.cooldowns },
@@ -313,6 +349,7 @@ export class World {
       entities: this.entities.size,
       projectiles: this.projectiles.length,
       ultimateActive: this.ultimate.active,
+      chain: this.chain,
       timeScale: this.timeScale,
     };
   }
@@ -371,12 +408,22 @@ export class World {
     this.cleanup(dt);
   }
 
+  finisher: { timer: number } | null = null;
+
   private updateTimers(dt: number, rawDt: number): void {
+    if (this.chainTimer > 0) {
+      this.chainTimer -= dt;
+      if (this.chainTimer <= 0) this.chain = 0;
+    }
+    if (this.finisher) {
+      this.finisher.timer -= rawDt;
+      if (this.finisher.timer <= 0) this.finisher = null;
+    }
     for (const id of Object.keys(this.cooldowns) as AbilityId[]) this.cooldowns[id] = Math.max(0, this.cooldowns[id] - rawDt);
     this.dodgeCooldown = Math.max(0, this.dodgeCooldown - rawDt);
     this.cooldowns.shadow_dash = this.dodgeCooldown;
     this.playerMoveLockTimer = Math.max(0, this.playerMoveLockTimer - dt);
-    if (this.timeScale < 1 && !this.ultimate.active) this.timeScale = Math.min(1, this.timeScale + rawDt * 2.5);
+    if (this.timeScale < 1 && !this.ultimate.active && !this.finisher) this.timeScale = Math.min(1, this.timeScale + rawDt * 2.5);
   }
 
   private updateRunState(rawDt: number): void {
@@ -387,19 +434,30 @@ export class World {
         break;
       case "wave": {
         this.runWave(rawDt);
+        this.modeTime += rawDt;
+        if (this.mode === "vault" && this.modeTime >= (this.modeDef.duration ?? 45)) {
+          this.endRun();
+          break;
+        }
         const done = this.waveRunner !== null && this.waveRunner.spawnQueue.length === 0 && this.enemies().length === 0;
         if (done) {
           this.events.push({ type: "wave_cleared", wave: this.wave });
+          if (this.mode === "vault") {
+            this.endRun();
+            break;
+          }
           this.phase = "between";
-          this.phaseTimer = this.wave >= WAVES_PER_STAGE ? 1.6 : 1.4;
+          this.phaseTimer = this.wave >= this.wavesTotal ? 1.6 : this.mode === "endless" ? 1.1 : 1.4;
         }
         break;
       }
       case "between":
         this.phaseTimer -= rawDt;
         if (this.phaseTimer <= 0) {
-          if (this.wave >= WAVES_PER_STAGE) this.startBossIntro();
-          else this.startWave(this.wave + 1);
+          if (this.wave >= this.wavesTotal) {
+            if (this.hasBoss) this.startBossIntro();
+            else this.endRun();
+          } else this.startWave(this.wave + 1);
         }
         break;
       case "boss_intro":
@@ -412,34 +470,43 @@ export class World {
         break;
       case "boss": {
         const b = this.entities.get(this.bossId);
-        if (b && b.dead && this.enemies().length === 0) {
-          this.phase = "victory";
-          this.phaseTimer = 1.2;
-          this.events.push({ type: "stage_cleared", stage: this.stage });
-        }
+        if (b && b.dead && this.enemies().length === 0) this.endRun();
         break;
       }
       default:
         break;
     }
-    if (this.player.dead && this.phase !== "defeat") {
+    if (this.player.dead && this.phase !== "defeat" && this.phase !== "victory") {
       this.phase = "defeat";
-      this.events.push({ type: "player_defeated", stage: this.stage, wave: this.wave });
+      this.events.push({ type: "player_defeated", stage: this.stage, wave: this.wave, mode: this.mode });
     }
+  }
+
+  /** Resolves the run as a success. Timed modes dismiss whatever is still on the field. */
+  private endRun(): void {
+    for (const e of this.enemies()) {
+      e.dead = true;
+      e.hp = 0;
+      e.state = "dead";
+      e.deathTime = 0;
+    }
+    this.phase = "victory";
+    this.phaseTimer = 1.2;
+    this.events.push({ type: "stage_cleared", stage: this.stage, mode: this.mode, wave: this.wave, time: this.modeTime });
   }
 
   private startWave(n: number): void {
     this.wave = n;
-    const def = this.regionWaves[n - 1] ?? this.regionWaves[this.regionWaves.length - 1];
+    const def = this.mode === "endless" ? endlessWave(n) : (this.regionWaves[n - 1] ?? this.regionWaves[this.regionWaves.length - 1]);
     if (!def) return;
-    const queue: { enemyId: string; at: number; elite?: EliteAffix }[] = [];
+    const queue: { enemyId: string; at: number; elite?: EliteAffix; attackMult?: number }[] = [];
     for (const group of def.spawns) {
-      for (let i = 0; i < group.count; i++) queue.push({ enemyId: group.enemyId, at: group.delay + i * group.interval, elite: i === 0 ? group.elite : undefined });
+      for (let i = 0; i < group.count; i++) queue.push({ enemyId: group.enemyId, at: group.delay + i * group.interval, elite: i === 0 ? group.elite : undefined, attackMult: group.attackMult });
     }
     queue.sort((a, b) => a.at - b.at);
     this.waveRunner = { def, spawnQueue: queue, elapsed: 0 };
     this.phase = "wave";
-    this.events.push({ type: "wave_start", wave: n, total: WAVES_PER_STAGE, stage: this.stage });
+    this.events.push({ type: "wave_start", wave: n, total: Number.isFinite(this.wavesTotal) ? this.wavesTotal : 0, stage: this.stage });
   }
 
   private runWave(rawDt: number): void {
@@ -447,8 +514,9 @@ export class World {
     if (!r) return;
     r.elapsed += rawDt;
     while (r.spawnQueue.length > 0 && (r.spawnQueue[0] as { at: number }).at <= r.elapsed) {
-      const next = r.spawnQueue.shift() as { enemyId: string; at: number; elite?: EliteAffix };
-      this.spawnEnemy(next.enemyId, { elite: next.elite });
+      const next = r.spawnQueue.shift() as { enemyId: string; at: number; elite?: EliteAffix; attackMult?: number };
+      const e = this.spawnEnemy(next.enemyId, { elite: next.elite });
+      if (next.attackMult) e.stats.attack = Math.round(e.stats.attack * next.attackMult * 10) / 10;
     }
   }
 
@@ -456,8 +524,14 @@ export class World {
     const region = regionForStage(this.stage);
     const def = enemyDef(region.bossId);
     const scale = stageScale(this.stage);
-    const boss = createEnemy(this.allocId(), def, { x: ARENA.maxX - 70, y: ARENA.homeY }, scale, this.stage, true);
+    const boss = createEnemy(this.allocId(), def, { x: ARENA.maxX - 70, y: ARENA.homeY }, scale, this.stage, this.mode !== "trial");
     boss.kind = "boss";
+    if (this.mode === "trial") {
+      // The trial Warden is empowered: brutal, and it remembers its second phase sooner.
+      makeElite(boss, "brutal");
+      boss.stats.maxHp = Math.round(boss.stats.maxHp * 1.15);
+      boss.hp = boss.stats.maxHp;
+    }
     boss.boss = { phase: 1, patternTimer: 1.2, pattern: "idle", patternStep: 0, introTimer: 2.4, enraged: false };
     boss.state = "emerge";
     boss.stateDuration = 2.4;
@@ -471,17 +545,19 @@ export class World {
 
   spawnEnemy(enemyId: string, opts: { pos?: Vec2; elite?: EliteAffix | null; minion?: boolean; ownerId?: number } = {}): Combatant {
     const def = enemyDef(enemyId);
-    const scale = stageScale(this.stage);
+    const scale = stageScale(this.scaleStage);
     const fromLeft = this.stage >= 2 && this.rng.chance(0.25);
     const x = opts.pos?.x ?? (fromLeft ? ARENA.minX - 30 : ARENA.maxX + 30);
     const y = opts.pos?.y ?? this.rng.range(ARENA.minY + 10, ARENA.maxY - 10);
     const firstEver = def.essenceSummonId !== undefined && this.stage === 1 && this.wave === 1 && enemyId === "husk" && !this.guaranteedEssenceGiven && this.loadout.summons.length === 0 && !this.loadout.hasSummons;
     if (firstEver) this.guaranteedEssenceGiven = true;
     const elite = opts.minion ? null : (opts.elite ?? (this.rng.chance(eliteChance(this.stage, this.wave)) ? this.rng.pick(ELITE_IDS) : null));
-    const eligibleChance = def.essenceChance * this.loadout.mods.essenceChanceMult;
+    const ownedAlready = def.essenceSummonId !== undefined && this.loadout.owned.includes(def.essenceSummonId);
+    const eligibleChance = def.essenceChance * this.loadout.mods.essenceChanceMult * (ownedAlready ? 0.5 : 1);
     // Elites always leave a shadow behind: they are the encounters worth hoping for.
-    const eligible = !opts.minion && def.essenceSummonId !== undefined && (firstEver || elite !== null || this.rng.chance(eligibleChance));
-    const e = createEnemy(this.allocId(), def, { x, y }, scale, this.stage, eligible);
+    // The Gold Vault is about gold; shadows belong to the campaign and the Essence Rift.
+    const eligible = this.mode !== "vault" && !opts.minion && def.essenceSummonId !== undefined && (firstEver || elite !== null || this.mode === "rift" || this.rng.chance(eligibleChance));
+    const e = createEnemy(this.allocId(), def, { x, y }, scale, this.scaleStage, eligible);
     if (opts.minion && e.enemy) {
       e.enemy.minion = true;
       e.enemy.ownerId = opts.ownerId ?? -1;
@@ -663,9 +739,26 @@ export class World {
 
   private playerBasicHit(target: Combatant): void {
     const p = this.player;
+    const fx = this.loadout.mods.gearEffects;
     const res = this.dealDamage(p, target, 1, "physical", false);
     if (!res) return;
     this.gainEnergy(6);
+    this.basicHits += 1;
+    if (fx.has("bloodthirst") && !p.dead) {
+      const heal = res.amount * 0.06;
+      p.hp = Math.min(p.stats.maxHp, p.hp + heal);
+    }
+    if (fx.has("huntmark") && res.crit && !target.dead) addStatus(target, { kind: "mark", remaining: 3, value: 0.2, sourceId: p.id });
+    if (fx.has("thunderclap") && this.basicHits % 5 === 0) {
+      let current = target;
+      const struck = new Set<number>();
+      for (let i = 0; i < 3 && current; i++) {
+        struck.add(current.id);
+        this.events.push({ type: "chain", from: i === 0 ? { x: current.pos.x, y: current.pos.y - 140 } : { ...current.pos }, to: { ...current.pos }, color: 0xa8c4e6 });
+        if (!current.dead) this.dealDamage(p, current, 1.2, "lightning", false);
+        current = factionWithin(current.pos, "enemy", this.entities.values(), 140).find((o) => !struck.has(o.id)) as Combatant;
+      }
+    }
     const path = this.loadout.weaponPath;
     if (path === "stormblade" && this.rng.chance(STORMBLADE_CHAIN_CHANCE)) {
       const others = hostilesWithin(p, this.entities.values(), 160).filter((o) => o.id !== target.id && !o.dead);
@@ -676,7 +769,7 @@ export class World {
       }
     } else if (path === "infernal") {
       addStatus(target, { kind: "burn", remaining: 3, value: p.stats.attack * INFERNAL_BURN_FRACTION, sourceId: p.id });
-      for (const o of hostilesWithin(target, this.entities.values(), 55)) {
+      for (const o of factionWithin(target.pos, target.faction, this.entities.values(), 55)) {
         if (o.id !== target.id && o.faction === "enemy") this.dealDamage(p, o, 0.35, "fire", false);
       }
     } else if (path === "voidfang" && !target.dead && target.kind !== "boss" && target.hp / target.stats.maxHp < VOIDFANG_EXECUTE_THRESHOLD) {
@@ -701,7 +794,7 @@ export class World {
     }
     if (hasStatus(target, "opening") && sum.role === "reaper") power *= 1.5;
     if (s.defId === "ember_acolyte") {
-      for (const o of hostilesWithin(target, this.entities.values(), 60)) if (o.id !== target.id && o.faction === "enemy") this.dealDamage(s, o, 0.4, "fire", false);
+      for (const o of factionWithin(target.pos, target.faction, this.entities.values(), 60)) if (o.id !== target.id) this.dealDamage(s, o, 0.4, "fire", false);
     }
     this.dealDamage(s, target, power, s.defId === "ember_acolyte" ? "fire" : "physical", false);
   }
@@ -716,12 +809,20 @@ export class World {
   /** Full damage pipeline with crits, marks, shields, invulnerability and death. Returns null if no damage was dealt. */
   dealDamage(source: Combatant, target: Combatant, power: number, element: Element, heavy: boolean, bonusMult = 1): { amount: number; crit: boolean } | null {
     if (target.dead || source.dead) return null;
+    // Invariant: nothing ever damages its own side.
+    if (source.faction === target.faction) return null;
     if (hasStatus(target, "invuln")) return null;
     let bonus = bonusMult;
     if (hasStatus(target, "mark") && source.faction === "ally") bonus *= 1 + statusValue(target, "mark");
     if (source.faction === "ally") bonus *= 1 + 0.04 * this.shadeCount();
     const block = this.blockFactor(target, source.pos.x, heavy);
     bonus *= block;
+    const fx = this.loadout.mods.gearEffects;
+    if (source.kind === "player" && fx.has("executioner") && target.hp / target.stats.maxHp < 0.3) bonus *= 1.4;
+    if (target.kind === "player" && fx.has("bulwark")) {
+      bonus *= 0.85;
+      if (heavy && this.rng.chance(0.35)) addStatus(target, { kind: "shield", remaining: 4, value: Math.round(target.stats.maxHp * 0.08), sourceId: target.id });
+    }
     const res = computeDamage(
       { attack: source.stats.attack, power, critChance: source.stats.critChance, critDamage: source.stats.critDamage, targetDefense: target.stats.defense, bonusMultiplier: bonus },
       this.rng,
@@ -804,7 +905,7 @@ export class World {
 
   private onEnemyKilled(e: Combatant, killerId: number): void {
     const def = enemyDef(e.defId);
-    const scale = stageScale(this.stage);
+    const scale = stageScale(this.scaleStage);
     const eliteMult = e.enemy?.elite ? ELITE_REWARD_MULT : 1;
     const minionMult = e.enemy?.minion ? 0.25 : 1;
     const gold = Math.round(def.gold * scale.reward * this.loadout.mods.goldFind * this.rng.range(0.85, 1.15) * eliteMult * minionMult * this.modeGoldMult);
@@ -812,6 +913,19 @@ export class World {
     this.events.push({ type: "gold", amount: gold, pos: { ...e.pos } });
     this.events.push({ type: "xp", amount: xp, pos: { ...e.pos } });
     this.gainEnergy(killerId === this.player.id ? 10 : 4);
+    if (!e.enemy?.minion || this.chain > 0) {
+      this.chain += 1;
+      this.chainTimer = CHAIN_WINDOW;
+      if (this.chain >= 5) this.gainEnergy(2);
+      if (this.chain === 5 || this.chain === 10 || this.chain === 20 || (this.chain > 20 && this.chain % 10 === 0)) this.events.push({ type: "kill_streak", count: this.chain });
+    }
+    // Finishing blow: the last enemy of a wave (or the boss) falls in slow motion.
+    const queueEmpty = !this.waveRunner || this.waveRunner.spawnQueue.length === 0;
+    if (e.kind === "boss" || (queueEmpty && this.enemies().length === 0 && this.phase === "wave")) {
+      this.timeScale = e.kind === "boss" ? 0.22 : 0.4;
+      this.finisher = { timer: e.kind === "boss" ? 0.9 : 0.45 };
+      this.events.push({ type: "finisher", pos: { ...e.pos }, boss: e.kind === "boss" });
+    }
     if (this.loadout.mods.lifeOnKill > 0 && !this.player.dead) {
       const heal = this.player.stats.maxHp * this.loadout.mods.lifeOnKill;
       this.player.hp = Math.min(this.player.stats.maxHp, this.player.hp + heal);
@@ -830,6 +944,11 @@ export class World {
       this.events.push({ type: "loot", pos: { ...e.pos } });
     }
     if (e.enemy?.eligible && def.essenceSummonId) {
+      // A species already sworn does not need the ceremony again: ordinary kills become shards.
+      if (!isBoss && !e.enemy.elite && this.loadout.owned.includes(def.essenceSummonId)) {
+        this.events.push({ type: "shard_gain", summonId: def.essenceSummonId, amount: this.mode === "rift" ? 2 : 1, pos: { ...e.pos } });
+        return;
+      }
       const orb: EssenceOrb = { id: this.allocId(), summonId: def.essenceSummonId, enemyDefId: def.id, pos: { ...e.pos }, remaining: isBoss ? 30 : 14, total: isBoss ? 30 : 14, claimed: false, isBoss, elite: !!e.enemy?.elite, attempts: isBoss ? BOSS_ATTEMPTS : 1 };
       this.orbs.push(orb);
       this.events.push({ type: "essence_available", orbId: orb.id, summonId: orb.summonId, pos: { ...orb.pos }, isBoss });

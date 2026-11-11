@@ -1,4 +1,5 @@
 import type { EquipSlot, Rarity, StatKey, SummonCommand, UpgradeableStat, WeaponPath } from "../data/ids";
+import type { GearEffectId } from "../data/gearEffects";
 
 export interface EquipmentItem {
   uid: string;
@@ -9,6 +10,8 @@ export interface EquipmentItem {
   mainStat: StatKey;
   mainValue: number;
   substats: { stat: StatKey; value: number }[];
+  /** Epic and legendary items carry a build-defining effect. */
+  effect?: GearEffectId;
 }
 
 export interface SummonInstance {
@@ -19,6 +22,8 @@ export interface SummonInstance {
   /** Bond is raised with Essence (hold-to-upgrade) and multiplies stats. */
   bond: number;
   shards: number;
+  /** Stars 0-5, bought with shards and Rift Cores. Each adds 12% to the shadow's stats. */
+  stars: number;
   deployed: boolean;
   recruitedAt: number;
 }
@@ -79,11 +84,18 @@ export interface Profile {
     evolutions: number;
     redeemedCodes: string[];
   };
+  modes: {
+    /** Local calendar day (YYYY-MM-DD) the keys were last refilled. */
+    keyDay: string;
+    keys: { vault: number; rift: number };
+    endlessBest: number;
+    vaultBest: number;
+  };
   tutorial: { completed: string[]; finished: boolean };
   settings: { music: number; sfx: number; reducedEffects: boolean; diagnostics: boolean; battleSpeed: 1 | 2; autoAdvance: boolean };
 }
 
-export const PROFILE_VERSION = 4;
+export const PROFILE_VERSION = 6;
 
 export function createDefaultProfile(now = Date.now()): Profile {
   return {
@@ -121,6 +133,7 @@ export function createDefaultProfile(now = Date.now()): Profile {
       evolutions: 0,
       redeemedCodes: [],
     },
+    modes: { keyDay: "", keys: { vault: 3, rift: 3 }, endlessBest: 0, vaultBest: 0 },
     tutorial: { completed: [], finished: false },
     settings: { music: 0.6, sfx: 0.8, reducedEffects: false, diagnostics: false, battleSpeed: 1, autoAdvance: true },
   };

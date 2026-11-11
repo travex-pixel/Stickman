@@ -65,3 +65,14 @@ export function lowestHpFraction(self: Combatant, all: Iterable<Combatant>, maxD
   }
   return best;
 }
+
+/** Living members of `faction` within `radius` of `pos`. Use this around a target, never hostilesWithin(target). */
+export function factionWithin(pos: { x: number; y: number }, faction: string, all: Iterable<Combatant>, radius: number): Combatant[] {
+  const r2 = radius * radius;
+  const out: Combatant[] = [];
+  for (const c of all) {
+    if (c.dead || c.faction !== faction) continue;
+    if (distSq(pos, c.pos) <= r2) out.push(c);
+  }
+  return out;
+}

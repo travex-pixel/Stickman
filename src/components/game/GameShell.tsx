@@ -21,8 +21,10 @@ export default function GameShell() {
     const c = new GameController();
     let alive = true;
     setController(c);
-    // Debug/test hook (read-only usage in automated tests).
-    (window as unknown as { __ASCEND__?: GameController }).__ASCEND__ = c;
+    // Debug and test hook: only with ?debug in the URL, or outside production.
+    if (process.env.NODE_ENV !== "production" || new URLSearchParams(window.location.search).has("debug")) {
+      (window as unknown as { __ASCEND__?: GameController }).__ASCEND__ = c;
+    }
     void c.boot().then(() => alive && setReady(true));
     return () => {
       alive = false;
