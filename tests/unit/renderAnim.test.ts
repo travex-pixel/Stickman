@@ -72,14 +72,15 @@ describe("Camera", () => {
     }
   });
 
-  it("is the identity at zoom 1", () => {
+  it("never frames wider than the minimum zoom, however spread the fight", () => {
     const cam = new Camera();
     cam.setViewport(W, H);
     cam.frame({ minX: -1000, minY: -1000, maxX: 1000, maxY: 1000 }, 0, 0);
     cam.snap();
-    const p = cam.project(123, 77, { x: 0, y: 0 });
-    expect(p.x).toBeCloseTo(123, 6);
-    expect(p.y).toBeCloseTo(77, 6);
+    expect(cam.zoom).toBe(ZOOM_MIN);
+    // The centre of the view maps to the centre of the screen.
+    const c = cam.project(cam.cx, cam.cy, { x: 0, y: 0 });
+    expect(c.x).toBeCloseTo(W / 2, 4);
   });
 
   it("project and unproject round-trip, with zoom, kick and shake", () => {

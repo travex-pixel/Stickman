@@ -88,8 +88,8 @@ const FIGURE_SCALE = 1.62;
 const CHEST = 50;
 const MAX_FX = 128;
 /** Hostiles this close to the warrior (world units) are framed with it; the boss always is. */
-const FRAME_RADIUS = 260;
-const FRAME_PAD = 70;
+const FRAME_RADIUS = 230;
+const FRAME_PAD = 55;
 /** The backdrop is painted this far past each canvas edge so shake never shows its border. */
 const BLEED = 24;
 /** A held body eases back to its live position over this long. */

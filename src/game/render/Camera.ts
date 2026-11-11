@@ -13,10 +13,13 @@ export interface Point {
   y: number;
 }
 
-export const ZOOM_MIN = 1;
-export const ZOOM_MAX = 1.32;
+/** The view is never wider than this: the arena at 1.0 leaves the fighters too small on a phone. */
+export const ZOOM_MIN = 1.12;
+/** How far the framing leans from the centre of the action toward the warrior. */
+export const FOCUS_BIAS = 0.35;
+export const ZOOM_MAX = 1.5;
 /** With reduced motion the camera holds one gentle zoom and only follows. */
-export const ZOOM_REDUCED = 1.12;
+export const ZOOM_REDUCED = 1.2;
 const KICK_STIFFNESS = 240;
 const KICK_DAMPING = 22;
 const PUNCH_TIME = 0.26;
@@ -99,8 +102,8 @@ export class Camera {
     this.targetZoom = z;
     const mx = (box.minX + box.maxX) / 2;
     const my = (box.minY + box.maxY) / 2;
-    this.targetX = mx + (focusX - mx) * 0.2;
-    this.targetY = my + (focusY - my) * 0.2;
+    this.targetX = mx + (focusX - mx) * FOCUS_BIAS;
+    this.targetY = my + (focusY - my) * FOCUS_BIAS;
   }
 
   /** Jump straight to the current target (new world, resize). */
