@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ASCEND Rebirth: identity mockup</title>
+<!--
+  Static reference for the Rebirth identity ("Quiet interface, loud battlefield").
+  Not shipped. Open in a browser; three 390x844 frames: battle + Hero, boss readiness, summon reveal.
+  Tokens here are the source for src/app/globals.css (see ASCEND_REBIRTH_BLUEPRINT.md, sections 3 to 5).
+-->
+<style>
+@font-face { font-family: "Instrument Sans"; src: url("../../src/app/fonts/instrument-sans-latin-variable.woff2") format("woff2"); font-weight: 400 700; font-stretch: 75% 100%; font-display: block; }
+@font-face { font-family: "Instrument Serif"; src: url("../../src/app/fonts/instrument-serif-latin-400-normal.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: block; }
+@font-face { font-family: "Instrument Serif"; src: url("../../src/app/fonts/instrument-serif-latin-400-italic.woff2") format("woff2"); font-weight: 400; font-style: italic; font-display: block; }
+
+:root {
+  /* Surfaces: neutral graphite, a breath of warmth. No brown. */
+  --bg-0: #0a0a0b;
+  --bg-1: #121213;
+  --bg-2: #1b1b1d;
+  --bg-3: #262629;
+  --line: rgba(255, 255, 255, 0.07);
+  --line-2: rgba(255, 255, 255, 0.13);
+  /* Text */
+  --t1: #f3f0e9;
+  --t2: #a9a59d;
+  --t3: #74716b;
+  /* Meaning */
+  --gold: #dab86c;
+  --gold-ink: #1b1508;
+  --crimson: #cc3f4b;
+  --jade: #5ecaa8;
+  --rare: #74a8ea;
+  /* Glass over the battlefield */
+  --glass: rgba(12, 12, 13, 0.56);
+  --r-s: 10px; --r-m: 14px; --r-l: 22px;
+  --sans: "Instrument Sans", system-ui, sans-serif;
+  --serif: "Instrument Serif", Georgia, serif;
+}
+* { box-sizing: border-box; margin: 0; }
+body { background: #2a2a2c; font-family: var(--sans); color: var(--t1); padding: 24px; display: flex; gap: 24px; -webkit-font-smoothing: antialiased; }
+.phone { width: 390px; height: 844px; background: var(--bg-0); position: relative; overflow: hidden; flex: none; display: grid; grid-template-rows: 44px 1fr 274px 58px; }
+.num { font-variant-numeric: tabular-nums; font-stretch: 86%; font-weight: 600; letter-spacing: -0.01em; }
+
+/* Top bar: no chips, no boxes. Three zones. */
+.top { display: flex; align-items: center; justify-content: space-between; padding: 0 16px; position: relative; z-index: 3; }
+.top .lv { display: flex; align-items: baseline; gap: 6px; font-size: 13px; color: var(--t2); font-weight: 500; }
+.top .lv b { color: var(--t1); font-size: 15px; }
+.top .stage { position: absolute; left: 50%; transform: translateX(-50%); text-align: center; line-height: 1.1; }
+.top .stage .n { font-size: 15px; font-weight: 600; }
+.top .stage .n span { color: var(--t3); font-weight: 500; }
+.dots { display: flex; gap: 4px; justify-content: center; margin-top: 4px; }
+.dots i { width: 14px; height: 2px; border-radius: 2px; background: var(--line-2); }
+.dots i.on { background: var(--t1); }
+.cur { display: flex; gap: 14px; font-size: 14px; align-items: center; }
+.cur span { display: flex; gap: 5px; align-items: center; }
+.cur .g::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--gold); }
+.cur .e::before { content: ""; width: 7px; height: 7px; border-radius: 2px; transform: rotate(45deg); background: var(--jade); }
+.xp { position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: var(--line); }
+.xp i { display: block; height: 100%; width: 38%; background: var(--t2); }
+
+/* Battlefield */
+.field { position: relative; background: #101a1a url("field.jpg") center / cover; }
+.field::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(10,10,11,0.55) 0, transparent 14%, transparent 70%, rgba(10,10,11,0.9) 100%); pointer-events: none; }
+.seg { position: absolute; left: 12px; top: 12px; z-index: 2; display: flex; background: var(--glass); backdrop-filter: blur(14px); border-radius: 999px; padding: 3px; font-size: 12px; font-weight: 500; color: var(--t2); }
+.seg span { padding: 6px 12px; border-radius: 999px; }
+.seg .on { background: rgba(255,255,255,0.14); color: var(--t1); }
+.army { position: absolute; right: 12px; top: 12px; z-index: 2; display: flex; gap: 6px; }
+.army i { width: 30px; height: 30px; border-radius: 50%; background: var(--glass); backdrop-filter: blur(14px); box-shadow: inset 0 0 0 1.5px var(--jade); }
+.army i.dn { box-shadow: inset 0 0 0 1.5px var(--line-2); opacity: 0.5; }
+.quest { position: absolute; left: 16px; bottom: 76px; z-index: 2; font-size: 12px; color: var(--t2); display: flex; gap: 8px; align-items: center; }
+.quest b { color: var(--t1); font-weight: 500; }
+.quest .bar { width: 44px; height: 2px; background: var(--line-2); border-radius: 2px; }
+.quest .bar i { display: block; width: 66%; height: 100%; background: var(--t1); border-radius: 2px; }
+.abil { position: absolute; left: 0; right: 0; bottom: 12px; z-index: 2; display: flex; align-items: center; justify-content: center; gap: 10px; }
+.ab { width: 46px; height: 46px; border-radius: 50%; background: var(--glass); backdrop-filter: blur(14px); display: grid; place-items: center; position: relative; color: var(--t1); font-size: 15px; }
+.ab svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.ab.cd { color: var(--t3); }
+.ab.cd b { position: absolute; color: var(--t1); font-size: 14px; }
+.ab.cd svg { opacity: 0.25; }
+.ab .ring { position: absolute; inset: 0; border-radius: 50%; background: conic-gradient(var(--t1) 62%, transparent 0); -webkit-mask: radial-gradient(circle, transparent 20.5px, #000 21px); mask: radial-gradient(circle, transparent 20.5px, #000 21px); }
+.ab.ult { width: 56px; height: 56px; }
+.ab.ult .ring { background: conic-gradient(var(--gold) 78%, rgba(255,255,255,0.1) 0); -webkit-mask: radial-gradient(circle, transparent 25.5px, #000 26px); mask: radial-gradient(circle, transparent 25.5px, #000 26px); }
+.auto { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; color: var(--jade); width: 40px; text-align: center; }
+.dmg { position: absolute; z-index: 1; font-stretch: 78%; font-weight: 700; font-size: 34px; letter-spacing: -0.02em; color: #fff; text-shadow: 0 2px 0 rgba(0,0,0,0.55); }
+.dmg.crit { color: var(--gold); font-size: 46px; }
+.dmg small { font-size: 0.5em; letter-spacing: 0.04em; margin-left: 2px; }
+
+/* Panel: one sheet, rounded shoulders, no inner cards. */
+.panel { background: var(--bg-1); border-radius: var(--r-l) var(--r-l) 0 0; margin-top: -14px; position: relative; z-index: 2; padding: 16px 16px 0; }
+.ph { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 12px; }
+.ph .lab { font-size: 12px; color: var(--t2); font-weight: 500; }
+.ph .pw { font-size: 30px; line-height: 1; margin-top: 3px; }
+.ph .pw sup { font-size: 12px; color: var(--jade); font-weight: 600; margin-left: 6px; vertical-align: 12px; }
+.link { font-size: 13px; color: var(--t1); font-weight: 500; display: flex; gap: 6px; align-items: center; background: var(--bg-2); padding: 8px 12px; border-radius: 999px; }
+.link i { width: 6px; height: 6px; border-radius: 50%; background: var(--gold); }
+.stats { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--line); margin: 0 -16px; }
+.st { padding: 11px 16px 10px; border-bottom: 1px solid var(--line); position: relative; display: flex; justify-content: space-between; align-items: center; }
+.st:nth-child(odd) { border-right: 1px solid var(--line); }
+.st .k { font-size: 12px; color: var(--t2); font-weight: 500; }
+.st .k span { color: var(--t3); margin-left: 5px; }
+.st .v { font-size: 20px; line-height: 1.15; margin-top: 2px; }
+.st .v em { font-style: normal; font-size: 12px; color: var(--jade); margin-left: 5px; font-weight: 600; }
+.st .c { font-size: 13px; color: var(--gold); display: flex; align-items: center; gap: 5px; background: rgba(218,184,108,0.1); padding: 7px 10px; border-radius: 999px; }
+.st .c::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--gold); }
+.st .c.no { color: var(--t3); background: transparent; }
+.st .c.no::before { background: var(--t3); }
+.st.press { background: var(--bg-2); }
+.st .ms { position: absolute; left: 0; bottom: -1px; height: 1px; background: var(--gold); }
+
+.tabs { background: var(--bg-1); display: grid; grid-template-columns: repeat(5, 1fr); border-top: 1px solid var(--line); position: relative; z-index: 2; }
+.tabs div { display: grid; place-items: center; align-content: center; gap: 4px; font-size: 11px; font-weight: 500; color: var(--t3); }
+.tabs div.on { color: var(--t1); }
+.tabs svg { width: 21px; height: 21px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+
+/* Sheets */
+.scrim { position: absolute; inset: 0; background: rgba(6, 6, 7, 0.6); backdrop-filter: blur(10px); z-index: 5; }
+.sheet { position: absolute; left: 0; right: 0; bottom: 0; z-index: 6; background: var(--bg-1); border-radius: 28px 28px 0 0; padding: 10px 20px 28px; }
+.grab { width: 36px; height: 4px; border-radius: 4px; background: var(--line-2); margin: 0 auto 18px; }
+.eyebrow { font-size: 11px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: var(--crimson); }
+.h-serif { font-family: var(--serif); font-size: 32px; line-height: 1.05; letter-spacing: -0.01em; margin-top: 6px; }
+.sub { font-size: 13px; color: var(--t2); margin-top: 4px; }
+.verdict { margin-top: 20px; display: flex; align-items: center; justify-content: space-between; }
+.verdict .big { font-size: 34px; line-height: 1; }
+.verdict .big span { color: var(--t3); font-size: 20px; }
+.verdict .tag { font-size: 13px; font-weight: 600; color: var(--crimson); }
+.pips { display: flex; gap: 6px; margin-top: 10px; }
+.pips i { flex: 1; height: 4px; border-radius: 4px; background: var(--bg-3); }
+.pips i.w { background: var(--jade); }
+.rows { margin-top: 18px; border-top: 1px solid var(--line); }
+.row { display: flex; align-items: center; justify-content: space-between; padding: 13px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.row span { color: var(--t2); }
+.row .chev { color: var(--t3); font-size: 18px; }
+.hint { font-family: var(--serif); font-style: italic; font-size: 16px; line-height: 1.3; color: var(--t2); margin-top: 16px; }
+.actions { display: flex; gap: 10px; margin-top: 22px; align-items: center; }
+.btn { height: 52px; border-radius: var(--r-m); font-size: 16px; font-weight: 600; display: grid; place-items: center; flex: 1; }
+.btn.quiet { background: transparent; color: var(--t2); flex: 0.8; font-weight: 500; }
+.btn.threat { background: var(--crimson); color: #fff; }
+.btn.gold { background: var(--gold); color: var(--gold-ink); }
+
+/* Summon reveal */
+.reveal { position: absolute; inset: 0; z-index: 6; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; padding: 0 24px 34px; text-align: center; background: radial-gradient(60% 34% at 50% 34%, rgba(116,168,234,0.22), transparent 70%), rgba(6,6,7,0.86); }
+.figure { position: absolute; top: 150px; left: 50%; transform: translateX(-50%); width: 150px; height: 230px; }
+.figure::before { content: ""; position: absolute; left: 50%; bottom: -6px; width: 190px; height: 26px; transform: translateX(-50%); border-radius: 50%; background: radial-gradient(closest-side, rgba(116,168,234,0.5), transparent); }
+.figure .body { position: absolute; inset: 0; background: #0d0f14; clip-path: polygon(50% 0, 62% 8%, 60% 18%, 78% 30%, 92% 100%, 8% 100%, 22% 30%, 40% 18%, 38% 8%); }
+.figure .eye { position: absolute; top: 24px; left: 50%; width: 22px; height: 3px; transform: translateX(-50%); background: var(--rare); border-radius: 3px; box-shadow: 0 0 12px var(--rare); }
+.rar { font-size: 11px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: var(--rare); }
+.name { font-family: var(--serif); font-size: 40px; line-height: 1; margin-top: 8px; }
+.epi { font-family: var(--serif); font-style: italic; font-size: 17px; color: var(--t2); margin-top: 6px; }
+.facts { width: 100%; margin-top: 22px; border-top: 1px solid var(--line); text-align: left; }
+.fact { padding: 12px 0; border-bottom: 1px solid var(--line); font-size: 13px; color: var(--t2); line-height: 1.35; }
+.fact b { display: block; color: var(--t1); font-weight: 600; font-size: 14px; margin-bottom: 1px; }
+.reveal .btn { width: 100%; flex: none; margin-top: 20px; }
+</style>
+</head>
+<body>
+
+<!-- 1. Battle + Hero -->
+<div class="phone">
+  <div class="top">
+    <div class="lv">Level <b class="num">24</b></div>
+    <div class="stage"><div class="n num">11 <span>· Drowned Hollow</span></div><div class="dots"><i class="on"></i><i class="on"></i><i></i></div></div>
+    <div class="cur num"><span class="g">48.7K</span><span class="e">380</span></div>
+    <div class="xp"><i></i></div>
+  </div>
+  <div class="field">
+    <div class="seg"><span class="on">Follow</span><span>Attack</span><span>Guard</span></div>
+    <div class="army"><i></i><i></i><i class="dn"></i></div>
+    <div class="dmg" style="left:150px;top:196px">335</div>
+    <div class="dmg crit" style="left:206px;top:140px">808<small>CRIT</small></div>
+    <div class="quest"><b>Defeat enemies</b> 2 of 3 <span class="bar"><i></i></span></div>
+    <div class="abil">
+      <div class="auto">AUTO</div>
+      <div class="ab cd"><svg viewBox="0 0 24 24"><path d="M4 18c2-8 8-12 16-12"/></svg><b class="num">3.1</b><div class="ring"></div></div>
+      <div class="ab"><svg viewBox="0 0 24 24"><path d="M5 12h12M13 7l5 5-5 5"/></svg></div>
+      <div class="ab"><svg viewBox="0 0 24 24"><path d="M13 3 6 13h5l-1 8 7-10h-5z"/></svg></div>
+      <div class="ab"><svg viewBox="0 0 24 24"><path d="M12 4c3 4 5 6 5 9a5 5 0 0 1-10 0c0-3 2-5 5-9z"/></svg></div>
+      <div class="ab"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M6 6l2 2M16 16l2 2M18 6l-2 2M8 16l-2 2"/></svg></div>
+      <div class="ab ult"><svg viewBox="0 0 24 24"><path d="m12 3 2.6 6 6.4.6-4.8 4.3 1.4 6.3L12 17l-5.6 3.2 1.4-6.3L3 9.600l6.400-.600z"/></svg><div class="ring"></div></div>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="ph">
+      <div><div class="lab">Power</div><div class="pw num">5.54K<sup>+1.4%</sup></div></div>
+      <div class="link"><i></i>Rank E · Trial ready</div>
+    </div>
+    <div class="stats">
+      <div class="st press"><div><div class="k">Attack <span>Lv 48</span></div><div class="v num">430<em>+8</em></div></div><div class="c num">533</div><div class="ms" style="width:92%"></div></div>
+      <div class="st"><div><div class="k">Health <span>Lv 44</span></div><div class="v num">2.57K<em>+50</em></div></div><div class="c num">332</div><div class="ms" style="width:76%"></div></div>
+      <div class="st"><div><div class="k">Defence <span>Lv 26</span></div><div class="v num">29<em>+1</em></div></div><div class="c num">145</div></div>
+      <div class="st"><div><div class="k">Attack speed <span>Lv 18</span></div><div class="v num">1.31<em>+0.01</em></div></div><div class="c num">122</div></div>
+      <div class="st"><div><div class="k">Crit rate <span>Lv 14</span></div><div class="v num">14.2%<em>+0.4</em></div></div><div class="c num">77</div></div>
+      <div class="st"><div><div class="k">Crit damage <span>Lv 12</span></div><div class="v num">178%<em>+2</em></div></div><div class="c no num">61.2K</div></div>
+    </div>
+  </div>
+  <div class="tabs">
+    <div class="on"><svg viewBox="0 0 24 24"><path d="M12 3 5 6v6c0 4 3 7 7 9 4-2 7-5 7-9V6z"/></svg>Hero</div>
+    <div><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c1-4 4-6 7-6s6 2 7 6"/></svg>Army</div>
+    <div><svg viewBox="0 0 24 24"><path d="M6 4h12l2 5-8 11L4 9z"/></svg>Gear</div>
+    <div><svg viewBox="0 0 24 24"><path d="M12 3v18M5 8l7-5 7 5M7 14h10"/></svg>Skills</div>
+    <div><svg viewBox="0 0 24 24"><path d="M12 3c4 5 4 13 0 18-4-5-4-13 0-18z"/></svg>Rift</div>
+  </div>
+</div>
+
+<!-- 2. Boss readiness -->
+<div class="phone">
+  <div class="top"><div class="lv">Level <b class="num">24</b></div><div class="stage"><div class="n num">12 <span>· Drowned Hollow</span></div><div class="dots"><i class="on"></i><i class="on"></i><i class="on"></i></div></div><div class="cur num"><span class="g">48.8K</span><span class="e">383</span></div></div>
+  <div class="field"></div>
+  <div class="panel"></div><div class="tabs"></div>
+  <div class="scrim"></div>
+  <div class="sheet">
+    <div class="grab"></div>
+    <div class="eyebrow">Boss · Stage 12</div>
+    <div class="h-serif">The Drowned Warden</div>
+    <div class="sub">Clears the way to stage 13 · 340 gold, 1 Rift Core</div>
+    <div class="verdict"><div><div class="big num">0 <span>of 4</span></div><div class="sub" style="margin-top:6px">Forecast fights won on auto. Losses left it at 61%.</div></div><div class="tag">Overwhelming</div></div>
+    <div class="pips"><i></i><i></i><i></i><i></i></div>
+    <div class="rows">
+      <div class="row">50+ stat upgrades are affordable <i class="chev">›</i></div>
+      <div class="row">2 unspent skill points <i class="chev">›</i></div>
+      <div class="row">No frontline in your army <i class="chev">›</i></div>
+    </div>
+    <div class="hint">Dash out of the Undertow's lane before it pulls, and out of each tide pool as it falls.</div>
+    <div class="actions"><div class="btn quiet">Keep farming</div><div class="btn threat">Fight</div></div>
+  </div>
+</div>
+
+<!-- 3. Summon reveal (rare) -->
+<div class="phone">
+  <div class="top"></div><div class="field"></div><div class="panel"></div><div class="tabs"></div>
+  <div class="reveal">
+    <div class="figure"><div class="body"></div><div class="eye"></div></div>
+    <div class="rar">Rare · Arcanist</div>
+    <div class="name">Ember Acolyte</div>
+    <div class="epi">Flame turned</div>
+    <div class="facts">
+      <div class="fact"><b>Cinder Bloom</b>Ignites the ground beneath a group of enemies for 5 seconds.</div>
+      <div class="fact"><b>Codex</b>+6% Attack for your warrior, permanently.</div>
+    </div>
+    <div class="btn gold">Add to army</div>
+  </div>
+</div>
+
+</body>
+</html>
