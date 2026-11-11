@@ -7,11 +7,10 @@ import { Ticker } from "@/components/ui/Ticker";
 import { useController, useHud, useProfile } from "@/hooks/useGame";
 import { replayClass } from "@/hooks/useShake";
 import { xpForLevel } from "@/game/progression/xp";
-import { regionForStage } from "@/game/data/regions";
 import { cn } from "@/lib/cn";
 
 /**
- * 44px, no boxes. Left: the level. Centre: the stage and its region, three wave ticks.
+ * 44px, no boxes. Left: the level. Centre: the stage and three wave ticks.
  * Right: gold and essence, the speed toggle and the menu. A 1px XP line runs along the bottom.
  */
 export function TopBar() {
@@ -27,7 +26,6 @@ export function TopBar() {
   const mode = useHud((s) => s?.mode ?? "campaign");
   const speedUnlocked = bestStage >= 3;
   // "Drowned Hollow", not "The Drowned Hollow": the bar has room for the name, not the article.
-  const region = regionForStage(stage).name.replace(/^The /, "");
   return (
     <header className="relative z-20 flex items-center gap-2 min-[360px]:gap-3 h-11 pl-4 pr-1 min-w-0 w-full" data-testid="top-bar">
       <div className="flex flex-col justify-center shrink-0 w-[52px] min-[360px]:w-[60px]" aria-label={`Level ${level}`}>
@@ -43,8 +41,9 @@ export function TopBar() {
             <span className="font-serif text-[20px] leading-[20px] text-[#e58a92]">Boss {stage}</span>
           ) : (
             <>
+              {/* No region name here: it never fit beside the currencies. Banners and the Rift panel name it. */}
+              <span className="t-label text-t2 hidden min-[360px]:inline">Stage</span>
               <span className="t-num-m text-[17px] leading-[20px] text-t1 shrink-0">{stage}</span>
-              <span className="t-label text-t2 truncate hidden min-[380px]:inline">{region}</span>
             </>
           )}
         </div>

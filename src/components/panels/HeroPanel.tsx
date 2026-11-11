@@ -146,10 +146,7 @@ function StatCell({ stat, index, profile, value, next, onUpgrade, onDenied }: Ce
       >
         <span ref={tint} className="pointer-events-none absolute inset-0 bg-[var(--tint-gold)] opacity-0" aria-hidden="true" />
         <span className="relative flex flex-col min-w-0">
-          <span className="t-label text-t2 truncate">
-            {label}
-            <span className="text-t2 ml-1 tnum hidden min-[360px]:inline">Lv {level}</span>
-          </span>
+          <span className="t-label text-t2 truncate">{label}</span>
           <span className="flex items-baseline gap-1.5 min-w-0">
             <span ref={valueRef} className="inline-block origin-left">
               <span data-testid={`stat-value-${stat}`}>
@@ -163,16 +160,22 @@ function StatCell({ stat, index, profile, value, next, onUpgrade, onDenied }: Ce
             )}
           </span>
         </span>
-        <span ref={pill} className={cn("relative shrink-0 flex items-center gap-[5px] rounded-full h-8 px-2.5 min-[360px]:px-3 t-num-m", capped ? "text-t3" : affordable ? "bg-[var(--tint-gold)] text-gold" : "text-t3")}>
-          {capped ? (
-            "Max"
-          ) : (
-            <>
-              <Icon name="chevron" size={12} strokeWidth={2.2} className="-rotate-90 -ml-0.5" />
-              <CurrencyGlyph kind="gold" size={6} className={affordable ? undefined : "!bg-t3"} />
-              {fmt(cost)}
-            </>
-          )}
+        <span className="relative shrink-0 flex flex-col items-end gap-px">
+          <span ref={pill} className={cn("relative flex items-center gap-[5px] rounded-full h-8 px-2.5 min-[360px]:px-3 t-num-m", capped ? "text-t3" : affordable ? "bg-[var(--tint-gold)] text-gold" : "text-t3")}>
+            {capped ? (
+              "Max"
+            ) : (
+              <>
+                <Icon name="chevron" size={12} strokeWidth={2.2} className="-rotate-90 -ml-0.5" />
+                <CurrencyGlyph kind="gold" size={6} className={affordable ? undefined : "!bg-t3"} />
+                {fmt(cost)}
+              </>
+            )}
+          </span>
+          {/* The level sits with the price of the next one, so the label never truncates. */}
+          <span className="t-caption text-t3 tnum pr-2" data-testid={`stat-level-${stat}`}>
+            Lv {level}
+          </span>
         </span>
         {milestone && !capped && (
           <span className="pointer-events-none absolute left-0 bottom-0 h-px w-full origin-left bg-gold" style={{ transform: `scaleX(${toNext})`, transition: "transform 200ms var(--ease)" }} title={`Every ${MILESTONE_EVERY} levels multiply ${STAT_LABEL[stat]} ×${MILESTONE_MULT}`} aria-hidden="true" />
