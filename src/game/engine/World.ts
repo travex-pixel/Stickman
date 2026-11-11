@@ -40,6 +40,8 @@ export interface WorldSnapshot {
   farming: boolean;
   /** Farming cycles completed in this world. */
   cycle: number;
+  /** The tapped focus target (-1 when none). */
+  focusId: number;
   stage: number;
   wave: number;
   wavesTotal: number;
@@ -98,6 +100,8 @@ export class World {
   /** Set by the controller during a cycle break: the stage the next cycle farms. */
   private nextStage: number | null = null;
   time = 0;
+  /** The enemy the player tapped: the warrior and the army prefer it while it lives. */
+  focusId = -1;
   /** Blood Pact: basic hits heal until this world time. */
   pactUntil = -1;
   timeScale = 1;
@@ -451,6 +455,7 @@ export class World {
       phase: this.phase,
       farming: this.farming,
       cycle: this.cycles,
+      focusId: this.focusId,
       stage: this.stage,
       wave: this.wave,
       wavesTotal: Number.isFinite(this.wavesTotal) ? this.wavesTotal : 0,
@@ -618,8 +623,19 @@ export class World {
     }
   }
 
+  /** The warrior (and army) raise their weapons: a cycle cleared, or a boss down. */
+  private celebrate(duration: number): void {
+    for (const e of this.entities.values()) {
+      if (e.dead || (e.kind !== "player" && e.kind !== "summon") || e.summon?.temporary) continue;
+      if (e.state !== "idle" && e.state !== "move" && e.state !== "recover" && duration < 10) continue;
+      this.stop(e);
+      this.setState(e, "victory", duration);
+    }
+  }
+
   /** Between farming cycles the warrior and army recover a quarter of what they lost. */
   private restoreAfterCycle(): void {
+    this.celebrate(1.1);
     for (const e of this.entities.values()) {
       if (e.dead || (e.kind !== "player" && e.kind !== "summon")) continue;
       const heal = Math.round((e.stats.maxHp - e.hp) * 0.25);
@@ -639,6 +655,7 @@ export class World {
     }
     this.phase = "victory";
     this.phaseTimer = 1.2;
+    if (this.mode === "boss" || this.mode === "trial") this.celebrate(99);
     this.events.push({ type: "stage_cleared", stage: this.stage, mode: this.mode, wave: this.wave, time: this.modeTime });
   }
 
@@ -737,6 +754,12 @@ export class World {
 
   private updatePlayer(dt: number): void {
     const p = this.player;
+    if (p.state === "victory") {
+      // A short flourish after a cleared cycle; held for good after a won boss fight.
+      this.stop(p);
+      if (p.stateTime >= p.stateDuration && this.phase !== "victory") this.setState(p, "idle");
+      return;
+    }
     if (p.state === "cast") {
       resolvePlayerAbility(this);
       if (p.stateTime >= p.stateDuration) this.setState(p, "idle");
@@ -811,7 +834,34 @@ export class World {
   // Shared combat helpers (used by AI modules)
   // ---------------------------------------------------------------------
 
+  /** Marks an enemy as the focus target (or clears focus with -1). Returns whether it took. */
+  setFocus(id: number): boolean {
+    if (id < 0) {
+      this.focusId = -1;
+      return true;
+    }
+    const e = this.entities.get(id);
+    if (!e || e.dead || e.faction !== "enemy") return false;
+    this.focusId = id;
+    return true;
+  }
+
+  /** The living, reachable focus target, if any. */
+  focusTarget(): Combatant | null {
+    if (this.focusId < 0) return null;
+    const e = this.entities.get(this.focusId);
+    if (!e || e.dead) {
+      this.focusId = -1;
+      return null;
+    }
+    return hasStatus(e, "submerged") ? null : e;
+  }
+
   acquireTarget(self: Combatant): Combatant | null {
+    if (self.faction === "ally") {
+      const f = this.focusTarget();
+      if (f) return f;
+    }
     const current = self.targetId >= 0 ? this.entities.get(self.targetId) : undefined;
     if (current && !current.dead && current.faction !== self.faction && !hasStatus(current, "submerged")) {
       const n = nearestHostile(self, this.entities.values());
@@ -1074,7 +1124,7 @@ export class World {
     target.state = "dead";
     target.vel.x = 0;
     target.vel.y = 0;
-    this.events.push({ type: "death", id: target.id, kind: target.kind, defId: target.defId, pos: { ...target.pos }, killerId });
+    this.events.push({ type: "death", id: target.id, kind: target.kind, defId: target.defId, pos: { ...target.pos }, killerId, elite: !!target.enemy?.elite || undefined });
     if (target.faction === "enemy") {
       this.kills += 1;
       this.onEnemyKilled(target, killerId);

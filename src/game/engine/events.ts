@@ -6,7 +6,7 @@ export type GameEvent =
   | { type: "spawn"; id: number; kind: EntityKind; defId: string; pos: Vec2 }
   | { type: "hit"; targetId: number; sourceId: number; amount: number; crit: boolean; pos: Vec2; element: Element; faction: Faction; targetKind: EntityKind; heavy: boolean }
   | { type: "heal"; targetId: number; amount: number; pos: Vec2 }
-  | { type: "death"; id: number; kind: EntityKind; defId: string; pos: Vec2; killerId: number }
+  | { type: "death"; id: number; kind: EntityKind; defId: string; pos: Vec2; killerId: number; elite?: boolean }
   | { type: "attack_swing"; id: number; kind: EntityKind; heavy: boolean; pos: Vec2; facing: 1 | -1 }
   | { type: "cast"; id: number; ability: AbilityId; pos: Vec2; facing: 1 | -1; targetPos: Vec2 | null }
   | { type: "chain"; from: Vec2; to: Vec2; color: number }

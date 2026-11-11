@@ -577,6 +577,21 @@ function computePose(style: BodyStyle, state: ActionState, t: number, duration: 
       }
       break;
     }
+    case "victory": {
+      // Weapon raised high, a small hop, then a proud stance.
+      const e = easeOutCubic(clamp(t / 0.35, 0, 1));
+      const hop = t < 0.7 ? Math.sin((t / 0.7) * Math.PI) * -4 : breathe * 0.6;
+      p.torso = -0.1 * e;
+      p.head = -0.28 * e;
+      p.armR = [-2.9 * e - 0.1, 0.12];
+      p.armL = [0.55 + 0.25 * e, 0.55];
+      p.weapon = 0.5 - 0.5 * e;
+      p.hips.y = hop;
+      p.legL = [0.22, 0.08];
+      p.legR = [-0.22, 0.08];
+      if (style === "archer") p.armL = [-2.6 * e, 0.1];
+      break;
+    }
     case "dead": {
       p.torso = 0.3;
       p.armL = [1.4, 0.5];

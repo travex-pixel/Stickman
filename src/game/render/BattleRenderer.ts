@@ -52,6 +52,8 @@ export class BattleRenderer {
   private shakeLayer = new Container();
   private groundFx = new Graphics();
   private entityLayer = new Container();
+  /** Gold reticle under the player's focus target. */
+  private focusRing = new Graphics();
   private fxGraphics = new Graphics();
   private projectileLayer = new Container();
   private orbLayer = new Container();
@@ -112,6 +114,7 @@ export class BattleRenderer {
     this.root.addChild(this.shakeLayer);
     this.shakeLayer.addChild(this.groundFx, this.entityLayer, this.projectileLayer, this.orbLayer, this.fxGraphics, this.particles.container);
     this.entityLayer.sortableChildren = true;
+    this.entityLayer.addChild(this.focusRing);
     this.root.addChild(this.numbers.container, this.cinematicLayer, this.flashRect);
     this.flashRect.blendMode = "add";
     this.resizeObs = new ResizeObserver(() => {
@@ -245,6 +248,7 @@ export class BattleRenderer {
     this.background?.update(paused ? dt * 0.3 : dt);
     this.background?.setCamera((world.player.pos.x - ARENA.width / 2) / (ARENA.width / 2));
     this.syncEntities(world, alpha, paused ? 0 : dt);
+    this.drawFocus(world, alpha);
     this.syncProjectiles(world, alpha);
     this.syncOrbs(world, dt);
     this.drawGroundFx(world);
@@ -346,6 +350,61 @@ export class BattleRenderer {
    * Health bars sit just above the head, appear only once a unit is hurt (or shielded, elite or
    * markable), and are re-tessellated only when what they show changes. Movement is a position update.
    */
+  private focusSpin = 0;
+
+  private drawFocus(world: World, alpha: number): void {
+    const ring = this.focusRing;
+    const f = world.focusId >= 0 ? world.entities.get(world.focusId) : undefined;
+    if (!f || f.dead || f.statuses.some((st) => st.kind === "submerged")) {
+      ring.visible = false;
+      return;
+    }
+    const x = lerp(f.prevPos.x, f.pos.x, alpha);
+    const y = lerp(f.prevPos.y, f.pos.y, alpha);
+    const ds = this.depthScale(y) * this.unit() * FIGURE_SCALE;
+    const rx = Math.max(18, f.radius * 1.5) * ds;
+    const ry = rx * 0.38;
+    this.focusSpin += this.reduced ? 0 : 0.04;
+    ring.visible = true;
+    ring.clear();
+    ring.ellipse(0, 0, rx, ry).stroke({ width: 2, color: 0xe9c97a, alpha: 0.9 });
+    for (let i = 0; i < 4; i++) {
+      const a = this.focusSpin + (i * Math.PI) / 2;
+      const px = Math.cos(a) * (rx + 5);
+      const py = Math.sin(a) * (ry + 2);
+      ring.moveTo(px, py).lineTo(px * 0.86, py * 0.86).stroke({ width: 2.5, color: 0xe9c97a, alpha: 0.95 });
+    }
+    ring.position.set(this.sx(x), this.sy(y) + 1);
+    ring.zIndex = -999 + y;
+  }
+
+  /** The living enemy drawn nearest a screen point (client coordinates), or null. */
+  pickEnemy(clientX: number, clientY: number): number | null {
+    const world = this.world;
+    const canvas = this.app?.canvas as HTMLCanvasElement | undefined;
+    if (!world || !canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    const px = clientX - rect.left;
+    const py = clientY - rect.top;
+    let best: number | null = null;
+    let bestD = Infinity;
+    for (const e of world.entities.values()) {
+      if (e.dead || e.faction !== "enemy" || e.statuses.some((st) => st.kind === "submerged")) continue;
+      const ds = this.depthScale(e.pos.y) * this.unit() * FIGURE_SCALE;
+      const sx = this.sx(e.pos.x);
+      const feet = this.sy(e.pos.y);
+      const top = feet - 95 * ds * (e.scale || 1);
+      const halfW = Math.max(26, e.radius * 2 * ds);
+      if (px < sx - halfW || px > sx + halfW || py < top - 10 || py > feet + 16) continue;
+      const d = Math.abs(px - sx) + Math.abs(py - (feet + top) / 2) * 0.5;
+      if (d < bestD) {
+        bestD = d;
+        best = e.id;
+      }
+    }
+    return best;
+  }
+
   private drawBar(v: EntityView, e: Combatant, sx: number, sy: number, ds: number): void {
     const bar = v.bar;
     const hurt = e.hp < e.stats.maxHp - 0.5 || e.shield > 0;

@@ -33,6 +33,11 @@ export function updateSummonAi(world: World, s: Combatant, dt: number): void {
     if (s.stateTime >= s.stateDuration) world.setState(s, "idle");
     return;
   }
+  if (s.state === "victory") {
+    world.stop(s);
+    if (s.stateTime >= s.stateDuration) world.setState(s, "idle");
+    return;
+  }
 
   const player = world.player;
   const engageRadius = sum.command === "aggressive" ? Infinity : sum.command === "guard" ? 150 : 200;
@@ -52,6 +57,9 @@ export function updateSummonAi(world: World, s: Combatant, dt: number): void {
         target = nearestHostile(s, enemiesNearAnchor);
     }
   }
+  // The player's focus overrides role targeting, except for a guard holding its post.
+  const focus = world.focusTarget();
+  if (focus && sum.command !== "guard" && sum.role !== "sentinel") target = focus;
   s.targetId = target ? target.id : -1;
 
   // Active abilities

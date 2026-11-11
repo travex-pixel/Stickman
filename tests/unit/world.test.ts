@@ -690,3 +690,28 @@ describe("Ember Herald", () => {
     expect(ev.some((e) => e.type === "summon_ability" && e.ability === "Pyre Rain")).toBe(true);
   });
 });
+
+describe("focus target", () => {
+  it("the warrior and the army prefer the tapped enemy, and focus clears when it dies", () => {
+    const p = createDefaultProfile();
+    claimEssence(p, "husk_blade");
+    p.summons.collection[0]!.deployed = true;
+    p.summons.command = "aggressive";
+    const w = new World({ stage: 2, loadout: buildLoadout(p), seed: 3 });
+    step(w, 0.5);
+    for (const e of w.entities.values()) if (e.kind === "enemy") e.dead = true;
+    const near = w.spawnEnemy("husk", { pos: { x: w.player.pos.x + 40, y: w.player.pos.y } });
+    const far = w.spawnEnemy("husk", { pos: { x: w.player.pos.x + 300, y: w.player.pos.y } });
+    near.stats.maxHp = near.hp = far.stats.maxHp = far.hp = 1e6;
+    expect(w.acquireTarget(w.player)?.id).toBe(near.id);
+    expect(w.setFocus(far.id)).toBe(true);
+    expect(w.setFocus(w.player.id)).toBe(false);
+    expect(w.acquireTarget(w.player)?.id).toBe(far.id);
+    step(w, 0.3);
+    const shadow = w.summonEntities()[0]!;
+    expect(shadow.targetId).toBe(far.id);
+    w.kill(far, w.player.id);
+    expect(w.focusTarget()).toBeNull();
+    expect(w.focusId).toBe(-1);
+  });
+});

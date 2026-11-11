@@ -4,7 +4,7 @@ import type { AbilityId, EliteAffix, EnemyArchetype, SummonCommand, SummonRole }
 export type Faction = "ally" | "enemy";
 export type EntityKind = "player" | "summon" | "enemy" | "boss";
 
-export type ActionState = "idle" | "move" | "windup" | "attack" | "recover" | "hit" | "cast" | "dodge" | "dead" | "stagger" | "emerge";
+export type ActionState = "idle" | "move" | "windup" | "attack" | "recover" | "hit" | "cast" | "dodge" | "dead" | "stagger" | "emerge" | "victory";
 
 export interface CombatStats {
   maxHp: number;

@@ -16,6 +16,7 @@ import { WEAPON_PATHS } from "@/game/progression/weaponPaths";
 import { fmt, fmtDuration } from "@/lib/format";
 import { bossForStage } from "@/game/data/regions";
 import { affordableUpgrades } from "@/game/progression/readiness";
+import { DAILY_BONUS, objectiveDef, objectivePayout } from "@/game/progression/objectives";
 import { cn } from "@/lib/cn";
 import { SettingsModal } from "@/components/settings/SettingsModal";
 import { CountUp, LootCard } from "@/components/rewards/RewardFx";
@@ -51,6 +52,8 @@ function ModalBody({ modal }: { modal: Modal }) {
       return <WeaponPathChoice />;
     case "journal":
       return <Journal />;
+    case "objectives":
+      return <Objectives />;
     case "rank_up":
       return <RankUp modal={modal} />;
     case "technique":
@@ -437,6 +440,65 @@ function TechniqueLearned({ modal }: { modal: Extract<Modal, { kind: "technique"
             Equip
           </button>
         </div>
+      </div>
+    </Card>
+  );
+}
+
+function Objectives() {
+  const c = useController();
+  const profile = useProfileRef();
+  const o = profile.objectives;
+  const allDaily = o.daily.length > 0 && o.daily.every((s) => s.claimed);
+  const row = (st: { id: string; progress: number; claimed: boolean }) => {
+    const def = objectiveDef(st.id);
+    if (!def) return null;
+    const pay = objectivePayout(profile, def);
+    const done = st.progress >= def.target;
+    return (
+      <div key={st.id} className={cn("rounded-lg border px-2.5 py-1.5 flex items-center gap-2", st.claimed ? "border-white/8 opacity-60" : done ? "border-gold/60 bg-gold/10" : "border-white/10 bg-white/[0.03]")} data-testid={`objective-${st.id}`}>
+        <div className="flex-1 min-w-0">
+          <div className="text-[12px] font-semibold text-ivory truncate">{def.text}</div>
+          <div className="flex items-center gap-2 mt-0.5">
+            <div className="bar bar-gold flex-1 !h-1.5">
+              <div style={{ width: `${Math.min(100, (st.progress / def.target) * 100)}%` }} />
+            </div>
+            <span className="text-[10px] text-mist tabular-nums shrink-0">
+              {fmt(Math.min(st.progress, def.target))}/{fmt(def.target)}
+            </span>
+          </div>
+        </div>
+        <div className="shrink-0 flex flex-col items-end gap-0.5 text-[10px] font-bold leading-none">
+          {pay.gold > 0 && <span className="flex items-center gap-0.5 text-gold-2"><Icon name="coin" size={10} />{fmt(pay.gold)}</span>}
+          {pay.essence > 0 && <span className="flex items-center gap-0.5 text-jade-2"><Icon name="essence" size={10} />{pay.essence}</span>}
+          {pay.cores > 0 && <span className="flex items-center gap-0.5 text-parch"><Icon name="core" size={10} />{pay.cores}</span>}
+        </div>
+        <button
+          className={cn("shrink-0 h-8 min-w-[58px] rounded-md text-[11px] font-extrabold", st.claimed ? "text-mist" : done ? "btn-primary !py-0 !px-2 !text-[12px]" : "border border-white/10 text-mist")}
+          disabled={!done || st.claimed}
+          onClick={() => c.claimObjective(st.id)}
+          data-testid={`claim-${st.id}`}
+        >
+          {st.claimed ? "Done" : done ? "Claim" : "…"}
+        </button>
+      </div>
+    );
+  };
+  return (
+    <Card>
+      <div className="px-3 pt-3 pb-3 flex flex-col gap-1.5" data-testid="objectives">
+        <div className="flex items-baseline justify-between">
+          <span className="font-display text-[17px] text-ivory">Objectives</span>
+          <span className="text-[10px] text-mist">Optional. Missing a day costs nothing.</span>
+        </div>
+        <div className="caps">Today</div>
+        {o.daily.map(row)}
+        <div className={cn("text-[10px] text-center", allDaily ? "text-jade-2" : "text-mist")}>{allDaily ? `All three done: +${DAILY_BONUS.cores} Rift Core received` : `Finish all three today for +${DAILY_BONUS.cores} Rift Core`}</div>
+        <div className="caps mt-1">This week</div>
+        {o.weekly.map(row)}
+        <button className="btn-ghost w-full mt-1 !py-2" onClick={() => c.closeModal()} data-testid="objectives-close">
+          Close
+        </button>
       </div>
     </Card>
   );

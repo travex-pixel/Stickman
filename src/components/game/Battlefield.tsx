@@ -21,7 +21,14 @@ export function Battlefield() {
 
   return (
     <section className="relative min-h-0 overflow-hidden" data-testid="battlefield" onPointerDown={() => c.userGesture()}>
-      <div ref={hostRef} className="absolute inset-0" />
+      <div
+        ref={hostRef}
+        className="absolute inset-0"
+        data-testid="battle-canvas"
+        onPointerDown={(e) => {
+          if (e.target instanceof HTMLCanvasElement) c.focusAt(e.clientX, e.clientY);
+        }}
+      />
       <div className="absolute left-1/2 top-1/2 h-0 w-0" data-guide="battlefield-player" />
       <BattleOverlays />
       <AbilityBar />

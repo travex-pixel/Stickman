@@ -78,6 +78,7 @@ export type Modal =
   | { kind: "settings" }
   | { kind: "weapon_path" }
   | { kind: "journal" }
+  | { kind: "objectives" }
   | { kind: "boss_intro"; defId: string }
   | { kind: "technique"; id: AbilityId }
   | { kind: "mode_result"; mode: ModeId; title: string; subtitle: string; lines: { label: string; value: string; tone?: "gold" | "jade" | "violet" }[]; success: boolean; record?: boolean; items?: EquipmentItem[] }
@@ -558,6 +559,7 @@ export class GameController {
         case "death":
           if (e.kind === "enemy" || e.kind === "boss") {
             kills += 1;
+            if (e.elite) this.objectiveEvent("elites", 1);
             p.progress.killsByEnemy[e.defId] = (p.progress.killsByEnemy[e.defId] ?? 0) + 1;
             this.sfx(e.kind === "boss" ? "boss_death" : "enemy_death", { volume: e.kind === "boss" ? 1 : 0.5, minInterval: 80, rate: 0.9 + Math.random() * 0.2 });
             if (e.kind === "boss") {
@@ -592,6 +594,7 @@ export class GameController {
         case "cast":
           if (e.id === this.world?.player.id) {
             this.run.casts += 1;
+            this.objectiveEvent("casts", 1);
             p.progress.abilityCasts += 1;
             if (e.ability !== "shadow_dash") this.completeTutorialIf("ability");
             dirty = true;
@@ -713,6 +716,7 @@ export class GameController {
       dirty = true;
     }
     if (kills > 0) {
+      this.objectiveEvent("kills", kills);
       p.progress.totalKills += kills;
       this.run.kills += kills;
       if (this.mode === "rift") {
@@ -1042,6 +1046,8 @@ export class GameController {
 
   private onModeCleared(mode: ModeId, wave: number, time: number): void {
     const p = this.profile;
+    if (mode === "trial") this.objectiveEvent("bossWins", 1);
+    else this.objectiveEvent("modeRuns", 1);
     this.sfx("level_up", { volume: 0.9, rate: 0.9 });
     if (mode === "trial") {
       const from = p.player.rank;
@@ -1071,6 +1077,7 @@ export class GameController {
   }
 
   private onEndlessOver(wave: number): void {
+    this.objectiveEvent("modeRuns", 1);
     const p = this.profile;
     const reached = Math.max(0, wave - 1);
     const best = p.modes.endlessBest;
@@ -1093,6 +1100,7 @@ export class GameController {
       return;
     }
     p.equipment.inventory.push(item);
+    this.objectiveEvent("gear", 1);
     // An empty slot is never a decision: once the gear lesson is learned, fill it straight away.
     const gearLearned = p.tutorial.finished || p.tutorial.completed.includes("gear");
     if (gearLearned && !p.equipment.equipped[item.slot]) {
@@ -1121,6 +1129,27 @@ export class GameController {
     if (!ok) this.sfx("error", { volume: 0.25, minInterval: 200 });
     return ok;
   }
+
+  /** Tap on the battlefield: an enemy under the finger becomes the focus target (tap again to clear). */
+  focusAt(clientX: number, clientY: number): void {
+    const world = this.world;
+    const id = this.renderer?.pickEnemy(clientX, clientY) ?? null;
+    if (!world || id === null) return;
+    if (world.focusId === id) {
+      world.setFocus(-1);
+      this.sfx("ui_tap", { volume: 0.3, rate: 0.8 });
+      return;
+    }
+    if (world.setFocus(id)) {
+      this.sfx("ui_tap", { volume: 0.5, rate: 1.3 });
+      if (!this.seenFocus) {
+        this.seenFocus = true;
+        this.toast("Focus: your warrior and army strike this foe first. Tap it again to release.", "info");
+      }
+    }
+  }
+
+  private seenFocus = false;
 
   dodge(): boolean {
     this.userGesture();
@@ -1161,6 +1190,7 @@ export class GameController {
     const p = this.profile;
     const first = !p.summons.firstSummonSeen;
     p.summons.totalAttempts += 1;
+    this.objectiveEvent("binds", 1);
     const roll = first ? 0 : this.rng.next();
     const result = resolveExtraction(p, peek.summonId, roll, { elite: peek.elite, bonus: computeModifiers(p).extractionBonus });
     if (!result.success) {
@@ -1224,6 +1254,7 @@ export class GameController {
   upgradeStat(stat: UpgradeableStat): UpgradeAttempt {
     const res = doUpgradeStat(this.profile, stat);
     if (res.ok) {
+      this.objectiveEvent("upgrades", 1);
       this.coachUpgrade = false;
       if (this.uiStore.get().guide?.target.startsWith("upgrade-")) this.uiStore.update((u) => ({ ...u, guide: null }));
       this.sfx("upgrade", { volume: 0.5, minInterval: 30, rate: 0.95 + Math.random() * 0.15 });
@@ -1264,6 +1295,7 @@ export class GameController {
     if (p.player.gold < cost) return false;
     p.player.gold -= cost;
     item.level += 1;
+    this.objectiveEvent("upgrades", 1);
     this.sfx("upgrade", { volume: 0.5, minInterval: 30 });
     this.refreshLoadout();
     this.commit();
@@ -1330,6 +1362,7 @@ export class GameController {
     if (p.player.essence < cost) return false;
     p.player.essence -= cost;
     inst.bond += 1;
+    this.objectiveEvent("shadowUps", 1);
     this.sfx("upgrade", { volume: 0.5, minInterval: 30, rate: 1.1 });
     this.refreshLoadout();
     this.commit();
@@ -1350,6 +1383,7 @@ export class GameController {
     p.player.riftCores -= cores;
     evolveSummon(inst);
     p.progress.evolutions += 1;
+    this.objectiveEvent("shadowUps", 1);
     this.sfx("summon_first", { volume: 0.9, rate: 1.3 });
     this.toast(`${check.def.name} has awakened`, "level");
     this.renderer?.flash(check.def.palette.glow, 0.5);
@@ -1508,6 +1542,7 @@ export class GameController {
     }
     const bestBefore = speciesStars(p).get(inst.defId) ?? 0;
     p.player.riftCores -= starUp(inst);
+    this.objectiveEvent("shadowUps", 1);
     this.sfx("level_up", { volume: 0.8, rate: 1.25 });
     const def = summonDef(inst.defId);
     const gained = Math.max(0, (inst.stars ?? 0) - bestBefore);
@@ -1560,6 +1595,12 @@ export class GameController {
   openSettings(): void {
     this.userGesture();
     this.uiStore.update((u) => ({ ...u, modal: { kind: "settings" } }));
+  }
+
+  openObjectives(): void {
+    this.userGesture();
+    if (refreshObjectives(this.profile)) this.commit();
+    this.uiStore.update((u) => ({ ...u, modal: { kind: "objectives" }, newBadges: { ...u.newBadges, rift: false } }));
   }
 
   openJournal(): void {
@@ -1680,8 +1721,7 @@ export class GameController {
     if (!p.tutorial.finished) {
       const remaining = TUTORIAL_STEPS.filter((st) => !p.tutorial.completed.includes(st.id));
       if (remaining.length === 0) {
-        p.tutorial.finished = true;
-        this.toast("You know the way. Ascend.", "level");
+        this.finishTutorial();
         setGuide(null, null);
         this.commit();
         return;
@@ -1747,11 +1787,20 @@ export class GameController {
     this.tutorialElapsed = 0;
     this.sfx("quest", { volume: 0.5, rate: 1.2 });
     this.uiStore.update((u) => ({ ...u, tutorialStep: null, guide: null }));
-    if (TUTORIAL_STEPS.every((s) => p.tutorial.completed.includes(s.id))) {
-      p.tutorial.finished = true;
-      this.toast("You know the way. Ascend.", "level");
-    }
+    if (TUTORIAL_STEPS.every((s) => p.tutorial.completed.includes(s.id))) this.finishTutorial();
     this.commit();
+  }
+
+  /** The lessons are over: the warrior fights on their own from here, abilities included. */
+  private finishTutorial(): void {
+    const p = this.profile;
+    if (p.tutorial.finished) return;
+    p.tutorial.finished = true;
+    if (!p.player.autoCast) {
+      p.player.autoCast = true;
+      this.refreshLoadout();
+    }
+    this.toast("You know the way. AUTO is on: tap it to take the abilities yourself.", "level");
   }
 }
 

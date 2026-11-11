@@ -21,7 +21,7 @@ export function AbilityBar() {
   const c = useController();
   const level = useProfile((p) => p.player.level);
   const autoCast = useProfile((p) => p.player.autoCast);
-  const tutorialFinished = useProfile((p) => p.tutorial.finished || p.tutorial.completed.includes("ability"));
+  const tutorialFinished = useProfile((p) => p.tutorial.finished || (p.tutorial.completed.includes("ability") && p.tutorial.completed.includes("dodge")));
   // A string selector so a form swap (mutated in place) still re-renders the bar.
   const formKey = useProfile((p) => SLOTS.map((s) => slotForm(p, s)).join(","));
   const forms = formKey.split(",") as AbilityId[];
@@ -36,11 +36,11 @@ export function AbilityBar() {
       <button
         className={cn("medal medal-sm shrink-0", autoCast ? "text-gold-2" : "text-mist")}
         data-ready={autoCast}
-        onClick={() => c.toggleAutoCast()}
+        onClick={() => (tutorialFinished ? c.toggleAutoCast() : c.toast("AUTO unlocks once you have used an ability and dodged", "info"))}
         aria-pressed={autoCast}
         aria-label={`Auto abilities ${autoCast ? "on" : "off"}`}
         data-testid="auto-toggle"
-        disabled={!tutorialFinished}
+        aria-disabled={!tutorialFinished}
         style={{ opacity: tutorialFinished ? 1 : 0.35 }}
       >
         <span className="font-display text-[11px] leading-none">AUTO</span>
