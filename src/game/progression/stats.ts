@@ -34,6 +34,16 @@ export const STAT_UPGRADE_STEP: Record<UpgradeableStat, number> = {
   defense: 0.9,
 };
 
+/**
+ * Milestones: every MILESTONE_EVERY levels of Attack or Health multiply that stat. A visible goal
+ * in the short term and the compounding growth that keeps late stages reachable.
+ */
+export const MILESTONE_EVERY = 25;
+export const MILESTONE_MULT = Number(process.env.ASCEND_MILESTONE ?? 1.5);
+export function milestoneMult(level: number): number {
+  return Math.pow(MILESTONE_MULT, Math.floor(level / MILESTONE_EVERY));
+}
+
 export const STAT_UPGRADE_CAP: Record<UpgradeableStat, number> = {
   attack: 400,
   maxHp: 400,
@@ -234,6 +244,8 @@ export function computePlayerStats(profile: Profile): CombatStats {
   s.critChance += STAT_UPGRADE_STEP.critChance * (lv.critChance - 1);
   s.critDamage += STAT_UPGRADE_STEP.critDamage * (lv.critDamage - 1);
   s.defense += STAT_UPGRADE_STEP.defense * (lv.defense - 1);
+  s.attack *= milestoneMult(lv.attack);
+  s.maxHp *= milestoneMult(lv.maxHp);
 
   // Warrior level: steady compounding power.
   const levelMult = 1 + (profile.player.level - 1) * 0.045;

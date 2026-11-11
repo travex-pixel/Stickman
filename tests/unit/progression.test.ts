@@ -183,3 +183,39 @@ describe("achievements and journal", () => {
     expect(j).toContain("j_claim");
   });
 });
+
+describe("long-run growth levers", () => {
+  it("attack and health milestones multiply every 25 levels", async () => {
+    const { milestoneMult, MILESTONE_MULT, computePlayerStats } = await import("@/game/progression/stats");
+    const { createDefaultProfile } = await import("@/game/progression/profile");
+    expect(milestoneMult(24)).toBe(1);
+    expect(milestoneMult(25)).toBeCloseTo(MILESTONE_MULT);
+    expect(milestoneMult(50)).toBeCloseTo(MILESTONE_MULT * MILESTONE_MULT);
+    const p = createDefaultProfile();
+    p.player.statLevels.attack = 24;
+    const a24 = computePlayerStats(p).attack;
+    p.player.statLevels.attack = 25;
+    expect(computePlayerStats(p).attack / a24).toBeGreaterThan(MILESTONE_MULT * 0.95);
+  });
+  it("gate bosses are tougher than their stage, except the first lesson", async () => {
+    const { bossScale } = await import("@/game/data/regions");
+    expect(bossScale(1)).toEqual({ hp: 1, attack: 1 });
+    expect(bossScale(3).hp).toBeGreaterThan(3);
+    expect(bossScale(30).hp).toBeGreaterThan(bossScale(3).hp);
+  });
+  it("spare shards refine into Rift Cores, never the ones the next star needs", async () => {
+    const { createDefaultProfile } = await import("@/game/progression/profile");
+    const { claimEssence } = await import("@/game/summons/recruitment");
+    const { refineShards, spareShards, starCost, REFINE_SHARDS } = await import("@/game/summons/progression");
+    const p = createDefaultProfile();
+    claimEssence(p, "husk_blade");
+    const inst = p.summons.collection[0]!;
+    const need = starCost(inst)!.shards;
+    inst.shards = need + REFINE_SHARDS - 1;
+    expect(refineShards(inst)).toBe(0);
+    inst.shards = need + REFINE_SHARDS;
+    expect(spareShards(inst)).toBe(REFINE_SHARDS);
+    expect(refineShards(inst)).toBe(1);
+    expect(inst.shards).toBe(need);
+  });
+});

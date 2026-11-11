@@ -12,7 +12,7 @@ import type { PlayerLoadout, DeployedSummonLoadout } from "../progression/loadou
 import type { AbilityId, SummonCommand, Element } from "../data/ids";
 import { ABILITIES, ABILITY_SLOTS, ULTIMATE_ENERGY_COST, ULTIMATE_ID } from "../data/abilities";
 import { enemyDef } from "../data/enemies";
-import { bossForStage, regionForStage, stageScale, type WaveDef } from "../data/regions";
+import { bossForStage, bossScale, regionForStage, stageScale, type WaveDef } from "../data/regions";
 import { computeDamage } from "../combat/damage";
 import { addStatus, hasStatus, speedMultiplier, statusValue, tickStatuses } from "../combat/statuses";
 import { nearestHostile, hostilesWithin, factionWithin } from "../combat/targeting";
@@ -761,7 +761,9 @@ export class World {
 
   private startBossIntro(): void {
     const def = enemyDef(bossForStage(this.stage, this.mode));
-    const scale = stageScale(this.stage);
+    const base = stageScale(this.stage);
+    const gate = bossScale(this.stage);
+    const scale = { ...base, hp: base.hp * gate.hp, attack: base.attack * gate.attack };
     const boss = createEnemy(this.allocId(), def, { x: ARENA.maxX - 70, y: ARENA.homeY }, scale, this.stage, this.mode !== "trial");
     boss.kind = "boss";
     if (this.stage === 1 && this.mode !== "trial") {

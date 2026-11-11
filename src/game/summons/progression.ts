@@ -101,3 +101,18 @@ export function starUp(inst: SummonInstance): number {
   inst.stars = (inst.stars ?? 0) + 1;
   return c.cores;
 }
+
+/** Shards beyond what the next star needs can be refined into Rift Cores. */
+export const REFINE_SHARDS = 25;
+
+export function spareShards(inst: SummonInstance): number {
+  const next = starCost(inst);
+  return Math.max(0, inst.shards - (next ? next.shards : 0));
+}
+
+/** Refines REFINE_SHARDS spare shards into one Rift Core. Returns cores gained (0 or 1). */
+export function refineShards(inst: SummonInstance): number {
+  if (spareShards(inst) < REFINE_SHARDS) return 0;
+  inst.shards -= REFINE_SHARDS;
+  return 1;
+}

@@ -145,13 +145,23 @@ export function regionForStage(stage: number): RegionDef {
  */
 export const HP_GROWTH = Number(process.env.ASCEND_HP_GROWTH ?? 1.27);
 export const ATK_GROWTH = Number(process.env.ASCEND_ATK_GROWTH ?? 1.16);
-export const REWARD_GROWTH = Number(process.env.ASCEND_REWARD_GROWTH ?? 1.075);
+export const REWARD_GROWTH = Number(process.env.ASCEND_REWARD_GROWTH ?? 1.1);
+/**
+ * Two phases: early on the player's power arrives in bursts (army, gear, skills, codex), so the
+ * curve is steep; past the knee those bursts are spent and growth comes from compounding stats,
+ * so enemies grow more gently. Tuned with the economy simulator (tests/unit/economy.sim.test.ts).
+ */
+export const GROWTH_KNEE = Number(process.env.ASCEND_GROWTH_KNEE ?? 18);
+export const HP_GROWTH_LATE = Number(process.env.ASCEND_HP_GROWTH_LATE ?? 1.17);
+export const ATK_GROWTH_LATE = Number(process.env.ASCEND_ATK_GROWTH_LATE ?? 1.1);
 
 export function stageScale(stage: number): { hp: number; attack: number; reward: number } {
   const s = Math.max(1, stage) - 1;
+  const early = Math.min(s, GROWTH_KNEE);
+  const late = Math.max(0, s - GROWTH_KNEE);
   return {
-    hp: Math.pow(HP_GROWTH, s) * (1 + 0.06 * s),
-    attack: Math.pow(ATK_GROWTH, s) * (1 + 0.03 * s),
+    hp: Math.pow(HP_GROWTH, early) * Math.pow(HP_GROWTH_LATE, late) * (1 + 0.06 * s),
+    attack: Math.pow(ATK_GROWTH, early) * Math.pow(ATK_GROWTH_LATE, late) * (1 + 0.03 * s),
     reward: Math.pow(REWARD_GROWTH, s),
   };
 }
@@ -172,4 +182,19 @@ export const WAVES_PER_STAGE = 3;
 export function bossForStage(stage: number, mode: string = "campaign"): string {
   const region = regionForStage(stage);
   return mode !== "trial" && region.bossFor ? region.bossFor(stage) : region.bossId;
+}
+
+/**
+ * Gate bosses grow tougher than the stage around them, gate by gate, so each one asks for a
+ * little farming and upgrading first. Applied to every boss fight (and so to its forecast).
+ */
+export const BOSS_HP_BASE = Number(process.env.ASCEND_BOSS_HP_BASE ?? 4);
+export const BOSS_ATK_BASE = Number(process.env.ASCEND_BOSS_ATK_BASE ?? 1.5);
+export const BOSS_HP_SLOPE = Number(process.env.ASCEND_BOSS_HP ?? 0.03);
+export const BOSS_ATK_SLOPE = Number(process.env.ASCEND_BOSS_ATK ?? 0.008);
+export function bossScale(stage: number): { hp: number; attack: number } {
+  // The first Warden is the tutorial's lesson: it keeps its plain stage strength.
+  if (stage <= 1) return { hp: 1, attack: 1 };
+  const s = stage - 1;
+  return { hp: BOSS_HP_BASE + BOSS_HP_SLOPE * s, attack: BOSS_ATK_BASE + BOSS_ATK_SLOPE * s };
 }

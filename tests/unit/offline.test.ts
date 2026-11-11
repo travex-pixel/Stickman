@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createDefaultProfile, type Profile } from "@/game/progression/profile";
-import { applyOfflineProgress, elapsedAway, OFFLINE_CAP_SECONDS, OFFLINE_FIGHT_SHARE, sampleCycle } from "@/game/progression/offline";
+import { applyOfflineProgress, elapsedAway, offlineCapSeconds, OFFLINE_CAP_SECONDS, OFFLINE_FIGHT_SHARE, sampleCycle } from "@/game/progression/offline";
 import { claimEssence } from "@/game/summons/recruitment";
 
 function strong(): Profile {
@@ -63,6 +63,7 @@ describe("offline progression", () => {
     p.progress.bestStage = 2;
     p.progress.currentStage = 3;
     p.progress.bossGate = 3;
+    p.progress.bossWins = 20;
     const gold0 = p.player.gold;
     const shards0 = p.summons.collection[0]!.shards;
     const s = applyOfflineProgress(p, 3 * 24 * 3600, 7)!;
@@ -98,5 +99,18 @@ describe("offline progression", () => {
     expect(sa.kills).toBe(sb.kills);
     expect(sa.gold).toBe(sb.gold);
     expect(sa.cycles).toBe(sb.cycles);
+  });
+
+  it("a new save's absence is capped short, growing with bosses won", () => {
+    expect(offlineCapSeconds(0)).toBe(2 * 3600);
+    expect(offlineCapSeconds(4)).toBe(4 * 3600);
+    expect(offlineCapSeconds(50)).toBe(OFFLINE_CAP_SECONDS);
+    const p = strong();
+    p.progress.bestStage = 2;
+    p.progress.currentStage = 3;
+    p.progress.bossGate = 3;
+    const s = applyOfflineProgress(p, 9 * 3600, 3)!;
+    expect(s.seconds).toBe(2 * 3600);
+    expect(s.capped).toBe(true);
   });
 });

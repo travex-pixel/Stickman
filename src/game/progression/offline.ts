@@ -14,13 +14,21 @@ import { computeModifiers } from "./stats";
  *
  * - It follows the same campaign rules as live play (progression/campaign.ts): new ordinary
  *   stages are cleared and pushed past, but a boss gate stops it. It never fights a boss.
- * - Time away is capped at OFFLINE_CAP_SECONDS, and the warrior fights OFFLINE_FIGHT_SHARE of
- *   it (rests, regroups) so an evening away is generous without replacing play.
+ * - Time away is capped (offlineCapSeconds: 2h to start, up to 8h as bosses fall), and the
+ *   warrior fights OFFLINE_FIGHT_SHARE of it, so an evening away is generous without replacing play.
  * - Kills, gold, XP, gear and shadow shards all come from the sampled cycles.
  */
 export const OFFLINE_CAP_SECONDS = 8 * 60 * 60;
 export const OFFLINE_MIN_SECONDS = 90;
-export const OFFLINE_FIGHT_SHARE = 0.5;
+export const OFFLINE_FIGHT_SHARE = 0.4;
+
+/**
+ * The absence that counts grows with the journey: 2 hours to start, half an hour more per boss
+ * won, up to 8. A brand-new save cannot skip its own early game by closing the tab overnight.
+ */
+export function offlineCapSeconds(bossWins: number): number {
+  return Math.min(OFFLINE_CAP_SECONDS, (2 + 0.5 * Math.max(0, bossWins)) * 3600);
+}
 /** Gear kept from offline drops; the rest is salvaged into gold. */
 export const OFFLINE_ITEMS_KEPT = 6;
 const CYCLE_BREAK_SECONDS = 1.8;
@@ -99,8 +107,9 @@ export interface OfflineSummary {
  */
 export function applyOfflineProgress(profile: Profile, elapsedSeconds: number, seed: number): OfflineSummary | null {
   if (!Number.isFinite(elapsedSeconds) || elapsedSeconds < OFFLINE_MIN_SECONDS) return null;
-  const capped = elapsedSeconds > OFFLINE_CAP_SECONDS;
-  const seconds = Math.min(OFFLINE_CAP_SECONDS, Math.floor(elapsedSeconds));
+  const cap = offlineCapSeconds(profile.progress.bossWins);
+  const capped = elapsedSeconds > cap;
+  const seconds = Math.min(cap, Math.floor(elapsedSeconds));
   let budget = seconds * OFFLINE_FIGHT_SHARE;
   const p = profile;
   let stage = clampFarmStage(p, p.progress.currentStage);

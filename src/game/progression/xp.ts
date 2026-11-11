@@ -3,7 +3,7 @@ export function xpForLevel(level: number): number {
   return Math.round(60 * Math.pow(level, 1.85) + 40 * level);
 }
 
-export const PLAYER_LEVEL_CAP = 60;
+export const PLAYER_LEVEL_CAP = Number(process.env.ASCEND_LEVEL_CAP ?? 150);
 
 export interface LevelResult {
   level: number;
@@ -24,7 +24,7 @@ export function applyXp(level: number, xp: number, gain: number): LevelResult {
   return { level: l, xp: x, levelsGained: gained };
 }
 
-export const SUMMON_LEVEL_CAP = 25;
+export const SUMMON_LEVEL_CAP = Number(process.env.ASCEND_SUMMON_CAP ?? 40);
 
 export function summonXpForLevel(level: number): number {
   return Math.round(45 * Math.pow(level, 1.5) + 30);

@@ -14,11 +14,11 @@ import { learnTechniques, setSlotForm } from "./progression/techniques";
 import { offerPerks, takePerk as doTakePerk } from "./progression/perks";
 import { claimQuest as doClaimQuest, currentQuest, isQuestComplete } from "./progression/quests";
 import { evaluateAchievements, evaluateJournal } from "./progression/achievements";
-import { computeModifiers, isStatUnlocked, statUpgradeCost } from "./progression/stats";
+import { computeModifiers, isStatUnlocked, MILESTONE_EVERY, MILESTONE_MULT, statUpgradeCost } from "./progression/stats";
 import { claimEssence as doClaimEssence, setDeployed, type ClaimOutcome } from "./summons/recruitment";
 import { CODEX_STAR_STEP, resolveExtraction, speciesStars } from "./summons/extraction";
 import { SLOT_LABEL, STAT_LABEL } from "./data/equipment";
-import { bondCost, BOND_CAP, canStarUp, checkEvolution, evolveSummon, grantSummonXp, starCost, starUp } from "./summons/progression";
+import { bondCost, BOND_CAP, canStarUp, checkEvolution, evolveSummon, grantSummonXp, REFINE_SHARDS, refineShards as doRefineShards, starCost, starUp } from "./summons/progression";
 import { enemyDef } from "./data/enemies";
 import { MODES, RIFT_ESSENCE_PER_KILL, cryptSlot, isKeyedMode, type ModeId } from "./data/modes";
 import { RARITY_ORDER } from "./data/ids";
@@ -363,10 +363,8 @@ export class GameController {
     p.player.level = lv.level;
     p.player.xp = lv.xp;
     if (lv.levelsGained > 0) this.onLevelUp(lv.levelsGained);
+    // Objectives reward playing: time away counts toward kills only.
     this.objectiveEvent("kills", summary.kills);
-    this.objectiveEvent("cycles", summary.cycles);
-    this.objectiveEvent("elites", summary.elites);
-    this.objectiveEvent("gear", summary.items.length);
     this.refreshLoadout();
     this.commit();
     void this.save.flush();
@@ -1099,6 +1097,8 @@ export class GameController {
     const p = this.profile;
     if (mode === "trial") this.objectiveEvent("bossWins", 1);
     else this.objectiveEvent("modeRuns", 1);
+    // A Crypt Keeper is boss-grade: it counts for the weekly boss objective too.
+    if (mode === "crypt") this.objectiveEvent("bossWins", 1);
     this.sfx("level_up", { volume: 0.9, rate: 0.9 });
     if (mode === "trial") {
       const from = p.player.rank;
@@ -1146,6 +1146,7 @@ export class GameController {
   private addItem(item: EquipmentItem): void {
     const p = this.profile;
     if (p.equipment.inventory.length >= INVENTORY_CAP) {
+      this.objectiveEvent("gear", 1);
       p.player.gold += salvageValue(item);
       this.toast("Inventory full. Item salvaged for gold.", "warn");
       return;
@@ -1307,6 +1308,13 @@ export class GameController {
     if (res.ok) {
       this.objectiveEvent("upgrades", 1);
       this.coachUpgrade = false;
+      const lvNow = this.profile.player.statLevels[stat];
+      if ((stat === "attack" || stat === "maxHp") && lvNow % MILESTONE_EVERY === 0) {
+        this.toast(`${STAT_LABEL[stat]} milestone: ×${MILESTONE_MULT}`, "level");
+        this.sfx("level_up", { volume: 0.8, rate: 1.1 });
+        this.renderer?.flash(0xe9c97a, 0.25);
+        this.renderer?.levelUpBurst();
+      }
       if (this.uiStore.get().guide?.target.startsWith("upgrade-")) this.uiStore.update((u) => ({ ...u, guide: null }));
       this.sfx("upgrade", { volume: 0.5, minInterval: 30, rate: 0.95 + Math.random() * 0.15 });
       this.refreshLoadout();
@@ -1601,6 +1609,24 @@ export class GameController {
     this.toast(`${def.name} reached ★${inst.stars}${pct > 0 ? ` · Codex +${pct}% ${STAT_LABEL[def.owned.stat]}` : ""}`, "level");
     this.renderer?.flash(0xe9c97a, 0.2);
     this.refreshLoadout();
+    this.commit();
+    return true;
+  }
+
+  /** Turn a shadow's surplus shards into a Rift Core. */
+  refineShards(instanceId: string): boolean {
+    this.userGesture();
+    const p = this.profile;
+    const inst = p.summons.collection.find((s) => s.instanceId === instanceId);
+    const gained = inst ? doRefineShards(inst) : 0;
+    if (!gained) {
+      this.sfx("error", { volume: 0.3 });
+      this.toast(`Refining needs ${REFINE_SHARDS} spare shards`, "warn");
+      return false;
+    }
+    p.player.riftCores += gained;
+    this.sfx("level_up", { volume: 0.5, rate: 1.4 });
+    this.toast(`Refined ${REFINE_SHARDS} shards into a Rift Core`, "essence");
     this.commit();
     return true;
   }

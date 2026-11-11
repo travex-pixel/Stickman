@@ -12,6 +12,7 @@ import { STAT_LABEL } from "@/game/data/equipment";
 import { computeModifiers } from "@/game/progression/stats";
 import { bondCost, BOND_CAP, canStarUp, checkEvolution, starCost, summonStats } from "@/game/summons/progression";
 import { summonXpForLevel, SUMMON_LEVEL_CAP } from "@/game/progression/xp";
+import { REFINE_SHARDS, spareShards } from "@/game/summons/progression";
 import { fmt } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import { useShortScreen } from "@/hooks/useShortScreen";
@@ -91,6 +92,11 @@ function SummonDetail({ inst, slots, short }: { inst: ReturnType<typeof useProfi
         <div className="flex-1 min-w-0 flex flex-col gap-1">
           <div className="flex items-baseline justify-between gap-2 leading-tight">
             <span className="font-display text-[15px] text-ivory truncate">{def.name}</span>
+            {spareShards(inst) >= REFINE_SHARDS && (
+              <button className="shrink-0 rounded-full border border-gold/50 bg-gold/10 px-1.5 text-[10px] font-bold text-gold-2 leading-[18px]" onClick={() => c.refineShards(inst.instanceId)} data-testid="refine-shards" aria-label={`Refine ${REFINE_SHARDS} spare shards into a Rift Core`}>
+                ◆ Refine {REFINE_SHARDS}
+              </button>
+            )}
             <span className="text-[10px] text-mist shrink-0">
               <span className="text-gold-2 tracking-tight">{"★".repeat(inst.stars ?? 0)}</span> <span className={`rarity-${def.rarity}`}>{ROLE_INFO[def.role].label}</span> · Lv {inst.level}
             </span>

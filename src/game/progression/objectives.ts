@@ -30,7 +30,7 @@ export const OBJECTIVES: ObjectiveDef[] = [
   { id: "d_mode", scope: "daily", counter: "modeRuns", text: "Run a Vault, Rift or Crypt", target: 1, reward: { essence: 80 }, available: (p) => p.progress.bestStage >= 2 },
   { id: "w_kills", scope: "weekly", counter: "kills", text: "Defeat 2,500 enemies", target: 2500, reward: { goldStages: 12, cores: 1 } },
   { id: "w_shadow", scope: "weekly", counter: "shadowUps", text: "Strengthen shadows 15 times", target: 15, reward: { essence: 300 }, available: (p) => p.summons.collection.length > 0 },
-  { id: "w_boss", scope: "weekly", counter: "bossWins", text: "Win 2 boss challenges or trials", target: 2, reward: { cores: 2 } },
+  { id: "w_boss", scope: "weekly", counter: "bossWins", text: "Beat 3 bosses, trials or Crypt Keepers", target: 3, reward: { cores: 2 } },
   { id: "w_cycles", scope: "weekly", counter: "cycles", text: "Clear 60 farming cycles", target: 60, reward: { goldStages: 10 } },
   { id: "w_modes", scope: "weekly", counter: "modeRuns", text: "Complete 6 mode runs", target: 6, reward: { essence: 250, cores: 1 }, available: (p) => p.progress.bestStage >= 2 },
 ];
