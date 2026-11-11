@@ -7,8 +7,10 @@ import { Meter } from "@/components/ui/Meter";
 import { Segment, Segmented } from "@/components/ui/Segmented";
 import { CurrencyGlyph, type CurrencyKind } from "@/components/ui/Currency";
 import { SummonPortrait } from "@/components/ui/Portrait";
+import { Icon, type IconName } from "@/components/ui/Icon";
 import { useController, useHud, useProfile, useProfileRef, useUi } from "@/hooks/useGame";
 import { SUMMONS } from "@/game/data/summons";
+import type { SummonRole } from "@/game/data/ids";
 import type { WorldSnapshot } from "@/game/engine/World";
 import { ENEMIES } from "@/game/data/enemies";
 import { bossForStage, regionForStage } from "@/game/data/regions";
@@ -20,11 +22,10 @@ import { RARITY_ORDER, type PanelId, type SummonCommand } from "@/game/data/ids"
 import type { QuestGoal } from "@/game/progression/quests";
 import { cn } from "@/lib/cn";
 import { fmt } from "@/lib/format";
-import { voice } from "@/lib/voice";
-import { ModeResult } from "@/components/rewards/ModalHost";
-import { BossDefeat, BossReady, BossVictory, isBattlefieldModal } from "@/components/rewards/BossCards";
+import { isBattlefieldModal } from "@/components/sheets/kinds";
 import { TIER_LABEL } from "@/game/progression/readiness";
 import { useStore } from "@/lib/store";
+import { useSheetRise } from "@/hooks/useSheetLift";
 import { MODES } from "@/game/data/modes";
 
 const EMPTY_ORBS: WorldSnapshot["orbs"] = [];
@@ -39,27 +40,12 @@ const EASE_OUT = [0.16, 1, 0.3, 1] as const;
 export function BattleOverlays() {
   return (
     <>
-      <RunOutcome />
       <TopCluster />
       <WaveBanner />
       <GateBanner />
       <ChainCounter />
       <BottomStack />
     </>
-  );
-}
-
-/** Defeat and victory live over the battlefield so the panels below stay usable for upgrading. */
-function RunOutcome() {
-  const modal = useUi((u) => u.modal);
-  if (!modal || !isBattlefieldModal(modal.kind)) return null;
-  return (
-    <div className="absolute inset-0 z-30 flex items-center justify-center p-2 pb-3" data-testid={`modal-${modal.kind}`} role="dialog" aria-modal="false">
-      <div className="absolute inset-0 bg-bg-0/60" />
-      <AnimatePresence>
-        {modal.kind === "mode_result" ? <ModeResult modal={modal} /> : modal.kind === "boss_ready" ? <BossReady modal={modal} /> : modal.kind === "boss_victory" ? <BossVictory modal={modal} /> : modal.kind === "boss_defeat" ? <BossDefeat modal={modal} /> : null}
-      </AnimatePresence>
-    </div>
   );
 }
 
@@ -71,6 +57,7 @@ function TopCluster() {
   return (
     <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex flex-col gap-3 px-3 pt-3">
       <BossBar />
+      <BossHint />
       <ModeHud />
       <ArmyRow />
       <Toasts />
@@ -81,27 +68,61 @@ function TopCluster() {
 /** Boss name in serif at the left, phase ticks at the right, a 4px crimson meter with a damage ghost. */
 function BossBar() {
   const name = useHud((s) => s?.boss?.name ?? null);
-  // The entrance names the boss; the bar stays transparent until the fight begins.
-  const intro = useHud((s) => s?.phase === "boss_intro");
   const phase = useHud((s) => s?.boss?.phase ?? 1);
   // Quantised to 0.1%: the meter moves smoothly without a render per frame.
   const frac = useHud((s) => (s?.boss ? Math.round((s.boss.hp / s.boss.maxHp) * 1000) / 1000 : 0));
   return (
     <AnimatePresence>
       {name && (
-        <motion.div className="px-1" initial={{ opacity: 0, y: -8 }} animate={intro ? { opacity: 0, y: -8 } : { opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.32, ease: EASE_OUT }} data-testid="boss-bar">
+        <motion.div className="px-1" initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.32, ease: EASE_OUT }} data-testid="boss-bar">
           <div className="flex items-end justify-between gap-3 mb-2">
             <span className="font-serif text-[20px] leading-[22px] text-t1 truncate legible">{name}</span>
-            <span className="flex gap-1 shrink-0 pb-1" aria-label={`Phase ${phase}`}>
+            <span className="flex items-center gap-1.5 shrink-0 pb-1 t-caption text-t1 legible" aria-label={`Phase ${phase}`}>
+              Phase {phase}
               {Array.from({ length: Math.max(2, phase) }, (_, i) => (
-                <span key={i} className={cn("h-[3px] w-3 rounded-full", i < phase ? "bg-crimson" : "bg-white/20")} />
+                <span key={i} className={cn("lozenge", i < phase ? "!bg-crimson" : "!bg-white/30")} />
               ))}
             </span>
           </div>
-          <Meter value={frac} height={4} color="var(--color-crimson)" ghost label="Boss health" />
+          <div className="rounded-full bg-black/50 p-px">
+            <Meter value={frac} height={6} color="var(--color-crimson)" ghost label="Boss health" />
+          </div>
         </motion.div>
       )}
     </AnimatePresence>
+  );
+}
+
+/**
+ * Under the boss bar: Retreat at the left (far from the ultimate), and the counter hint on a
+ * scrimmed band that never sits over the fight, fading after four seconds.
+ */
+function BossHint() {
+  const defId = useHud((s) => s?.boss?.defId ?? null);
+  const counter = defId ? ENEMIES[defId]?.counter : undefined;
+  const [shownFor, setShownFor] = useState<string | null>(null);
+  const [lastId, setLastId] = useState<string | null>(null);
+  if (defId !== lastId) {
+    setLastId(defId);
+    setShownFor(defId);
+  }
+  useEffect(() => {
+    if (!shownFor) return;
+    const t = setTimeout(() => setShownFor(null), 4000);
+    return () => clearTimeout(t);
+  }, [shownFor]);
+  if (!defId) return null;
+  return (
+    <div className="flex flex-col items-start gap-2 min-w-0">
+      <Retreat />
+      <AnimatePresence>
+        {shownFor && counter && (
+          <motion.p key={shownFor} className="glass max-w-full rounded-[14px] px-3 py-2 t-flavour text-t1" initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.32, ease: EASE_OUT }} data-testid="boss-counter">
+            {counter}
+          </motion.p>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
 
@@ -173,14 +194,15 @@ function ArmyRow() {
   );
 }
 
+/** A plain disc: the shadow's role as a glyph inside a jade health ring (grey and 50% when down). */
 function ArmyDisc({ defId, hp, alive }: { defId: string; hp: number; alive: boolean }) {
   const r = 14.25;
   const len = 2 * Math.PI * r;
+  const def = SUMMONS[defId];
+  const glyph = def ? ROLE_GLYPH[def.role] : undefined;
   return (
-    <span className={cn("relative h-[30px] w-[30px] rounded-full glass-flat transition-opacity duration-200", !alive && "opacity-50")} title={SUMMONS[defId]?.name} aria-label={`${SUMMONS[defId]?.name ?? "Shadow"}${alive ? `, ${Math.round(hp * 100)}% health` : ", down"}`}>
-      <span className="absolute inset-[3px] overflow-hidden rounded-full opacity-90">
-        <SummonPortrait defId={defId} size={24} round />
-      </span>
+    <span className={cn("relative flex h-[30px] w-[30px] items-center justify-center rounded-full glass-flat transition-opacity duration-200", !alive && "opacity-50")} title={def?.name} aria-label={`${def?.name ?? "Shadow"}${alive ? `, ${Math.round(hp * 100)}% health` : ", down"}`}>
+      {glyph ? <Icon name={glyph} size={14} className={alive ? "text-t1" : "text-t2"} /> : <span className="t-caption text-t1">{(def?.name ?? "?").charAt(0)}</span>}
       <svg className="absolute inset-0 -rotate-90" width="30" height="30" viewBox="0 0 30 30" aria-hidden="true">
         <circle cx="15" cy="15" r={r} fill="none" stroke="rgba(255,255,255,0.13)" strokeWidth="1.5" />
         {alive && <circle cx="15" cy="15" r={r} fill="none" stroke="var(--color-jade)" strokeWidth="1.5" strokeDasharray={len} strokeDashoffset={len * (1 - Math.max(0, Math.min(1, hp)))} strokeLinecap="round" />}
@@ -188,6 +210,9 @@ function ArmyDisc({ defId, hp, alive }: { defId: string; hp: number; alive: bool
     </span>
   );
 }
+
+/** One glyph per role, from the interface's own stroke set. */
+const ROLE_GLYPH: Partial<Record<SummonRole, IconName>> = { vanguard: "shield", reaper: "sword", ranger: "arc", arcanist: "nova", sentinel: "guard", caller: "summons", support: "regen", sovereign: "star" };
 
 const TOAST_DOT: Record<string, string> = { info: "bg-t2", gold: "bg-gold", essence: "bg-jade", warn: "bg-crimson", level: "bg-gold" };
 
@@ -207,7 +232,7 @@ function Toasts() {
             className="glass flex max-w-full items-center gap-2 rounded-full px-4 py-2"
           >
             <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", TOAST_DOT[t.tone] ?? "bg-t2")} aria-hidden="true" />
-            <span className="t-label text-t1 truncate">{voice(t.text)}</span>
+            <span className="t-label text-t1 truncate">{t.text}</span>
           </motion.div>
         ))}
       </AnimatePresence>
@@ -247,10 +272,8 @@ function WaveBanner() {
   let title: string | null = null;
   let sub: string | null = null;
   let quiet: string | null = null;
-  let counter: string | undefined;
   if (phase === "boss_intro") {
     title = bossDef?.name ?? "The Warden";
-    counter = bossDef?.counter;
   } else if (phase === "intro") {
     title = mode === "boss" ? "The challenge" : `Stage ${stage}`;
     if (mode === "campaign") sub = regionForStage(stage).name;
@@ -267,11 +290,6 @@ function WaveBanner() {
         <motion.div key={key} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.32, ease: EASE_OUT }} className="pointer-events-none absolute inset-x-0 top-[24%] z-10 flex flex-col items-center px-6 text-center">
           {title ? <span className="t-display text-t1 legible">{title}</span> : <span className="t-eyebrow text-t2 legible">{quiet}</span>}
           {sub && <span className="t-flavour text-t2 mt-1 legible">{sub}</span>}
-          {counter && (
-            <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5, duration: 0.32 }} className="t-flavour text-t2 mt-2 max-w-[320px] legible" data-testid="boss-counter">
-              {counter}
-            </motion.span>
-          )}
         </motion.div>
       )}
     </AnimatePresence>
@@ -333,19 +351,27 @@ function BottomStack() {
   const gateUp = !!gate && farming && !(modal && isBattlefieldModal(modal.kind));
   // In a boss fight the quest would sit where the boss stands: it waits until the fight is over.
   const fighting = mode === "boss" || mode === "hunt";
+  const rise = useSheetRise();
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-[calc(var(--panel-overlap)+80px)] z-20 flex flex-col items-start gap-2 px-4">
+    <motion.div className="pointer-events-none absolute inset-x-0 bottom-[calc(var(--panel-overlap)+80px)] z-20 flex flex-col items-start gap-2 px-4" style={{ y: rise }}>
       <BindPill />
       <div className="flex flex-wrap items-center gap-2 empty:hidden">
         <PerkChip />
         <PushChip />
-        <Retreat />
-        {gateUp && questDone && <QuestLine />}
       </div>
-      {/* The boss gate replaces the quest line while it is open; a finished quest moves up beside the chips. */}
-      <AnimatePresence initial={false}>{gateUp && <BossGate key={gate} gate={gate} />}</AnimatePresence>
-      {!gateUp && !fighting && <QuestLine />}
-    </div>
+      {/* The boss gate is the anchor. A finished quest becomes one gold pill on its row, and wraps
+          above it (never over it) when the row is too narrow. */}
+      {gateUp ? (
+        <div className="flex max-w-full flex-wrap-reverse items-center gap-2">
+          <AnimatePresence initial={false}>
+            <BossGate key={gate} gate={gate} compact={questDone} />
+          </AnimatePresence>
+          {questDone && <QuestLine />}
+        </div>
+      ) : (
+        !fighting && <QuestLine />
+      )}
+    </motion.div>
   );
 }
 
@@ -441,9 +467,9 @@ function Retreat() {
   const mode = useHud((s) => s?.mode ?? "campaign");
   if (mode !== "boss" && mode !== "hunt") return null;
   return (
-    <Button size="sm" variant="plain" className="pointer-events-auto rounded-full !bg-[var(--glass)] backdrop-blur-[14px]" onClick={() => c.returnToCampaign()} data-testid="mode-leave" aria-label="Retreat to farming; the boss keeps waiting">
+    <button className="press pointer-events-auto flex h-11 items-center rounded-full glass-flat px-4 t-label text-t2" onClick={() => c.returnToCampaign()} data-testid="mode-leave" aria-label="Retreat to farming; the boss keeps waiting">
       Retreat
-    </Button>
+    </button>
   );
 }
 
@@ -451,7 +477,7 @@ function Retreat() {
  * BOSS. Appears once a boss gate is reached and stays while farming continues.
  * Pressing it opens the readiness sheet; the fight itself starts only from FIGHT there.
  */
-function BossGate({ gate }: { gate: number }) {
+function BossGate({ gate, compact = false }: { gate: number; compact?: boolean }) {
   const c = useController();
   const fc = useStore(c.forecastStore, (s) => s);
   const bossId = bossForStage(gate);
@@ -463,23 +489,22 @@ function BossGate({ gate }: { gate: number }) {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.32, ease: EASE_OUT }}
-      className="press pointer-events-auto flex h-[52px] max-w-full items-center gap-3 rounded-[14px] bg-crimson pl-2 pr-4 text-white"
+      className="press pointer-events-auto relative flex h-[52px] max-w-full items-center gap-3 rounded-[14px] bg-[#2a1013] pl-2 pr-4 text-t1"
       onClick={() => c.openBossChallenge()}
       data-guide="boss-challenge"
       data-testid="boss-challenge"
       aria-label={`Boss challenge: ${name}, stage ${gate}${tier ? `, readiness ${TIER_LABEL[tier]}` : ""}`}
     >
-      <span className="relative h-9 w-9 shrink-0">
-        <span className="absolute inset-0 overflow-hidden rounded-full">
-          <SummonPortrait defId={bossId} size={36} enemy round />
-        </span>
-        <span className="breathe absolute -inset-[2px] rounded-full shadow-[inset_0_0_0_1.5px_rgba(255,255,255,0.85)]" aria-hidden="true" />
+      {/* A crimson rim on a dark crimson-black surface, breathing slowly: a threat, not an alert. */}
+      <span className="breathe pointer-events-none absolute inset-0 rounded-[14px] shadow-[inset_0_0_0_1.5px_var(--color-crimson)]" aria-hidden="true" />
+      <span className="relative h-9 w-9 shrink-0 overflow-hidden rounded-full bg-bg-2">
+        <SummonPortrait defId={bossId} size={36} enemy round />
       </span>
       <span className="flex min-w-0 flex-col items-start text-left">
-        <span className="t-caption text-white/75">Challenge</span>
-        <span className="truncate font-serif text-[18px] leading-[20px]">{name}</span>
+        <span className="t-caption text-[#e58a92]">Challenge · stage {gate}</span>
+        <span className="truncate font-serif text-[18px] leading-[20px] text-t1">{name}</span>
       </span>
-      {tier && <span className="ml-1 shrink-0 t-label text-white/80">{TIER_LABEL[tier]}</span>}
+      {tier && !compact && <span className="ml-1 shrink-0 t-label text-t2">{TIER_LABEL[tier]}</span>}
     </motion.button>
   );
 }
@@ -506,7 +531,7 @@ function QuestLine() {
   return (
     <div className={cn("transition-opacity duration-200", hidden ? "opacity-0 [&_*]:!pointer-events-none" : "opacity-100")} data-testid="quest-banner">
       {done ? (
-        <Button size="sm" variant="primary" className="pointer-events-auto" onClick={() => c.claimQuest()} data-guide="quest-claim" aria-label={`Claim quest reward: ${fmt(amount)}`} leading={<CurrencyGlyph kind={kind} className={kind === "gold" ? "!bg-gold-ink" : undefined} />}>
+        <Button size="sm" variant="primary" className="pointer-events-auto px-3" onClick={() => c.claimQuest()} data-guide="quest-claim" aria-label={`Claim quest reward: ${fmt(amount)}`} leading={<CurrencyGlyph kind={kind} className={kind === "gold" ? "!bg-gold-ink" : undefined} />}>
           Claim {fmt(amount)}
         </Button>
       ) : (

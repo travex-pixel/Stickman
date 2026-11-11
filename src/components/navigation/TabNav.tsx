@@ -1,6 +1,7 @@
 "use client";
 
 import { Icon, type IconName } from "@/components/ui/Icon";
+import { cn } from "@/lib/cn";
 import { useController, useUi } from "@/hooks/useGame";
 import type { PanelId } from "@/game/data/ids";
 
@@ -28,6 +29,7 @@ export function TabNav() {
               {badges[t.id] && !on && <span className="absolute -right-1 -top-0.5 h-1.5 w-1.5 rounded-full bg-gold" aria-hidden="true" />}
             </span>
             <span className="t-caption">{t.label}</span>
+            <span className={cn("lozenge absolute bottom-[5px] transition-opacity duration-200", on ? "opacity-100" : "opacity-0")} aria-hidden="true" />
           </button>
         );
       })}

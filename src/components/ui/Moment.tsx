@@ -12,22 +12,31 @@ interface MomentProps {
   label?: string;
   /** Tap anywhere on the takeover (for example to skip to the final beat). */
   onTap?: () => void;
+  /**
+   * solid: an 86% scrim over everything. reveal: clear over the upper part of the screen, where
+   * the battlefield canvas stages a figure, and solid behind the text at the foot.
+   */
+  scrim?: "solid" | "reveal";
   className?: string;
 }
 
 const EASE_OUT = [0.16, 1, 0.3, 1] as const;
+/** The scrims are the only gradients in the interface besides rarity accents: the reveal's leaves the
+    figure clear; the solid one is 86% over the field and nearly opaque behind the text. */
+const REVEAL_SCRIM = "linear-gradient(180deg, rgba(12,11,9,0) 0%, rgba(12,11,9,0) 28%, rgba(12,11,9,0.82) 46%, rgba(12,11,9,0.97) 56%, rgba(12,11,9,0.97) 100%)";
+const SOLID_SCRIM = "linear-gradient(180deg, rgba(12,11,9,0.86) 0%, rgba(12,11,9,0.86) 36%, rgba(12,11,9,0.97) 52%, rgba(12,11,9,0.97) 100%)";
 
 /**
- * A full-bleed takeover for reveals and boss cards. An 86% scrim keeps the Pixi figure visible in
- * the upper part of the screen; the content sits bottom-aligned where the thumb is, and enters in
- * a short sequence (8px rise and fade, 60ms apart) through `MomentItem`.
+ * A full-bleed takeover for reveals and boss cards. Content sits bottom-aligned where the thumb
+ * is, and enters in a short sequence (8px rise and fade, 60ms apart) through `MomentItem`.
  */
-export function Moment({ open, children, testId, label, onTap, className }: MomentProps) {
+export function Moment({ open, children, testId, label, onTap, scrim = "solid", className }: MomentProps) {
   return (
     <AnimatePresence>
       {open && (
         <motion.div
-          className={cn("fixed inset-0 z-50 flex flex-col justify-end bg-[rgba(6,6,7,0.86)]", className)}
+          className={cn("fixed inset-0 z-50 flex flex-col justify-end", className)}
+          style={{ backgroundImage: scrim === "reveal" ? REVEAL_SCRIM : SOLID_SCRIM }}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -38,17 +47,19 @@ export function Moment({ open, children, testId, label, onTap, className }: Mome
           data-testid={testId}
           onClick={onTap}
         >
-          <motion.div
-            className="mx-auto w-full max-w-[440px] px-6 pb-[calc(32px+var(--sab))] flex flex-col items-center text-center"
-            initial="hidden"
-            animate="shown"
-            variants={{ hidden: {}, shown: { transition: { staggerChildren: 0.06, delayChildren: 0.08 } } }}
-          >
-            {children}
-          </motion.div>
+          <MomentGroup className="mx-auto w-full max-w-[440px] px-6 pb-[calc(24px+var(--sab))] flex flex-col items-center text-center">{children}</MomentGroup>
         </motion.div>
       )}
     </AnimatePresence>
+  );
+}
+
+/** Sequences its `MomentItem` children: 60ms apart, after a short beat. */
+export function MomentGroup({ children, className, delay = 0.08 }: { children: ReactNode; className?: string; delay?: number }) {
+  return (
+    <motion.div className={className} initial="hidden" animate="shown" variants={{ hidden: {}, shown: { transition: { staggerChildren: 0.06, delayChildren: delay } } }}>
+      {children}
+    </motion.div>
   );
 }
 

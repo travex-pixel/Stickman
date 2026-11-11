@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useState } from "react";
-import { isBattlefieldModal } from "@/components/rewards/BossCards";
 import { AnimatePresence, motion } from "motion/react";
 import { useUi } from "@/hooks/useGame";
-import { voice } from "@/lib/voice";
+
+const LABEL_W = 220;
+const LABEL_H = 36;
 
 interface Rect {
   x: number;
@@ -22,6 +23,9 @@ export function HandGuide() {
   const modal = useUi((u) => u.modal);
   const panel = useUi((u) => u.panel);
   const [rect, setRect] = useState<Rect | null>(null);
+  // Controls the label must never cover (the boss gate, a finished quest's Claim).
+  const [keepClear, setKeepClear] = useState<Rect[]>([]);
+  const [inDialog, setInDialog] = useState(false);
 
   useLayoutEffect(() => {
     if (!guide) {
@@ -31,6 +35,14 @@ export function HandGuide() {
     let raf = 0;
     const measure = () => {
       const el = document.querySelector<HTMLElement>(`[data-guide="${guide.target}"]`);
+      const clear: Rect[] = [];
+      for (const k of document.querySelectorAll<HTMLElement>('[data-guide="boss-challenge"], [data-guide="quest-claim"]')) {
+        if (k === el) continue;
+        const r = k.getBoundingClientRect();
+        if (r.width > 0 && getComputedStyle(k).opacity !== "0") clear.push({ x: r.left, y: r.top, w: r.width, h: r.height });
+      }
+      setKeepClear((prev) => (sameRects(prev, clear) ? prev : clear));
+      setInDialog(!!el?.closest("[role=dialog]"));
       if (!el) {
         setRect(null);
       } else if (guide.target === "battlefield-player") {
@@ -49,8 +61,8 @@ export function HandGuide() {
   }, [guide, panel, modal]);
 
   const [visible, setVisible] = useState(false);
-  // Battlefield cards (defeat, stage clear, mode results) leave the panels usable, so the guide may point past them.
-  const blocking = modal !== null && !isBattlefieldModal(modal.kind);
+  // An open sheet covers the screen: the guide only shows when what it points at is inside it.
+  const blocking = modal !== null && modal.kind !== "boss_intro" && !inDialog;
   useEffect(() => {
     setVisible(Boolean(guide && rect && !blocking));
   }, [guide, rect, blocking]);
@@ -62,11 +74,21 @@ export function HandGuide() {
   const cy = rect.y + rect.h / 2;
   // Place the hand below-right of the target when there is room, otherwise above-left.
   // FIGHT sits at the foot of the readiness sheet: point from below so the sheet stays readable.
-  const below = cy < vh * 0.42 || guide.target === "boss-fight";
   const handX = Math.min(vw - 60, Math.max(16, cx + 8));
-  const handY = below ? cy + rect.h / 2 - 6 : cy - rect.h / 2 - 58;
-  const labelY = below ? handY + 64 : handY - 34;
+  const overlaps = (y: number) => keepClear.some((k) => handX < k.x + k.w && k.x < handX + 48 && y < k.y + k.h && k.y < y + 56);
+  let below = cy < vh * 0.42 || guide.target === "boss-fight";
+  // The hand never sits on the gate or a Claim either: point from the other side instead.
+  if (overlaps(below ? cy + rect.h / 2 + 2 : cy - rect.h / 2 - 60)) below = !below;
+  // The fingertip stops at the target's edge: the hand never covers what it points at.
+  const handY = below ? cy + rect.h / 2 + 2 : cy - rect.h / 2 - 60;
+  let labelY = below ? handY + 64 : handY - 34;
   const labelX = Math.min(vw - 140, Math.max(10, cx - 70));
+  // Never over the gate or a Claim: step the label above (or below) whatever it would cover.
+  for (let i = 0; i < 3; i++) {
+    const hit = [...keepClear, rect, { x: handX, y: handY, w: 48, h: 56 }].find((k) => labelX < k.x + k.w && k.x < labelX + LABEL_W && labelY < k.y + k.h && k.y < labelY + LABEL_H);
+    if (!hit) break;
+    labelY = below ? hit.y + hit.h + 8 : hit.y - LABEL_H - 8;
+  }
   const gestureAnim =
     guide.gesture === "tap"
       ? { y: [0, -10, 0], scale: [1, 0.9, 1] }
@@ -85,11 +107,11 @@ export function HandGuide() {
           </motion.div>
           <motion.div
             className="absolute rounded-[14px] bg-bg-2 px-3 py-2 t-label text-t1"
-            style={{ left: labelX, top: labelY, minWidth: 120, textAlign: "center" }}
+            style={{ left: labelX, top: labelY, minWidth: 120, maxWidth: LABEL_W, textAlign: "center" }}
             initial={{ y: 6, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
           >
-            {voice(guide.label)}
+            {guide.label}
           </motion.div>
         </motion.div>
       )}
@@ -97,24 +119,23 @@ export function HandGuide() {
   );
 }
 
-/** Original vector hand: a pointing glove drawn with soft shading and a cyan trim. */
+/** Original vector hand: a flat pointing glove in warm white with a gold cuff. */
 function Hand() {
   return (
-    <svg viewBox="0 0 48 56" width="48" height="56" aria-hidden="true" style={{ filter: "drop-shadow(0 6px 10px rgba(0,0,0,0.6))" }}>
-      <defs>
-        <linearGradient id="hand-grad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#f7f3ea" />
-          <stop offset="1" stopColor="#cfc6b6" />
-        </linearGradient>
-      </defs>
+    <svg viewBox="0 0 48 56" width="48" height="56" aria-hidden="true">
+      
       {/* index finger */}
-      <path d="M19 2.5c2.4 0 4 1.6 4 4V26h-8V6.5c0-2.4 1.6-4 4-4z" fill="url(#hand-grad)" stroke="#2a2d3a" strokeWidth="1.5" />
+      <path d="M19 2.5c2.4 0 4 1.6 4 4V26h-8V6.5c0-2.4 1.6-4 4-4z" fill="#f3f0e9" stroke="#15130f" strokeWidth="1.5" />
       {/* palm and folded fingers */}
-      <path d="M11 24c0-2 1.5-3.5 3.5-3.5h16.5c4 0 7 2.6 7 7v7c0 7.5-5.5 13-13 13h-6c-5 0-8.5-3-10-7l-2.6-7c-.8-2.2.5-4.5 2.8-4.9z" fill="url(#hand-grad)" stroke="#2a2d3a" strokeWidth="1.5" />
-      <path d="M27 21.5v8M33 22.5v8M38 25v7" stroke="#2a2d3a" strokeWidth="1.2" strokeLinecap="round" opacity="0.7" />
+      <path d="M11 24c0-2 1.5-3.5 3.5-3.5h16.5c4 0 7 2.6 7 7v7c0 7.5-5.5 13-13 13h-6c-5 0-8.5-3-10-7l-2.6-7c-.8-2.2.5-4.5 2.8-4.9z" fill="#f3f0e9" stroke="#15130f" strokeWidth="1.5" />
+      <path d="M27 21.5v8M33 22.5v8M38 25v7" stroke="#15130f" strokeWidth="1.2" strokeLinecap="round" opacity="0.7" />
       {/* cuff */}
-      <path d="M15 46.5h17c1.6 0 3 1.3 3 3v2c0 1.6-1.4 3-3 3H15c-1.6 0-3-1.4-3-3v-2c0-1.7 1.4-3 3-3z" fill="#1b2130" stroke="#cfa95e" strokeWidth="1.5" />
-      <circle cx="23.5" cy="50.5" r="1.6" fill="#e9d39a" />
+      <path d="M15 46.5h17c1.6 0 3 1.3 3 3v2c0 1.6-1.4 3-3 3H15c-1.6 0-3-1.4-3-3v-2c0-1.7 1.4-3 3-3z" fill="#1e1b16" stroke="#dab86c" strokeWidth="1.5" />
+      <circle cx="23.5" cy="50.5" r="1.6" fill="#dab86c" />
     </svg>
   );
+}
+
+function sameRects(a: Rect[], b: Rect[]): boolean {
+  return a.length === b.length && a.every((r, i) => Math.abs(r.x - b[i]!.x) < 1 && Math.abs(r.y - b[i]!.y) < 1 && Math.abs(r.w - b[i]!.w) < 1 && Math.abs(r.h - b[i]!.h) < 1);
 }

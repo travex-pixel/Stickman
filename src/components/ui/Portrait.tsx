@@ -49,7 +49,7 @@ function VectorPortrait({ defId, size = 56, enemy = false, radius }: { defId: st
   const glow = isEnemy ? hex(e?.palette.eye ?? 0xe8c98a) : "#e9c97a";
   return (
     <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden="true" style={{ borderRadius: radius, flexShrink: 0 }}>
-      <rect width="64" height="64" fill="#1b1b1d" />
+      <rect width="64" height="64" fill="#1e1b16" />
       {role === "vanguard" || role === "sovereign" ? (
         <g fill={fill}>
           <path d="M10 64 C12 44 20 36 32 36 C44 36 52 44 54 64 Z" />

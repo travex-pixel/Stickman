@@ -54,15 +54,15 @@ export async function walkScreens(page, visit) {
     await visit(`03-panel-${t}`, page);
   }
   await page.click("[data-testid=menu-button]").catch(() => {});
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(900);
   await visit("04-settings", page);
   await closeAll(page);
   await page.evaluate(() => window.__ASCEND__.openObjectives());
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(900);
   await visit("05-objectives", page);
   await closeAll(page);
   await page.evaluate(() => { const c = window.__ASCEND__; c.profile.progress.bestStage = 25; c.openAscension(); });
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(900);
   await visit("06-ascend", page);
   await closeAll(page);
   await page.evaluate(() => { const c = window.__ASCEND__; const p = c.profile; p.progress.bestStage = 11; p.progress.currentStage = 12; p.progress.bossGate = 12; c["commit"](); c.startRun(12); });
@@ -96,4 +96,80 @@ export async function walkScreens(page, visit) {
   await page.waitForTimeout(600);
   await visit("14-journal", page);
   await closeAll(page);
+  await walkMoreScreens(page, visit);
+}
+
+const setModal = (page, modal) => page.evaluate((m) => window.__ASCEND__.uiStore.update((u) => ({ ...u, modal: m })), modal);
+
+/** Phase 2 additions: every remaining sheet and moment, the reveal's states, and the tall panel. */
+export async function walkMoreScreens(page, visit) {
+  await page.evaluate(() => { const c = window.__ASCEND__; c.profile.player.pendingPerkChoices = 1; c["commit"](); c.openPerkChoice(); });
+  await page.waitForTimeout(600);
+  await visit("15-perk-choice", page);
+  await closeAll(page);
+  await page.evaluate(() => { const c = window.__ASCEND__; c.profile.player.pendingPerkChoices = 0; c["commit"](); });
+  await setModal(page, { kind: "rank_up", from: 0, to: 1, rewards: ["+10% Attack and Health", "A third army place", "The Rank Trial D opens at level 30"] });
+  await page.waitForTimeout(1400);
+  await visit("16-rank-up", page);
+  await closeAll(page);
+  await setModal(page, { kind: "technique", id: "blade_tempest" });
+  await page.waitForTimeout(800);
+  await visit("17-technique", page);
+  await closeAll(page);
+  await setModal(page, { kind: "mode_result", mode: "tyrant", title: "2.40 bars broken", subtitle: "Rift Tyrant", success: true, record: true, lines: [{ label: "Bars", value: "2.40", tone: "gold" }, { label: "Gold", value: "+18.2K", tone: "gold" }, { label: "Essence", value: "+60", tone: "jade" }], tyrant: { claimed: 3, newTiers: [1, 2], score: 2.4 } });
+  await page.waitForTimeout(1200);
+  await visit("18-mode-result", page);
+  await closeAll(page);
+  await page.evaluate(() => window.__ASCEND__.openHunts());
+  await page.waitForTimeout(600);
+  await visit("19-hunt-list", page);
+  await closeAll(page);
+  await page.evaluate(() => { const c = window.__ASCEND__; c.profile.progress.bestStage = 12; c["commit"](); c.openTyrant(); });
+  await page.waitForTimeout(600);
+  await visit("20-tyrant", page);
+  await closeAll(page);
+  await setModal(page, { kind: "boss_defeat", stage: 12, defId: "hollow_warden", bossHpLeft: 0.61, bossPhase: 2, seconds: 48, casts: 14, dodges: 6, perfect: 2, summonsLost: 1, farmStage: 11, tips: [{ text: "50+ stat upgrades are affordable right now.", panel: "hero" }, { text: "2 unspent skill points.", panel: "skills" }] });
+  await page.waitForTimeout(800);
+  await visit("21-boss-defeat", page);
+  await closeAll(page);
+  await page.evaluate(() => { const c = window.__ASCEND__; const p = c.profile; p.ascension.count = 1; p.ascension.aether = 40; p.ascension.bestEver = 30; c["commit"](); c.openAscension(); });
+  await page.waitForTimeout(600);
+  await page.click("[data-testid=ascend-tab-tree]").catch(() => {});
+  await page.waitForTimeout(500);
+  await visit("22-ascend-tree", page);
+  await closeAll(page);
+  // The reveal: the rite (only the skip line), then a legendary name, an epic, and a duplicate.
+  await page.evaluate(() => { const c = window.__ASCEND__; c.uiStore.update((u) => ({ ...u, modal: { kind: "summon_reveal", outcome: { kind: "new", instance: c.profile.summons.collection[0], essenceGained: 0, shardsGained: 0 }, summonId: "hollow_warden", first: false, cinematicDone: false } })); });
+  await page.waitForTimeout(1200);
+  await visit("23-reveal-rite", page);
+  await page.evaluate(() => window.__ASCEND__.uiStore.update((u) => ({ ...u, modal: { ...u.modal, cinematicDone: true } })));
+  await page.waitForTimeout(1500);
+  await visit("24-reveal-legendary", page);
+  await closeAll(page);
+  await page.evaluate(() => { const c = window.__ASCEND__; c.uiStore.update((u) => ({ ...u, modal: { kind: "summon_reveal", outcome: { kind: "new", instance: c.profile.summons.collection[0], essenceGained: 0, shardsGained: 0 }, summonId: "ember_herald", first: false, cinematicDone: true } })); });
+  await page.waitForTimeout(1500);
+  await visit("25-reveal-epic", page);
+  await closeAll(page);
+  await page.evaluate(() => { const c = window.__ASCEND__; c.uiStore.update((u) => ({ ...u, modal: { kind: "summon_reveal", outcome: { kind: "duplicate", essenceGained: 12, shardsGained: 3 }, summonId: "husk_blade", first: false, cinematicDone: false } })); });
+  await page.waitForTimeout(500);
+  await visit("26-reveal-duplicate", page);
+  await page.waitForTimeout(1800);
+  await closeAll(page);
+  // The crowded corner: a gate, a finished quest and the guide pointing at a tab, all at once.
+  await page.evaluate(() => { const c = window.__ASCEND__; const p = c.profile; p.progress.bossGate = 12; p.progress.quest.index = 1; p.progress.abilityCasts = 5; c["commit"](); c.uiStore.update((u) => ({ ...u, panel: "hero", guide: { target: "tab-gear", label: "Open Gear to equip what dropped", gesture: "tap" } })); });
+  await page.waitForTimeout(1500);
+  await visit("27-hud-crowded", page);
+  await page.evaluate(() => window.__ASCEND__.uiStore.update((u) => ({ ...u, guide: null })));
+  // The tall panel and the base, by tab.
+  for (const t of ["summons", "skills", "rift", "gear"]) {
+    await page.click(`[data-testid=tab-${t}]`);
+    await page.waitForTimeout(900);
+    await closeAll(page);
+    if (t === "skills") await page.click("[data-testid=branch-arts]").catch(() => {});
+    await page.waitForTimeout(400);
+    await visit(`28-tall-${t}`, page);
+  }
+  await page.click("[data-testid=panel-grabber]").catch(() => {});
+  await page.waitForTimeout(900);
+  await visit("29-base-gear", page);
 }

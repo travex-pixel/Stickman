@@ -170,10 +170,14 @@ test.describe("ASCEND vertical slice", () => {
 
   test("settings open and reset wipes the save", async ({ page }) => {
     await waitForGame(page);
+    await game(page, "c => { c.profile.player.gold = 500; c['commit'](); }");
     await page.getByTestId("menu-button").click();
     await expect(page.getByTestId("settings")).toBeVisible();
     await page.getByTestId("reset-save").click();
+    // Erasing asks with a hold: a tap alone erases nothing.
     await page.getByTestId("reset-save-confirm").click();
+    expect(await game<number>(page, "c => c.profile.player.gold")).toBeGreaterThan(0);
+    await pressAndHold(page, "[data-testid=reset-save-confirm]", 1600);
     await page.waitForTimeout(300);
     expect(await game<number>(page, "c => c.profile.player.gold")).toBe(0);
   });

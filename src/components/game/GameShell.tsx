@@ -2,7 +2,7 @@
 
 import { attachPlaytest, playtestRequested } from "@/game/telemetry/PlaytestRecorder";
 import { useEffect, useState } from "react";
-import { MotionConfig } from "motion/react";
+import { MotionConfig, useMotionValue } from "motion/react";
 import { GameController } from "@/game/GameController";
 import { GameContext, useUi } from "@/hooks/useGame";
 import { useReducedEffects } from "@/hooks/useReducedEffects";
@@ -11,7 +11,8 @@ import { TopBar } from "@/components/hud/TopBar";
 import { TabNav } from "@/components/navigation/TabNav";
 import { PanelHost } from "@/components/panels/PanelHost";
 import { HandGuide } from "@/components/guidance/HandGuide";
-import { ModalHost } from "@/components/rewards/ModalHost";
+import { ModalHost } from "@/components/sheets/ModalHost";
+import { SheetLiftContext } from "@/hooks/useSheetLift";
 
 export default function GameShell() {
   // The controller is created inside an effect so React StrictMode's mount/unmount/mount
@@ -72,7 +73,9 @@ export default function GameShell() {
  */
 function Shell({ controller, ready }: { controller: GameController; ready: boolean }) {
   const reduced = useReducedEffects();
+  const lift = useMotionValue(0);
   return (
+    <SheetLiftContext.Provider value={lift}>
     <MotionConfig reducedMotion={reduced ? "always" : "user"}>
       <div id="app-shell" data-testid="app-shell" data-reduced={reduced} onPointerDownCapture={() => controller.userGesture()}>
         <TopBar />
@@ -86,6 +89,7 @@ function Shell({ controller, ready }: { controller: GameController; ready: boole
         <BootVeil ready={ready} />
       </div>
     </MotionConfig>
+    </SheetLiftContext.Provider>
   );
 }
 

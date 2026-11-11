@@ -15,6 +15,7 @@ import { aetherFor, canAscend, romanAscension, spendableAether } from "@/game/pr
 import { combatPower, computePlayerStats, isStatUnlocked, MILESTONE_EVERY, MILESTONE_MULT, statUnlockRule, statUpgradeCost, statCap } from "@/game/progression/stats";
 import type { Profile } from "@/game/progression/profile";
 import { canAttemptTrial, nextRankStep, rankLetter } from "@/game/progression/ranks";
+import { nextMilestone } from "@/game/progression/milestones";
 import { fmt, fmtStat } from "@/lib/format";
 import { cn } from "@/lib/cn";
 
@@ -32,20 +33,29 @@ export default function HeroPanel() {
   const short = useShortScreen();
   const stats = computePlayerStats(profile);
   const power = combatPower(stats);
+  // Until the first purchase, a caption teaches the hold.
+  const upgraded = STATS.some((s) => profile.player.statLevels[s] > 1);
   return (
-    <div className={cn("flex flex-col h-full min-h-0 px-4", short ? "pt-3" : "pt-4")}>
-      <div className={cn("flex items-end justify-between gap-3 shrink-0", short ? "mb-2" : "mb-3")}>
+    <div className={cn("flex flex-col h-full min-h-0 px-4", short ? "pt-2" : "pt-4")}>
+      <div className={cn("flex items-end justify-between gap-3 shrink-0", short ? "mb-1" : "mb-3")}>
         <PowerReadout power={power} short={short} />
         <div className="flex items-center gap-2 min-w-0">
           <AscendBadge />
           <RankBadge />
         </div>
       </div>
+      {upgraded && <NextGoal />}
       <div className="grid grid-cols-2 grid-rows-3 flex-1 min-h-0 -mx-4 shadow-[inset_0_1px_0_var(--line)]">
         {STATS.map((s, i) => (
           <StatCell key={s} stat={s} index={i} profile={profile} value={stats[s]} next={previewNext(profile, s)[s]} onUpgrade={() => c.upgradeStat(s).ok} onDenied={() => c.audio.play("error", { volume: 0.3, minInterval: 200 })} />
         ))}
       </div>
+      {!upgraded && !short && (
+        <p className="t-label text-t2 shrink-0 flex h-7 items-center gap-2" data-testid="hold-hint">
+          <span className="lozenge" aria-hidden="true" />
+          Hold a stat to upgrade it; it keeps buying while you hold.
+        </p>
+      )}
     </div>
   );
 }
@@ -138,12 +148,12 @@ function StatCell({ stat, index, profile, value, next, onUpgrade, onDenied }: Ce
         <span className="relative flex flex-col min-w-0">
           <span className="t-label text-t2 truncate">
             {label}
-            <span className="text-t3 ml-1 tnum">Lv {level}</span>
+            <span className="text-t2 ml-1 tnum hidden min-[360px]:inline">Lv {level}</span>
           </span>
           <span className="flex items-baseline gap-1.5 min-w-0">
             <span ref={valueRef} className="inline-block origin-left">
               <span data-testid={`stat-value-${stat}`}>
-                <Ticker value={value} format={(v) => fmtStat(stat, v)} className="t-num-l text-t1" />
+                <Ticker value={value} format={(v) => fmtStat(stat, v)} className="t-num-serif text-t1" />
               </span>
             </span>
             {!capped && (
@@ -158,6 +168,7 @@ function StatCell({ stat, index, profile, value, next, onUpgrade, onDenied }: Ce
             "Max"
           ) : (
             <>
+              <Icon name="chevron" size={12} strokeWidth={2.2} className="-rotate-90 -ml-0.5" />
               <CurrencyGlyph kind="gold" size={6} className={affordable ? undefined : "!bg-t3"} />
               {fmt(cost)}
             </>
@@ -179,7 +190,7 @@ function RankBadge() {
   const ready = canAttemptTrial(profile);
   return (
     <button
-      className="press flex h-9 items-center gap-2 rounded-full bg-bg-2 px-3 t-label text-t1 whitespace-nowrap min-w-0 before:absolute before:inset-x-0 before:-inset-y-1 before:content-['']"
+      className="press-pill flex h-11 items-center min-w-0 t-label text-t1 whitespace-nowrap"
       onClick={() => (ready ? c.startMode("trial") : c.setPanel("rift"))}
       data-testid="rank-badge"
       aria-label={`Ascendant rank ${rankLetter(profile.player.rank)}${ready ? ", trial ready" : ""}`}
@@ -204,7 +215,7 @@ function AscendBadge() {
   const spend = spendableAether(profile) > 0;
   return (
     <button
-      className="press flex h-9 items-center gap-2 rounded-full bg-bg-2 px-3 t-label text-t1 whitespace-nowrap shrink-0 before:absolute before:inset-x-0 before:-inset-y-1 before:content-['']"
+      className="press-pill flex h-11 items-center shrink-0 t-label text-t1 whitespace-nowrap"
       onClick={() => c.openAscension()}
       data-testid="ascend-badge"
       aria-label={can ? `Ascend for ${fmt(gain)} Aether` : `Ascension ${romanAscension(a.count)}, ${fmt(a.aether)} Aether`}
@@ -240,7 +251,7 @@ function PowerReadout({ power, short }: { power: number; short: boolean }) {
       <span className="t-label text-t2">Power</span>
       <span className={cn("relative flex items-start gap-1.5", !short && "mt-1")}>
         <span data-testid="combat-power">
-          <Ticker value={power} className={short ? "t-num-l text-t1" : "t-num-xl text-t1"} />
+          <Ticker value={power} className={short ? "t-num-serif text-t1" : "t-num-serif-xl text-t1"} />
         </span>
         <AnimatePresence>
           {gain && (
@@ -251,5 +262,28 @@ function PowerReadout({ power, short }: { power: number; short: boolean }) {
         </AnimatePresence>
       </span>
     </div>
+  );
+}
+
+/**
+ * The next goal, in one line under the header, on phones tall enough to spare it. Tapping goes
+ * where it is advanced: the boss sheet, the Skills panel for a technique, the Rift otherwise.
+ */
+function NextGoal() {
+  const c = useController();
+  const profile = useProfileRef();
+  const text = nextMilestone(profile);
+  const go = () => {
+    if (profile.progress.bossGate) c.openBossChallenge();
+    else if (text.startsWith("Learn")) c.setPanel("skills");
+    else if (text.startsWith("Take the Rank Trial") && canAttemptTrial(profile)) c.startMode("trial");
+    else c.setPanel("rift");
+  };
+  return (
+    <button className="press-fill -mx-4 -mt-2 mb-1 hidden h-11 shrink-0 items-center gap-2 px-4 text-left [@media(min-height:800px)]:flex" onClick={go} data-testid="next-goal" aria-label={`Next goal: ${text}`}>
+      <span className="t-label text-t2 shrink-0">Next</span>
+      <span className="t-label text-t1 min-w-0 flex-1 truncate">{text}</span>
+      <Icon name="chevron" size={16} className="shrink-0 text-t2" />
+    </button>
   );
 }

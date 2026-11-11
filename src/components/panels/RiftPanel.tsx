@@ -16,6 +16,7 @@ import type { Profile } from "@/game/progression/profile";
 import { cn } from "@/lib/cn";
 import { useShortScreen } from "@/hooks/useShortScreen";
 import { claimableObjectives } from "@/game/progression/objectives";
+import { usePanelDetent } from "@/hooks/usePanelDetent";
 
 const MODE_ICON: Record<Exclude<ModeId, "campaign">, IconName> = { boss: "skull", hunt: "skull", vault: "coin", rift: "summons", crypt: "relic", endless: "level", trial: "star", tyrant: "skull" };
 type ListedMode = Exclude<ModeId, "campaign" | "boss">;
@@ -32,6 +33,7 @@ type ShortView = "stages" | "bosses" | "runs";
 export default function RiftPanel() {
   const short = useShortScreen();
   const [view, setView] = useState<ShortView>("stages");
+  const tall = usePanelDetent() === "tall";
   if (short) {
     return (
       <div className="flex flex-col h-full min-h-0 px-4 pt-3 pb-2 gap-3">
@@ -65,7 +67,7 @@ export default function RiftPanel() {
         <HeaderLinks />
       </div>
       <StageStrip />
-      <ModeGrid modes={MODES_ORDER} cols={2} sortAvailable />
+      {tall ? <ModeRows /> : <ModeGrid modes={MODES_ORDER} cols={2} sortAvailable />}
     </div>
   );
 }
@@ -185,6 +187,46 @@ function ModeGrid({ modes, cols, sortAvailable = false }: { modes: ListedMode[];
             </span>
             {keys !== null && avail.ok && (
               <span className="t-caption tnum text-t2 shrink-0">
+                {keys}/{MODES[m].dailyKeys ?? 3}
+              </span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** With the panel tall: every mode as a proper 52px row in one column (playable ones first). */
+function ModeRows() {
+  const c = useController();
+  const profile = useProfileRef();
+  const listed = MODES_ORDER.map((m) => ({ m, avail: c.modeAvailability(m) })).sort((a, b) => Number(b.avail.ok) - Number(a.avail.ok));
+  return (
+    <div className="-mx-4 min-h-0 flex-1 overflow-y-auto overscroll-contain shadow-[inset_0_1px_0_var(--line)]" style={{ touchAction: "pan-y" }} data-scroll>
+      {listed.map(({ m, avail }) => {
+        const keys = isKeyedMode(m) ? profile.modes.keys[m] : null;
+        const { title, sub } = modeCopy(m, avail, profile);
+        // Ready: playable now with a try left (or a trial waiting).
+        const ready = avail.ok && (keys === null ? m === "trial" : keys > 0);
+        return (
+          <button
+            key={m}
+            className="press-fill flex min-h-[52px] w-full items-center gap-3 px-4 py-2 text-left shadow-[inset_0_-1px_0_var(--line)]"
+            onClick={() => (m === "hunt" && avail.ok ? c.openHunts() : m === "tyrant" && avail.ok ? c.openTyrant() : c.startMode(m))}
+            data-testid={`mode-${m}`}
+            aria-label={`${title}${avail.ok ? "" : `, ${avail.reason}`}`}
+          >
+            <Icon name={avail.ok ? MODE_ICON[m] : "lock"} size={18} className={cn("shrink-0", avail.ok ? (m === "tyrant" ? "text-crimson" : m === "trial" ? "text-gold" : "text-t2") : "text-t3")} />
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span className={cn("t-body flex items-center gap-2", avail.ok ? "text-t1" : "text-t2")}>
+                {title}
+                {ready && <span className="lozenge" aria-label="ready" />}
+              </span>
+              <span className="t-label text-t2">{sub}</span>
+            </span>
+            {keys !== null && avail.ok && (
+              <span className={cn("t-num-m shrink-0", keys > 0 ? "text-gold" : "text-t2")}>
                 {keys}/{MODES[m].dailyKeys ?? 3}
               </span>
             )}

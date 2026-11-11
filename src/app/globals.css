@@ -8,13 +8,14 @@
    Spacing scale: 4 8 12 16 20 24 32. Radii: 10 14 22 28 999.
 --------------------------------------------------------------------------- */
 @theme {
-  --color-bg-0: #0a0a0b;
-  --color-bg-1: #121213;
-  --color-bg-2: #1b1b1d;
-  --color-bg-3: #262629;
+  /* Ink: warm, not graphite. */
+  --color-bg-0: #0c0b09;
+  --color-bg-1: #15130f;
+  --color-bg-2: #1e1b16;
+  --color-bg-3: #29251e;
   --color-t1: #f3f0e9;
   --color-t2: #a9a59d;
-  --color-t3: #74716b;
+  --color-t3: #8a877f;
   --color-gold: #dab86c;
   --color-gold-ink: #1b1508;
   --color-crimson: #cc3f4b;
@@ -36,7 +37,7 @@
   --sar: env(safe-area-inset-right, 0px);
   --line: rgba(255, 255, 255, 0.07);
   --line-2: rgba(255, 255, 255, 0.13);
-  --glass: rgba(12, 12, 13, 0.56);
+  --glass: rgba(14, 12, 9, 0.56);
   --tint-gold: rgba(218, 184, 108, 0.12);
   --tint-crimson: rgba(204, 63, 75, 0.16);
   --tint-jade: rgba(94, 202, 168, 0.12);
@@ -52,6 +53,10 @@
 }
 
 @layer base {
+  html {
+    /* The rem stays 16px so Tailwind's spacing scale means what it says (h-11 is 44px). */
+    font-size: 16px;
+  }
   html,
   body {
     height: 100%;
@@ -62,8 +67,6 @@
     background: var(--color-bg-0);
     color: var(--color-t1);
     font-family: var(--font-sans);
-    font-size: 14px;
-    line-height: 20px;
     -webkit-text-size-adjust: 100%;
     -webkit-tap-highlight-color: transparent;
     touch-action: none;
@@ -71,6 +74,10 @@
     -webkit-user-select: none;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+  }
+  body {
+    font-size: 14px;
+    line-height: 20px;
   }
 
   #app-shell {
@@ -210,6 +217,23 @@
   font-stretch: 100%;
   letter-spacing: 0;
 }
+/* Serif numerals: the numbers that matter (power, stat values, stage, level, reward totals). */
+@utility t-num-serif-xl {
+  font-family: var(--font-serif);
+  font-size: 34px;
+  line-height: 36px;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+@utility t-num-serif {
+  font-family: var(--font-serif);
+  font-size: 24px;
+  line-height: 26px;
+  font-weight: 400;
+  letter-spacing: -0.005em;
+  font-variant-numeric: lining-nums tabular-nums;
+}
 @utility tnum {
   font-variant-numeric: tabular-nums;
 }
@@ -224,17 +248,51 @@
     backdrop-filter: blur(14px);
   }
   .glass-flat {
-    background: rgba(12, 12, 13, 0.62);
+    background: rgba(14, 12, 9, 0.62);
   }
   @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
     .glass {
-      background: rgba(12, 12, 13, 0.8);
+      background: rgba(14, 12, 9, 0.8);
     }
   }
 
   /* Text set straight on the painting (banners, the quest line): a tight drop shadow, never a glow. */
   .legible {
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+  }
+
+  /* The panel: ink with a faint paper grain, and a gilt hairline along its shoulder that fades at
+     both ends. Texture lives on the panel only, never over the battlefield. */
+  .panel-surface {
+    background-color: var(--color-bg-1);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.85 0 0 0 0 0.75 0 0 0 0 0.55 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  .gilt-edge {
+    position: absolute;
+    left: 22px;
+    right: 22px;
+    top: 0;
+    height: 1px;
+    pointer-events: none;
+    background: linear-gradient(90deg, rgba(218, 184, 108, 0) 0%, rgba(218, 184, 108, 0.3) 22%, rgba(218, 184, 108, 0.3) 78%, rgba(218, 184, 108, 0) 100%);
+  }
+
+  /* The one ornament: a 4px gold lozenge marks what is active or selected. */
+  .lozenge {
+    display: inline-block;
+    width: 4px;
+    height: 4px;
+    flex-shrink: 0;
+    transform: rotate(45deg);
+    background: var(--color-gold);
+  }
+
+  /* Ability medallions: a 1px gold ring when ready; the ultimate carries a double ring. */
+  .medallion-ready {
+    box-shadow: inset 0 0 0 1px rgba(218, 184, 108, 0.45);
+  }
+  .medallion-double {
+    box-shadow: inset 0 0 0 1px rgba(218, 184, 108, 0.45), inset 0 0 0 4px var(--glass), inset 0 0 0 5px rgba(218, 184, 108, 0.3);
   }
 
   .hairline-b {
@@ -269,6 +327,27 @@
     opacity: 0.08;
     transition-duration: var(--d1);
   }
+  /* A quiet pill whose own box is the 44px target: the 36px pill is drawn inside it. */
+  .press-pill {
+    position: relative;
+    isolation: isolate;
+    gap: 8px;
+    padding: 0 12px;
+    transition: transform var(--d2) var(--ease);
+  }
+  .press-pill::before {
+    content: "";
+    position: absolute;
+    inset: 4px 0;
+    z-index: -1;
+    border-radius: 999px;
+    background: var(--color-bg-2);
+  }
+  .press-pill:active:not(:disabled) {
+    transform: scale(0.97);
+    transition-duration: var(--d1);
+  }
+
   /* Rows and grid cells press by filling, not by shrinking. */
   .press-fill {
     transition: background-color var(--d2) var(--ease);
@@ -294,7 +373,8 @@
     padding: 0 20px;
   }
   .ui-btn[data-size="sm"] {
-    height: 40px;
+    /* 44, the touch floor: the small button is narrower and quieter, never shorter than a finger. */
+    height: 44px;
     padding: 0 16px;
     font-size: 14px;
     line-height: 18px;
@@ -328,7 +408,7 @@
     container-type: inline-size;
   }
   .ab-slot {
-    --slot: clamp(44px, calc((100cqw - 56px) / 6.3), 56px);
+    --slot: clamp(44px, calc((100cqw - 60px) / 6.3), 56px);
     width: var(--slot);
     height: 56px;
   }
@@ -337,7 +417,7 @@
     height: min(46px, calc(var(--slot) - 4px));
   }
   .ab-ult-slot {
-    --ult: clamp(50px, calc((100cqw - 56px) / 6.3 * 1.05), 56px);
+    --ult: clamp(50px, calc((100cqw - 60px) / 6.3 * 1.05), 56px);
     width: calc(var(--ult) + 4px);
     height: 56px;
   }
@@ -587,7 +667,7 @@
   opacity: 0;
 }
 
-/* Short screens (320x568 and similar): reward cards trade extras for fitting the battlefield. */
+/* Short screens (320x568 and similar): sheets trade extras (a second loot row) for fitting. */
 .short-only {
   display: none;
 }
@@ -598,203 +678,22 @@
   .short-only {
     display: block;
   }
-  .short-tight {
-    padding-top: 0.5rem;
-    padding-bottom: 0.5rem;
-    gap: 0.25rem;
-  }
-  .loot-card {
-    padding-top: 0.2rem;
-    padding-bottom: 0.2rem;
-  }
 }
 
-/* ===========================================================================
-   LEGACY: modals pending Rebirth phase 2
-   The modal contents (rewards/ModalHost.tsx, rewards/BossCards.tsx, rewards/RewardFx.tsx,
-   settings/SettingsModal.tsx) still use the old class and colour names. They are re-expressed
-   here in the new tokens: flat graphite, no gradients, no gold hairlines, the new fonts.
-   Phase 2 rebuilds those modals on components/ui and deletes this whole block.
-   =========================================================================== */
-@theme {
-  --color-ink: #0a0a0b;
-  --color-ink-2: #121213;
-  --color-ink-3: #1b1b1d;
-  --color-ink-4: #262629;
-  --color-ivory: #f3f0e9;
-  --color-parch: #c9c5bd;
-  --color-mist: #a9a59d;
-  --color-gold-2: #dab86c;
-  --color-gold-3: #8a744a;
-  --color-jade-2: #5ecaa8;
-  --color-steel: #74a8ea;
-  --color-crimson-2: #e0606b;
-  --color-violet: #a98be8;
-  --color-ember: #d9823f;
-  --color-soul: #5ecaa8;
-  --font-display: var(--font-instrument-serif), Georgia, serif;
-  --font-body: var(--font-instrument-sans), system-ui, sans-serif;
-}
-
-/* The canvas damage numbers (game/render/DamageNumbers.ts) still read this variable; until they
-   move to the numeral face they get the interface sans instead of the removed display serif. */
+/* The canvas damage numbers (game/render/DamageNumbers.ts) read this variable; until they move to
+   the numeral face they get the interface sans. */
 :root {
   --font-marcellus: var(--font-instrument-sans);
 }
 
 @layer components {
-  .font-display {
-    font-family: var(--font-serif);
-    letter-spacing: 0;
-  }
-  .caps {
-    font-size: 11px;
-    line-height: 14px;
-    font-weight: 600;
-    letter-spacing: 0.09em;
-    text-transform: uppercase;
-    color: var(--color-t2);
-  }
-  .gild {
-    color: var(--color-gold);
-  }
-  .text-glow-gold {
-    text-shadow: none;
-  }
-  .card {
-    position: relative;
-    background: var(--color-bg-2);
-    border: 1px solid transparent;
-    border-radius: 14px;
-  }
-  .card-active {
-    background: var(--color-bg-3);
-  }
-  .card-locked {
-    background: var(--color-bg-1);
-    opacity: 0.8;
-  }
-  .modal-card {
-    background: var(--color-bg-1);
-    border-radius: 28px;
-  }
-  .scrim {
-    position: absolute;
-    inset: 0;
-    background: rgba(6, 6, 7, 0.6);
-    -webkit-backdrop-filter: blur(10px);
-    backdrop-filter: blur(10px);
-  }
-  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-    .scrim {
-      background: rgba(6, 6, 7, 0.86);
-    }
-  }
-  .btn-primary,
-  .btn-boss,
-  .btn-ghost,
-  .btn-jade {
-    border-radius: 14px;
-    padding: 12px 16px;
-    font-family: var(--font-sans);
-    font-size: 16px;
-    line-height: 20px;
-    font-weight: 600;
-    letter-spacing: 0;
-    transition: transform var(--d2) var(--ease);
-  }
-  .btn-primary {
-    background: var(--color-gold);
-    color: var(--color-gold-ink);
-  }
-  .btn-boss {
-    background: var(--color-crimson);
-    color: #fff;
-  }
-  .btn-ghost {
-    background: var(--color-bg-2);
-    color: var(--color-t1);
-  }
-  .btn-jade {
-    background: var(--tint-jade);
-    color: var(--color-jade);
-  }
-  .btn-primary:active:not(:disabled),
-  .btn-boss:active:not(:disabled),
-  .btn-ghost:active:not(:disabled),
-  .btn-jade:active:not(:disabled) {
-    transform: scale(0.97);
-    transition-duration: var(--d1);
-  }
-  .btn-primary:disabled,
-  .btn-boss:disabled,
-  .btn-ghost:disabled {
-    opacity: 0.4;
-  }
-  .chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    border-radius: 999px;
-    background: var(--color-bg-2);
-    padding: 2px 8px;
-  }
-  .bar {
-    position: relative;
-    height: 4px;
-    border-radius: 999px;
-    background: var(--color-bg-3);
-    overflow: hidden;
-  }
-  .bar > div {
-    height: 100%;
-    border-radius: 999px;
-    background: var(--color-t1);
-    transition: width var(--d2) var(--ease);
-  }
-  .bar-gold > div {
-    background: var(--color-gold);
-  }
-  .bar-jade > div {
-    background: var(--color-jade);
-  }
-  .bar-crimson > div {
-    background: var(--color-crimson);
-  }
-  .bar-steel > div {
-    background: var(--color-rare);
-  }
-  .medal {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: var(--m, 52px);
-    height: var(--m, 52px);
-    border-radius: 999px;
-    background: var(--color-bg-2);
-  }
-  .border-rarity-common {
-    border-color: rgba(154, 150, 142, 0.45);
-  }
-  .border-rarity-uncommon {
-    border-color: rgba(108, 196, 154, 0.55);
-  }
-  .border-rarity-rare {
-    border-color: rgba(116, 168, 234, 0.6);
-  }
-  .border-rarity-epic {
-    border-color: rgba(169, 139, 232, 0.65);
-  }
-  .border-rarity-legendary {
-    border-color: rgba(227, 189, 106, 0.75);
-  }
-  /* Text inputs must stay selectable and typeable despite the game-wide touch lock. */
+  /* Text inputs stay selectable and typeable despite the game-wide touch lock. A filled shape. */
   .field {
     width: 100%;
+    height: 44px;
     border-radius: 10px;
-    padding: 10px 12px;
+    padding: 0 12px;
     background: var(--color-bg-2);
-    border: 1px solid transparent;
     color: var(--color-t1);
     font-family: var(--font-sans);
     font-weight: 600;
@@ -807,13 +706,53 @@
     outline: none;
   }
   .field:focus {
-    border-color: var(--line-2);
+    box-shadow: inset 0 0 0 1px var(--line-2);
   }
   .field::placeholder {
-    color: var(--color-t3);
+    color: var(--color-t2);
     text-transform: none;
     letter-spacing: 0;
     font-weight: 500;
   }
+
+  /* Range: a 3px track (filled warm white to the value) and a 20px thumb, in a 44px hit row. */
+  .ui-range {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 44px;
+    background: transparent;
+    cursor: pointer;
+  }
+  .ui-range::-webkit-slider-runnable-track {
+    height: 3px;
+    border-radius: 999px;
+    background: linear-gradient(to right, var(--color-t1) var(--v, 50%), var(--color-bg-3) var(--v, 50%));
+  }
+  .ui-range::-moz-range-track {
+    height: 3px;
+    border-radius: 999px;
+    background: var(--color-bg-3);
+  }
+  .ui-range::-moz-range-progress {
+    height: 3px;
+    border-radius: 999px;
+    background: var(--color-t1);
+  }
+  .ui-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 20px;
+    height: 20px;
+    margin-top: -8.5px;
+    border-radius: 999px;
+    background: var(--color-t1);
+    border: 0;
+  }
+  .ui-range::-moz-range-thumb {
+    width: 20px;
+    height: 20px;
+    border-radius: 999px;
+    background: var(--color-t1);
+    border: 0;
+  }
 }
-/* END LEGACY */

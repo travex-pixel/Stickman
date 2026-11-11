@@ -8,7 +8,7 @@ export type ButtonVariant = "primary" | "threat" | "quiet" | "plain";
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   /** primary: gold fill (one per view). threat: crimson fill. quiet: graphite fill. plain: text only. */
   variant?: ButtonVariant;
-  /** md is 52 high, sm is 40 (its hit area is still 44). */
+  /** md is 52 high, sm is 44 (the touch floor). */
   size?: "md" | "sm";
   loading?: boolean;
   /** Stretch to the container's width. */
@@ -25,7 +25,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
     <button
       ref={ref}
       type={type}
-      className={cn("ui-btn press", size === "md" ? "t-button" : "text-[14px] leading-[18px] font-semibold before:absolute before:inset-x-0 before:-inset-y-[2px] before:content-['']", block && "w-full", className)}
+      className={cn("ui-btn press", size === "md" ? "t-button" : "text-[14px] leading-[18px] font-semibold", block && "w-full", className)}
       data-variant={variant}
       data-size={size}
       disabled={disabled || loading}

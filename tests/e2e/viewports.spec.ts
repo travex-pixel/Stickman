@@ -42,6 +42,8 @@ for (const vp of VIEWPORTS) {
         panel.querySelectorAll<HTMLElement>("button").forEach((b) => {
           const r = b.getBoundingClientRect();
           if (r.width === 0 || r.height === 0) return;
+          // Inside a list that scrolls within the panel, a row below the fold is reachable by scrolling.
+          if (b.closest("[data-scroll]") && r.right <= Math.min(pr.right, window.innerWidth) + 1 && r.left >= -1) return;
           if (r.bottom > pr.bottom + 1 || r.right > Math.min(pr.right, window.innerWidth) + 1 || r.top < pr.top - 1 || r.left < -1) bad.push(`${b.getAttribute("data-testid") ?? b.textContent?.slice(0, 20)}`);
         });
         return { ok: bad.length === 0, reason: bad.join(",") };
@@ -117,6 +119,8 @@ for (const vp of VIEWPORTS) {
         panel.querySelectorAll<HTMLElement>("button").forEach((b) => {
           const r = b.getBoundingClientRect();
           if (r.width === 0 || r.height === 0) return;
+          // Inside a list that scrolls within the panel, a row below the fold is reachable by scrolling.
+          if (b.closest("[data-scroll]") && r.right <= Math.min(pr.right, window.innerWidth) + 1 && r.left >= -1) return;
           if (r.bottom > pr.bottom + 1 || r.right > Math.min(pr.right, window.innerWidth) + 1 || r.top < pr.top - 1 || r.left < -1) bad.push(`${b.getAttribute("data-testid") ?? b.textContent?.slice(0, 20)}`);
         });
         return { ok: bad.length === 0, reason: bad.join(",") };

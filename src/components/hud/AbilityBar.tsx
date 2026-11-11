@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { motion } from "motion/react";
 import { Icon } from "@/components/ui/Icon";
+import { useSheetRise } from "@/hooks/useSheetLift";
 import { useController, useHud, useProfile } from "@/hooks/useGame";
 import { replayClass } from "@/hooks/useShake";
 import { ABILITIES, ABILITY_SLOTS, ULTIMATE_ENERGY_COST, ULTIMATE_ID } from "@/game/data/abilities";
@@ -26,8 +28,10 @@ export function AbilityBar() {
   // A string selector so a form swap (mutated in place) still re-renders the bar.
   const formKey = useProfile((p) => SLOTS.map((s) => slotForm(p, s)).join(","));
   const forms = formKey.split(",") as AbilityId[];
+  // Rides the panel's top edge when the panel is pulled tall.
+  const rise = useSheetRise();
   return (
-    <div className="ab-host absolute inset-x-0 bottom-[calc(var(--panel-overlap)+12px)] z-20 px-0.5" data-testid="ability-bar">
+    <motion.div className="ab-host absolute inset-x-0 bottom-[calc(var(--panel-overlap)+12px)] z-20" style={{ y: rise }} data-testid="ability-bar">
       <div className="flex items-center justify-center">
         <AutoToggle />
         {SLOTS.map((slot, i) => (
@@ -35,7 +39,7 @@ export function AbilityBar() {
         ))}
         <UltimateDisc level={level} />
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -45,14 +49,17 @@ function AutoToggle() {
   const tutorialFinished = useProfile((p) => p.tutorial.finished || (p.tutorial.completed.includes("ability") && p.tutorial.completed.includes("dodge")));
   return (
     <button
-      className={cn("press flex h-11 w-10 shrink-0 items-center justify-center rounded-full text-[11px] leading-[14px] font-semibold tracking-[0.06em] legible", autoCast ? "text-jade" : "text-t3", !tutorialFinished && "opacity-40")}
+      className={cn("press flex h-11 w-11 shrink-0 items-center justify-center rounded-full", !tutorialFinished && "opacity-40")}
       onClick={() => (tutorialFinished ? c.toggleAutoCast() : c.toast("AUTO unlocks once you have used an ability and dodged", "info"))}
       aria-pressed={autoCast}
       aria-label={`Auto abilities ${autoCast ? "on" : "off"}`}
       data-testid="auto-toggle"
       aria-disabled={!tutorialFinished}
     >
-      AUTO
+      {/* A real toggle: a filled jade pill when on, a dim glass pill when off. */}
+      <span className={cn("flex h-7 w-full flex-col items-center justify-center rounded-full text-[11px] leading-[12px] font-semibold tracking-[0.04em] transition-colors duration-200", autoCast ? "bg-jade text-gold-ink" : "glass-flat text-t2 shadow-[inset_0_0_0_1px_var(--line-2)]")}>
+        AUTO
+      </span>
     </button>
   );
 }
@@ -92,7 +99,7 @@ function AbilityDisc({ slot, id, level }: { slot: AbilityId; id: AbilityId; leve
       aria-label={unlocked ? `${def.name}${cooling ? `, ${cd.toFixed(1)} seconds` : ", ready"}` : `${def.name}, unlocks at level ${unlockLevel}`}
       aria-disabled={!unlocked}
     >
-      <span ref={disc} className="ab-disc press relative flex items-center justify-center rounded-full glass-flat">
+      <span ref={disc} className={cn("ab-disc press relative flex items-center justify-center rounded-full glass-flat", unlocked && !cooling && "medallion-ready")}>
         {unlocked ? (
           <>
             <Icon name={ABILITY_ICON[id]} size={20} strokeWidth={1.8} className={cn("text-t1 transition-opacity duration-200", cooling && "opacity-25")} />
@@ -149,6 +156,7 @@ function UltimateDisc({ level }: { level: number }) {
             <Icon name="fury" size={22} strokeWidth={1.8} className={ready ? "text-t1" : "text-t2"} />
             <svg className="absolute inset-0 h-full w-full -rotate-90" viewBox="0 0 56 56" aria-hidden="true">
               <circle cx="28" cy="28" r={ULT_R} fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="1.5" />
+              <circle cx="28" cy="28" r={ULT_R - 4} fill="none" stroke="rgba(218,184,108,0.4)" strokeWidth="1" />
               <circle className={cn(ready && "breathe")} cx="28" cy="28" r={ULT_R} fill="none" stroke="var(--color-gold)" strokeWidth="1.5" strokeDasharray={ULT_LEN} strokeDashoffset={ULT_LEN * (1 - frac)} strokeLinecap="round" />
             </svg>
           </>

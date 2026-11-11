@@ -29,7 +29,7 @@ interface SegmentedProps<T extends string> {
 
 /**
  * A pill track with a thumb that slides to the selection (a critically damped spring, no
- * overshoot). Segments are 36 high with a 4px hit margin above and below, so each target is 44.
+ * overshoot). The track is drawn 36 high; each segment's own box is 44 high, so it is a full target.
  *
  *   <Segmented value={v} onChange={setV}>
  *     <Segment id="power" data-testid="branch-power">Power</Segment>
@@ -40,7 +40,9 @@ export function Segmented<T extends string>({ value, onChange, tone = "solid", s
   const reduced = useReducedEffects();
   return (
     <SegCtx.Provider value={{ value, onChange: onChange as (id: string) => void, thumb, tone, stretch, reduced }}>
-      <div className={cn("relative flex h-9 rounded-full p-[3px]", tone === "glass" ? "glass" : "bg-bg-2", stretch ? "w-full" : "self-start", className)} role="group" aria-label={label}>
+      <div className={cn("relative flex h-11 px-[3px]", stretch ? "w-full" : "self-start", className)} role="group" aria-label={label}>
+        {/* The visible track is 36 high; the segments keep a 44px box for the finger. */}
+        <span className={cn("pointer-events-none absolute inset-x-0 inset-y-1 rounded-full", tone === "glass" ? "glass" : "bg-bg-2")} aria-hidden="true" />
         {children}
       </div>
     </SegCtx.Provider>
@@ -61,8 +63,7 @@ export function Segment({ id, badge, children, className, ...rest }: SegmentProp
     <button
       type="button"
       className={cn(
-        "relative flex items-center justify-center rounded-full px-3 t-label whitespace-nowrap transition-colors duration-200",
-        "before:absolute before:inset-x-0 before:-inset-y-[7px] before:content-['']",
+        "relative flex h-11 items-center justify-center px-3 t-label whitespace-nowrap transition-colors duration-200",
         ctx.stretch && "flex-1 min-w-0",
         on ? "text-t1" : "text-t2 active:text-t1",
         className,
@@ -71,9 +72,9 @@ export function Segment({ id, badge, children, className, ...rest }: SegmentProp
       aria-pressed={on}
       {...rest}
     >
-      {on && <motion.span layoutId={ctx.thumb} className={cn("absolute inset-0 rounded-full", ctx.tone === "glass" ? "bg-white/[0.14]" : "bg-bg-3")} transition={ctx.reduced ? { duration: 0 } : { type: "spring", stiffness: 520, damping: 46, mass: 1 }} />}
+      {on && <motion.span layoutId={ctx.thumb} className={cn("absolute inset-x-0 inset-y-[7px] rounded-full", ctx.tone === "glass" ? "bg-white/[0.14]" : "bg-bg-3")} transition={ctx.reduced ? { duration: 0 } : { type: "spring", stiffness: 520, damping: 46, mass: 1 }} />}
       <span className="relative truncate">{children}</span>
-      {badge && <span className="absolute right-1.5 top-1 h-1.5 w-1.5 rounded-full bg-gold" aria-hidden="true" />}
+      {badge && <span className="absolute right-1.5 top-[11px] h-1.5 w-1.5 rounded-full bg-gold" aria-hidden="true" />}
     </button>
   );
 }

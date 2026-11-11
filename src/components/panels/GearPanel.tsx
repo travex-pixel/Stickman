@@ -61,9 +61,13 @@ export default function GearPanel() {
               Bag <span className="text-t3">{bag.length} of {BAG_CAP}</span>
             </span>
             {bag.length === 0 ? (
-              <div className="flex-1 flex flex-col justify-center gap-1 pb-4">
-                <span className="t-body text-t1">Gear drops from enemies.</span>
-                <span className="t-label text-t2">Every boss drops a piece. Equip it here.</span>
+              <div className="flex-1 flex flex-col justify-center gap-1 pb-2">
+                <span className="t-body text-t1">Bosses drop gear.</span>
+                <span className="t-label text-t2">Every boss leaves a piece; enemies drop the rest. Equip it here.</span>
+                {/* A next step, not a dead end: the waiting boss, or the Rift to hunt one. */}
+                <Button size="sm" variant="quiet" className="mt-3 self-start" onClick={() => (profile.progress.bossGate ? c.openBossChallenge() : c.setPanel("rift"))} data-testid="gear-empty-next">
+                  {profile.progress.bossGate ? "Face the boss" : "Find a boss"}
+                </Button>
               </div>
             ) : (
               <div className="grid grid-cols-3 min-[360px]:grid-cols-4 content-start overflow-y-auto no-scrollbar min-h-0 -mx-1 px-1 pb-1" style={{ gap, gridAutoRows: sq, touchAction: "pan-y" }}>

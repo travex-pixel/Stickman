@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { useController, useProfile } from "@/hooks/useGame";
+import { useController, useProfile, useUi } from "@/hooks/useGame";
+import { cn } from "@/lib/cn";
+
+const MOMENT_KINDS = ["summon_reveal", "boss_victory", "rank_up", "technique"] as const;
 import { useStore } from "@/lib/store";
 import { BattleOverlays } from "@/components/hud/BattleOverlays";
 import { AbilityBar } from "@/components/hud/AbilityBar";
@@ -14,6 +17,8 @@ export function Battlefield() {
   const c = useController();
   const hostRef = useRef<HTMLDivElement>(null);
   const showDiag = useProfile((p) => p.settings.diagnostics);
+  // Under a moment (a reveal, a victory) the field is the stage: the controls step aside.
+  const moment = useUi((u) => !!u.modal && (MOMENT_KINDS as readonly string[]).includes(u.modal.kind) && !(u.modal.kind === "summon_reveal" && u.modal.outcome.kind !== "new"));
 
   useEffect(() => {
     const host = hostRef.current;
@@ -34,10 +39,12 @@ export function Battlefield() {
       />
       {/* Scene shading, not interface: the sky darkens under the top bar and the ground darkens
           where the controls sit, so glass reads without boxes. */}
-      <div className="pointer-events-none absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(10,10,11,0.55) 0, rgba(10,10,11,0) 14%, rgba(10,10,11,0) 64%, rgba(10,10,11,0.88) 100%)" }} aria-hidden="true" />
+      <div className="pointer-events-none absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(12,11,9,0.55) 0, rgba(12,11,9,0) 14%, rgba(12,11,9,0) 64%, rgba(12,11,9,0.88) 100%)" }} aria-hidden="true" />
       <div className="absolute left-1/2 top-[60%] h-0 w-0" data-guide="battlefield-player" />
-      <BattleOverlays />
-      <AbilityBar />
+      <div className={cn("transition-opacity duration-200", moment && "pointer-events-none opacity-0")} aria-hidden={moment || undefined}>
+        <BattleOverlays />
+        <AbilityBar />
+      </div>
       {showDiag && <Diagnostics />}
     </section>
   );
