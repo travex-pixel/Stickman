@@ -70,7 +70,7 @@ describe("validation and repair", () => {
     p.player.level = 9999;
     p.settings.music = 7;
     const { profile } = sanitizeProfile(p);
-    expect(profile.player.level).toBe(60);
+    expect(profile.player.level).toBe(150);
     expect(profile.settings.music).toBe(1);
   });
 });
@@ -185,5 +185,31 @@ describe("unsaved stash", () => {
     expect((await new IndexedDbSaveManager().load()).profile.player.gold).toBe(500);
     localStorage.setItem("ascend-unsaved", "{not json");
     expect((await new IndexedDbSaveManager().load()).profile.player.gold).toBe(500);
+  });
+});
+
+describe("the deep game survives a reload", () => {
+  it("keeps high levels and currencies past 2^53", async () => {
+    const { createDefaultProfile } = await import("@/game/progression/profile");
+    const { sanitizeProfile } = await import("@/persistence/SaveSchema");
+    const p = createDefaultProfile() as unknown as { player: Record<string, unknown>; ascension: Record<string, unknown> };
+    p.player.level = 137;
+    p.player.gold = 3.2e27;
+    p.player.essence = 4e18;
+    p.ascension.aether = 7.5e20;
+    p.ascension.spent = 1.2e20;
+    const out = sanitizeProfile(p as unknown as Record<string, unknown>).profile;
+    expect(out.player.level).toBe(137);
+    expect(out.player.gold).toBe(3.2e27);
+    expect(out.player.essence).toBe(4e18);
+    expect(out.ascension.aether).toBe(7.5e20);
+    expect(out.ascension.spent).toBe(1.2e20);
+  });
+
+  it("formats numbers far past the named suffixes", async () => {
+    const { fmt } = await import("@/lib/format");
+    expect(fmt(1.5e21)).toBe("1.50Sx");
+    expect(fmt(2.5e33)).toBe("2.50Dc");
+    expect(fmt(1.234e40)).toBe("1.23e40");
   });
 });

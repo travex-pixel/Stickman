@@ -259,7 +259,8 @@ function WaveBanner() {
   const wave = useHud((s) => s?.wave ?? 0);
   const stage = useHud((s) => s?.stage ?? 1);
   const mode = useHud((s) => s?.mode ?? "campaign");
-  const bossDef = ENEMIES[bossForStage(stage, mode)];
+  const liveBoss = useHud((s) => s?.boss?.defId ?? null);
+  const bossDef = ENEMIES[liveBoss ?? bossForStage(stage, mode)];
   const bossName = bossDef?.name.toUpperCase() ?? "THE WARDEN";
   const farming = useHud((s) => s?.farming ?? false);
   const total = useHud((s) => s?.wavesTotal ?? 3);

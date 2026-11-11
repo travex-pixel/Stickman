@@ -138,6 +138,27 @@ Ascension is the answer to the late ceiling: in eight simulated hours the same p
 stage 51 without it and reaches stage 66 ascending whenever stuck for 30 minutes
 (`ASCEND_AFTER=30` in the simulator).
 
+### The weeks-long curve
+
+Measured over 60 simulated hours of engaged play (two seeds, `MAXMIN=3600 ASCEND_AFTER=45`), which
+is several weeks for most players once offline time is counted:
+
+| Hours | Deepest stage | What the player is doing |
+|---|---|---|
+| 0 to 3 | 44 | First climb, first Depth (31) |
+| 3 to 10 | 44 to 86 | Ascensions every 1.5 to 3 hours, +10 to 20 stages each; Aether tree bought out cheaply |
+| 10 to 28 | 86 to 300 | The breakthrough: deep Aether (x1.1 per stage past 60) and the compounding tree push +20 to 30 stages per ascension, a new Depth every ascension or two |
+| 28 to 60 | 300 to 370 | The long tail: Might and Vigor near their caps, +3 stages per ascension; Limit Break and the Tyrant's weekly tiers carry the power growth |
+
+What made the difference, found with the simulator:
+
+- Without deep Aether, Aether grows linearly against exponential enemies: every ascension
+  reached a little less far and the climb stalled at about stage 98 for the last 15 hours.
+- Without Rift Memory each re-climb took three hours of trivial stages and dozens of boss
+  presses; with it a re-climb takes 75 to 90 minutes.
+- Gold and Aether pass 2^53 around hour 18: saves keep them as plain doubles (up to 1e300), and
+  numbers format with suffixes to Dc (1e33), then scientific notation.
+
 ## Studio review, round 3 (the always-on loop)
 
 Three independent reviewers (combat, summoning and creative; mobile UX, hostile player and

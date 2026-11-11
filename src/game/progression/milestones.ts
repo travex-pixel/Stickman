@@ -18,7 +18,7 @@ export function nextMilestone(p: Profile): string {
   if (gate) return `Defeat ${ENEMIES[bossForStage(gate)]?.name ?? "the boss"} at stage ${gate}`;
   const best = p.progress.bestStage;
   const modes = (Object.keys(MODES) as ModeId[])
-    .filter((m) => m !== "campaign" && m !== "boss" && m !== "trial" && MODES[m].unlockAfterStage > best)
+    .filter((m) => m !== "campaign" && m !== "boss" && m !== "trial" && MODES[m].unlockAfterStage > (m === "tyrant" ? Math.max(best, p.ascension.bestEver) : best))
     .sort((a, b) => MODES[a].unlockAfterStage - MODES[b].unlockAfterStage);
   const firstMode = modes[0];
   const next = nextRegionStart(frontierStage(p));

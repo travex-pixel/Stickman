@@ -64,12 +64,14 @@ interface RunTally {
   summonsLost: number;
   /** For a boss challenge: the stage farming returns to. */
   farmStage: number;
+  /** When the run began (the Rift Tyrant's week is the one it started in). */
+  startedAt: Date;
   /** The run's outcome has been paid out: never pay it twice. */
   resolved: boolean;
 }
 
 function newTally(mode: ModeId): RunTally {
-  return { gold: 0, kills: 0, raised: 0, mode, items: [], casts: 0, dodges: 0, perfect: 0, summonsLost: 0, farmStage: 0, resolved: false };
+  return { gold: 0, kills: 0, raised: 0, mode, items: [], casts: 0, dodges: 0, perfect: 0, summonsLost: 0, farmStage: 0, resolved: false, startedAt: new Date() };
 }
 
 export type Modal =
@@ -202,6 +204,8 @@ export class GameController {
   private rng = new Rng(Date.now() >>> 0);
   private visibilityHandler = () => this.onVisibility();
   private pageHideHandler = () => {
+    // Closing the tab mid-Tyrant still banks the try.
+    this.bankTyrant();
     this.save.stashUnsaved();
     void this.save.flush();
   };
@@ -387,12 +391,24 @@ export class GameController {
   // ---------------------------------------------------------------------
 
   startRun(stage: number, mode: ModeId = "campaign"): void {
+    // Whatever replaces a Tyrant fight still in progress, the try it cost is scored and paid.
+    this.bankTyrant();
     // Any new run supersedes a pending post-defeat beat: it must never overwrite this one.
     this.pending = null;
     this.world?.dispose();
     const loadout = buildLoadout(this.profile);
-    this.world = new World({ stage, loadout, mode, seed: (Date.now() ^ (stage * 2654435761)) >>> 0, cryptSlot: cryptSlot(), tyrant: mode === "tyrant" ? tyrantForWeek(new Date()) : undefined });
+    const started = new Date();
+    this.world = new World({ stage, loadout, mode, seed: (Date.now() ^ (stage * 2654435761)) >>> 0, cryptSlot: cryptSlot(), tyrant: mode === "tyrant" ? tyrantForWeek(started) : undefined });
     this.run = newTally(mode);
+    this.run.startedAt = started;
+    if (mode !== "campaign") {
+      // A card that would interrupt the fight goes back in line until farming resumes.
+      const shown = this.uiStore.get().modal;
+      if (shown && DEFERRED_IN_FIGHT.has(shown.kind)) {
+        this.modalQueue.unshift(shown);
+        this.uiStore.update((u) => ({ ...u, modal: null }));
+      }
+    }
     if (mode === "boss") this.run.farmStage = this.challengeFrom;
     this.renderer?.setWorld(this.world);
     this.hudStore.set(this.world.snapshot());
@@ -471,8 +487,6 @@ export class GameController {
     this.userGesture();
     const retreat = (this.world?.mode === "boss" || this.world?.mode === "hunt") && this.world.phase !== "victory" && this.world.phase !== "defeat";
     this.closeModal();
-    // Leaving the Tyrant early still banks the bars already broken.
-    if (this.world?.mode === "tyrant" && !this.run.resolved && this.world.phase !== "victory" && this.world.phase !== "defeat") this.onTyrantEnd(false);
     this.startRun(this.profile.progress.currentStage, "campaign");
     if (retreat) this.toast("You withdrew. The boss waits for your return.", "info");
   }
@@ -868,6 +882,12 @@ export class GameController {
 
   private offerPerkChoice(): void {
     if (this.profile.player.pendingPerkChoices <= 0) return;
+    // One perk card at a time, and never in the middle of a fight.
+    if (this.uiStore.get().modal?.kind === "perk_choice" || this.modalQueue.some((m) => m.kind === "perk_choice")) return;
+    if (this.inFight()) {
+      this.toast("Choose your perk once the fight is over", "info");
+      return;
+    }
     this.enqueueModal({ kind: "perk_choice", perks: offerPerks(this.profile, this.rng) });
   }
 
@@ -1072,7 +1092,7 @@ export class GameController {
     const res = resolveBossVictory(p, stage, computeModifiers(p).goldFind);
     p.player.gold += res.gold;
     p.player.riftCores += res.cores;
-    const lv = applyXp(p.player.level, p.player.xp, res.xp);
+    const lv = applyXp(p.player.level, p.player.xp, Math.round(res.xp * computeModifiers(p).xpMult));
     p.player.level = lv.level;
     p.player.xp = lv.xp;
     const late = (this.world?.takeLoot() ?? []).map((l) => l.item);
@@ -1152,15 +1172,22 @@ export class GameController {
     this.uiStore.update((u) => ({ ...u, modal: { kind: "tyrant" } }));
   }
 
+  /** A Tyrant try still in progress (left, replaced, or the tab closed) is scored as it stands. */
+  private bankTyrant(): void {
+    if (this.world?.mode === "tyrant" && !this.run.resolved && this.world.phase !== "victory" && this.world.phase !== "defeat") this.onTyrantEnd(false);
+  }
+
   /** The minute is up, or the warrior fell: the score stands either way. */
   private onTyrantEnd(fell: boolean): void {
     if (this.run.resolved) return;
     this.run.resolved = true;
     const p = this.profile;
-    const now = new Date();
+    // The week the fight began in, even if midnight on Sunday passed during it.
+    const now = this.run.startedAt;
     const week = tyrantForWeek(now);
     const stage = this.world?.stage ?? tyrantStage(p);
-    const before = p.tyrant.claimed;
+    syncTyrantWeek(p, now);
+    const bestBefore = p.tyrant.best;
     const res = recordTyrant(p, this.world?.tyrantScore ?? 0, now);
     let gold = 0;
     let essence = 0;
@@ -1194,7 +1221,7 @@ export class GameController {
     if (gold > 0) lines.push({ label: "Gold", value: `+${fmt(gold)}`, tone: "gold" });
     if (essence > 0) lines.push({ label: "Essence", value: `+${fmt(essence)}`, tone: "violet" });
     if (cores > 0) lines.push({ label: "Cores", value: `+${cores}`, tone: "jade" });
-    this.enqueueModal({ kind: "mode_result", mode: "tyrant", title: fell ? "The Tyrant stands" : "Time!", subtitle: `${boss} · ${TWISTS[week.twist].name}`, lines, success: !fell || res.score > 0, record: res.newBest && before > 0, items, tyrant: { claimed: p.tyrant.claimed, newTiers: res.newTiers, score: res.score } });
+    this.enqueueModal({ kind: "mode_result", mode: "tyrant", title: fell ? "The Tyrant stands" : "Time!", subtitle: `${boss} · ${TWISTS[week.twist].name}`, lines, success: !fell || res.score > 0, record: res.newBest && bestBefore > 0, items, tyrant: { claimed: p.tyrant.claimed, newTiers: res.newTiers, score: res.score } });
     this.afterProgression();
     this.commit();
   }
@@ -1225,7 +1252,7 @@ export class GameController {
     const p = this.profile;
     const goldFind = computeModifiers(p).goldFind;
     const gold = Math.round(stageClearGold(stage, goldFind) * 0.5);
-    const xp = Math.round(stageClearXp(stage) * 0.5);
+    const xp = Math.round(stageClearXp(stage) * 0.5 * computeModifiers(p).xpMult);
     p.player.gold += gold;
     const lv = applyXp(p.player.level, p.player.xp, xp);
     p.player.level = lv.level;
@@ -1979,6 +2006,8 @@ export class GameController {
 
   /** Shows the next queued card. Cards that would interrupt a fight wait for farming. */
   private flushModalQueue(): void {
+    // A perk card with no perk left to choose could never be closed: drop it.
+    if (this.profile.player.pendingPerkChoices <= 0) this.modalQueue = this.modalQueue.filter((m) => m.kind !== "perk_choice");
     const idx = this.inFight() ? this.modalQueue.findIndex((m) => !DEFERRED_IN_FIGHT.has(m.kind)) : 0;
     if (idx < 0 || idx >= this.modalQueue.length) return;
     const [next] = this.modalQueue.splice(idx, 1);

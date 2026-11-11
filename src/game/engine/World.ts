@@ -56,7 +56,7 @@ export interface WorldSnapshot {
   dodgeCooldown: number;
   dodgeCooldownMax: number;
   enemiesAlive: number;
-  boss: { hp: number; maxHp: number; phase: number; name: string } | null;
+  boss: { hp: number; maxHp: number; phase: number; name: string; defId: string } | null;
   orbs: { id: number; summonId: string; x: number; y: number; remaining: number; total: number; isBoss: boolean; elite: boolean; attempts: number }[];
   summons: { id: number; instanceId: string; defId: string; hp: number; maxHp: number; alive: boolean; abilityCooldown: number }[];
   command: SummonCommand;
@@ -174,6 +174,7 @@ export class World {
   /** Rift Tyrant: this week's boss and twist, and how many times its bar has broken. */
   readonly tyrant: { bossId: string; twist: TwistId | null } | null;
   tyrantBreaks = 0;
+  private tyrantFinal: number | null = null;
   /** Damage the warrior took this farming cycle, and the last cycle's share of their health. */
   private cycleHurt = 0;
   lastCycleHurt = 0;
@@ -316,6 +317,7 @@ export class World {
 
   /** Rift Tyrant score: bars broken, plus the share of the current bar. */
   get tyrantScore(): number {
+    if (this.tyrantFinal !== null) return this.tyrantFinal;
     const b = this.entities.get(this.bossId);
     const bar = b && b.stats.maxHp > 0 ? 1 - Math.max(0, b.hp) / b.stats.maxHp : 0;
     return this.tyrantBreaks + Math.max(0, Math.min(1, bar));
@@ -590,7 +592,7 @@ export class World {
       dodgeCooldown: this.dodgeCooldown,
       dodgeCooldownMax: cdMax.shadow_dash,
       enemiesAlive: this.enemies().length,
-      boss: boss && !boss.dead ? { hp: boss.hp, maxHp: boss.stats.maxHp, phase: boss.boss?.phase ?? 1, name: boss.name } : null,
+      boss: boss && !boss.dead ? { hp: boss.hp, maxHp: boss.stats.maxHp, phase: boss.boss?.phase ?? 1, name: boss.name, defId: boss.defId } : null,
       orbs: this.orbs.filter((o) => !o.claimed).map((o) => ({ id: o.id, summonId: o.summonId, x: o.pos.x, y: o.pos.y, remaining: o.remaining, total: o.total, isBoss: o.isBoss, elite: o.elite, attempts: o.attempts })),
       summons: Array.from(this.entities.values())
         .filter((e) => e.kind === "summon" && !e.summon?.temporary)
@@ -740,7 +742,11 @@ export class World {
         if (this.mode === "tyrant") {
           // The clock only runs while the Tyrant is on its feet and fighting.
           this.modeTime += rawDt;
-          if (this.modeTime >= (this.modeDef.duration ?? 60) && !this.player.dead) this.endRun();
+          if (this.modeTime >= (this.modeDef.duration ?? 60) && !this.player.dead) {
+            // Freeze the score first: ending the run clears the field, the Tyrant's bar with it.
+            this.tyrantFinal = this.tyrantScore;
+            this.endRun();
+          }
           break;
         }
         if (b && b.dead && this.enemies().length === 0) this.endRun();

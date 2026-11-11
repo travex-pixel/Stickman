@@ -3,6 +3,10 @@ import { SUMMONS } from "@/game/data/summons";
 import { EQUIP_SLOTS, type AbilityId } from "@/game/data/ids";
 import { ABILITIES, TECHNIQUES } from "@/game/data/abilities";
 import { TREE } from "@/game/progression/ascension";
+import { PLAYER_LEVEL_CAP, SUMMON_LEVEL_CAP } from "@/game/progression/xp";
+
+/** The largest currency value a save keeps (far beyond anything reachable, well short of Infinity). */
+const BIG_MAX = 1e300;
 import { ABILITY_RANK_MAX } from "@/game/progression/abilityRanks";
 import { EQUIPMENT_TEMPLATES } from "@/game/data/equipment";
 import { SKILLS } from "@/game/data/skills";
@@ -27,6 +31,12 @@ export function sanitizeProfile(raw: unknown): { profile: Profile; repaired: boo
   };
   const num = (v: unknown, fallback: number, min = 0, max = Number.MAX_SAFE_INTEGER) => Math.min(max, Math.max(min, Math.floor(fix(v, isNum, fallback))));
   const numF = (v: unknown, fallback: number, min = 0, max = 1) => Math.min(max, Math.max(min, fix(v, isNum, fallback)));
+  /**
+   * Currencies of the deep game: gold and Aether grow exponentially and pass 2^53 within a few
+   * days of play. They are kept as plain doubles (exact enough for prices of the same size), so
+   * they must not be clamped to the safe-integer range.
+   */
+  const big = (v: unknown, fallback: number) => Math.min(BIG_MAX, Math.max(0, Math.floor(fix(v, isNum, fallback))));
 
   const p = isObj(raw.player) ? raw.player : (repaired = true, {});
   const statLevels = isObj(p.statLevels) ? p.statLevels : {};
@@ -75,8 +85,8 @@ export function sanitizeProfile(raw: unknown): { profile: Profile; repaired: boo
       collection.push({
         instanceId: s.instanceId,
         defId: s.defId,
-        level: num(s.level, 1, 1, 25),
-        xp: num(s.xp, 0),
+        level: num(s.level, 1, 1, SUMMON_LEVEL_CAP),
+        xp: big(s.xp, 0),
         bond: num(s.bond, 1, 1, 50),
         shards: num(s.shards, 0),
         stars: num(s.stars, 0, 0, 5),
@@ -100,10 +110,10 @@ export function sanitizeProfile(raw: unknown): { profile: Profile; repaired: boo
     createdAt: num(raw.createdAt, def.createdAt),
     lastActive: num(raw.lastActive, def.lastActive),
     player: {
-      level: num(p.level, 1, 1, 60),
-      xp: num(p.xp, 0),
-      gold: num(p.gold, 0),
-      essence: num(p.essence, 0),
+      level: num(p.level, 1, 1, PLAYER_LEVEL_CAP),
+      xp: big(p.xp, 0),
+      gold: big(p.gold, 0),
+      essence: big(p.essence, 0),
       riftCores: num(p.riftCores, 0),
       skillPoints: num(p.skillPoints, 0),
       statLevels: {
@@ -154,9 +164,9 @@ export function sanitizeProfile(raw: unknown): { profile: Profile; repaired: boo
     objectives: sanitizeObjectives(raw.objectives),
     ascension: (() => {
       const a = isObj(raw.ascension) ? raw.ascension : {};
-      const aether = num(a.aether, 0, 0, 1e15);
+      const aether = big(a.aether, 0);
       const nodes = isObj(a.nodes) ? Object.fromEntries(Object.entries(a.nodes).filter(([k, v]) => TREE.some((n) => n.id === k) && isNum(v) && v >= 0).map(([k, v]) => [k, Math.min(TREE.find((n) => n.id === k)!.max, Math.floor(v as number))])) : {};
-      return { count: num(a.count, 0, 0, 9999), aether, bestEver: num(a.bestEver, 0, 0, 9999), spent: Math.min(aether, num(a.spent, 0, 0, 1e15)), nodes };
+      return { count: num(a.count, 0, 0, 9999), aether, bestEver: num(a.bestEver, 0, 0, 9999), spent: Math.min(aether, big(a.spent, 0)), nodes };
     })(),
     tyrant: (() => {
       const t = isObj(raw.tyrant) ? raw.tyrant : {};
@@ -166,7 +176,7 @@ export function sanitizeProfile(raw: unknown): { profile: Profile; repaired: boo
       keyDay: isStr(md.keyDay) ? md.keyDay : "",
       keys: { vault: num(mk.vault, 3, 0, 3), rift: num(mk.rift, 3, 0, 3), crypt: num(mk.crypt, 3, 0, 3), hunt: num(mk.hunt, 3, 0, 3), tyrant: num(mk.tyrant, 2, 0, 2) },
       endlessBest: num(md.endlessBest, 0),
-      vaultBest: num(md.vaultBest, 0),
+      vaultBest: big(md.vaultBest, 0),
     },
     tutorial: { completed: Array.isArray(tut.completed) ? tut.completed.filter(isStr) : [], finished: tut.finished === true },
     settings: {

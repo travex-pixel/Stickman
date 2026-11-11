@@ -122,3 +122,69 @@ describe("the Rift Tyrant: the fight", () => {
     expect(w.snapshot().tyrantScore).toBe(0);
   });
 });
+
+describe("the Rift Tyrant: every try is scored and paid", () => {
+  async function controller() {
+    const { GameController } = await import("@/game/GameController");
+    const c = new GameController() as unknown as {
+      profile: ReturnType<typeof createDefaultProfile>;
+      world: World;
+      startRun(stage: number, mode?: string): void;
+      startMode(mode: string): boolean;
+      selectStage(stage: number): void;
+      openTyrant(): void;
+      openPerkChoice(): void;
+      simulate(dt: number): void;
+      uiStore: { get(): { modal: { kind: string } | null } };
+      modalQueue: { kind: string }[];
+    };
+    const p = c.profile;
+    p.tutorial.finished = true;
+    p.progress.bestStage = 20;
+    p.progress.currentStage = 20;
+    p.player.level = 60;
+    p.player.statLevels = { attack: 1, maxHp: 400, attackSpeed: 1, critChance: 1, critDamage: 1, defense: 250 };
+    c.startRun(20, "campaign");
+    return c;
+  }
+  const shown = (c: Awaited<ReturnType<typeof controller>>) => [c.uiStore.get().modal?.kind, ...c.modalQueue.map((m) => m.kind)];
+
+  it("a try that runs out the clock records the bars actually broken, not one more", async () => {
+    const c = await controller();
+    expect(c.startMode("tyrant")).toBe(true);
+    let real = 0;
+    for (let i = 0; i < 120 / FIXED_DT && !shown(c).includes("mode_result"); i++) {
+      if (c.world.phase === "boss") real = c.world.tyrantScore;
+      c.simulate(FIXED_DT);
+    }
+    expect(shown(c)).toContain("mode_result");
+    expect(c.profile.tyrant.best).toBeLessThan(real + 0.05);
+  });
+
+  it("switching stage, or starting the Tyrant again, mid-fight banks the try first", async () => {
+    for (const leave of ["stage", "again"] as const) {
+      const c = await controller();
+      c.startMode("tyrant");
+      while (c.world.phase !== "boss") c.simulate(FIXED_DT);
+      const b = c.world.boss!;
+      b.hp = b.stats.maxHp * 0.4;
+      if (leave === "stage") c.selectStage(5);
+      else {
+        c.openTyrant();
+        c.startMode("tyrant");
+      }
+      expect(c.profile.tyrant.best).toBeCloseTo(0.6, 2);
+      expect(c.profile.tyrant.claimed).toBe(2);
+      expect(shown(c)).toContain("mode_result");
+    }
+  });
+
+  it("the perk chip mid-fight never queues a card that cannot be closed", async () => {
+    const c = await controller();
+    c.profile.player.pendingPerkChoices = 1;
+    c.startMode("tyrant");
+    c.openPerkChoice();
+    c.openPerkChoice();
+    expect(shown(c).filter((k) => k === "perk_choice")).toHaveLength(0);
+  });
+});

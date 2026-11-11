@@ -1,10 +1,12 @@
-const SUFFIXES = ["", "K", "M", "B", "T", "Qa", "Qi"];
+const SUFFIXES = ["", "K", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No", "Dc"];
 
 /** Compact numbers for a phone screen: 1234 -> 1.23K, 5390000 -> 5.39M. */
 export function fmt(n: number): string {
   if (!Number.isFinite(n)) return "0";
   const abs = Math.abs(n);
   if (abs < 1000) return Math.round(n).toString();
+  // Past the named suffixes, scientific notation keeps it short: 1.23e36.
+  if (abs >= 1e36) return `${n < 0 ? "-" : ""}${abs.toExponential(2).replace("+", "")}`;
   let idx = 0;
   let v = abs;
   while (v >= 1000 && idx < SUFFIXES.length - 1) {
