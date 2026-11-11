@@ -25,11 +25,6 @@ export function shadowXpShare(enemyXp: number, stage: number, deployed: boolean,
   return enemyXp * stageScale(stage).reward * 0.6 * mult * (deployed ? 1 : BENCH_XP_SHARE);
 }
 
-/** Offline: about a quarter of what an hour of active play would earn, capped by the caller. */
-export function offlineGoldPerHour(stage: number, goldFind = 1): number {
-  return stageClearGold(Math.max(1, stage), goldFind) * 6;
-}
-
 /** Skill points arrive every second level. */
 export function skillPointsBetween(fromLevel: number, toLevel: number): number {
   let n = 0;

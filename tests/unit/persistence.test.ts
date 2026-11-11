@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { IndexedDbSaveManager } from "@/persistence/SaveManager";
 import { sanitizeProfile } from "@/persistence/SaveSchema";
 import { runMigrations } from "@/persistence/migrations";
-import { computeOfflineReward, OFFLINE_CAP_SECONDS } from "@/persistence/OfflineRewards";
 import { createDefaultProfile, PROFILE_VERSION } from "@/game/progression/profile";
 import { claimEssence } from "@/game/summons/recruitment";
 
@@ -92,24 +91,6 @@ describe("migrations", () => {
     const r = sm.parse({ player: { gold: 9 } });
     expect(r.profile.player.gold).toBe(9);
     expect(r.migrated).toBe(true);
-  });
-});
-
-describe("offline rewards", () => {
-  it("returns nothing for short absences", () => {
-    expect(computeOfflineReward(1000, 1000 + 30_000, 1)).toBeNull();
-  });
-  it("scales with time and stage, and caps at 8 hours", () => {
-    const now = 10_000_000_000;
-    const oneHour = computeOfflineReward(now - 3600_000, now, 1)!;
-    const twoHours = computeOfflineReward(now - 7200_000, now, 1)!;
-    const stage5 = computeOfflineReward(now - 3600_000, now, 5)!;
-    expect(twoHours.gold).toBeGreaterThan(oneHour.gold);
-    expect(stage5.gold).toBeGreaterThan(oneHour.gold);
-    const day = computeOfflineReward(now - 86_400_000, now, 1)!;
-    expect(day.capped).toBe(true);
-    expect(day.seconds).toBe(OFFLINE_CAP_SECONDS);
-    expect(day.gold).toBe(computeOfflineReward(now - OFFLINE_CAP_SECONDS * 1000, now, 1)!.gold);
   });
 });
 

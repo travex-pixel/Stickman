@@ -13,7 +13,9 @@ import { ENEMIES } from "@/game/data/enemies";
 import { RANKS } from "@/game/progression/ranks";
 import { MODES, isKeyedMode } from "@/game/data/modes";
 import { WEAPON_PATHS } from "@/game/progression/weaponPaths";
-import { fmtDuration } from "@/lib/format";
+import { fmt, fmtDuration } from "@/lib/format";
+import { bossForStage } from "@/game/data/regions";
+import { affordableUpgrades } from "@/game/progression/readiness";
 import { cn } from "@/lib/cn";
 import { SettingsModal } from "@/components/settings/SettingsModal";
 import { CountUp, LootCard } from "@/components/rewards/RewardFx";
@@ -148,18 +150,85 @@ function PerkChoice({ modal }: { modal: Extract<Modal, { kind: "perk_choice" }> 
 
 function Offline({ modal }: { modal: Extract<Modal, { kind: "offline" }> }) {
   const c = useController();
-  const r = modal.reward;
+  const profile = useProfileRef();
+  const r = modal.summary;
+  const ups = affordableUpgrades(profile);
+  const shardTotal = Object.values(r.shards).reduce((a, b) => a + b, 0);
+  const boss = r.bossWaiting ? ENEMIES[bossForStage(r.bossWaiting)] : undefined;
+  const stats: [string, React.ReactNode, string][] = [
+    ["Enemies", fmt(r.kills), "text-ivory"],
+    ["Cycles", fmt(r.cycles), "text-ivory"],
+    ["XP", `+${fmt(r.xp)}`, "text-gold-2"],
+    ["Stage", r.endStage !== r.startStage ? `${r.startStage}→${r.endStage}` : `${r.endStage}`, r.stagesCleared.length ? "text-jade-2" : "text-ivory"],
+  ];
   return (
     <Card>
-      <div className="px-5 pt-5 pb-4 text-center flex flex-col gap-2 items-center">
-        <div className="caps">While you were away</div>
-        <div className="font-display text-[18px] text-ivory">{fmtDuration(r.seconds)}{r.capped ? " (max)" : ""}</div>
-        <div className="flex gap-3 text-[13px] font-bold">
-          <span className="flex items-center gap-1 text-gold"><Icon name="coin" size={14} /><CountUp prefix="+" value={r.gold} delay={250} duration={1100} onTick={() => c.rewardCue("tick")} /></span>
-          {r.essence > 0 && <span className="flex items-center gap-1 text-jade-2"><Icon name="essence" size={14} /><CountUp prefix="+" value={r.essence} delay={400} duration={900} /></span>}
+      <div className="px-4 pt-4 pb-3 text-center flex flex-col gap-2 items-stretch short-tight" data-testid="offline-summary">
+        <div>
+          <div className="caps">While you were away</div>
+          <div className="font-display text-[19px] text-ivory leading-tight">{fmtDuration(r.seconds)}{r.capped ? " (max)" : ""}</div>
+          <div className="text-[10px] text-mist">Your warrior fought for {fmtDuration(Math.round(r.foughtSeconds))} of it{modal.levels > 0 ? ` and reached level ${profile.player.level}` : ""}.</div>
         </div>
-        <p className="text-[10px] text-mist">Your companions kept the Verge quiet. Rewards are capped at 8 hours.</p>
-        <button className="btn-primary w-full" onClick={() => c.dismissOffline()} data-testid="offline-collect">Collect</button>
+        <div className="flex justify-center gap-4 text-[15px] font-bold">
+          <span className="flex items-center gap-1 text-gold">
+            <Icon name="coin" size={15} />
+            <CountUp prefix="+" value={r.gold + r.salvageGold} delay={250} duration={1100} onTick={() => c.rewardCue("tick")} />
+          </span>
+          {r.essence > 0 && (
+            <span className="flex items-center gap-1 text-jade-2">
+              <Icon name="essence" size={15} />
+              <CountUp prefix="+" value={r.essence} delay={400} duration={900} />
+            </span>
+          )}
+        </div>
+        <div className="grid grid-cols-4 gap-1">
+          {stats.map(([k, v, tone]) => (
+            <div key={k} className="rounded-md bg-white/[0.04] border border-white/8 py-1 leading-none">
+              <div className="text-[9px] uppercase tracking-[0.1em] text-mist">{k}</div>
+              <div className={cn("text-[13px] font-bold mt-0.5 tabular-nums", tone)}>{v}</div>
+            </div>
+          ))}
+        </div>
+        {(r.items.length > 0 || shardTotal > 0) && (
+          <div className="text-[11px] text-parch">
+            {r.items.length > 0 && <span>{r.items.length} piece{r.items.length > 1 ? "s" : ""} of gear kept{r.salvageGold > 0 ? `, the rest salvaged` : ""}</span>}
+            {r.items.length > 0 && shardTotal > 0 && " · "}
+            {shardTotal > 0 && <span className="text-jade-2">{shardTotal} shadow shard{shardTotal > 1 ? "s" : ""}</span>}
+          </div>
+        )}
+        {r.items.length > 0 && (
+          <div className="w-full flex flex-col gap-1 short-hide" style={{ perspective: 600 }}>
+            {r.items.slice(0, 2).map((it, k) => (
+              <LootCard key={it.uid} item={it} index={k} baseDelay={0.7} onReveal={(rare) => c.rewardCue(rare ? "rare" : "card")} />
+            ))}
+          </div>
+        )}
+        {r.fellBack && <div className="text-[10px] text-crimson-2">Your warrior could not hold the frontier and stepped back to stage {r.endStage}.</div>}
+        {boss && (
+          <div className="flex items-center gap-2 rounded-lg border border-crimson/50 bg-crimson/10 px-2 py-1.5 text-left" data-testid="offline-boss">
+            <Icon name="skull" size={14} className="text-crimson-2 shrink-0" />
+            <span className="text-[11px] text-parch leading-snug">
+              <b className="text-ivory">{boss.name}</b> still waits at stage {r.bossWaiting}. It is never fought without you.
+            </span>
+          </div>
+        )}
+        <div className="flex gap-2 mt-0.5">
+          {ups > 0 && (
+            <button
+              className="btn-ghost flex-1 !py-2 text-[12px]"
+              onClick={() => {
+                c.dismissOffline();
+                c.spendGoldNow();
+              }}
+              data-testid="offline-upgrade"
+            >
+              {ups >= 50 ? "50+" : ups} upgrades ready
+            </button>
+          )}
+          <button className="btn-primary flex-1 !py-2" onClick={() => c.dismissOffline()} data-testid="offline-collect">
+            Collect
+          </button>
+        </div>
       </div>
     </Card>
   );

@@ -80,11 +80,17 @@ test.describe("onboarding", () => {
     expect(await game<string[]>(page, "c => c.profile.tutorial.completed")).toEqual(expect.arrayContaining(["summon", "deploy"]));
   });
 
-  test("after a defeat the guide points at spending gold", async ({ page }) => {
+  test("after falling while farming the warrior regroups and the guide points at spending gold", async ({ page }) => {
     await waitForGame(page);
-    await game(page, "c => { c.profile.tutorial.finished = true; c.profile.player.gold = 500; c['commit'](); c.world.player.hp = 1; c.world.kill(c.world.player, -1); }");
-    await expect(page.getByTestId("modal-defeat")).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByTestId("hand-guide")).toHaveAttribute("data-target", /upgrade-maxHp|tab-hero/, { timeout: 10_000 });
+    await game(page, "c => { const p = c.profile; p.tutorial.finished = true; p.player.gold = 500; p.progress.bestStage = 2; p.progress.currentStage = 3; c['commit'](); c.startRun(3); }");
+    await page.waitForTimeout(1500);
+    await game(page, "c => { c.world.player.hp = 1; c.world.kill(c.world.player, -1); }");
+    await expect.poll(() => game<number>(page, "c => c.world.stage"), { timeout: 10_000 }).toBe(2);
+    expect(await game<boolean>(page, "c => c.profile.progress.autoPush")).toBe(false);
+    await expect(page.getByTestId("push-stage")).toBeVisible();
+    await expect(page.getByTestId("hand-guide")).toHaveAttribute("data-target", /upgrade-maxHp|upgrade-attack|tab-hero/, { timeout: 10_000 });
+    await page.getByTestId("push-stage").click();
+    await expect.poll(() => game<number>(page, "c => c.world.stage"), { timeout: 10_000 }).toBe(3);
   });
 
   test("an art can be ranked up with gold from the Skills panel", async ({ page }) => {

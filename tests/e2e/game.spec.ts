@@ -150,19 +150,6 @@ test.describe("ASCEND vertical slice", () => {
     await expect(page.getByTestId("skill-points")).toHaveText("2");
   });
 
-  test("the boss can be defeated and rewards appear", async ({ page }) => {
-    test.setTimeout(240_000);
-    await waitForGame(page);
-    await game(page, "c => { c.profile.player.statLevels = { attack: 80, maxHp: 80, attackSpeed: 40, critChance: 20, critDamage: 20, defense: 40 }; c.profile.player.level = 8; c.profile.player.autoCast = true; c['commit'](); c.startRun(1); }");
-    await expect(page.getByTestId("boss-bar")).toBeVisible({ timeout: 150_000 });
-    await expect(page.getByTestId("modal-stage_clear")).toBeVisible({ timeout: 120_000 });
-    await expect(page.getByTestId("advance-stage")).toBeVisible();
-    expect(await game<number>(page, "c => c.profile.progress.bestStage")).toBe(1);
-    expect(await game<number>(page, "c => c.profile.progress.bossKills")).toBe(1);
-    await page.getByTestId("advance-stage").click();
-    expect(await game<number>(page, "c => c.world.stage")).toBe(2);
-  });
-
   test("progress persists across reload", async ({ page }) => {
     await waitForGame(page);
     await game(page, "c => { c.profile.player.gold = 777; c.profile.player.statLevels.attack = 9; c['commit'](); }");

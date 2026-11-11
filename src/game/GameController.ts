@@ -30,7 +30,7 @@ import { stageScale } from "./data/regions";
 import { EQUIPMENT_LEVEL_CAP, equipmentUpgradeCost, fuseItems, salvageValue } from "./economy/loot";
 import { INVENTORY_CAP } from "./data/equipment";
 import { IndexedDbSaveManager } from "@/persistence/SaveManager";
-import { computeOfflineReward, type OfflineReward } from "@/persistence/OfflineRewards";
+import { applyOfflineProgress, elapsedAway, OFFLINE_MIN_SECONDS, type OfflineSummary } from "./progression/offline";
 import { AudioManager } from "./audio/AudioManager";
 import type { SfxName } from "./audio/synth";
 import type { PerkDef } from "./data/perks";
@@ -74,7 +74,7 @@ export type Modal =
   | { kind: "boss_ready"; stage: number }
   | { kind: "boss_victory"; stage: number; defId: string; gold: number; xp: number; cores: number; items: EquipmentItem[]; nextStage: number; unlocks: string[]; seconds: number; firstWin: boolean }
   | { kind: "boss_defeat"; stage: number; defId: string; bossHpLeft: number; bossPhase: number; seconds: number; casts: number; dodges: number; perfect: number; summonsLost: number; farmStage: number; tips: ReadinessTip[] }
-  | { kind: "offline"; reward: OfflineReward }
+  | { kind: "offline"; summary: OfflineSummary; levels: number }
   | { kind: "settings" }
   | { kind: "weapon_path" }
   | { kind: "journal" }
@@ -228,11 +228,12 @@ export class GameController {
     if (result.migrated) note = "Your save was updated.";
     if (result.fromBackup) note = "Your save was restored from its backup.";
     if (result.readOnly) note = "Your save could not be read safely. It is untouched; progress this session will not be saved.";
-    if (!result.fresh) {
-      const reward = computeOfflineReward(profile.lastActive, now, profile.progress.currentStage, computeModifiers(profile).goldFind);
-      if (reward && reward.gold > 0) this.enqueueModal({ kind: "offline", reward });
-    }
     normalizeCampaign(profile);
+    let offline: OfflineSummary | null = null;
+    if (!result.fresh && !result.readOnly) {
+      const away = elapsedAway(profile.lastActive, now);
+      if (away !== null) offline = applyOfflineProgress(profile, away, now >>> 0);
+    }
     refreshObjectives(profile, new Date(now));
     profile.lastActive = now;
     profile.progress.runs += 1;
@@ -243,6 +244,7 @@ export class GameController {
     this.audio.setVolumes(profile.settings.music, profile.settings.sfx);
     this.startRun(profile.progress.currentStage);
     this.uiStore.update((u) => ({ ...u, booted: true, loadNote: note }));
+    if (offline) this.presentOffline(offline);
     if (profile.progress.bossGate) this.requestForecast(true);
     if (typeof document !== "undefined") {
       document.addEventListener("visibilitychange", this.visibilityHandler);
@@ -312,16 +314,55 @@ export class GameController {
     if (typeof document === "undefined") return;
     if (document.hidden) {
       this.audio.suspend();
+      this.hiddenAt = Date.now();
       this.profile.lastActive = Date.now();
       this.save.schedule(this.profile, 0);
       this.save.stashUnsaved();
       void this.save.flush();
       this.loop.stop();
     } else {
+      this.resumeFromBackground();
       this.loop.resync();
       this.loop.start();
       this.audio.resume();
     }
+  }
+
+  private hiddenAt = 0;
+
+  /**
+   * Back from the background: the loop was stopped, so farming did not run. If the tab was away
+   * long enough, the time is filled with the same offline simulation as a cold start. A boss
+   * fight left in the background is simply paused, never resolved or started.
+   */
+  private resumeFromBackground(): void {
+    const away = this.hiddenAt ? elapsedAway(this.hiddenAt, Date.now()) : null;
+    this.hiddenAt = 0;
+    const world = this.world;
+    if (away === null || away < OFFLINE_MIN_SECONDS || !world?.farming || this.save.readOnly) return;
+    const p = this.profile;
+    const summary = applyOfflineProgress(p, away, Date.now() >>> 0);
+    p.lastActive = Date.now();
+    if (!summary) return;
+    if (p.progress.currentStage !== world.stage && !world.player.dead) world.moveToStage(p.progress.currentStage);
+    this.presentOffline(summary);
+  }
+
+  /** Offline rewards are already in the profile: apply XP, feed objectives, save, then show. */
+  private presentOffline(summary: OfflineSummary): void {
+    const p = this.profile;
+    const lv = applyXp(p.player.level, p.player.xp, summary.xp);
+    p.player.level = lv.level;
+    p.player.xp = lv.xp;
+    if (lv.levelsGained > 0) this.onLevelUp(lv.levelsGained);
+    this.objectiveEvent("kills", summary.kills);
+    this.objectiveEvent("cycles", summary.cycles);
+    this.objectiveEvent("elites", summary.elites);
+    this.objectiveEvent("gear", summary.items.length);
+    this.refreshLoadout();
+    this.commit();
+    void this.save.flush();
+    this.enqueueModal({ kind: "offline", summary, levels: lv.levelsGained });
   }
 
   // ---------------------------------------------------------------------
@@ -1567,14 +1608,10 @@ export class GameController {
     this.flushModalQueue();
   }
 
+  /** The offline card only reports: everything was credited (and saved) before it opened. */
   dismissOffline(): void {
-    const ui = this.uiStore.get();
-    if (ui.modal?.kind === "offline") {
-      this.profile.player.gold += ui.modal.reward.gold;
-      this.profile.player.essence += ui.modal.reward.essence;
-      this.sfx("gold", { volume: 0.7 });
-      this.commit();
-    }
+    this.userGesture();
+    if (this.uiStore.get().modal?.kind === "offline") this.sfx("gold", { volume: 0.7 });
     this.closeModal();
   }
 
