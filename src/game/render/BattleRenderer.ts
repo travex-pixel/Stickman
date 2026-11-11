@@ -7,7 +7,7 @@ import { ARENA } from "../engine/World";
 import type { GameEvent } from "../engine/events";
 import type { Combatant } from "../entities/types";
 import { Rig } from "./rigs/Rig";
-import { eliteSpec, enemySpec, playerSpec, summonSpec } from "./rigs/specs";
+import { eliteSpec, enemySpec, playerSpec, speciesAccent, summonSpec } from "./rigs/specs";
 import { ELITES } from "../data/elites";
 import { ParticleSystem } from "./Particles";
 import { DamageNumbers } from "./DamageNumbers";
@@ -802,8 +802,10 @@ export class BattleRenderer {
         case "summon_ability": {
           const sx = this.sx(e.pos.x);
           const sy = this.sy(e.pos.y);
-          const glow = summonDef(e.defId).palette.glow;
+          // Each species' ability flashes in its own sigil colour.
+          const glow = speciesAccent(e.defId);
           this.fx.push({ kind: "ring", x: sx, y: sy, r0: 10, r1: 80 * u, life: 0.5, total: 0.5, color: glow, width: 3, squash: 0.42 });
+          this.particles.emit({ x: sx, y: sy - 30 * u, count: this.reduced ? 5 : 14, texture: spark(), color: glow, speed: [60, 200], life: [0.25, 0.5], scale: [0.3, 0.7], endScale: 0.1 });
           const src = world.entities.get(e.id);
           const label = src ? { x: this.sx(src.pos.x), y: this.sy(src.pos.y) - 70 * u } : { x: sx, y: sy - 60 * u };
           this.numbers.spawn(label.x, label.y, e.ability, 0xf0d9a8, 0.5, false);

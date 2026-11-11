@@ -139,7 +139,8 @@ function tryActive(world: World, s: Combatant, target: Combatant, nearby: Combat
     case "husk_blade":
     case "gravewalker": {
       const threshold = s.defId === "gravewalker" ? 0.4 : 0.3;
-      const victim = nearby.find((e) => e.hp / e.stats.maxHp < threshold && e.kind !== "boss") ?? (target.hp / target.stats.maxHp < threshold ? target : null);
+      // Bosses are fair game once they are worn down to half (a finisher, not a free execute).
+      const victim = nearby.find((e) => e.hp / e.stats.maxHp < threshold && e.kind !== "boss") ?? (target.hp / target.stats.maxHp < (target.kind === "boss" ? 0.5 : threshold) ? target : null);
       if (!victim) return false;
       const from = { ...s.pos };
       s.pos.x = victim.pos.x - (victim.pos.x >= s.pos.x ? 1 : -1) * (victim.radius + 10);
@@ -189,7 +190,12 @@ function tryActive(world: World, s: Combatant, target: Combatant, nearby: Combat
           victim = e;
         }
       }
-      if (!victim) return false;
+      // No backline left: it ambushes a boss from behind instead.
+      if (!victim) {
+        const boss = world.boss;
+        if (!boss || isHidden(boss)) return false;
+        victim = boss;
+      }
       const from = { ...s.pos };
       const behind = victim.pos.x >= world.player.pos.x ? 1 : -1;
       s.pos.x = clamp(victim.pos.x + behind * (victim.radius + 14), ARENA.minX, ARENA.maxX);
@@ -206,8 +212,10 @@ function tryActive(world: World, s: Combatant, target: Combatant, nearby: Combat
     }
     case "ashborn_bulwark": {
       const close = hostilesWithin(s, world.entities.values(), 130);
-      if (close.length < 2 && !(world.player.hp / world.player.stats.maxHp < 0.4 && close.length >= 1)) return false;
-      for (const e of close) addStatus(e, { kind: "taunt", remaining: 4, value: 1, sourceId: s.id });
+      const bossClose = close.some((e) => e.kind === "boss");
+      if (close.length < 2 && !bossClose && !(world.player.hp / world.player.stats.maxHp < 0.4 && close.length >= 1)) return false;
+      // A boss shrugs a taunt off sooner.
+      for (const e of close) addStatus(e, { kind: "taunt", remaining: e.kind === "boss" ? 2 : 4, value: 1, sourceId: s.id });
       addStatus(s, { kind: "shield", remaining: 6, value: Math.round(s.stats.maxHp * 0.3), sourceId: s.id });
       world.events.push({ type: "summon_ability", id: s.id, defId: s.defId, ability: "Ember Taunt", pos: { ...s.pos } });
       world.events.push({ type: "shield", id: s.id, pos: { ...s.pos } });

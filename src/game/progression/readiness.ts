@@ -156,6 +156,7 @@ export function readinessTips(p: Profile, stage: number): ReadinessTip[] {
     return role === "vanguard" || role === "sentinel";
   });
   if (deployed.length > 0 && !frontline && p.summons.collection.some((s) => ["vanguard", "sentinel"].includes(SUMMONS[s.defId]?.role ?? ""))) tips.push({ text: "Your army has no frontline: deploy a Vanguard or Sentinel to take the blows.", panel: "summons" });
+  if (deployed.length > 0 && p.summons.command !== "guard") tips.push({ text: "Against a boss, the Guard command keeps your shadows between you and its blows.", panel: "summons" });
   if (p.summons.collection.some((s) => canStarUp(s, p.player.riftCores))) tips.push({ text: "A shadow is ready to gain a star.", panel: "summons" });
   if (anyAbilityRankReady(p)) tips.push({ text: "An ability can be ranked up in Skills, Arts.", panel: "skills" });
   return tips.slice(0, 4);

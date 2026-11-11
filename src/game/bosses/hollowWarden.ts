@@ -42,7 +42,10 @@ export function updateBossAi(world: World, b: Combatant, dt: number): void {
     if (b.stateTime >= b.stateDuration) world.setState(b, "idle");
     return;
   }
-  const target = world.acquireTarget(b);
+  // A taunt (the Bulwark's Ember Taunt) holds even a boss's attention, briefly.
+  const taunt = b.statuses.find((st) => st.kind === "taunt");
+  const taunter = taunt ? world.entities.get(taunt.sourceId) : undefined;
+  const target = taunter && !taunter.dead ? taunter : world.acquireTarget(b);
   b.targetId = target ? target.id : -1;
   if (!target) {
     world.stop(b);
