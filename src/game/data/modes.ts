@@ -1,7 +1,7 @@
 import type { WaveDef } from "./regions";
 import { EQUIP_SLOTS, type EquipSlot } from "./ids";
 
-export type ModeId = "campaign" | "vault" | "rift" | "crypt" | "endless" | "trial";
+export type ModeId = "campaign" | "boss" | "vault" | "rift" | "crypt" | "endless" | "trial";
 /** Modes that spend a daily key. */
 export type KeyedMode = "vault" | "rift" | "crypt";
 export const KEYED_MODES: KeyedMode[] = ["vault", "rift", "crypt"];
@@ -25,7 +25,10 @@ export interface ModeDef {
 }
 
 export const MODES: Record<ModeId, ModeDef> = {
-  campaign: { id: "campaign", name: "Campaign", tagline: "Push deeper into the Rift.", unlockAfterStage: 0, waves: 3, boss: true },
+  // Campaign farms its stage's encounters forever and never starts a boss on its own.
+  campaign: { id: "campaign", name: "Campaign", tagline: "Push deeper into the Rift.", unlockAfterStage: 0, waves: 3, boss: false },
+  // A boss challenge: only ever started by the player pressing BOSS CHALLENGE.
+  boss: { id: "boss", name: "Boss Challenge", tagline: "A deliberate fight against the stage's guardian.", unlockAfterStage: 0, waves: 0, boss: true },
   vault: { id: "vault", name: "Gold Vault", tagline: "45 seconds. Everything that falls drops seven times the gold.", unlockAfterStage: 2, dailyKeys: 3, duration: 45, waves: 1, boss: false },
   rift: { id: "rift", name: "Essence Rift", tagline: "Every foe swears an oath. Double shards for your army.", unlockAfterStage: 3, dailyKeys: 3, waves: 3, boss: false },
   crypt: { id: "crypt", name: "Relic Crypt", tagline: "Elites guard today's relics. Each one drops gear for the featured slot.", unlockAfterStage: 4, dailyKeys: 3, waves: 3, boss: false },

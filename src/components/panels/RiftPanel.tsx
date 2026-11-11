@@ -9,7 +9,7 @@ import { SLOT_LABEL } from "@/game/data/equipment";
 import { nextRankStep, rankLetter } from "@/game/progression/ranks";
 import { cn } from "@/lib/cn";
 
-const MODE_ICON: Record<Exclude<ModeId, "campaign">, IconName> = { vault: "coin", rift: "summons", crypt: "relic", endless: "level", trial: "star" };
+const MODE_ICON: Record<Exclude<ModeId, "campaign">, IconName> = { boss: "skull", vault: "coin", rift: "summons", crypt: "relic", endless: "level", trial: "star" };
 
 /** The journey: where you are on the campaign, and the trials that sit beside it. */
 export default function RiftPanel() {

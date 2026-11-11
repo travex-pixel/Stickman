@@ -22,8 +22,7 @@ import { bondCost, BOND_CAP, canStarUp, checkEvolution, evolveSummon, grantSummo
 import { enemyDef } from "./data/enemies";
 import { MODES, RIFT_ESSENCE_PER_KILL, cryptSlot, isKeyedMode, type ModeId } from "./data/modes";
 import { RARITY_ORDER } from "./data/ids";
-import { REPEAT_BOSS_CORE_CHANCE, shadowXpShare, skillPointsBetween, stageClearCores, stageClearGold, stageClearXp } from "./economy/rewards";
-import { isBossStage } from "./data/regions";
+import { REPEAT_BOSS_CORE_CHANCE, shadowXpShare, skillPointsBetween } from "./economy/rewards";
 import { RANK_STEPS, nextRankStep, promote } from "./progression/ranks";
 import { ELITES } from "./data/elites";
 import { GEAR_EFFECTS } from "./data/gearEffects";
@@ -42,12 +41,39 @@ import { WEAPON_PATHS } from "./progression/weaponPaths";
 import { describeReward, verifyCode } from "./economy/codes";
 import { generateItem } from "./economy/loot";
 import { ABILITIES } from "./data/abilities";
+import { bossForStage, regionForStage } from "./data/regions";
+import { clampFarmStage, frontierStage, normalizeCampaign, resolveBossDefeat, resolveBossVictory, resolveCycle, resolveFarmingDefeat } from "./progression/campaign";
+import { readinessTips, simulateBossFight, summarizeForecast, FORECAST_SEEDS, type BossForecast, type ReadinessTip } from "./progression/readiness";
+import { claimObjective as doClaimObjective, objectiveDef, recordObjective, refreshObjectives, type ObjectiveCounter } from "./progression/objectives";
+import { fmt } from "@/lib/format";
+
+/** Per-run tallies for result screens and boss summaries. */
+interface RunTally {
+  gold: number;
+  kills: number;
+  raised: number;
+  mode: ModeId;
+  items: EquipmentItem[];
+  casts: number;
+  dodges: number;
+  perfect: number;
+  summonsLost: number;
+  /** For a boss challenge: the stage farming returns to. */
+  farmStage: number;
+  /** The run's outcome has been paid out: never pay it twice. */
+  resolved: boolean;
+}
+
+function newTally(mode: ModeId): RunTally {
+  return { gold: 0, kills: 0, raised: 0, mode, items: [], casts: 0, dodges: 0, perfect: 0, summonsLost: 0, farmStage: 0, resolved: false };
+}
 
 export type Modal =
   | { kind: "summon_reveal"; outcome: ClaimOutcome; summonId: string; first: boolean; cinematicDone: boolean }
   | { kind: "perk_choice"; perks: PerkDef[] }
-  | { kind: "stage_clear"; stage: number; gold: number; runGold: number; xp: number; items: EquipmentItem[]; riftCores: number; nextStage: number; upgrades: number }
-  | { kind: "defeat"; stage: number; wave: number }
+  | { kind: "boss_ready"; stage: number }
+  | { kind: "boss_victory"; stage: number; defId: string; gold: number; xp: number; cores: number; items: EquipmentItem[]; nextStage: number; unlocks: string[]; seconds: number; firstWin: boolean }
+  | { kind: "boss_defeat"; stage: number; defId: string; bossHpLeft: number; bossPhase: number; seconds: number; casts: number; dodges: number; perfect: number; summonsLost: number; farmStage: number; tips: ReadinessTip[] }
   | { kind: "offline"; reward: OfflineReward }
   | { kind: "settings" }
   | { kind: "weapon_path" }
@@ -75,6 +101,8 @@ export interface UiState {
   selectedSummon: string | null;
   selectedItem: string | null;
   paused: boolean;
+  /** A boss gate was just reached at this stage (drives the milestone banner). */
+  gateFlash: number;
 }
 
 export interface ViewTransform {
@@ -110,6 +138,7 @@ export class GameController {
     selectedSummon: null,
     selectedItem: null,
     paused: false,
+    gateFlash: 0,
   });
   /** Rendered rig portraits by key ("summon:husk_blade"), filled on demand once the renderer is up. */
   readonly portraitStore = new Store<Record<string, string>>({});
@@ -167,6 +196,13 @@ export class GameController {
   private cinematicTimer: ReturnType<typeof setTimeout> | null = null;
   private seenAffixes = new Set<string>();
   private seenPerfect = false;
+  /** A short beat after a fall before the world changes (the body hits the ground first). */
+  private pending: { left: number; fn: () => void } | null = null;
+  /** The stage being farmed when a boss challenge began: where a loss returns to. */
+  private challengeFrom = 1;
+  private forecast: BossForecast | null = null;
+  private forecastJob = 0;
+  readonly forecastStore = new Store<{ forecast: BossForecast | null; running: boolean; stage: number } | null>(null);
 
   constructor() {
     this.loop = new GameLoop(FIXED_DT, (dt) => this.simulate(dt), (alpha, dtReal) => this.render(alpha, dtReal));
@@ -196,6 +232,8 @@ export class GameController {
       const reward = computeOfflineReward(profile.lastActive, now, profile.progress.currentStage, computeModifiers(profile).goldFind);
       if (reward && reward.gold > 0) this.enqueueModal({ kind: "offline", reward });
     }
+    normalizeCampaign(profile);
+    refreshObjectives(profile, new Date(now));
     profile.lastActive = now;
     profile.progress.runs += 1;
     this.profileStore.set({ profile, v: 1 });
@@ -205,6 +243,7 @@ export class GameController {
     this.audio.setVolumes(profile.settings.music, profile.settings.sfx);
     this.startRun(profile.progress.currentStage);
     this.uiStore.update((u) => ({ ...u, booted: true, loadNote: note }));
+    if (profile.progress.bossGate) this.requestForecast(true);
     if (typeof document !== "undefined") {
       document.addEventListener("visibilitychange", this.visibilityHandler);
       window.addEventListener("pagehide", this.pageHideHandler);
@@ -293,13 +332,14 @@ export class GameController {
     this.world?.dispose();
     const loadout = buildLoadout(this.profile);
     this.world = new World({ stage, loadout, mode, seed: (Date.now() ^ (stage * 2654435761)) >>> 0, cryptSlot: cryptSlot() });
-    this.run = { gold: 0, kills: 0, raised: 0, mode, items: [] };
+    this.run = newTally(mode);
+    if (mode === "boss") this.run.farmStage = this.challengeFrom;
     this.renderer?.setWorld(this.world);
     this.hudStore.set(this.world.snapshot());
   }
 
   /** Per-run tallies for the result screens. */
-  private run: { gold: number; kills: number; raised: number; mode: ModeId; items: EquipmentItem[] } = { gold: 0, kills: 0, raised: 0, mode: "campaign", items: [] };
+  private run: RunTally = newTally("campaign");
 
   get mode(): ModeId {
     return this.world?.mode ?? "campaign";
@@ -390,9 +430,15 @@ export class GameController {
   // Loop
   // ---------------------------------------------------------------------
 
+  /**
+   * The world keeps moving while the player reads or manages: only the summon cinematic stops
+   * it. Outside the farming loop (a boss challenge, a mode) a modal does pause the fight.
+   */
   private get paused(): boolean {
-    const ui = this.uiStore.get();
-    return ui.modal !== null && ui.modal.kind !== "boss_intro";
+    const m = this.uiStore.get().modal;
+    if (!m || m.kind === "boss_intro") return false;
+    if (m.kind === "summon_reveal") return true;
+    return !this.world?.farming;
   }
 
   /** 2x battle speed unlocks after clearing stage 3; it never changes the simulation, only how many steps run per frame. */
@@ -406,6 +452,14 @@ export class GameController {
     const steps = this.battleSpeedUnlocked && this.profile.settings.battleSpeed === 2 && world.phase !== "defeat" && world.phase !== "victory" && world.phase !== "boss_intro" ? 2 : 1;
     if (!this.paused) for (let i = 0; i < steps; i++) world.update(dt);
     this.processEvents(world.drainEvents());
+    if (this.pending) {
+      this.pending.left -= dt;
+      if (this.pending.left <= 0) {
+        const fn = this.pending.fn;
+        this.pending = null;
+        fn();
+      }
+    }
     this.tutorialElapsed += dt;
     this.hudAccum += dt;
     if (this.hudAccum >= 0.08) {
@@ -484,6 +538,7 @@ export class GameController {
             }
             dirty = true;
           } else if (e.kind === "summon") {
+            this.run.summonsLost += 1;
             this.toast("A companion has fallen. It will return.", "warn");
           }
           break;
@@ -495,6 +550,7 @@ export class GameController {
           break;
         case "cast":
           if (e.id === this.world?.player.id) {
+            this.run.casts += 1;
             p.progress.abilityCasts += 1;
             if (e.ability !== "shadow_dash") this.completeTutorialIf("ability");
             dirty = true;
@@ -504,6 +560,7 @@ export class GameController {
           break;
         case "dodge":
           if (e.id === this.world?.player.id) {
+            this.run.dodges += 1;
             this.sfx("dodge", { volume: 0.6 });
             this.completeTutorialIf("dodge");
           }
@@ -529,18 +586,23 @@ export class GameController {
           this.sfx("void_nova", { volume: 0.9 });
           this.toast("The Warden remembers its oath. Phase two.", "warn");
           break;
+        case "encounters_cleared":
+          if (this.world?.farming) this.onEncountersCleared(e.stage);
+          dirty = true;
+          break;
+        case "stage_advanced":
+          this.onStageAdvanced(e.from, e.stage);
+          break;
         case "stage_cleared":
-          if (e.mode === "campaign") this.onStageCleared(e.stage);
+          if (e.mode === "boss") this.onBossVictory(e.stage);
           else this.onModeCleared(e.mode as ModeId, e.wave, e.time);
           dirty = true;
           break;
         case "player_defeated":
           this.sfx("boss_intro", { volume: 0.6, rate: 1.6 });
           if (e.mode === "endless") this.onEndlessOver(e.wave);
-          else if (e.mode === "campaign") {
-            this.coachUpgrade = true;
-            this.enqueueModal({ kind: "defeat", stage: e.stage, wave: e.wave });
-          }
+          else if (e.mode === "campaign") this.onFarmingDefeat(e.stage);
+          else if (e.mode === "boss") this.onBossDefeat(e.stage);
           else this.enqueueModal({ kind: "mode_result", mode: e.mode as ModeId, title: "You fell", subtitle: MODES[e.mode as ModeId].name, lines: [{ label: "Kills", value: `${this.run.kills}` }, { label: "Gold kept", value: `${this.run.gold}` }], success: false });
           break;
         case "loot":
@@ -567,6 +629,7 @@ export class GameController {
           break;
         }
         case "perfect_dodge":
+          this.run.perfect += 1;
           this.sfx("crit", { volume: 0.8, rate: 1.3 });
           if (!this.seenPerfect) {
             this.seenPerfect = true;
@@ -690,28 +753,250 @@ export class GameController {
     this.enqueueModal({ kind: "perk_choice", perks: offerPerks(this.profile, this.rng) });
   }
 
-  private onStageCleared(stage: number): void {
+  // ---------------------------------------------------------------------
+  // Campaign: farming cycles, the boss gate, and deliberate boss challenges
+  // ---------------------------------------------------------------------
+
+  /** Every ordinary encounter of the farmed stage is down: pay the cycle, then move on or hold. */
+  private onEncountersCleared(stage: number): void {
     const p = this.profile;
-    const firstClear = stage > p.progress.bestStage;
-    // Replays pay less, so pushing forward is always the better use of time.
-    const gold = Math.round(stageClearGold(stage, computeModifiers(p).goldFind) * (firstClear ? 1 : 0.5));
-    const xp = Math.round(stageClearXp(stage) * (firstClear ? 1 : 0.5));
-    p.player.gold += gold;
-    const res = applyXp(p.player.level, p.player.xp, xp);
-    p.player.level = res.level;
-    p.player.xp = res.xp;
-    p.progress.bestStage = Math.max(p.progress.bestStage, stage);
-    p.progress.currentStage = Math.max(p.progress.currentStage, stage);
+    const res = resolveCycle(p, stage, computeModifiers(p).goldFind);
+    p.player.gold += res.gold;
+    this.run.gold += res.gold;
+    const lv = applyXp(p.player.level, p.player.xp, res.xp);
+    p.player.level = lv.level;
+    p.player.xp = lv.xp;
+    if (lv.levelsGained > 0) this.onLevelUp(lv.levelsGained);
+    this.objectiveEvent("cycles", 1);
+    if (res.gateReached) {
+      this.sfx("boss_intro", { volume: 0.7, rate: 0.85 });
+      this.renderer?.flash(0xc4453f, 0.18);
+      this.uiStore.update((u) => ({ ...u, gateFlash: stage }));
+      this.requestForecast(true);
+    } else if (res.stageCleared) {
+      this.sfx("quest", { volume: 0.6 });
+      this.toast(`Stage ${stage} cleared · +${fmt(res.gold)} gold`, "gold");
+    } else {
+      this.toast(`Stage ${stage} · +${fmt(res.gold)} gold`, "gold");
+    }
+    if (res.next !== stage) this.world?.queueStage(res.next);
+    this.commitSoon();
+  }
+
+  private onStageAdvanced(from: number, stage: number): void {
+    this.renderer?.onStageChanged();
+    if (regionForStage(stage).id !== regionForStage(from).id) {
+      this.sfx("boss_intro", { volume: 0.5, rate: 1.2 });
+      this.toast(`${regionForStage(stage).name}`, "level");
+    }
+  }
+
+  /** Falling while farming is never a dead end: step back a stage, hold, and get stronger. */
+  private onFarmingDefeat(stage: number): void {
+    if (this.run.resolved) return;
+    this.run.resolved = true;
+    this.coachUpgrade = true;
+    this.pending = {
+      left: 2.2,
+      fn: () => {
+        const p = this.profile;
+        const fallback = resolveFarmingDefeat(p, stage);
+        this.commit();
+        this.startRun(fallback, "campaign");
+        this.toast(fallback < stage ? `Fallen at stage ${stage}. Regrouping at stage ${fallback}: upgrade, then push on.` : "Fallen. Back on your feet: spend your gold.", "warn");
+      },
+    };
+  }
+
+  private forecastTimer: ReturnType<typeof setTimeout> | null = null;
+  private forecastKey = "";
+
+  /** What the forecast depends on: if none of it changed, the old forecast still stands. */
+  private forecastSignature(): string {
+    const p = this.profile;
+    const eq = Object.values(p.equipment.equipped).map((uid) => {
+      const it = p.equipment.inventory.find((i) => i.uid === uid);
+      return it ? `${it.uid}:${it.level}` : "";
+    });
+    const army = p.summons.collection.filter((s) => s.deployed).map((s) => `${s.defId}:${s.level}:${s.stars ?? 0}:${s.bond}`);
+    return JSON.stringify([p.progress.bossGate, p.player.level, p.player.rank, p.player.statLevels, eq, army, p.skills.unlocked, p.player.abilityRanks, p.player.artForms, p.player.perks, p.player.weaponPath]);
+  }
+
+  /**
+   * Re-runs the boss forecast when something that matters changed. Fights run one per tick so
+   * the frame never hitches; a newer request cancels an older one.
+   */
+  requestForecast(force: boolean): void {
+    const gate = this.profile.progress.bossGate;
+    if (!gate) {
+      this.forecastStore.set(null);
+      return;
+    }
+    const key = this.forecastSignature();
+    if (!force && key === this.forecastKey && this.forecast?.stage === gate) return;
+    if (this.forecastTimer) clearTimeout(this.forecastTimer);
+    this.forecastTimer = setTimeout(() => this.runForecast(gate, key), force ? 0 : 900);
+  }
+
+  private runForecast(stage: number, key: string): void {
+    this.forecastTimer = null;
+    const job = ++this.forecastJob;
+    const snapshot: Profile = JSON.parse(JSON.stringify(this.profile));
+    const results: ReturnType<typeof simulateBossFight>[] = [];
+    this.forecastStore.set({ forecast: this.forecast?.stage === stage ? this.forecast : null, running: true, stage });
+    const step = (i: number) => {
+      if (job !== this.forecastJob || this.disposed) return;
+      if (i >= FORECAST_SEEDS.length) {
+        this.forecast = summarizeForecast(stage, results);
+        this.forecastKey = key;
+        this.forecastStore.set({ forecast: this.forecast, running: false, stage });
+        return;
+      }
+      results.push(simulateBossFight(snapshot, stage, FORECAST_SEEDS[i] as number));
+      setTimeout(() => step(i + 1), 0);
+    };
+    step(0);
+  }
+
+  /** Feeds daily and weekly objectives; announces any that just completed. */
+  private objectiveEvent(counter: ObjectiveCounter, amount: number): void {
+    const p = this.profile;
+    refreshObjectives(p);
+    const done = recordObjective(p, counter, amount);
+    for (const d of done) {
+      this.toast(`Objective complete: ${d.text}`, "level");
+      this.sfx("quest", { volume: 0.5 });
+      this.uiStore.update((u) => ({ ...u, newBadges: { ...u.newBadges, rift: true } }));
+    }
+  }
+
+  claimObjective(id: string): boolean {
+    this.userGesture();
+    const pay = doClaimObjective(this.profile, id);
+    if (!pay) {
+      this.sfx("error", { volume: 0.3 });
+      return false;
+    }
+    const parts = [pay.gold ? `+${fmt(pay.gold)} gold` : "", pay.essence ? `+${pay.essence} essence` : "", pay.cores ? `+${pay.cores} Rift Core${pay.cores > 1 ? "s" : ""}` : ""].filter(Boolean);
+    this.toast(`${objectiveDef(id)?.text ?? "Objective"}: ${parts.join(", ")}`, "gold");
+    this.sfx("gold", { volume: 0.7 });
+    this.afterProgression();
+    this.commit();
+    return true;
+  }
+
+  /** The player chose to fight. Opens the readiness sheet first; the fight starts from there. */
+  openBossChallenge(): void {
+    this.userGesture();
+    const gate = this.profile.progress.bossGate;
+    if (!gate || !this.world?.farming) {
+      this.sfx("error", { volume: 0.3 });
+      return;
+    }
+    this.sfx("ui_tap", { volume: 0.6, rate: 0.8 });
+    this.enqueueModal({ kind: "boss_ready", stage: gate });
+    this.requestForecast(false);
+  }
+
+  /**
+   * The only way into a boss fight. Called from the player's press on FIGHT; never from a
+   * timer, an event, offline progress or a defeat. Returns false if nothing was started.
+   */
+  challengeBoss(): boolean {
+    this.userGesture();
+    const p = this.profile;
+    const gate = p.progress.bossGate;
+    const world = this.world;
+    if (!gate || !world || !world.farming || world.player.dead || this.pending) {
+      this.sfx("error", { volume: 0.3 });
+      return false;
+    }
+    this.challengeFrom = world.stage;
+    this.closeModal();
+    this.completeTutorialIf("boss");
+    this.startRun(gate, "boss");
+    this.sfx("boss_intro", { volume: 0.8, rate: 0.9 });
+    this.renderer?.flash(0x1a0d0b, 0.45);
+    return true;
+  }
+
+  private onBossVictory(stage: number): void {
+    if (this.run.resolved) return;
+    this.run.resolved = true;
+    const p = this.profile;
+    const res = resolveBossVictory(p, stage, computeModifiers(p).goldFind);
+    p.player.gold += res.gold;
+    p.player.riftCores += res.cores;
+    const lv = applyXp(p.player.level, p.player.xp, res.xp);
+    p.player.level = lv.level;
+    p.player.xp = lv.xp;
     const items = (this.world?.takeLoot() ?? []).map((l) => l.item);
     for (const it of items) this.addItem(it);
-    const riftCores = stageClearCores(stage, firstClear, isBossStage(stage));
-    p.player.riftCores += riftCores;
-    this.sfx("level_up", { volume: 0.9, rate: 0.85 });
-    const upgrades = affordableUpgrades(p);
-    // Early on, banked gold is the difference between the next wall and a stall: point at it now, not after a death.
-    if (upgrades >= 2 && p.progress.bestStage <= 8) this.coachUpgrade = true;
-    this.enqueueModal({ kind: "stage_clear", stage, gold, runGold: this.run.gold, xp, items, riftCores, nextStage: stage + 1, upgrades });
-    if (res.levelsGained > 0) this.onLevelUp(res.levelsGained);
+    this.objectiveEvent("bossWins", 1);
+    this.forecast = null;
+    this.forecastStore.set(null);
+    this.sfx("level_up", { volume: 1, rate: 0.8 });
+    this.renderer?.flash(0xe9c97a, 0.4);
+    this.renderer?.levelUpBurst();
+    this.enqueueModal({ kind: "boss_victory", stage, defId: bossForStage(stage), gold: res.gold + this.run.gold, xp: res.xp, cores: res.cores, items, nextStage: res.next, unlocks: res.unlocks, seconds: Math.round(this.world?.time ?? 0), firstWin: res.firstWin });
+    if (lv.levelsGained > 0) this.onLevelUp(lv.levelsGained);
+    this.afterProgression();
+    this.commit();
+  }
+
+  private onBossDefeat(stage: number): void {
+    if (this.run.resolved) return;
+    this.run.resolved = true;
+    const p = this.profile;
+    const world = this.world;
+    const boss = world ? Array.from(world.entities.values()).find((e) => e.kind === "boss") : undefined;
+    const summary = {
+      stage,
+      defId: bossForStage(stage),
+      bossHpLeft: boss ? Math.max(0, boss.hp / boss.stats.maxHp) : 1,
+      bossPhase: boss?.boss?.phase ?? 1,
+      seconds: Math.round(world?.time ?? 0),
+      casts: this.run.casts,
+      dodges: this.run.dodges,
+      perfect: this.run.perfect,
+      summonsLost: this.run.summonsLost,
+    };
+    const farmStage = resolveBossDefeat(p, this.run.farmStage || stage);
+    this.coachUpgrade = true;
+    this.commit();
+    this.pending = {
+      left: 1.8,
+      fn: () => {
+        this.startRun(farmStage, "campaign");
+        this.enqueueModal({ kind: "boss_defeat", ...summary, farmStage, tips: readinessTips(this.profile, stage) });
+        this.requestForecast(true);
+      },
+    };
+  }
+
+  /** After the victory card: farming resumes at the next stage. */
+  continueAfterVictory(): void {
+    this.userGesture();
+    const ui = this.uiStore.get();
+    const next = ui.modal?.kind === "boss_victory" ? ui.modal.nextStage : clampFarmStage(this.profile, this.profile.progress.currentStage);
+    this.closeModal();
+    this.startRun(next, "campaign");
+  }
+
+  /** Farming was holding below the frontier: move up a stage now and keep pushing. */
+  pushStage(): void {
+    this.userGesture();
+    const p = this.profile;
+    const world = this.world;
+    p.progress.autoPush = true;
+    const next = clampFarmStage(p, (world?.farming ? world.stage : p.progress.currentStage) + 1);
+    if (world?.farming && next !== world.stage) {
+      p.progress.currentStage = next;
+      world.moveToStage(next);
+      this.toast(`Pushing to stage ${next}`, "level");
+    }
+    this.sfx("ui_tap", { volume: 0.6 });
+    this.commit();
   }
 
   private onModeCleared(mode: ModeId, wave: number, time: number): void {
@@ -1045,12 +1330,12 @@ export class GameController {
     }
   }
 
-  /** From the stage-clear card: stop the countdown's pull and walk the player to their upgrades. */
+  /** From a result card: walk the player to their upgrades. */
   spendGoldNow(): void {
     this.userGesture();
     this.coachUpgrade = true;
     this.setPanel("hero");
-    // The stage-clear card pauses the loop that normally refreshes guidance, so point now.
+    // A result card can pause the loop that normally refreshes guidance, so point now.
     const guide = this.contextualGuide("hero");
     if (guide) this.uiStore.update((u) => ({ ...u, guide }));
   }
@@ -1204,39 +1489,17 @@ export class GameController {
     this.commit();
   }
 
-  advanceStage(): void {
-    this.userGesture();
-    const ui = this.uiStore.get();
-    const next = ui.modal?.kind === "stage_clear" ? ui.modal.nextStage : this.profile.progress.currentStage + 1;
-    this.profile.progress.currentStage = next;
-    this.closeModal();
-    this.commit();
-    this.startRun(next);
-  }
-
-  replayStage(stage?: number): void {
-    this.userGesture();
-    const s = Math.max(1, stage ?? this.profile.progress.currentStage);
-    this.profile.progress.currentStage = s;
-    this.closeModal();
-    this.commit();
-    this.startRun(s);
-  }
-
-  retry(): void {
-    this.userGesture();
-    this.closeModal();
-    this.startRun(this.profile.progress.currentStage);
-  }
-
+  /** Farm a chosen stage (from the Rift panel). Choosing below the frontier holds there. */
   selectStage(stage: number): void {
     this.userGesture();
-    const max = this.profile.progress.bestStage + 1;
-    const s = Math.min(max, Math.max(1, stage));
-    this.profile.progress.currentStage = s;
+    const p = this.profile;
+    const s = clampFarmStage(p, stage);
+    p.progress.currentStage = s;
+    p.progress.autoPush = s >= frontierStage(p);
     this.commit();
-    this.startRun(s);
-    this.toast(`Stage ${s}`, "info");
+    if (this.world?.farming && !this.world.player.dead) this.world.moveToStage(s);
+    else this.startRun(s);
+    this.toast(s >= frontierStage(p) ? `Stage ${s}` : `Farming stage ${s}`, "info");
   }
 
   setPanel(panel: PanelId): void {
@@ -1372,7 +1635,7 @@ export class GameController {
         this.uiStore.update((u) => ({ ...u, guide, tutorialStep: stepId }));
       }
     };
-    if (ui.modal !== null && ui.modal.kind !== "defeat") {
+    if (ui.modal !== null && ui.modal.kind !== "boss_ready" && ui.modal.kind !== "boss_defeat") {
       if (ui.guide) setGuide(null, ui.tutorialStep);
       return;
     }
@@ -1404,9 +1667,15 @@ export class GameController {
         const sub = step.targets[this.tutorialSubstep];
         if (sub?.panel && ui.panel === sub.panel && this.tutorialSubstep < step.targets.length - 1) this.tutorialSubstep += 1;
         else if (sub?.panel && ui.panel !== sub.panel && this.tutorialSubstep > 0) this.tutorialSubstep = 0;
+        if (step.id === "boss") this.tutorialSubstep = ui.modal?.kind === "boss_ready" ? 1 : 0;
         setGuide(this.guideFor(step, this.tutorialSubstep), step.id);
         return;
       }
+    }
+    // Contextual hints wait while a card is open or a boss fight is on: one thing at a time.
+    if (ui.modal !== null || !world.farming) {
+      setGuide(null, null);
+      return;
     }
     setGuide(this.contextualGuide(ui.panel), null);
   }
@@ -1480,27 +1749,3 @@ export function itemName(item: EquipmentItem): string {
 }
 
 export type { SummonInstance };
-
-/** How many stat upgrades the current gold buys, cheapest first. */
-export function affordableUpgrades(p: Profile): number {
-  const stats = (["attack", "maxHp", "defense", "attackSpeed", "critChance", "critDamage"] as const).filter((st) => isStatUnlocked(p, st));
-  const levels = { ...p.player.statLevels };
-  let gold = p.player.gold;
-  let n = 0;
-  while (n < 50) {
-    let best: (typeof stats)[number] | null = null;
-    let cost = Infinity;
-    for (const st of stats) {
-      const c = statUpgradeCost(st, levels[st]);
-      if (c < cost) {
-        cost = c;
-        best = st;
-      }
-    }
-    if (!best || cost > gold) break;
-    gold -= cost;
-    levels[best] += 1;
-    n += 1;
-  }
-  return n;
-}

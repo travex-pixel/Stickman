@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useState } from "react";
+import { isBattlefieldModal } from "@/components/rewards/BossCards";
 import { AnimatePresence, motion } from "motion/react";
 import { useUi, useController } from "@/hooks/useGame";
 
@@ -53,7 +54,7 @@ export function HandGuide() {
 
   const [visible, setVisible] = useState(false);
   // Battlefield cards (defeat, stage clear, mode results) leave the panels usable, so the guide may point past them.
-  const blocking = modal !== null && modal.kind !== "defeat" && modal.kind !== "stage_clear" && modal.kind !== "mode_result";
+  const blocking = modal !== null && !isBattlefieldModal(modal.kind);
   useEffect(() => {
     setVisible(Boolean(guide && rect && !blocking));
   }, [guide, rect, blocking]);

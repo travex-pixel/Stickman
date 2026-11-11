@@ -36,6 +36,12 @@ export interface QuestProgress {
   complete: boolean;
 }
 
+export interface ObjectiveState {
+  id: string;
+  progress: number;
+  claimed: boolean;
+}
+
 export interface Profile {
   version: number;
   createdAt: number;
@@ -89,6 +95,22 @@ export interface Profile {
     abilityCasts: number;
     evolutions: number;
     redeemedCodes: string[];
+    /** The stage whose boss is waiting for a challenge (0 when none). Farming never passes it. */
+    bossGate: number;
+    /** Farming advances to the frontier on its own; off after a fall-back until the player pushes. */
+    autoPush: boolean;
+    /** Boss challenges won and lost (for summaries and objectives). */
+    bossWins: number;
+    bossLosses: number;
+  };
+  /** Optional daily and weekly objectives. Missing a day never costs anything. */
+  objectives: {
+    day: string;
+    week: string;
+    daily: ObjectiveState[];
+    weekly: ObjectiveState[];
+    /** Day key whose all-three bonus was claimed. */
+    dailyBonusDay: string;
   };
   modes: {
     /** Local calendar day (YYYY-MM-DD) the keys were last refilled. */
@@ -101,7 +123,7 @@ export interface Profile {
   settings: { music: number; sfx: number; reducedEffects: boolean; diagnostics: boolean; battleSpeed: 1 | 2; autoAdvance: boolean };
 }
 
-export const PROFILE_VERSION = 8;
+export const PROFILE_VERSION = 9;
 
 export function createDefaultProfile(now = Date.now()): Profile {
   return {
@@ -141,7 +163,12 @@ export function createDefaultProfile(now = Date.now()): Profile {
       abilityCasts: 0,
       evolutions: 0,
       redeemedCodes: [],
+      bossGate: 0,
+      autoPush: true,
+      bossWins: 0,
+      bossLosses: 0,
     },
+    objectives: { day: "", week: "", daily: [], weekly: [], dailyBonusDay: "" },
     modes: { keyDay: "", keys: { vault: 3, rift: 3, crypt: 3 }, endlessBest: 0, vaultBest: 0 },
     tutorial: { completed: [], finished: false },
     settings: { music: 0.6, sfx: 0.8, reducedEffects: false, diagnostics: false, battleSpeed: 1, autoAdvance: true },

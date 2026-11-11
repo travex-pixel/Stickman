@@ -15,7 +15,11 @@ import type { QuestGoal } from "@/game/progression/quests";
 import { cn } from "@/lib/cn";
 import { fmt } from "@/lib/format";
 import { SummonPortrait } from "@/components/ui/Portrait";
-import { Defeat, ModeResult, StageClear } from "@/components/rewards/ModalHost";
+import { ModeResult } from "@/components/rewards/ModalHost";
+import { BossDefeat, BossReady, BossVictory, TIER_TONE, isBattlefieldModal } from "@/components/rewards/BossCards";
+import { TIER_LABEL } from "@/game/progression/readiness";
+import { useStore } from "@/lib/store";
+import { useEffect, useState } from "react";
 import { MODES } from "@/game/data/modes";
 
 const EMPTY_ORBS: WorldSnapshot["orbs"] = [];
@@ -27,6 +31,9 @@ export function BattleOverlays() {
     <>
       <RunOutcome />
       <ModeHud />
+      <BossPlaque />
+      <PushChip />
+      <GateBanner />
       <ChainCounter />
       <PerkChip />
       <BossBar />
@@ -42,11 +49,13 @@ export function BattleOverlays() {
 /** Defeat and victory live over the battlefield so the panels below stay usable for upgrading. */
 function RunOutcome() {
   const modal = useUi((u) => u.modal);
-  if (!modal || (modal.kind !== "defeat" && modal.kind !== "stage_clear" && modal.kind !== "mode_result")) return null;
+  if (!modal || !isBattlefieldModal(modal.kind)) return null;
   return (
-    <div className="absolute inset-0 z-30 flex items-center justify-center p-3 pb-6" data-testid={`modal-${modal.kind}`} role="dialog" aria-modal="false">
+    <div className="absolute inset-0 z-30 flex items-center justify-center p-2 pb-3" data-testid={`modal-${modal.kind}`} role="dialog" aria-modal="false">
       <div className="absolute inset-0 bg-ink/60" />
-      <AnimatePresence>{modal.kind === "defeat" ? <Defeat modal={modal} /> : modal.kind === "mode_result" ? <ModeResult modal={modal} /> : <StageClear modal={modal} />}</AnimatePresence>
+      <AnimatePresence>
+        {modal.kind === "mode_result" ? <ModeResult modal={modal} /> : modal.kind === "boss_ready" ? <BossReady modal={modal} /> : modal.kind === "boss_victory" ? <BossVictory modal={modal} /> : modal.kind === "boss_defeat" ? <BossDefeat modal={modal} /> : null}
+      </AnimatePresence>
     </div>
   );
 }
@@ -65,8 +74,8 @@ function ModeHud() {
     <div className={cn("absolute left-1/2 -translate-x-1/2 z-10 flex items-center gap-2 rounded-full bg-ink/80 border border-gold/40 pl-3 pr-1 py-0.5", hasBoss ? "top-10" : "top-1.5")} data-testid="mode-hud">
       <span className="font-display text-[11px] tracking-[0.14em] text-gold-2 whitespace-nowrap">{MODES[mode].name}</span>
       <span className={cn("text-[11px] font-extrabold tabular-nums", timeLeft !== null && timeLeft < 10 ? "text-crimson-2" : "text-ivory")}>{status}</span>
-      <button className="text-[10px] font-bold text-mist px-2 py-1 rounded-full border border-white/10" onClick={() => c.returnToCampaign()} data-testid="mode-leave">
-        Leave
+      <button className="text-[10px] font-bold text-mist px-2 py-1 rounded-full border border-white/10" onClick={() => c.returnToCampaign()} data-testid="mode-leave" aria-label={mode === "boss" ? "Retreat to farming; the boss keeps waiting" : "Leave this mode"}>
+        {mode === "boss" ? "Retreat" : "Leave"}
       </button>
     </div>
   );
@@ -91,6 +100,95 @@ function PerkChip() {
       </motion.span>
       <span className="font-display text-[12px] tracking-[0.08em] text-gold-2">Choose a perk{pending > 1 ? ` ×${pending}` : ""}</span>
     </motion.button>
+  );
+}
+
+/**
+ * BOSS CHALLENGE. Appears once a boss gate is reached and stays while farming continues.
+ * Pressing it opens the readiness sheet; the fight itself starts only from FIGHT there.
+ */
+function BossPlaque() {
+  const c = useController();
+  const gate = useProfile((p) => p.progress.bossGate);
+  const farming = useHud((s) => s?.farming ?? false);
+  const modal = useUi((u) => u.modal);
+  const fc = useStore(c.forecastStore, (s) => s);
+  if (!gate || !farming || (modal && isBattlefieldModal(modal.kind))) return null;
+  const bossId = bossForStage(gate);
+  const name = ENEMIES[bossId]?.name ?? "The Warden";
+  const tier = fc?.stage === gate ? fc.forecast?.tier : undefined;
+  return (
+    <motion.button
+      initial={{ opacity: 0, x: 24 }}
+      animate={{ opacity: 1, x: 0 }}
+      className="boss-plaque absolute right-2 bottom-[122px] z-20 flex items-center gap-2 pl-1 pr-2 py-1 max-w-[56%]"
+      onClick={() => c.openBossChallenge()}
+      data-guide="boss-challenge"
+      data-testid="boss-challenge"
+      aria-label={`Boss challenge: ${name}, stage ${gate}${tier ? `, readiness ${TIER_LABEL[tier]}` : ""}`}
+    >
+      <span className="h-9 w-9 shrink-0 rounded-md overflow-hidden border border-crimson/50 bg-black/40">
+        <SummonPortrait defId={bossId} size={36} enemy />
+      </span>
+      <span className="flex flex-col items-start min-w-0 leading-none">
+        <span className="font-display text-[11px] tracking-[0.16em] text-crimson-2 whitespace-nowrap">BOSS CHALLENGE</span>
+        <span className="text-[11px] font-semibold text-ivory truncate max-w-full mt-0.5">{name}</span>
+        {tier && <span className={cn("mt-0.5 rounded px-1 text-[9px] font-bold border", TIER_TONE[tier])}>{TIER_LABEL[tier]}</span>}
+      </span>
+      <Icon name="chevron" size={12} className="text-crimson-2 shrink-0" />
+    </motion.button>
+  );
+}
+
+/** Farming is holding below the frontier (after a fall, or by choice): one tap pushes on. */
+function PushChip() {
+  const c = useController();
+  const farming = useHud((s) => s?.farming ?? false);
+  const stage = useHud((s) => s?.stage ?? 1);
+  const autoPush = useProfile((p) => p.progress.autoPush);
+  const frontier = useProfile((p) => p.progress.bestStage + 1);
+  const modal = useUi((u) => u.modal);
+  if (!farming || autoPush || stage >= frontier || (modal && isBattlefieldModal(modal.kind))) return null;
+  return (
+    <motion.button
+      initial={{ opacity: 0, y: -6 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="absolute left-1/2 -translate-x-1/2 top-1.5 z-20 flex items-center gap-2 rounded-full border border-gold/60 bg-ink/85 pl-3 pr-1 py-0.5"
+      onClick={() => c.pushStage()}
+      data-testid="push-stage"
+      aria-label={`Holding at stage ${stage}. Push to stage ${stage + 1}`}
+    >
+      <span className="text-[11px] text-parch whitespace-nowrap">Holding stage {stage}</span>
+      <span className="flex items-center gap-1 rounded-full bg-gold/20 px-2 py-0.5 font-display text-[11px] text-gold-2">
+        Push <Icon name="chevron" size={10} />
+      </span>
+    </motion.button>
+  );
+}
+
+/** The milestone moment when a boss gate opens. Brief, then the plaque carries it. */
+function GateBanner() {
+  const flash = useUi((u) => u.gateFlash);
+  const [shown, setShown] = useState(0);
+  useEffect(() => {
+    if (!flash) return;
+    setShown(flash);
+    const t = setTimeout(() => setShown(0), 3400);
+    return () => clearTimeout(t);
+  }, [flash]);
+  const name = shown ? (ENEMIES[bossForStage(shown)]?.name ?? "The Warden") : "";
+  return (
+    <AnimatePresence>
+      {shown > 0 && (
+        <motion.div key={shown} initial={{ opacity: 0, scale: 1.1 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.45 }} className="absolute inset-x-0 top-[22%] z-20 flex flex-col items-center pointer-events-none text-center" data-testid="gate-banner">
+          <span className="caps !text-crimson-2">Milestone · Stage {shown}</span>
+          <span className="font-display text-[19px] tracking-[0.12em] text-ivory" style={{ textShadow: "0 0 18px rgba(228,108,120,0.55), 0 2px 0 rgba(0,0,0,0.6)" }}>
+            {name.toUpperCase()} AWAITS
+          </span>
+          <span className="text-[11px] text-parch mt-0.5">Keep farming and grow stronger. Fight when you choose.</span>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }
 
@@ -142,8 +240,33 @@ function WaveBanner() {
   const mode = useHud((s) => s?.mode ?? "campaign");
   const bossDef = ENEMIES[bossForStage(stage, mode)];
   const bossName = bossDef?.name.toUpperCase() ?? "THE WARDEN";
+  const farming = useHud((s) => s?.farming ?? false);
+  const total = useHud((s) => s?.wavesTotal ?? 3);
+  // Farming moves stages in place: announce the new stage briefly when it changes.
+  const [stageFlash, setStageFlash] = useState<number | null>(null);
+  const [lastStage, setLastStage] = useState(stage);
+  if (stage !== lastStage) {
+    setLastStage(stage);
+    setStageFlash(stage);
+  }
+  useEffect(() => {
+    if (stageFlash === null) return;
+    const t = setTimeout(() => setStageFlash(null), 1700);
+    return () => clearTimeout(t);
+  }, [stageFlash]);
   const counter = phase === "boss_intro" ? bossDef?.counter : undefined;
-  const label = phase === "boss_intro" ? bossName : phase === "between" ? (wave >= 3 ? "THE WARDEN STIRS" : "WAVE CLEARED") : phase === "intro" ? `STAGE ${stage}` : null;
+  const label =
+    phase === "boss_intro"
+      ? bossName
+      : phase === "intro"
+        ? mode === "boss"
+          ? "BOSS CHALLENGE"
+          : `STAGE ${stage}`
+        : stageFlash !== null && farming
+          ? `STAGE ${stageFlash}`
+          : phase === "between" && !(farming && wave >= total)
+            ? "WAVE CLEARED"
+            : null;
   return (
     <AnimatePresence>
       {label && (

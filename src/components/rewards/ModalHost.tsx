@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Icon } from "@/components/ui/Icon";
 import { SummonPortrait } from "@/components/ui/Portrait";
@@ -12,7 +12,6 @@ import { ACHIEVEMENTS, JOURNAL } from "@/game/data/lore";
 import { ENEMIES } from "@/game/data/enemies";
 import { RANKS } from "@/game/progression/ranks";
 import { MODES, isKeyedMode } from "@/game/data/modes";
-import { isBossStage } from "@/game/data/regions";
 import { WEAPON_PATHS } from "@/game/progression/weaponPaths";
 import { fmtDuration } from "@/lib/format";
 import { cn } from "@/lib/cn";
@@ -20,12 +19,13 @@ import { SettingsModal } from "@/components/settings/SettingsModal";
 import { CountUp, LootCard } from "@/components/rewards/RewardFx";
 import { ABILITIES, TECHNIQUE_OWNED_ATTACK } from "@/game/data/abilities";
 import { ABILITY_ICON } from "@/components/ui/abilityIcons";
+import { isBattlefieldModal } from "@/components/rewards/BossCards";
 
 export function ModalHost() {
   const modal = useUi((u) => u.modal);
   return (
     <AnimatePresence>
-      {modal && modal.kind !== "boss_intro" && modal.kind !== "defeat" && modal.kind !== "stage_clear" && modal.kind !== "mode_result" && (
+      {modal && modal.kind !== "boss_intro" && !isBattlefieldModal(modal.kind) && (
         <motion.div key={modal.kind} className="fixed inset-0 z-50 flex items-center justify-center p-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} data-testid={`modal-${modal.kind}`} role="dialog" aria-modal="true">
           {modal.kind !== "summon_reveal" && <div className="scrim" />}
           <ModalBody modal={modal} />
@@ -141,93 +141,6 @@ function PerkChoice({ modal }: { modal: Extract<Modal, { kind: "perk_choice" }> 
             </button>
           );
         })}
-      </div>
-    </Card>
-  );
-}
-
-export function StageClear({ modal }: { modal: Extract<Modal, { kind: "stage_clear" }> }) {
-  const c = useController();
-  const auto = useProfileRef().settings.autoAdvance;
-  const [left, setLeft] = useState(auto ? 6 + Math.min(3, modal.items.length) : -1);
-  const shortShown = modal.upgrades > 0 ? 1 : 2;
-  useEffect(() => {
-    if (!auto) return;
-    if (left <= 0) {
-      c.advanceStage();
-      return;
-    }
-    const t = setTimeout(() => setLeft((v) => v - 1), 1000);
-    return () => clearTimeout(t);
-  }, [left, auto, c]);
-  return (
-    <Card>
-      <div className="px-4 pt-3 pb-3 text-center flex flex-col gap-1.5 items-center short-tight">
-        <div className="caps text-jade-2">{isBossStage(modal.stage) ? "The Warden falls" : "The champion falls"}</div>
-        <div className="font-display text-[20px] text-ivory text-glow-gold leading-none">Stage {modal.stage} cleared</div>
-        <div className="flex gap-3 mt-1 text-[13px] font-bold">
-          <motion.span initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="flex items-center gap-1 text-gold" data-testid="clear-gold">
-            <Icon name="coin" size={14} /><CountUp prefix="+" value={modal.gold + (modal.runGold ?? 0)} delay={120} onTick={() => c.rewardCue("tick")} />
-          </motion.span>
-          <motion.span initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }} className="flex items-center gap-1 text-gold-2">
-            <Icon name="xp" size={14} /><CountUp prefix="+" value={modal.xp} delay={240} /> XP
-          </motion.span>
-          {modal.riftCores > 0 && (
-            <motion.span initial={{ opacity: 0, scale: 1.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.45, type: "spring", stiffness: 300, damping: 14 }} className="flex items-center gap-1 text-parch">
-              <Icon name="core" size={14} className="text-gold-2" />+{modal.riftCores}
-            </motion.span>
-          )}
-        </div>
-        {modal.items.length > 0 && (
-          <div className="w-full flex flex-col gap-1" style={{ perspective: 600 }}>
-            {modal.items.slice(0, 3).map((it, i) => (
-              <LootCard key={it.uid} item={it} index={i} className={i >= shortShown ? "short-hide" : undefined} onReveal={(rare) => c.rewardCue(rare ? "rare" : "card")} />
-            ))}
-            {modal.items.length > 3 && <div className="text-[10px] text-mist short-hide">and {modal.items.length - 3} more in your satchel</div>}
-            {modal.items.length > shortShown && <div className="text-[10px] text-mist short-only">and {modal.items.length - shortShown} more in your satchel</div>}
-          </div>
-        )}
-        {modal.upgrades > 0 && (
-          <button
-            className="w-full flex items-center justify-between gap-2 rounded-lg border border-gold/60 bg-gold/10 px-3 h-9"
-            onClick={() => {
-              setLeft(-1);
-              c.spendGoldNow();
-            }}
-            data-testid="spend-gold"
-          >
-            <span className="text-[12px] text-parch">
-              <b className="text-gold-2">{modal.upgrades >= 50 ? "50+" : modal.upgrades}</b> upgrade{modal.upgrades === 1 ? "" : "s"} ready
-            </span>
-            <span className="font-display text-[13px] text-gold-2 flex items-center gap-1">
-              Spend gold <Icon name="chevron" size={12} />
-            </span>
-          </button>
-        )}
-        <div className="flex gap-2 w-full mt-1">
-          <button className="btn-ghost flex-1" onClick={() => { setLeft(-1); c.updateSettings({ autoAdvance: false }); c.replayStage(modal.stage); }} data-testid="replay-stage">Replay</button>
-          <button className="btn-primary flex-1" onClick={() => c.advanceStage()} data-testid="advance-stage">
-            Stage {modal.nextStage} →{left > 0 && <span className="ml-1.5 inline-block rounded-full bg-black/25 px-1.5 text-[11px] font-sans font-bold tabular-nums align-middle">{left}s</span>}
-          </button>
-        </div>
-        {left > 0 && <div className="text-[10px] text-mist short-hide">Advancing automatically. Replay to stay.</div>}
-      </div>
-    </Card>
-  );
-}
-
-export function Defeat({ modal }: { modal: Extract<Modal, { kind: "defeat" }> }) {
-  const c = useController();
-  return (
-    <Card>
-      <div className="px-4 pt-3 pb-3 text-center flex flex-col gap-1.5 items-center">
-        <div className="caps text-crimson-2">You fell</div>
-        <div className="font-display text-[18px] text-ivory leading-none">Stage {modal.stage}, wave {Math.max(1, modal.wave)}</div>
-        <p className="text-[11px] text-mist leading-snug">Everything you earned is kept. Spend your gold below, then return stronger.</p>
-        <div className="flex gap-2 w-full mt-0.5">
-          {modal.stage > 1 && <button className="btn-ghost flex-1" onClick={() => c.replayStage(modal.stage - 1)} data-testid="fall-back">Stage {modal.stage - 1}</button>}
-          <button className="btn-primary flex-1" onClick={() => c.retry()} data-testid="retry">Try again</button>
-        </div>
       </div>
     </Card>
   );

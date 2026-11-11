@@ -153,6 +153,17 @@ export class BattleRenderer {
     this.fx = [];
     this.particles.clear();
     this.endCinematic();
+    this.syncBackground();
+  }
+
+  /** Farming moved stages in place: repaint the backdrop only if the region changed. */
+  onStageChanged(): void {
+    this.syncBackground();
+  }
+
+  private syncBackground(): void {
+    const world = this.world;
+    if (!world) return;
     const region = regionForStage(world.stage);
     if (!this.background || this.background.regionId !== region.id) {
       this.background?.destroy();

@@ -171,23 +171,78 @@ describe("summons in combat", () => {
 });
 
 describe("boss", () => {
-  it("appears after three waves with an intro, and phases at half health", () => {
+  it("campaign farming never starts a boss, however long it runs", () => {
     const p = createDefaultProfile();
     p.player.statLevels = { attack: 60, maxHp: 60, attackSpeed: 30, critChance: 10, critDamage: 10, defense: 30 };
     p.player.level = 10;
     p.player.autoCast = true;
-    p.progress.bestStage = 1; // a veteran: the first-ever Warden is deliberately softened
     const w = new World({ stage: 1, loadout: buildLoadout(p), seed: 11 });
     const ev: GameEvent[] = [];
-    step(w, 240, ev);
+    step(w, 600, ev);
+    expect(ev.some((e) => e.type === "boss_intro")).toBe(false);
+    expect(ev.some((e) => e.type === "stage_cleared")).toBe(false);
+    expect(Array.from(w.entities.values()).some((e) => e.kind === "boss")).toBe(false);
+    expect(ev.filter((e) => e.type === "encounters_cleared").length).toBeGreaterThan(5);
+    expect(w.phase).not.toBe("victory");
+  });
+  it("a boss challenge opens on the boss, phases at half health, and resolves once", () => {
+    const p = createDefaultProfile();
+    p.player.statLevels = { attack: 60, maxHp: 60, attackSpeed: 30, critChance: 10, critDamage: 10, defense: 30 };
+    p.player.level = 10;
+    p.player.autoCast = true;
+    const w = new World({ stage: 1, loadout: buildLoadout(p), seed: 11, mode: "boss" });
+    const ev: GameEvent[] = [];
+    step(w, 200, ev);
+    expect(ev.some((e) => e.type === "wave_start")).toBe(false);
     expect(ev.some((e) => e.type === "boss_intro")).toBe(true);
     expect(ev.some((e) => e.type === "boss_phase" && e.phase === 2)).toBe(true);
-    expect(ev.some((e) => e.type === "stage_cleared")).toBe(true);
+    expect(ev.filter((e) => e.type === "stage_cleared" && e.mode === "boss")).toHaveLength(1);
     expect(w.phase).toBe("victory");
     expect(ev.some((e) => e.type === "essence_available" && e.isBoss)).toBe(true);
   });
   it("boss definition exists for the region", () => {
     expect(enemyDef("hollow_warden").archetype).toBe("boss");
+  });
+});
+
+describe("farming loop", () => {
+  it("repeats the stage's encounters until told where to go, then moves in place", () => {
+    const p = createDefaultProfile();
+    p.player.statLevels = { attack: 80, maxHp: 80, attackSpeed: 30, critChance: 10, critDamage: 10, defense: 30 };
+    p.player.level = 12;
+    p.player.autoCast = true;
+    const w = new World({ stage: 2, loadout: buildLoadout(p), seed: 3 });
+    const playerId = w.player.id;
+    const ev: GameEvent[] = [];
+    let queued = false;
+    for (let i = 0; i < 60 * 240; i++) {
+      w.update(FIXED_DT);
+      for (const e of w.drainEvents()) {
+        ev.push(e);
+        if (e.type === "encounters_cleared" && e.cycle === 2 && !queued) {
+          w.queueStage(3);
+          queued = true;
+        }
+      }
+      if (w.stage === 3 && w.wave >= 1) break;
+    }
+    const cycles = ev.filter((e) => e.type === "encounters_cleared");
+    expect(cycles.map((e) => (e.type === "encounters_cleared" ? e.stage : 0))).toEqual([2, 2]);
+    expect(ev.some((e) => e.type === "stage_advanced" && e.from === 2 && e.stage === 3)).toBe(true);
+    expect(w.stage).toBe(3);
+    expect(w.player.id).toBe(playerId); // same world, same warrior
+  });
+  it("moveToStage withdraws the current foes without paying for them", () => {
+    const w = freshWorld(2, 4);
+    step(w, 6);
+    const goldBefore = w.drainEvents().length;
+    expect(goldBefore).toBeGreaterThanOrEqual(0);
+    w.moveToStage(1);
+    const ev: GameEvent[] = [];
+    step(w, 0.5, ev);
+    expect(ev.some((e) => e.type === "gold" || e.type === "xp")).toBe(false);
+    step(w, 2, ev);
+    expect(w.stage).toBe(1);
   });
 });
 
@@ -205,18 +260,21 @@ describe("defeat", () => {
 });
 
 describe("second region", () => {
-  it("Drowned Hollow boss stages spawn its enemies and its Warden variant leaves an oath", () => {
+  it("Drowned Hollow stages farm its enemies, and its boss challenge is the Drowned Warden", () => {
     const p = createDefaultProfile();
     p.player.statLevels = { attack: 120, maxHp: 120, attackSpeed: 60, critChance: 30, critDamage: 30, defense: 60 };
     p.player.level = 20;
     p.player.autoCast = true;
-    const w = new World({ stage: 9, loadout: buildLoadout(p), seed: 4 });
+    const farm = new World({ stage: 9, loadout: buildLoadout(p), seed: 4 });
     const ev: GameEvent[] = [];
-    step(w, 240, ev);
+    step(farm, 60, ev);
     const spawned = new Set(ev.filter((e) => e.type === "spawn").map((e) => (e.type === "spawn" ? e.defId : "")));
     expect(spawned.has("drowned_husk")).toBe(true);
-    expect(ev.some((e) => e.type === "boss_intro" && e.defId === "drowned_warden")).toBe(true);
-    const bossEssence = ev.find((e) => e.type === "essence_available" && e.isBoss);
+    const fight = new World({ stage: 9, loadout: buildLoadout(p), seed: 4, mode: "boss" });
+    const bev: GameEvent[] = [];
+    step(fight, 240, bev);
+    expect(bev.some((e) => e.type === "boss_intro" && e.defId === "drowned_warden")).toBe(true);
+    const bossEssence = bev.find((e) => e.type === "essence_available" && e.isBoss);
     expect(bossEssence && bossEssence.type === "essence_available" ? bossEssence.summonId : "").toBe("hollow_warden");
   });
 });

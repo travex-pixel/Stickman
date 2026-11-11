@@ -2,7 +2,7 @@ import type { Profile } from "./progression/profile";
 import type { WorldSnapshot } from "./engine/World";
 import { statUpgradeCost } from "./progression/stats";
 
-export type TutorialStepId = "watch" | "ability" | "dodge" | "upgrade" | "gear" | "summon" | "deploy" | "command";
+export type TutorialStepId = "watch" | "ability" | "dodge" | "upgrade" | "gear" | "summon" | "deploy" | "command" | "boss";
 
 export type GuideGesture = "point" | "tap" | "hold";
 
@@ -22,6 +22,8 @@ export interface TutorialContext {
   elapsed: number;
   panel: string;
   enemyWindupNearPlayer: boolean;
+  /** A boss readiness sheet is open. */
+  bossSheet?: boolean;
 }
 
 export const TUTORIAL_STEPS: TutorialStep[] = [
@@ -76,6 +78,16 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     ready: (c) => c.profile.equipment.inventory.length > 0 && Object.keys(c.profile.equipment.equipped).length === 0,
   },
 ];
+
+/** Appended last: the first boss gate. Taught when it appears, finished by choosing to fight. */
+TUTORIAL_STEPS.push({
+  id: "boss",
+  targets: [
+    { target: "boss-challenge", label: "A boss waits. Challenge it when you feel ready.", gesture: "tap" },
+    { target: "boss-fight", label: "Fight", gesture: "tap" },
+  ],
+  ready: (c) => c.profile.progress.bossGate > 0 && (c.snapshot?.farming ?? false),
+});
 
 export function nextTutorialStep(profile: Profile): TutorialStep | null {
   if (profile.tutorial.finished) return null;

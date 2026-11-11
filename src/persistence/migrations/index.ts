@@ -76,6 +76,20 @@ export const MIGRATIONS: Migration[] = [
       return { ...raw, version: 8, player: { ...player, techniques: player.techniques ?? [], artForms: player.artForms ?? {} } };
     },
   },
+  {
+    // The boss gate: campaign farming loops a boss stage until the player challenges its boss.
+    from: 8,
+    to: 9,
+    migrate: (raw) => {
+      const progress = (raw.progress as Record<string, unknown> | undefined) ?? {};
+      return {
+        ...raw,
+        version: 9,
+        progress: { ...progress, bossGate: 0, autoPush: true, bossWins: progress.bossKills ?? 0, bossLosses: 0 },
+        objectives: { day: "", week: "", daily: [], weekly: [], dailyBonusDay: "" },
+      };
+    },
+  },
 ];
 
 export function runMigrations(raw: Record<string, unknown>, targetVersion: number): { raw: Record<string, unknown>; migrated: boolean } {

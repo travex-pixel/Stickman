@@ -145,7 +145,12 @@ export function sanitizeProfile(raw: unknown): { profile: Profile; repaired: boo
       abilityCasts: num(pr.abilityCasts, 0),
       evolutions: num(pr.evolutions, 0),
       redeemedCodes: Array.isArray(pr.redeemedCodes) ? pr.redeemedCodes.filter(isStr).slice(0, 500) : [],
+      bossGate: num(pr.bossGate, 0, 0, 9999),
+      autoPush: pr.autoPush !== false,
+      bossWins: num(pr.bossWins, 0),
+      bossLosses: num(pr.bossLosses, 0),
     },
+    objectives: sanitizeObjectives(raw.objectives),
     modes: {
       keyDay: isStr(md.keyDay) ? md.keyDay : "",
       keys: { vault: num(mk.vault, 3, 0, 3), rift: num(mk.rift, 3, 0, 3), crypt: num(mk.crypt, 3, 0, 3) },
@@ -198,4 +203,17 @@ function sanitizeTechniques(t: unknown, f: unknown): { techniques: AbilityId[]; 
     }
   }
   return { techniques, artForms };
+}
+
+function sanitizeObjectives(v: unknown): Profile["objectives"] {
+  const o = isObj(v) ? v : {};
+  const list = (x: unknown) =>
+    Array.isArray(x)
+      ? x
+          .filter(isObj)
+          .filter((e) => isStr(e.id))
+          .slice(0, 6)
+          .map((e) => ({ id: e.id as string, progress: isNum(e.progress) && e.progress >= 0 ? Math.floor(e.progress) : 0, claimed: e.claimed === true }))
+      : [];
+  return { day: isStr(o.day) ? o.day : "", week: isStr(o.week) ? o.week : "", daily: list(o.daily), weekly: list(o.weekly), dailyBonusDay: isStr(o.dailyBonusDay) ? o.dailyBonusDay : "" };
 }

@@ -22,6 +22,10 @@ export type GameEvent =
   | { type: "boss_phase"; id: number; phase: number }
   | { type: "telegraph"; pos: Vec2; radius: number; duration: number }
   | { type: "stage_cleared"; stage: number; mode: string; wave: number; time: number }
+  /** Campaign farming: every ordinary encounter of the stage is cleared (once per cycle). */
+  | { type: "encounters_cleared"; stage: number; cycle: number }
+  /** Campaign farming moved to another stage in place, without a new world. */
+  | { type: "stage_advanced"; from: number; stage: number }
   | { type: "player_defeated"; stage: number; wave: number; mode: string }
   | { type: "xp"; amount: number; pos: Vec2 }
   | { type: "gold"; amount: number; pos: Vec2 }

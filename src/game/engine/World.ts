@@ -12,7 +12,7 @@ import type { PlayerLoadout, DeployedSummonLoadout } from "../progression/loadou
 import type { AbilityId, SummonCommand, Element } from "../data/ids";
 import { ABILITIES, ABILITY_SLOTS, ULTIMATE_ENERGY_COST, ULTIMATE_ID } from "../data/abilities";
 import { enemyDef } from "../data/enemies";
-import { bossForStage, isBossStage, regionForStage, stageScale, type WaveDef } from "../data/regions";
+import { bossForStage, regionForStage, stageScale, type WaveDef } from "../data/regions";
 import { computeDamage } from "../combat/damage";
 import { addStatus, hasStatus, speedMultiplier, statusValue, tickStatuses } from "../combat/statuses";
 import { nearestHostile, hostilesWithin, factionWithin } from "../combat/targeting";
@@ -36,6 +36,10 @@ export interface WorldSnapshot {
   /** Seconds left in timed modes, otherwise null. */
   timeLeft: number | null;
   phase: RunPhase;
+  /** Campaign farming loop (as opposed to a boss challenge or another mode). */
+  farming: boolean;
+  /** Farming cycles completed in this world. */
+  cycle: number;
   stage: number;
   wave: number;
   wavesTotal: number;
@@ -86,8 +90,13 @@ export class World {
   readonly orbs: EssenceOrb[] = [];
   readonly telegraphs: Telegraph[] = [];
   readonly hazards: GroundHazard[] = [];
-  readonly stage: number;
+  /** The stage being fought. Campaign farming can move it in place (see queueStage). */
+  stage: number;
   loadout: PlayerLoadout;
+  /** Completed farming cycles (all ordinary encounters of a stage cleared) in this world. */
+  cycles = 0;
+  /** Set by the controller during a cycle break: the stage the next cycle farms. */
+  private nextStage: number | null = null;
   time = 0;
   /** Blood Pact: basic hits heal until this world time. */
   pactUntil = -1;
@@ -363,9 +372,49 @@ export class World {
     return this.modeDef.waves;
   }
 
-  /** Campaign bosses appear only on boss stages; trials always have one. */
+  /**
+   * Whether this world fights a boss on its own. Campaign farming never does: bosses are only
+   * fought in a "boss" world the player starts deliberately (or a Rank Trial).
+   */
   get hasBoss(): boolean {
-    return this.mode === "campaign" ? isBossStage(this.stage) : this.modeDef.boss;
+    return this.modeDef.boss;
+  }
+
+  /** True while this world is the endless campaign farming loop. */
+  get farming(): boolean {
+    return this.mode === "campaign";
+  }
+
+  /** Farming: the next cycle fights `stage` instead of repeating the current one. */
+  queueStage(stage: number): void {
+    if (!this.farming) return;
+    this.nextStage = Math.max(1, Math.floor(stage));
+  }
+
+  /**
+   * Farming: move to `stage` now. The current stage's remaining foes withdraw (no rewards),
+   * and the new stage begins after a short beat. Used when the player pushes or retreats.
+   */
+  moveToStage(stage: number): void {
+    if (!this.farming || this.player.dead) return;
+    for (const e of this.enemies()) {
+      e.dead = true;
+      e.hp = 0;
+      e.state = "dead";
+      e.deathTime = 1;
+    }
+    if (this.waveRunner) this.waveRunner.spawnQueue.length = 0;
+    this.nextStage = Math.max(1, Math.floor(stage));
+    this.wave = this.wavesTotal;
+    this.phase = "between";
+    this.phaseTimer = 0.7;
+  }
+
+  private applyStage(stage: number): void {
+    const from = this.stage;
+    this.stage = stage;
+    this.regionWaves = regionForStage(stage).waves(stage);
+    this.events.push({ type: "stage_advanced", from, stage });
   }
 
   get boss(): Combatant | undefined {
@@ -400,6 +449,8 @@ export class World {
       mode: this.mode,
       timeLeft: this.modeDef.duration ? Math.max(0, this.modeDef.duration - this.modeTime) : null,
       phase: this.phase,
+      farming: this.farming,
+      cycle: this.cycles,
       stage: this.stage,
       wave: this.wave,
       wavesTotal: Number.isFinite(this.wavesTotal) ? this.wavesTotal : 0,
@@ -502,7 +553,10 @@ export class World {
     switch (this.phase) {
       case "intro":
         this.phaseTimer -= rawDt;
-        if (this.phaseTimer <= 0) this.startWave(1);
+        if (this.phaseTimer <= 0) {
+          if (this.wavesTotal === 0 && this.hasBoss) this.startBossIntro();
+          else this.startWave(1);
+        }
         break;
       case "wave": {
         this.runWave(rawDt);
@@ -520,6 +574,12 @@ export class World {
           }
           this.phase = "between";
           this.phaseTimer = this.wave >= this.wavesTotal ? 1.6 : this.mode === "endless" ? 1.1 : 1.4;
+          if (this.farming && this.wave >= this.wavesTotal) {
+            // A cycle is complete: catch a breath, and let the controller decide where the next one is fought.
+            this.cycles += 1;
+            this.restoreAfterCycle();
+            this.events.push({ type: "encounters_cleared", stage: this.stage, cycle: this.cycles });
+          }
         }
         break;
       }
@@ -527,7 +587,11 @@ export class World {
         this.phaseTimer -= rawDt;
         if (this.phaseTimer <= 0) {
           if (this.wave >= this.wavesTotal) {
-            if (this.hasBoss) this.startBossIntro();
+            if (this.farming) {
+              if (this.nextStage !== null && this.nextStage !== this.stage) this.applyStage(this.nextStage);
+              this.nextStage = null;
+              this.startWave(1);
+            } else if (this.hasBoss) this.startBossIntro();
             else this.endRun();
           } else this.startWave(this.wave + 1);
         }
@@ -551,6 +615,17 @@ export class World {
     if (this.player.dead && this.phase !== "defeat" && this.phase !== "victory") {
       this.phase = "defeat";
       this.events.push({ type: "player_defeated", stage: this.stage, wave: this.wave, mode: this.mode });
+    }
+  }
+
+  /** Between farming cycles the warrior and army recover a quarter of what they lost. */
+  private restoreAfterCycle(): void {
+    for (const e of this.entities.values()) {
+      if (e.dead || (e.kind !== "player" && e.kind !== "summon")) continue;
+      const heal = Math.round((e.stats.maxHp - e.hp) * 0.25);
+      if (heal <= 0) continue;
+      e.hp += heal;
+      this.events.push({ type: "heal", targetId: e.id, amount: heal, pos: { ...e.pos } });
     }
   }
 
@@ -604,8 +679,8 @@ export class World {
     const scale = stageScale(this.stage);
     const boss = createEnemy(this.allocId(), def, { x: ARENA.maxX - 70, y: ARENA.homeY }, scale, this.stage, this.mode !== "trial");
     boss.kind = "boss";
-    if (this.mode === "campaign" && this.stage === 1 && this.loadout.bestStage < 1) {
-      // The very first Warden is a lesson, not a wall.
+    if (this.stage === 1 && this.mode !== "trial") {
+      // The first Warden is a lesson, not a wall: always the same, shown honestly in its forecast.
       boss.stats.maxHp = Math.round(boss.stats.maxHp * 0.7);
       boss.hp = boss.stats.maxHp;
       boss.stats.attack = Math.round(boss.stats.attack * 0.8 * 10) / 10;

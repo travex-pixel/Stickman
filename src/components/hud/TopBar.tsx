@@ -20,6 +20,8 @@ export function TopBar() {
   const stage = useHud((s) => s?.stage ?? 1);
   const wave = useHud((s) => s?.wave ?? 0);
   const phase = useHud((s) => s?.phase ?? "intro");
+  const mode = useHud((s) => s?.mode ?? "campaign");
+  const gate = useProfile((p) => p.progress.bossGate);
   const speedUnlocked = bestStage >= 3;
   const xpFrac = Math.min(1, xp / xpForLevel(level));
   const accent = weaponPathDef(path)?.color ?? "#cfa95e";
@@ -55,12 +57,14 @@ export function TopBar() {
         {speedUnlocked ? `${speed}×` : <Icon name="lock" size={10} />}
       </button>
       <div className="flex flex-col items-end leading-none shrink-0">
-        <span className="font-display text-[11px] tracking-[0.12em] text-parch whitespace-nowrap hidden min-[360px]:block">STAGE {stage}</span>
-        <div className="flex items-center gap-1 mt-1" aria-label="Wave progress">
+        <span className="font-display text-[11px] tracking-[0.12em] text-parch whitespace-nowrap hidden min-[360px]:block" data-testid="stage-label">
+          {mode === "boss" ? <span className="text-crimson-2">BOSS {stage}</span> : `STAGE ${stage}`}
+        </span>
+        <div className="flex items-center gap-1 mt-1" aria-label={gate === stage && mode === "campaign" ? `Stage ${stage}, boss waiting` : `Stage ${stage}, wave ${wave}`}>
           {[1, 2, 3].map((w) => (
-            <span key={w} className="h-1.5 w-3 rounded-sm" style={{ background: wave >= w ? "#cfa95e" : "rgba(235,228,211,0.16)" }} />
+            <span key={w} className="h-1.5 w-3 rounded-sm" style={{ background: mode === "boss" || wave >= w ? "#cfa95e" : "rgba(235,228,211,0.16)" }} />
           ))}
-          <Icon name="skull" size={12} className={phase === "boss" || phase === "boss_intro" ? "text-crimson-2" : "text-mist"} />
+          <Icon name="skull" size={12} className={phase === "boss" || phase === "boss_intro" ? "text-crimson-2" : gate === stage && mode === "campaign" ? "text-crimson-2 animate-pulse" : "text-mist"} />
         </div>
       </div>
       <button className="h-9 w-9 shrink-0 flex items-center justify-center rounded-lg border border-white/10 bg-white/5 text-parch" onClick={() => c.openSettings()} aria-label="Menu" data-testid="menu-button">
