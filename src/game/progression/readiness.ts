@@ -32,29 +32,50 @@ export interface BossForecast {
 export const FORECAST_SEEDS = [11, 23, 37, 51];
 const FORECAST_MAX_SECONDS = 150;
 
-/** One simulated boss challenge with AUTO on. Deterministic for a given profile and seed. */
-export function simulateBossFight(profile: Profile, stage: number, seed: number): { won: boolean; bossHpLeft: number; seconds: number } {
+export interface FightResult {
+  won: boolean;
+  bossHpLeft: number;
+  seconds: number;
+}
+
+/**
+ * One simulated boss challenge with AUTO on, advanced a slice at a time so the caller can spread
+ * it over frames. Deterministic for a given profile and seed.
+ */
+export function bossFightStepper(profile: Profile, stage: number, seed: number): { step: (maxSteps: number) => FightResult | null } {
   const p: Profile = JSON.parse(JSON.stringify(profile));
   p.player.autoCast = true;
   const w = new World({ stage, loadout: buildLoadout(p), seed, mode: "boss" });
   let t = 0;
   let bossMax = 1;
   let bossHp = 1;
-  while (t < FORECAST_MAX_SECONDS) {
-    w.update(FIXED_DT);
-    w.drainEvents();
-    w.takeLoot();
-    // Shadows the boss leaves behind would be claimed by a player; the forecast ignores them.
-    t += FIXED_DT;
-    const b = w.boss;
-    if (b) {
-      bossMax = b.stats.maxHp;
-      bossHp = b.hp;
-    }
-    if (w.phase === "victory") return { won: true, bossHpLeft: 0, seconds: t };
-    if (w.phase === "defeat") return { won: false, bossHpLeft: Math.max(0, bossHp / bossMax), seconds: t };
+  return {
+    step(maxSteps: number): FightResult | null {
+      for (let i = 0; i < maxSteps; i++) {
+        w.update(FIXED_DT);
+        w.drainEvents();
+        // Shadows and loot the boss leaves would be the player's to claim; the forecast ignores them.
+        w.takeLoot();
+        t += FIXED_DT;
+        const b = w.boss;
+        if (b) {
+          bossMax = b.stats.maxHp;
+          bossHp = b.hp;
+        }
+        if (w.phase === "victory") return { won: true, bossHpLeft: 0, seconds: t };
+        if (w.phase === "defeat" || t >= FORECAST_MAX_SECONDS) return { won: false, bossHpLeft: Math.max(0, bossHp / bossMax), seconds: t };
+      }
+      return null;
+    },
+  };
+}
+
+export function simulateBossFight(profile: Profile, stage: number, seed: number): FightResult {
+  const s = bossFightStepper(profile, stage, seed);
+  for (;;) {
+    const r = s.step(10_000);
+    if (r) return r;
   }
-  return { won: false, bossHpLeft: Math.max(0, bossHp / bossMax), seconds: t };
 }
 
 export function tierFor(wins: number, fights: number, avgBossHpLeft: number): ReadinessTier {
@@ -66,7 +87,7 @@ export function tierFor(wins: number, fights: number, avgBossHpLeft: number): Re
 }
 
 /** Combines individual fights (they may run in separate frames) into a forecast. */
-export function summarizeForecast(stage: number, results: { won: boolean; bossHpLeft: number; seconds: number }[]): BossForecast {
+export function summarizeForecast(stage: number, results: FightResult[]): BossForecast {
   const fights = results.length;
   const wins = results.filter((r) => r.won).length;
   const losses = results.filter((r) => !r.won);

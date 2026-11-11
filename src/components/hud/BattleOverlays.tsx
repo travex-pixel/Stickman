@@ -401,6 +401,7 @@ function QuestBanner() {
   const c = useController();
   const profile = useProfileRef();
   const guide = useUi((u) => u.guide);
+  const mode = useHud((s) => s?.mode ?? "campaign");
   const quest = currentQuest(profile);
   if (!quest) return null;
   const prog = questProgress(profile, quest);
@@ -408,7 +409,8 @@ function QuestBanner() {
   const reward = quest.reward;
   const panel = QUEST_PANEL[quest.goal.kind];
   // A guide label shares this corner: step aside while it teaches, unless it is pointing at us.
-  const hidden = !!guide && guide.target !== "quest-claim";
+  // In a boss fight the pill would sit where the boss stands: it waits until the fight is over.
+  const hidden = (!!guide && guide.target !== "quest-claim") || mode === "boss";
   return (
     <motion.div layout className={cn("absolute right-2 bottom-[84px] z-10 max-w-[64%] transition-opacity", hidden && "opacity-0 pointer-events-none")} data-testid="quest-banner">
       <button
@@ -417,8 +419,9 @@ function QuestBanner() {
         data-guide={done ? "quest-claim" : undefined}
         aria-label={done ? "Claim quest reward" : panel ? `Current objective: ${quest.text}. Open ${panel}` : `Current objective: ${quest.text}`}
       >
-        <span className="text-[11px] font-semibold text-ivory truncate">
-          {quest.text} <span className={done ? "text-gold-2" : "text-parch"}>{prog.value}/{prog.target}</span>
+        <span className="text-[11px] font-semibold text-ivory truncate min-w-0">{quest.text}</span>
+        <span className={cn("text-[11px] font-semibold shrink-0 tabular-nums -ml-1", done ? "text-gold-2" : "text-parch")}>
+          {prog.value}/{prog.target}
         </span>
         <span className={cn("flex items-center gap-0.5 text-[11px] font-bold shrink-0", reward.gold ? "text-gold-2" : reward.essence ? "text-jade-2" : "text-violet")}>
           <Icon name={reward.gold ? "coin" : reward.essence ? "essence" : "core"} size={11} />
@@ -432,9 +435,11 @@ function QuestBanner() {
 
 function Toasts() {
   const toasts = useUi((u) => u.toasts);
+  // Below the boss bar during a fight, so the boss name stays readable.
+  const bossUp = useHud((s) => !!s?.boss);
   const tone: Record<string, string> = { info: "text-parch border-white/12", gold: "text-gold-2 border-gold/40", essence: "text-jade-2 border-jade/40", warn: "text-crimson-2 border-crimson/40", level: "text-gold-2 border-gold/40" };
   return (
-    <div className="absolute right-2 top-2 z-20 flex flex-col items-end gap-1 pointer-events-none max-w-[62%]" aria-live="polite">
+    <div className={cn("absolute right-2 z-20 flex flex-col items-end gap-1 pointer-events-none max-w-[62%]", bossUp ? "top-[52px]" : "top-2")} aria-live="polite">
       <AnimatePresence>
         {toasts.map((t) => (
           <motion.div key={t.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} className={cn("px-2.5 py-1 rounded-md bg-ink/85 border text-[10px] font-semibold text-right leading-tight", tone[t.tone])}>

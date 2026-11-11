@@ -216,6 +216,21 @@ export function playerDodge(world: World): void {
   const from = { ...p.pos };
   let dir: 1 | -1 = p.facing;
   let distance = 130;
+  // Standing in a telegraph or a burning patch: the dash leaves it, in depth too.
+  const escape = world.escapeFrom(p.pos);
+  if (escape) {
+    world.setState(p, "dodge", def.castTime);
+    p.vel.x = (escape.x - p.pos.x) / def.castTime;
+    p.vel.y = (escape.y - p.pos.y) / def.castTime;
+    if (Math.abs(escape.x - p.pos.x) > 4) p.facing = escape.x >= p.pos.x ? 1 : -1;
+    p.pendingAbility = null;
+    p.pendingHitLanded = true;
+    addStatus(p, { kind: "invuln", remaining: def.castTime + 0.12, value: 1, sourceId: p.id });
+    world.playerMoveLockTimer = 0.15;
+    world.events.push({ type: "dodge", id: p.id, from, to: escape });
+    world.events.push({ type: "cast", id: p.id, ability: "shadow_dash", pos: from, facing: p.facing, targetPos: escape });
+    return;
+  }
   if (target) {
     dir = target.pos.x >= p.pos.x ? 1 : -1;
     const d = dist(p.pos, target.pos);

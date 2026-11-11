@@ -43,7 +43,7 @@ import { generateItem } from "./economy/loot";
 import { ABILITIES } from "./data/abilities";
 import { bossForStage, regionForStage } from "./data/regions";
 import { clampFarmStage, frontierStage, normalizeCampaign, resolveBossDefeat, resolveBossVictory, resolveCycle, resolveFarmingDefeat } from "./progression/campaign";
-import { readinessTips, simulateBossFight, summarizeForecast, FORECAST_SEEDS, type BossForecast, type ReadinessTip } from "./progression/readiness";
+import { bossFightStepper, readinessTips, summarizeForecast, FORECAST_SEEDS, type BossForecast, type FightResult, type ReadinessTip } from "./progression/readiness";
 import { claimObjective as doClaimObjective, objectiveDef, recordObjective, refreshObjectives, type ObjectiveCounter } from "./progression/objectives";
 import { fmt } from "@/lib/format";
 
@@ -72,7 +72,7 @@ export type Modal =
   | { kind: "summon_reveal"; outcome: ClaimOutcome; summonId: string; first: boolean; cinematicDone: boolean }
   | { kind: "perk_choice"; perks: PerkDef[] }
   | { kind: "boss_ready"; stage: number }
-  | { kind: "boss_victory"; stage: number; defId: string; gold: number; xp: number; cores: number; items: EquipmentItem[]; nextStage: number; unlocks: string[]; seconds: number; firstWin: boolean }
+  | { kind: "boss_victory"; stage: number; defId: string; gold: number; xp: number; cores: number; items: EquipmentItem[]; nextStage: number; unlocks: string[]; seconds: number; firstWin: boolean; orbId?: number }
   | { kind: "boss_defeat"; stage: number; defId: string; bossHpLeft: number; bossPhase: number; seconds: number; casts: number; dodges: number; perfect: number; summonsLost: number; farmStage: number; tips: ReadinessTip[] }
   | { kind: "offline"; summary: OfflineSummary; levels: number }
   | { kind: "settings" }
@@ -88,6 +88,8 @@ export interface Toast {
   id: number;
   text: string;
   tone: "info" | "gold" | "essence" | "warn" | "level";
+  /** Routine news that yields to anything else. */
+  low?: boolean;
 }
 
 export interface UiState {
@@ -341,12 +343,17 @@ export class GameController {
     this.hiddenAt = 0;
     const world = this.world;
     if (away === null || away < OFFLINE_MIN_SECONDS || !world?.farming || this.save.readOnly) return;
-    const p = this.profile;
-    const summary = applyOfflineProgress(p, away, Date.now() >>> 0);
-    p.lastActive = Date.now();
-    if (!summary) return;
-    if (p.progress.currentStage !== world.stage && !world.player.dead) world.moveToStage(p.progress.currentStage);
-    this.presentOffline(summary);
+    this.toast("Catching up on your time away…", "info");
+    // Let that toast paint before the (short) simulation runs.
+    setTimeout(() => {
+      if (this.disposed || this.world !== world || !world.farming) return;
+      const p = this.profile;
+      const summary = applyOfflineProgress(p, away, Date.now() >>> 0);
+      p.lastActive = Date.now();
+      if (!summary) return;
+      if (p.progress.currentStage !== world.stage && !world.player.dead) world.moveToStage(p.progress.currentStage);
+      this.presentOffline(summary);
+    }, 60);
   }
 
   /** Offline rewards are already in the profile: apply XP, feed objectives, save, then show. */
@@ -371,6 +378,8 @@ export class GameController {
   // ---------------------------------------------------------------------
 
   startRun(stage: number, mode: ModeId = "campaign"): void {
+    // Any new run supersedes a pending post-defeat beat: it must never overwrite this one.
+    this.pending = null;
     this.world?.dispose();
     const loadout = buildLoadout(this.profile);
     this.world = new World({ stage, loadout, mode, seed: (Date.now() ^ (stage * 2654435761)) >>> 0, cryptSlot: cryptSlot() });
@@ -414,6 +423,11 @@ export class GameController {
 
   startMode(mode: ModeId): boolean {
     this.userGesture();
+    if (this.pending || this.world?.player.dead) {
+      this.sfx("error", { volume: 0.4 });
+      this.toast("Your warrior is regrouping", "warn");
+      return false;
+    }
     this.refreshKeys();
     const avail = this.modeAvailability(mode);
     if (!avail.ok) {
@@ -494,6 +508,8 @@ export class GameController {
     const world = this.world;
     if (!world) return;
     const steps = this.battleSpeedUnlocked && this.profile.settings.battleSpeed === 2 && world.phase !== "defeat" && world.phase !== "victory" && world.phase !== "boss_intro" ? 2 : 1;
+    const modal = this.uiStore.get().modal;
+    world.holdOrbs = modal !== null && modal.kind !== "boss_intro";
     if (!this.paused) for (let i = 0; i < steps; i++) world.update(dt);
     this.processEvents(world.drainEvents());
     if (this.pending) {
@@ -548,6 +564,7 @@ export class GameController {
     let gold = 0;
     let xp = 0;
     let kills = 0;
+    let cleared: Extract<GameEvent, { type: "stage_cleared" }> | null = null;
     this.renderer?.handleEvents(events);
     for (const e of events) {
       switch (e.type) {
@@ -584,7 +601,7 @@ export class GameController {
             dirty = true;
           } else if (e.kind === "summon") {
             this.run.summonsLost += 1;
-            this.toast("A companion has fallen. It will return.", "warn");
+            if (this.run.summonsLost === 1) this.toast("A companion has fallen. It will return.", "warn", true);
           }
           break;
         case "gold":
@@ -640,8 +657,8 @@ export class GameController {
           this.onStageAdvanced(e.from, e.stage);
           break;
         case "stage_cleared":
-          if (e.mode === "boss") this.onBossVictory(e.stage);
-          else this.onModeCleared(e.mode as ModeId, e.wave, e.time);
+          // Resolved after this batch's gold, XP and loot are counted, so result cards are complete.
+          cleared = e;
           dirty = true;
           break;
         case "player_defeated":
@@ -737,9 +754,13 @@ export class GameController {
     if (loot.length > 0) {
       for (const l of loot) {
         this.addItem(l.item);
-        if (this.run.mode === "crypt") this.run.items.push(l.item);
+        if (this.run.mode === "crypt" || this.run.mode === "boss") this.run.items.push(l.item);
       }
       dirty = true;
+    }
+    if (cleared) {
+      if (cleared.mode === "boss") this.onBossVictory(cleared.stage);
+      else this.onModeCleared(cleared.mode as ModeId, cleared.wave, cleared.time);
     }
     if (dirty) {
       this.afterProgression();
@@ -824,7 +845,7 @@ export class GameController {
       this.sfx("quest", { volume: 0.6 });
       this.toast(`Stage ${stage} cleared · +${fmt(res.gold)} gold`, "gold");
     } else {
-      this.toast(`Stage ${stage} · +${fmt(res.gold)} gold`, "gold");
+      this.toast(`Stage ${stage} · +${fmt(res.gold)} gold`, "gold", true);
     }
     if (res.next !== stage) this.world?.queueStage(res.next);
     this.commitSoon();
@@ -885,24 +906,34 @@ export class GameController {
     this.forecastTimer = setTimeout(() => this.runForecast(gate, key), force ? 0 : 900);
   }
 
+  /** Runs the forecast fights in slices of a few milliseconds so frames keep flowing. */
   private runForecast(stage: number, key: string): void {
     this.forecastTimer = null;
     const job = ++this.forecastJob;
     const snapshot: Profile = JSON.parse(JSON.stringify(this.profile));
-    const results: ReturnType<typeof simulateBossFight>[] = [];
+    const results: FightResult[] = [];
+    let fight = 0;
+    let stepper = bossFightStepper(snapshot, stage, FORECAST_SEEDS[0] as number);
     this.forecastStore.set({ forecast: this.forecast?.stage === stage ? this.forecast : null, running: true, stage });
-    const step = (i: number) => {
+    const slice = () => {
       if (job !== this.forecastJob || this.disposed) return;
-      if (i >= FORECAST_SEEDS.length) {
-        this.forecast = summarizeForecast(stage, results);
-        this.forecastKey = key;
-        this.forecastStore.set({ forecast: this.forecast, running: false, stage });
-        return;
+      const until = performance.now() + 6;
+      while (performance.now() < until) {
+        const r = stepper.step(30);
+        if (!r) continue;
+        results.push(r);
+        fight += 1;
+        if (fight >= FORECAST_SEEDS.length) {
+          this.forecast = summarizeForecast(stage, results);
+          this.forecastKey = key;
+          this.forecastStore.set({ forecast: this.forecast, running: false, stage });
+          return;
+        }
+        stepper = bossFightStepper(snapshot, stage, FORECAST_SEEDS[fight] as number);
       }
-      results.push(simulateBossFight(snapshot, stage, FORECAST_SEEDS[i] as number));
-      setTimeout(() => step(i + 1), 0);
+      setTimeout(slice, 0);
     };
-    step(0);
+    slice();
   }
 
   /** Feeds daily and weekly objectives; announces any that just completed. */
@@ -977,15 +1008,17 @@ export class GameController {
     const lv = applyXp(p.player.level, p.player.xp, res.xp);
     p.player.level = lv.level;
     p.player.xp = lv.xp;
-    const items = (this.world?.takeLoot() ?? []).map((l) => l.item);
-    for (const it of items) this.addItem(it);
+    const late = (this.world?.takeLoot() ?? []).map((l) => l.item);
+    for (const it of late) this.addItem(it);
+    const items = [...this.run.items, ...late];
     this.objectiveEvent("bossWins", 1);
+    const bossOrb = this.world?.orbs.find((o) => o.isBoss && !o.claimed);
     this.forecast = null;
     this.forecastStore.set(null);
     this.sfx("level_up", { volume: 1, rate: 0.8 });
     this.renderer?.flash(0xe9c97a, 0.4);
     this.renderer?.levelUpBurst();
-    this.enqueueModal({ kind: "boss_victory", stage, defId: bossForStage(stage), gold: res.gold + this.run.gold, xp: res.xp, cores: res.cores, items, nextStage: res.next, unlocks: res.unlocks, seconds: Math.round(this.world?.time ?? 0), firstWin: res.firstWin });
+    this.enqueueModal({ kind: "boss_victory", stage, defId: bossForStage(stage), gold: res.gold + this.run.gold, xp: res.xp, cores: res.cores, items, nextStage: res.next, unlocks: res.unlocks, seconds: Math.round(this.world?.time ?? 0), firstWin: res.firstWin, orbId: bossOrb?.id });
     if (lv.levelsGained > 0) this.onLevelUp(lv.levelsGained);
     this.afterProgression();
     this.commit();
@@ -1019,6 +1052,22 @@ export class GameController {
         this.requestForecast(true);
       },
     };
+  }
+
+  /**
+   * BIND the fallen boss's essence from the victory card. The card steps aside for the attempt
+   * (and the reveal, on success) and comes back afterwards with the attempts left.
+   */
+  bindBossEssence(orbId: number): void {
+    const ui = this.uiStore.get();
+    const victory = ui.modal?.kind === "boss_victory" ? ui.modal : null;
+    this.uiStore.update((u) => ({ ...u, modal: null }));
+    this.claimEssence(orbId);
+    if (!victory) return;
+    const still = this.world?.peekOrb(orbId) ? orbId : undefined;
+    const next: Modal = { ...victory, orbId: still };
+    if (this.uiStore.get().modal) this.modalQueue.unshift(next);
+    else this.uiStore.update((u) => ({ ...u, modal: next }));
   }
 
   /** After the victory card: farming resumes at the next stage. */
@@ -1117,7 +1166,7 @@ export class GameController {
       this.toast(`${item.rarity === "legendary" ? "Legendary" : "Epic"}: ${itemName(item)} ✦ ${GEAR_EFFECTS[item.effect].name}`, "gold");
       this.sfx("level_up", { volume: 0.7, rate: 1.15 });
       this.renderer?.flash(item.rarity === "legendary" ? 0xe9c56f : 0xb595e6, 0.18);
-    } else this.toast(`Found: ${itemName(item)}`, "gold");
+    } else this.toast(`Found: ${itemName(item)}`, "gold", true);
     this.uiStore.update((u) => ({ ...u, newBadges: { ...u.newBadges, gear: true } }));
   }
 
@@ -1570,6 +1619,10 @@ export class GameController {
   /** Farm a chosen stage (from the Rift panel). Choosing below the frontier holds there. */
   selectStage(stage: number): void {
     this.userGesture();
+    if (this.pending || this.world?.player.dead) {
+      this.toast("Your warrior is regrouping", "warn");
+      return;
+    }
     const p = this.profile;
     const s = clampFarmStage(p, stage);
     p.progress.currentStage = s;
@@ -1669,9 +1722,11 @@ export class GameController {
     if (next) this.uiStore.update((u) => ({ ...u, modal: next }));
   }
 
-  toast(text: string, tone: Toast["tone"] = "info"): void {
+  toast(text: string, tone: Toast["tone"] = "info", low = false): void {
+    // Routine news (a fallen companion, a cycle's gold) never pushes out something more important.
+    if (low && this.uiStore.get().toasts.some((t) => !t.low)) return;
     const id = ++this.toastId;
-    this.uiStore.update((u) => ({ ...u, toasts: [{ id, text, tone }] }));
+    this.uiStore.update((u) => ({ ...u, toasts: [{ id, text, tone, low }] }));
     setTimeout(() => this.uiStore.update((u) => ({ ...u, toasts: u.toasts.filter((t) => t.id !== id) })), 2200);
   }
 
@@ -1715,8 +1770,11 @@ export class GameController {
         this.uiStore.update((u) => ({ ...u, guide, tutorialStep: stepId }));
       }
     };
-    if (ui.modal !== null && ui.modal.kind !== "boss_ready" && ui.modal.kind !== "boss_defeat") {
-      if (ui.guide) setGuide(null, ui.tutorialStep);
+    if (ui.modal !== null) {
+      // Only the boss lesson points into a card (at FIGHT); everything else waits for it to close.
+      const bossStep = TUTORIAL_STEPS.find((st) => st.id === "boss");
+      if (ui.modal.kind === "boss_ready" && bossStep && !p.tutorial.finished && !p.tutorial.completed.includes("boss")) setGuide(this.guideFor(bossStep, 1), "boss");
+      else if (ui.guide) setGuide(null, ui.tutorialStep);
       return;
     }
     const ctx = { profile: p, snapshot: snap, elapsed: this.tutorialElapsed, panel: ui.panel, enemyWindupNearPlayer: this.enemyWindupNearPlayer };
@@ -1746,7 +1804,7 @@ export class GameController {
         const sub = step.targets[this.tutorialSubstep];
         if (sub?.panel && ui.panel === sub.panel && this.tutorialSubstep < step.targets.length - 1) this.tutorialSubstep += 1;
         else if (sub?.panel && ui.panel !== sub.panel && this.tutorialSubstep > 0) this.tutorialSubstep = 0;
-        if (step.id === "boss") this.tutorialSubstep = ui.modal?.kind === "boss_ready" ? 1 : 0;
+        if (step.id === "boss") this.tutorialSubstep = 0;
         setGuide(this.guideFor(step, this.tutorialSubstep), step.id);
         return;
       }

@@ -65,7 +65,8 @@ export function HandGuide() {
   const cx = rect.x + rect.w / 2;
   const cy = rect.y + rect.h / 2;
   // Place the hand below-right of the target when there is room, otherwise above-left.
-  const below = cy < vh * 0.42;
+  // FIGHT sits at the foot of the readiness sheet: point from below so the sheet stays readable.
+  const below = cy < vh * 0.42 || guide.target === "boss-fight";
   const handX = Math.min(vw - 60, Math.max(16, cx + 8));
   const handY = below ? cy + rect.h / 2 - 6 : cy - rect.h / 2 - 58;
   const labelY = below ? handY + 64 : handY - 34;

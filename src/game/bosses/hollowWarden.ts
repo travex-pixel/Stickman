@@ -109,9 +109,10 @@ export function updateBossAi(world: World, b: Combatant, dt: number): void {
       if (bs.patternTimer > 0.9) {
         // telegraph
         world.stop(b);
-        b.state = "windup";
+        hold(b, "windup", bs.patternTimer - 0.9);
       } else if (bs.patternTimer > 0.25) {
-        b.state = "dodge";
+        // The charge itself: an attack, fully visible (never the translucent dodge look).
+        hold(b, "attack", bs.patternTimer - 0.25);
         b.vel.x = b.facing * 620;
         b.vel.y = 0;
         ext.chargeHit = ext.chargeHit ?? new Set();
@@ -128,7 +129,7 @@ export function updateBossAi(world: World, b: Combatant, dt: number): void {
         // vulnerable recovery window
         b.vel.x = 0;
         b.vel.y = 0;
-        b.state = "recover";
+        hold(b, "recover", bs.patternTimer);
         if (bs.patternTimer <= 0) {
           ext.chargeHit = undefined;
           world.setState(b, "stagger", bs.phase === 2 ? 0.9 : 1.4);
@@ -141,7 +142,7 @@ export function updateBossAi(world: World, b: Combatant, dt: number): void {
     case "slam": {
       bs.patternTimer -= dt;
       world.stop(b);
-      b.state = "windup";
+      hold(b, "windup", bs.patternTimer);
       if (bs.patternTimer <= 0) {
         world.events.push({ type: "attack_swing", id: b.id, kind: "boss", heavy: true, pos: { ...b.pos }, facing: b.facing });
         world.events.push({ type: "shake", strength: 16 });
@@ -162,7 +163,7 @@ export function updateBossAi(world: World, b: Combatant, dt: number): void {
     case "volley": {
       bs.patternTimer -= dt;
       world.stop(b);
-      b.state = "cast";
+      hold(b, "cast", bs.patternTimer);
       const ext = bs;
       ext.burstNext = (ext.burstNext ?? 0) - dt;
       if (ext.burstNext <= 0 && (ext.burstCount ?? 0) < 5) {
@@ -184,7 +185,7 @@ export function updateBossAi(world: World, b: Combatant, dt: number): void {
     case "undertow": {
       bs.patternTimer -= dt;
       world.stop(b);
-      b.state = "windup";
+      hold(b, "windup", bs.patternTimer);
       if (bs.patternTimer <= 0) {
         world.events.push({ type: "attack_swing", id: b.id, kind: "boss", heavy: true, pos: { ...b.pos }, facing: b.facing });
         world.events.push({ type: "shake", strength: 8 });
@@ -206,7 +207,7 @@ export function updateBossAi(world: World, b: Combatant, dt: number): void {
     case "riptide": {
       bs.patternTimer -= dt;
       world.stop(b);
-      b.state = "cast";
+      hold(b, "cast", bs.patternTimer);
       const ext = bs;
       ext.burstNext = (ext.burstNext ?? 0) - dt;
       if (ext.burstNext <= 0 && (ext.burstCount ?? 0) < 3) {
@@ -237,7 +238,7 @@ export function updateBossAi(world: World, b: Combatant, dt: number): void {
     case "blink": {
       bs.patternTimer -= dt;
       world.stop(b);
-      b.state = "cast";
+      hold(b, "cast", bs.patternTimer);
       if (bs.patternTimer <= 0) {
         const from = { ...b.pos };
         // Leave fire where it stood and reappear across the field.
@@ -335,4 +336,13 @@ function startVolley(world: World, b: Combatant, target: Combatant): void {
 /** The Herald is a caster: it breathes between spells, and those pauses are the windows to reach it. */
 function heraldRest(b: Combatant): number {
   return b.enemy?.defId === "ember_herald" ? 0.9 : 0;
+}
+
+/** Holds a boss in a state whose remaining duration is the true time left until it acts. */
+function hold(b: Combatant, state: Combatant["state"], timeLeft: number): void {
+  if (b.state !== state) {
+    b.state = state;
+    b.stateTime = 0;
+  }
+  b.stateDuration = b.stateTime + Math.max(0, timeLeft);
 }

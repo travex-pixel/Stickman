@@ -200,7 +200,6 @@ export function computeModifiers(profile: Profile): PlayerModifiers {
         break;
     }
   }
-  if (profile.summons.collection.some((s) => s.deployed && s.defId === "hollow_warden")) m.summonDefenseMult += 0.15;
   for (const item of equippedItems(profile)) if (item.effect) m.gearEffects.add(item.effect);
   for (const [id, n] of setCounts(equippedItems(profile).map((i) => i.templateId))) if (n >= 4) m.gearEffects.add(GEAR_SETS[id].four);
   if (m.gearEffects.has("shadowbound")) {

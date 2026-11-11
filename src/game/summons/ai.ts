@@ -118,8 +118,7 @@ export function updateSummonAi(world: World, s: Combatant, dt: number): void {
   s.facing = target.pos.x >= s.pos.x ? 1 : -1;
   if (s.attackCooldown <= 0) {
     const fast = sum.role === "reaper";
-    const haste = s.defId === "husk_blade" && sum.sameTargetTime > 1 ? 0.8 : 1;
-    world.beginAttack(s, target, fast ? 0.1 * haste : 0.3, 0.1, fast ? 0.12 : 0.3);
+    world.beginAttack(s, target, fast ? 0.1 : 0.3, 0.1, fast ? 0.12 : 0.3);
   }
 }
 
@@ -165,7 +164,7 @@ function tryActive(world: World, s: Combatant, target: Combatant, nearby: Combat
         .slice(0, 3)
         .map((x) => ({ ...x.e.pos }));
       for (const at of spots) {
-        world.addTelegraph(at, 60, 0.5, "circle", 1, 0, 0xd9823f);
+        world.addTelegraph(at, 60, 0.5, "circle", 1, 0, 0xd9823f, false);
         world.schedule(0.5, () => {
           if (s.dead) return;
           for (const e of factionWithin(at, "enemy", world.entities.values(), 60)) world.dealDamage(s, e, 1.6, "fire", true);
@@ -227,7 +226,7 @@ function tryActive(world: World, s: Combatant, target: Combatant, nearby: Combat
     case "ember_acolyte": {
       const cluster = factionWithin(target.pos, "enemy", world.entities.values(), 70);
       if (cluster.length < 2 && target.kind !== "boss") return false;
-      world.addTelegraph(target.pos, 60, 0.5, "circle", 1, 0, 0xff9b3d);
+      world.addTelegraph(target.pos, 60, 0.5, "circle", 1, 0, 0xff9b3d, false);
       world.addHazard({ ...target.pos }, 60, 5, s.stats.attack * 0.8, "ally", s.id, "fire");
       world.events.push({ type: "summon_ability", id: s.id, defId: s.defId, ability: "Cinder Bloom", pos: { ...target.pos } });
       world.setState(s, "cast", 0.6);
@@ -271,7 +270,3 @@ function tryActive(world: World, s: Combatant, target: Combatant, nearby: Combat
   }
 }
 
-/** Back-reference so the hazard/defense helpers can compute protection from the Warden. */
-export function wardenPresence(world: World): boolean {
-  return world.summonEntities().some((s) => s.defId === "hollow_warden");
-}

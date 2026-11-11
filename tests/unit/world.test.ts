@@ -715,3 +715,52 @@ describe("focus target", () => {
     expect(w.focusId).toBe(-1);
   });
 });
+
+describe("honest threats", () => {
+  it("the perfect window opens only in the last instant before a boss blow lands", () => {
+    for (const stage of [1, 3, 9]) {
+      const p = createDefaultProfile();
+      p.player.level = 30;
+      p.player.statLevels = { attack: 1, maxHp: 400, attackSpeed: 1, critChance: 1, critDamage: 1, defense: 200 };
+      const w = new World({ stage, loadout: buildLoadout(p), seed: 7, mode: "boss" });
+      // When the perfect window last opened (a new threat, or the same one after it had closed).
+      let latest = -1;
+      let lastId = -1;
+      const leads: number[] = [];
+      for (let i = 0; i < 60 * 40; i++) {
+        w.update(FIXED_DT);
+        const th = w.impendingThreat(World.PERFECT_WINDOW);
+        if (th && th.id !== lastId) latest = w.time;
+        lastId = th ? th.id : -1;
+        for (const e of w.drainEvents()) {
+          if (e.type === "hit" && e.targetId === w.player.id && e.sourceId === w.boss?.id && e.heavy && latest >= 0) leads.push(w.time - latest);
+        }
+        if (w.phase === "victory" || w.phase === "defeat") break;
+      }
+      expect(leads.length, `stage ${stage}`).toBeGreaterThan(0);
+      // Every heavy boss blow was announced by the window no more than ~0.45 s before it landed.
+      for (const lead of leads) expect(lead, `stage ${stage}`).toBeLessThanOrEqual(0.45);
+    }
+  });
+
+  it("a dash out of a riptide circle moves the warrior outside it, including in depth", () => {
+    const w = freshWorld(2, 4);
+    step(w, 1);
+    for (const e of w.entities.values()) if (e.kind === "enemy") e.dead = true;
+    const at = { x: w.player.pos.x + 10, y: w.player.pos.y + 5 };
+    w.addTelegraph(at, 60, 1.2, "circle", 1, 0, 0x8fc9c4);
+    const target = w.escapeFrom(w.player.pos)!;
+    expect(target).not.toBeNull();
+    expect(Math.hypot(target.x - at.x, target.y - at.y)).toBeGreaterThan(60);
+    w.dodge();
+    for (let i = 0; i < 30; i++) w.update(FIXED_DT);
+    expect(Math.hypot(w.player.pos.x - at.x, w.player.pos.y - at.y)).toBeGreaterThan(55);
+  });
+
+  it("the army's own telegraphs are never treated as threats", () => {
+    const w = freshWorld(2, 4);
+    w.addTelegraph({ ...w.player.pos }, 60, 0.2, "circle", 1, 0, 0xd9823f, false);
+    expect(w.impendingThreat(1)).toBeNull();
+    expect(w.escapeFrom(w.player.pos)).toBeNull();
+  });
+});

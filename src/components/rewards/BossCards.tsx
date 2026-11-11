@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { motion } from "motion/react";
 import { Icon } from "@/components/ui/Icon";
 import { SummonPortrait } from "@/components/ui/Portrait";
-import { useController, useProfileRef } from "@/hooks/useGame";
+import { useController, useHud, useProfileRef } from "@/hooks/useGame";
+import { extractionChance } from "@/game/summons/extraction";
 import { useStore } from "@/lib/store";
 import type { Modal } from "@/game/GameController";
 import { ENEMIES } from "@/game/data/enemies";
@@ -50,8 +51,8 @@ function TipList({ tips, max }: { tips: ReadinessTip[]; max: number }) {
   return (
     <ul className="w-full flex flex-col gap-1" data-testid="boss-tips">
       {tips.slice(0, max).map((t, i) => (
-        <li key={t.text}>
-          <button className={cn("w-full flex items-center gap-2 rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-left text-[11px] leading-snug text-parch", i >= 2 && "short-hide")} onClick={() => c.setPanel(t.panel)}>
+        <li key={t.text} className={cn(i >= 1 && "short-hide")}>
+          <button className="w-full flex items-center gap-2 rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-left text-[11px] leading-snug text-parch" onClick={() => c.setPanel(t.panel)}>
             <Icon name="chevron" size={10} className="text-gold shrink-0" />
             <span className="flex-1 min-w-0">{t.text}</span>
           </button>
@@ -67,6 +68,7 @@ export function BossReady({ modal }: { modal: Extract<Modal, { kind: "boss_ready
   // useProfileRef re-renders on every commit, so tips and numbers follow upgrades made below.
   const profile = useProfileRef();
   const fc = useStore(c.forecastStore, (s) => s);
+  const alive = useHud((s) => s?.player.alive ?? true);
   const bossId = bossForStage(modal.stage);
   const boss = ENEMIES[bossId];
   const stats = computePlayerStats(profile);
@@ -131,13 +133,13 @@ export function BossReady({ modal }: { modal: Extract<Modal, { kind: "boss_ready
           <span className="text-parch">Stage {modal.stage + 1}</span>
         </div>
         <TipList tips={tips} max={3} />
-        {boss?.counter && <p className="text-[10px] italic text-mist leading-snug short-hide">{boss.counter}</p>}
+        {boss?.counter && <p className="text-[10px] italic text-parch/90 leading-snug">{boss.counter}</p>}
         <div className="flex gap-2 mt-0.5">
           <button className="btn-ghost flex-1 !py-2" onClick={() => c.closeModal()} data-testid="boss-later">
             Keep farming
           </button>
-          <button className="btn-boss flex-[1.3] !py-2" onClick={() => c.challengeBoss()} data-guide="boss-fight" data-testid="boss-fight">
-            FIGHT
+          <button className="btn-boss flex-[1.3] !py-2" onClick={() => c.challengeBoss()} disabled={!alive} data-guide="boss-fight" data-testid="boss-fight">
+            {alive ? "FIGHT" : "Regrouping…"}
           </button>
         </div>
       </div>
@@ -147,7 +149,10 @@ export function BossReady({ modal }: { modal: Extract<Modal, { kind: "boss_ready
 
 export function BossVictory({ modal }: { modal: Extract<Modal, { kind: "boss_victory" }> }) {
   const c = useController();
-  const auto = useProfileRef().settings.autoAdvance;
+  const profile = useProfileRef();
+  const orb = useHud((s) => (modal.orbId !== undefined ? (s?.orbs.find((o) => o.id === modal.orbId) ?? null) : null));
+  // An unclaimed boss essence is a decision: no countdown runs while it waits.
+  const auto = profile.settings.autoAdvance && !orb;
   const [left, setLeft] = useState(auto ? 7 + Math.min(2, modal.items.length) : -1);
   useEffect(() => {
     if (!auto || left < 0) return;
@@ -159,6 +164,7 @@ export function BossVictory({ modal }: { modal: Extract<Modal, { kind: "boss_vic
     return () => clearTimeout(t);
   }, [left, auto, c]);
   const boss = ENEMIES[modal.defId];
+  const chance = orb ? extractionChance(profile, orb.summonId, { elite: orb.elite, bonus: computeModifiers(profile).extractionBonus }) : 0;
   return (
     <Sheet testId="boss-victory" tone="gold">
       <div className="px-4 pt-3 pb-3 text-center flex flex-col gap-1.5 items-center short-tight">
@@ -196,6 +202,17 @@ export function BossVictory({ modal }: { modal: Extract<Modal, { kind: "boss_vic
                 {u}
               </motion.span>
             ))}
+          </div>
+        )}
+        {orb && (
+          <div className="w-full flex items-center gap-2 rounded-lg border border-gold/50 bg-gold/10 px-2 py-1.5" data-testid="victory-bind">
+            <div className="flex-1 min-w-0 text-left leading-tight">
+              <div className="text-[11px] font-semibold text-ivory truncate">{boss?.name ?? "The boss"}&apos;s essence lingers</div>
+              <div className="text-[10px] text-mist">{orb.attempts > 1 ? `${orb.attempts} attempts` : "Last attempt"} · it will not fade</div>
+            </div>
+            <button className="btn-primary !py-1.5 !px-3 !text-[13px] shrink-0" onClick={() => c.bindBossEssence(orb.id)} data-testid="victory-bind-button">
+              BIND {Math.round(chance * 100)}%
+            </button>
           </div>
         )}
         <button className="btn-primary w-full mt-1" onClick={() => c.continueAfterVictory()} data-testid="victory-continue">

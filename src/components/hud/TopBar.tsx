@@ -60,6 +60,9 @@ export function TopBar() {
         <span className="font-display text-[11px] tracking-[0.12em] text-parch whitespace-nowrap hidden min-[360px]:block" data-testid="stage-label">
           {mode === "boss" ? <span className="text-crimson-2">BOSS {stage}</span> : `STAGE ${stage}`}
         </span>
+        <span className="font-display text-[11px] tracking-[0.08em] text-parch whitespace-nowrap min-[360px]:hidden" aria-hidden="true">
+          {mode === "boss" ? <span className="text-crimson-2">B{stage}</span> : `S${stage}`}
+        </span>
         <div className="flex items-center gap-1 mt-1" aria-label={gate === stage && mode === "campaign" ? `Stage ${stage}, boss waiting` : `Stage ${stage}, wave ${wave}`}>
           {[1, 2, 3].map((w) => (
             <span key={w} className="h-1.5 w-3 rounded-sm" style={{ background: mode === "boss" || wave >= w ? "#cfa95e" : "rgba(235,228,211,0.16)" }} />

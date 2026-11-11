@@ -164,6 +164,8 @@ export interface Telegraph {
   dir: 1 | -1;
   length: number;
   color: number;
+  /** Enemy attacks (false for the army's own abilities, such as Pyre Rain). */
+  hostile: boolean;
 }
 
 export interface GroundHazard {

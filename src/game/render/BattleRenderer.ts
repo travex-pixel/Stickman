@@ -147,7 +147,10 @@ export class BattleRenderer {
 
   setWorld(world: World): void {
     this.world = world;
-    for (const v of this.views.values()) v.rig.destroy();
+    for (const v of this.views.values()) {
+      v.rig.destroy();
+      v.bar.destroy();
+    }
     this.views.clear();
     for (const p of this.projectiles.values()) p.destroy({ children: true });
     this.projectiles.clear();
@@ -230,6 +233,11 @@ export class BattleRenderer {
 
   private depthScale(y: number): number {
     return 0.8 + 0.32 * clamp(y / WORLD_D, 0, 1);
+  }
+
+  /** Screen pixels per world unit along the depth axis. */
+  private depthUnit(): number {
+    return (this.groundBottom - this.groundTop) / WORLD_D;
   }
 
   private unit(): number {
@@ -563,38 +571,52 @@ export class BattleRenderer {
       const k = d.life / d.total;
       g.ellipse(d.x, d.y, d.rx * (1 + (1 - k) * 0.3), d.ry * (1 + (1 - k) * 0.3)).fill({ color: d.color, alpha: 0.55 * Math.min(1, k * 1.6) });
     }
+    // Telegraphs are drawn with the same geometry the simulation tests: world distance on both
+    // axes, so the vertical extent uses the ground's depth scale, not a fixed squash.
+    const vy = this.depthUnit();
     for (const t of world.telegraphs) {
       const k = 1 - t.remaining / t.total;
       const sx = this.sx(t.pos.x);
       const sy = this.sy(t.pos.y);
-      const r = t.radius * u;
+      const rx = t.radius * u;
+      const ry = t.radius * vy;
       if (t.shape === "circle") {
-        g.ellipse(sx, sy, r, r * 0.42).fill({ color: t.color, alpha: 0.1 + k * 0.1 });
-        g.ellipse(sx, sy, r, r * 0.42).stroke({ width: 2, color: t.color, alpha: 0.7 });
-        g.ellipse(sx, sy, r * k, r * 0.42 * k).fill({ color: t.color, alpha: 0.22 });
+        g.ellipse(sx, sy, rx, ry).fill({ color: t.color, alpha: 0.1 + k * 0.1 });
+        g.ellipse(sx, sy, rx, ry).stroke({ width: 2, color: t.color, alpha: 0.7 });
+        g.ellipse(sx, sy, rx * k, ry * k).fill({ color: t.color, alpha: 0.22 });
       } else if (t.shape === "line") {
         const len = t.length * u;
         const x0 = sx;
         const x1 = sx + t.dir * len;
-        g.rect(Math.min(x0, x1), sy - r * 0.42, Math.abs(x1 - x0), r * 0.84).fill({ color: t.color, alpha: 0.12 + k * 0.12 });
-        g.rect(Math.min(x0, x1), sy - r * 0.42, Math.abs(x1 - x0) * k, r * 0.84).fill({ color: t.color, alpha: 0.2 });
-        g.rect(Math.min(x0, x1), sy - r * 0.42, Math.abs(x1 - x0), r * 0.84).stroke({ width: 2, color: t.color, alpha: 0.7 });
+        g.rect(Math.min(x0, x1), sy - ry, Math.abs(x1 - x0), ry * 2).fill({ color: t.color, alpha: 0.12 + k * 0.12 });
+        g.rect(Math.min(x0, x1), sy - ry, Math.abs(x1 - x0) * k, ry * 2).fill({ color: t.color, alpha: 0.2 });
+        g.rect(Math.min(x0, x1), sy - ry, Math.abs(x1 - x0), ry * 2).stroke({ width: 2, color: t.color, alpha: 0.7 });
       } else {
-        const len = t.length * u;
-        g.moveTo(sx, sy).arc(sx, sy, len, t.dir === 1 ? -Math.PI * 0.45 : Math.PI * 0.55, t.dir === 1 ? Math.PI * 0.45 : Math.PI * 1.45).lineTo(sx, sy).fill({ color: t.color, alpha: 0.12 + k * 0.15 });
-        g.moveTo(sx, sy).arc(sx, sy, len, t.dir === 1 ? -Math.PI * 0.45 : Math.PI * 0.55, t.dir === 1 ? Math.PI * 0.45 : Math.PI * 1.45).lineTo(sx, sy).stroke({ width: 2, color: t.color, alpha: 0.7 });
+        // Cone: trace it in world space so its spread matches the hit test on every screen.
+        const a0 = t.dir === 1 ? -Math.PI * 0.45 : Math.PI * 0.55;
+        const a1 = t.dir === 1 ? Math.PI * 0.45 : Math.PI * 1.45;
+        const pts: number[] = [sx, sy];
+        for (let i = 0; i <= 16; i++) {
+          const a = a0 + ((a1 - a0) * i) / 16;
+          pts.push(sx + Math.cos(a) * t.length * u, sy + Math.sin(a) * t.length * vy);
+        }
+        g.poly(pts).fill({ color: t.color, alpha: 0.12 + k * 0.15 });
+        g.poly(pts).stroke({ width: 2, color: t.color, alpha: 0.7 });
       }
     }
     for (const h of world.hazards) {
       const sx = this.sx(h.pos.x);
       const sy = this.sy(h.pos.y);
       const r = h.radius * u;
+      const rv = h.radius * vy;
       const color = h.kind === "fire" ? (h.faction === "ally" ? 0xe0954f : 0xc9643a) : h.kind === "tide" ? 0x3f7d80 : 0x1d1a16;
       const flicker = 0.75 + Math.sin(this.time * 14 + h.id) * 0.15;
-      g.ellipse(sx, sy, r, r * 0.42).fill({ color, alpha: 0.18 * flicker * Math.min(1, h.remaining) });
-      g.ellipse(sx, sy, r * 0.6, r * 0.25).fill({ color: lighten(color, 0.4), alpha: 0.2 * flicker * Math.min(1, h.remaining) });
+      g.ellipse(sx, sy, r, rv).fill({ color, alpha: 0.18 * flicker * Math.min(1, h.remaining) });
+      g.ellipse(sx, sy, r * 0.6, rv * 0.6).fill({ color: lighten(color, 0.4), alpha: 0.2 * flicker * Math.min(1, h.remaining) });
+      // A hostile hazard gets a clear rim: it is the area that hurts.
+      if (h.faction === "enemy") g.ellipse(sx, sy, r, rv).stroke({ width: 1.5, color: lighten(color, 0.3), alpha: 0.55 * Math.min(1, h.remaining) });
       if (!this.reduced && Math.random() < 0.35) {
-        this.particles.emit({ x: sx + (Math.random() - 0.5) * r * 1.6, y: sy + (Math.random() - 0.5) * r * 0.6, count: 1, texture: softCircle(), color, speed: [10, 40], angle: [-Math.PI * 0.7, -Math.PI * 0.3], life: [0.3, 0.7], scale: [0.15, 0.35], alpha: 0.8 });
+        this.particles.emit({ x: sx + (Math.random() - 0.5) * r * 1.6, y: sy + (Math.random() - 0.5) * rv * 1.4, count: 1, texture: softCircle(), color, speed: [10, 40], angle: [-Math.PI * 0.7, -Math.PI * 0.3], life: [0.3, 0.7], scale: [0.15, 0.35], alpha: 0.8 });
       }
     }
   }

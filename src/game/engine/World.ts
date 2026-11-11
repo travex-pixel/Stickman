@@ -100,6 +100,8 @@ export class World {
   /** Set by the controller during a cycle break: the stage the next cycle farms. */
   private nextStage: number | null = null;
   time = 0;
+  /** Set while a card covers the field: essence orbs wait instead of fading. */
+  holdOrbs = false;
   /** The enemy the player tapped: the warrior and the army prefer it while it lives. */
   focusId = -1;
   /** Blood Pact: basic hits heal until this world time. */
@@ -122,6 +124,7 @@ export class World {
   private bossId = -1;
   private regionWaves: WaveDef[];
   private autoCastTimer = 0;
+  private autoDodgeRolled = new Set<number>();
   private nextOrbExpiryWarned = new Set<number>();
   playerMoveLockTimer = 0;
   /** Set by the tutorial director while it teaches dodging. */
@@ -291,11 +294,7 @@ export class World {
     if (this.dodgeCooldown > 0) return false;
     if (this.player.state === "dodge") return false;
     const p = this.player;
-    const perfect =
-      manual &&
-      Array.from(this.entities.values()).some(
-        (e) => !e.dead && e.faction === "enemy" && e.state === "windup" && (e.pendingTargetId === p.id || e.kind === "boss") && e.stateDuration - e.stateTime <= World.PERFECT_WINDOW && dist(e.pos, p.pos) < e.stats.range + 120,
-      );
+    const perfect = manual && this.impendingThreat(World.PERFECT_WINDOW) !== null;
     playerDodge(this);
     if (perfect) {
       this.perfectCrit = true;
@@ -307,6 +306,75 @@ export class World {
     this.dodgeCooldown = this.abilityCooldown("shadow_dash");
     this.cooldowns.shadow_dash = this.dodgeCooldown;
     return true;
+  }
+
+  /** Whether `pos` is inside a telegraphed (not yet landed) enemy attack. */
+  static insideTelegraph(t: Telegraph, pos: Vec2): boolean {
+    const dx = pos.x - t.pos.x;
+    const dy = pos.y - t.pos.y;
+    if (t.shape === "circle") return dx * dx + dy * dy < t.radius * t.radius;
+    if (t.shape === "line") return dx * t.dir >= 0 && dx * t.dir <= t.length && Math.abs(dy) < t.radius;
+    return dx * t.dir >= 0 && dx * dx + dy * dy < t.length * t.length;
+  }
+
+  /**
+   * A blow about to land on the warrior within `window` seconds: a melee wind-up aimed at them,
+   * a boss charge bearing down, or a telegraphed zone they stand in.
+   */
+  impendingThreat(window: number): { id: number } | null {
+    const p = this.player;
+    for (const e of this.entities.values()) {
+      if (e.dead || e.faction !== "enemy") continue;
+      const left = e.stateDuration - e.stateTime;
+      if (e.state === "windup" && left <= window && (e.pendingTargetId === p.id || e.kind === "boss") && dist(e.pos, p.pos) < e.stats.range + 120) return { id: e.id };
+      if (e.kind === "boss" && e.state === "attack" && e.boss?.pattern === "charge") {
+        const ahead = (p.pos.x - e.pos.x) * e.facing;
+        if (ahead > 0 && ahead < 620 * window + e.radius + p.radius && Math.abs(p.pos.y - e.pos.y) < 46) return { id: e.id };
+      }
+    }
+    for (const t of this.telegraphs) if (t.hostile && t.remaining <= window && World.insideTelegraph(t, p.pos)) return { id: t.id };
+    // A bolt that will reach the warrior within the window.
+    for (const pr of this.projectiles) {
+      if (pr.faction !== "enemy" || pr.vel.x === 0) continue;
+      const tx = (p.pos.x - pr.pos.x) / pr.vel.x;
+      if (tx < 0 || tx > window) continue;
+      if (Math.abs(pr.pos.y + pr.vel.y * tx - p.pos.y) < pr.radius + p.radius + 6) return { id: pr.id };
+    }
+    return null;
+  }
+
+  /** Where a dash should go to leave the danger the warrior is standing in, if any. */
+  escapeFrom(pos: Vec2): Vec2 | null {
+    let best: { t: number; to: Vec2 } | null = null;
+    const consider = (urgency: number, to: Vec2) => {
+      if (!best || urgency < best.t) best = { t: urgency, to };
+    };
+    for (const t of this.telegraphs) {
+      if (!t.hostile || !World.insideTelegraph(t, pos)) continue;
+      if (t.shape === "line") {
+        const up = pos.y - t.pos.y;
+        const side = up === 0 ? (pos.y > (ARENA.minY + ARENA.maxY) / 2 ? -1 : 1) : Math.sign(up);
+        consider(t.remaining, { x: pos.x, y: t.pos.y + side * (t.radius + 22) });
+      } else {
+        const r = t.shape === "circle" ? t.radius : t.length;
+        const dx = pos.x - t.pos.x;
+        const dy = pos.y - t.pos.y;
+        const len = Math.hypot(dx, dy) || 1;
+        const ux = len < 1 ? 1 : dx / len;
+        const uy = len < 1 ? 0 : dy / len;
+        consider(t.remaining, { x: t.pos.x + ux * (r + 24), y: t.pos.y + uy * (r + 24) });
+      }
+    }
+    for (const h of this.hazards) {
+      if (h.faction !== "enemy" || dist(pos, h.pos) >= h.radius) continue;
+      const dx = pos.x - h.pos.x;
+      const dy = pos.y - h.pos.y;
+      const len = Math.hypot(dx, dy) || 1;
+      consider(99, { x: h.pos.x + (dx / len) * (h.radius + 20), y: h.pos.y + (dy / len) * (h.radius + 20) });
+    }
+    const out = best as { t: number; to: Vec2 } | null;
+    if (!out) return null;
+    return { x: clamp(out.to.x, ARENA.minX + 10, ARENA.maxX - 10), y: clamp(out.to.y, ARENA.minY, ARENA.maxY) };
   }
 
   claimEssence(orbId: number): EssenceOrb | null {
@@ -808,11 +876,15 @@ export class World {
     if (enemies.length === 0) return;
     const near = hostilesWithin(this.player, enemies, 170).length;
     const p = this.player;
-    // Dodge when an enemy is winding up on us.
-    const threat = enemies.some((e) => (e.state === "windup") && e.pendingTargetId === p.id && dist(e.pos, p.pos) < e.stats.range + 40);
-    if (threat && this.dodgeCooldown <= 0 && p.hp / p.stats.maxHp < 0.9) {
-      this.dodge(false);
-      return;
+    // AUTO dodges at the last moment, and only about half the time: reading the fight is the player's edge.
+    const threat = this.dodgeCooldown <= 0 ? this.impendingThreat(0.3) : null;
+    if (threat && !this.autoDodgeRolled.has(threat.id)) {
+      this.autoDodgeRolled.add(threat.id);
+      if (this.autoDodgeRolled.size > 64) this.autoDodgeRolled.clear();
+      if (p.hp / p.stats.maxHp < 0.95 && this.rng.chance(0.5)) {
+        this.dodge(false);
+        return;
+      }
     }
     if (this.loadout.ultimateUnlocked && this.energy >= ULTIMATE_ENERGY_COST && (enemies.length >= 3 || this.boss)) {
       if (this.castAbility(ULTIMATE_ID)) return;
@@ -913,7 +985,9 @@ export class World {
     e.pendingTargetId = target.id;
     e.pendingHitLanded = false;
     e.facing = target.pos.x >= e.pos.x ? 1 : -1;
-    e.attackCooldown = 1 / Math.max(0.1, e.stats.attackSpeed * (1 + statusValue(e, "haste")));
+    // Fast Hands (Husk Blade): +20% attack speed after a second on the same target.
+    const fastHands = e.defId === "husk_blade" && e.kind === "summon" && (e.summon?.sameTargetTime ?? 0) > 1 ? 1.2 : 1;
+    e.attackCooldown = 1 / Math.max(0.1, e.stats.attackSpeed * fastHands * (1 + statusValue(e, "haste")));
     this.setState(e, "windup", windup);
     // A fresh record: a payload from an interrupted attack can never fire on a later one.
     e.attack = { strike, recover, onHit };
@@ -1047,6 +1121,8 @@ export class World {
     bonus *= block;
     const fx = this.loadout.mods.gearEffects;
     if (source.kind === "player" && fx.has("executioner") && target.hp / target.stats.maxHp < 0.3) bonus *= 1.4;
+    // Warden's Presence: a bound Warden on the field shields every ally (warrior included) by 15%.
+    if (target.faction === "ally" && source.faction === "enemy" && this.summonEntities().some((s) => s.defId === "hollow_warden" && !s.dead)) bonus *= 0.85;
     if (target.kind === "player" && fx.has("bulwark")) {
       bonus *= 0.85;
       if (heavy && this.rng.chance(0.35)) addStatus(target, { kind: "shield", remaining: 4, value: Math.round(target.stats.maxHp * 0.08), sourceId: target.id });
@@ -1057,6 +1133,8 @@ export class World {
     );
     this.applyRawDamage(target, res.amount, element, source.id, res.crit, heavy);
     if (source.kind === "player" && res.crit) this.gainEnergy(3);
+    // The Bastion's Bulwark: whoever strikes it is slowed.
+    if (target.defId === "bastion" && target.kind === "summon" && source.faction === "enemy" && !source.dead) addStatus(source, { kind: "slow", remaining: 2, value: 0.25, sourceId: target.id });
     const affix = source.enemy?.elite;
     if (affix && ELITES[affix].lifesteal > 0 && !source.dead) {
       const heal = res.amount * ELITES[affix].lifesteal;
@@ -1221,8 +1299,8 @@ export class World {
     return proj;
   }
 
-  addTelegraph(pos: Vec2, radius: number, duration: number, shape: Telegraph["shape"] = "circle", dir: 1 | -1 = 1, length = 0, color = 0xff4d6d): void {
-    this.telegraphs.push({ id: this.allocId(), pos: { ...pos }, radius, remaining: duration, total: duration, shape, dir, length, color });
+  addTelegraph(pos: Vec2, radius: number, duration: number, shape: Telegraph["shape"] = "circle", dir: 1 | -1 = 1, length = 0, color = 0xff4d6d, hostile = true): void {
+    this.telegraphs.push({ id: this.allocId(), pos: { ...pos }, radius, remaining: duration, total: duration, shape, dir, length, color, hostile });
     this.events.push({ type: "telegraph", pos: { ...pos }, radius, duration });
   }
 
@@ -1351,7 +1429,7 @@ export class World {
       }
       // Essence waits while the player reads the moment; it fades only during normal fighting.
       // Before the first oath is sworn, nothing fades: the first one must never be missed.
-      if (this.phase !== "victory" && this.loadout.hasSummons) o.remaining -= rawDt;
+      if (this.phase !== "victory" && this.loadout.hasSummons && !this.holdOrbs) o.remaining -= rawDt;
       if (o.remaining <= 0) {
         this.events.push({ type: "essence_expired", orbId: o.id });
         this.orbs.splice(i, 1);

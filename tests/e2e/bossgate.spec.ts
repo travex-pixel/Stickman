@@ -47,6 +47,15 @@ test.describe("boss gate loop", () => {
     expect(await game<number>(page, "c => c.profile.progress.bestStage")).toBe(1);
     expect(await game<number>(page, "c => c.profile.progress.bossGate")).toBe(0);
     expect(await game<number>(page, "c => c.profile.progress.bossWins")).toBe(1);
+    // The boss's essence can be bound from the victory card, and the card waits for it.
+    await expect(page.getByTestId("victory-bind")).toBeVisible();
+    const before = await game<number>(page, "c => c.profile.summons.totalAttempts");
+    await page.getByTestId("victory-bind-button").click();
+    expect(await game<number>(page, "c => c.profile.summons.totalAttempts")).toBe(before + 1);
+    // Success shows the reveal first; either way the victory card comes back.
+    const revealed = await page.getByTestId("summon-reveal-continue").waitFor({ timeout: 12_000 }).then(() => true, () => false);
+    if (revealed) await page.getByTestId("summon-reveal-continue").click();
+    await expect(page.getByTestId("boss-victory")).toBeVisible({ timeout: 10_000 });
     await page.getByTestId("victory-continue").click();
     expect(await game<string>(page, "c => c.world.mode")).toBe("campaign");
     expect(await game<number>(page, "c => c.world.stage")).toBe(2);
