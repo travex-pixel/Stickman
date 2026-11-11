@@ -42,7 +42,8 @@ export type GameEvent =
   | { type: "extract_fail"; orbId: number; pos: Vec2; attemptsLeft: number }
   | { type: "kill_streak"; count: number }
   | { type: "finisher"; pos: Vec2; boss: boolean }
-  | { type: "shard_gain"; summonId: string; amount: number; pos: Vec2 };
+  | { type: "shard_gain"; summonId: string; amount: number; pos: Vec2 }
+  | { type: "perfect_dodge"; pos: Vec2 };
 
 export class EventQueue {
   private items: GameEvent[] = [];

@@ -38,7 +38,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
   },
   {
     id: "dodge",
-    targets: [{ target: "ability-dodge", label: "Dodge the attack", gesture: "tap" }],
+    targets: [{ target: "ability-dodge", label: "Dodge as the blow lands", gesture: "tap" }],
     ready: (c) => c.enemyWindupNearPlayer && (c.snapshot?.dodgeCooldown ?? 1) <= 0,
   },
   {

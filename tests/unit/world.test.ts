@@ -387,3 +387,78 @@ describe("faction invariant", () => {
     expect(ev.filter((e) => e.type === "hit" && e.element === "fire").length).toBeGreaterThan(0);
   });
 });
+
+describe("perfect dodge", () => {
+  function windingUp(w: World, remaining: number) {
+    const e = w.spawnEnemy("husk", { pos: { x: w.player.pos.x + 30, y: w.player.pos.y } });
+    w.beginAttack(e, w.player, 1, 0.1, 0.2);
+    e.stateTime = 1 - remaining;
+    return e;
+  }
+  it("a manual dodge just before the hit lands is perfect and guarantees the next crit", () => {
+    const p = createDefaultProfile();
+    p.player.level = 3;
+    const w = new World({ stage: 1, loadout: buildLoadout(p), seed: 5 });
+    step(w, 1);
+    windingUp(w, 0.2);
+    w.drainEvents();
+    const energy = w.energy;
+    expect(w.dodge()).toBe(true);
+    expect(w.drainEvents().some((e) => e.type === "perfect_dodge")).toBe(true);
+    expect(w.energy).toBeGreaterThan(energy);
+    const target = w.spawnEnemy("ashborn_brute", { pos: { x: w.player.pos.x + 20, y: w.player.pos.y } });
+    target.stats.maxHp = 1e6;
+    target.hp = 1e6;
+    (w as unknown as { playerBasicHit(t: unknown): void }).playerBasicHit(target);
+    expect(w.drainEvents().some((e) => e.type === "hit" && e.crit && e.targetId === target.id)).toBe(true);
+  });
+  it("too early is not perfect, and AUTO never earns it", () => {
+    const w = freshWorld(1, 5);
+    step(w, 1);
+    windingUp(w, 0.8);
+    w.drainEvents();
+    w.dodge();
+    expect(w.drainEvents().some((e) => e.type === "perfect_dodge")).toBe(false);
+    const w2 = freshWorld(1, 6);
+    step(w2, 1);
+    windingUp(w2, 0.1);
+    w2.drainEvents();
+    w2.dodge(false);
+    expect(w2.drainEvents().some((e) => e.type === "perfect_dodge")).toBe(false);
+  });
+});
+
+describe("long session soak", () => {
+  it("thirty minutes of busy endless combat keeps every collection bounded", () => {
+    const p = createDefaultProfile();
+    p.player.statLevels = { attack: 120, maxHp: 140, attackSpeed: 40, critChance: 20, critDamage: 20, defense: 80 };
+    p.player.level = 20;
+    p.player.autoCast = true;
+    claimEssence(p, "rift_caller");
+    claimEssence(p, "ember_acolyte");
+    for (const s of p.summons.collection) s.deployed = true;
+    const w = new World({ stage: 4, loadout: buildLoadout(p), seed: 77, mode: "endless" });
+    let maxEntities = 0;
+    let maxProjectiles = 0;
+    let maxTimers = 0;
+    let maxHazards = 0;
+    for (let i = 0; i < 60 * 60 * 30; i++) {
+      w.update(FIXED_DT);
+      w.drainEvents();
+      w.takeLoot();
+      if (i % 60 === 0) {
+        maxEntities = Math.max(maxEntities, w.entities.size);
+        maxProjectiles = Math.max(maxProjectiles, w.projectiles.length);
+        maxTimers = Math.max(maxTimers, w.pendingTimers);
+        maxHazards = Math.max(maxHazards, w.hazards.length);
+        expect(w.orbs.length).toBeLessThan(40);
+        expect(w.telegraphs.length).toBeLessThan(40);
+      }
+      if (w.phase === "defeat") break;
+    }
+    expect(maxEntities).toBeLessThan(80);
+    expect(maxProjectiles).toBeLessThan(60);
+    expect(maxTimers).toBeLessThan(30);
+    expect(maxHazards).toBeLessThan(30);
+  }, 120_000);
+});

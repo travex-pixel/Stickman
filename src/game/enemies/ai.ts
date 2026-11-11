@@ -185,23 +185,7 @@ function rangedBehaviour(world: World, e: Combatant, target: Combatant, d: numbe
   }
 }
 
-/** Simulation-time deferred callbacks keyed off world.time; cheap and deterministic. */
-const pending: { world: World; at: number; fn: () => void }[] = [];
+/** Simulation-time deferred callback, owned by the World so nothing outlives it. */
 export function setTimeoutSim(world: World, delay: number, fn: () => void): void {
-  pending.push({ world, at: world.time + delay, fn });
-}
-export function flushSimTimeouts(world: World): void {
-  for (let i = pending.length - 1; i >= 0; i--) {
-    const p = pending[i] as { world: World; at: number; fn: () => void };
-    if (p.world !== world) {
-      continue;
-    }
-    if (world.time >= p.at) {
-      pending.splice(i, 1);
-      p.fn();
-    }
-  }
-}
-export function clearSimTimeouts(world: World): void {
-  for (let i = pending.length - 1; i >= 0; i--) if ((pending[i] as { world: World }).world === world) pending.splice(i, 1);
+  world.schedule(delay, fn);
 }

@@ -724,6 +724,14 @@ export class BattleRenderer {
           this.flash(0x7f9fd0, 0.35);
           break;
         }
+        case "perfect_dodge": {
+          const sx = this.sx(e.pos.x);
+          const sy = this.sy(e.pos.y);
+          this.numbers.spawn(sx, sy - 130 * u, "Perfect", 0xe9c97a, 0.9, true);
+          this.fx.push({ kind: "ring", x: sx, y: sy, r0: 90 * u, r1: 8, life: 0.4, total: 0.4, color: 0xe9c97a, width: 3, squash: 0.42 });
+          this.flash(0xf0eadc, 0.12);
+          break;
+        }
         case "finisher": {
           const sx = this.sx(e.pos.x);
           const sy = this.sy(e.pos.y);

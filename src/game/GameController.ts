@@ -156,6 +156,7 @@ export class GameController {
   private booted = false;
   private cinematicTimer: ReturnType<typeof setTimeout> | null = null;
   private seenAffixes = new Set<string>();
+  private seenPerfect = false;
 
   constructor() {
     this.loop = new GameLoop(FIXED_DT, (dt) => this.simulate(dt), (alpha, dtReal) => this.render(alpha, dtReal));
@@ -556,6 +557,13 @@ export class GameController {
           }
           break;
         }
+        case "perfect_dodge":
+          this.sfx("crit", { volume: 0.8, rate: 1.3 });
+          if (!this.seenPerfect) {
+            this.seenPerfect = true;
+            this.toast("Perfect dodge: your next strike is a guaranteed critical.", "level");
+          }
+          break;
         case "kill_streak":
           this.sfx("quest", { volume: 0.5, rate: 0.8 + Math.min(0.8, e.count / 25) });
           break;

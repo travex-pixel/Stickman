@@ -15,7 +15,7 @@ import { isBossStage, regionForStage, stageScale, type WaveDef } from "../data/r
 import { computeDamage } from "../combat/damage";
 import { addStatus, hasStatus, speedMultiplier, statusValue, tickStatuses } from "../combat/statuses";
 import { nearestHostile, hostilesWithin, factionWithin } from "../combat/targeting";
-import { updateEnemyAi, flushSimTimeouts, clearSimTimeouts } from "../enemies/ai";
+import { updateEnemyAi } from "../enemies/ai";
 import { updateBossAi } from "../bosses/hollowWarden";
 import { updateSummonAi } from "../summons/ai";
 import { castPlayerAbility, resolvePlayerAbility, playerDodge } from "../abilities/execute";
@@ -139,7 +139,7 @@ export class World {
   }
 
   dispose(): void {
-    clearSimTimeouts(this);
+    this.timers.length = 0;
     this.entities.clear();
     this.projectiles.length = 0;
     this.orbs.length = 0;
@@ -233,11 +233,50 @@ export class World {
     return ok;
   }
 
-  dodge(): boolean {
+  /** Deferred simulation-time callbacks (e.g. an ember landing). Cleared with the World. */
+  private timers: { at: number; fn: () => void }[] = [];
+
+  schedule(delay: number, fn: () => void): void {
+    this.timers.push({ at: this.time + delay, fn });
+  }
+
+  get pendingTimers(): number {
+    return this.timers.length;
+  }
+
+  private runTimers(): void {
+    for (let i = this.timers.length - 1; i >= 0; i--) {
+      const t = this.timers[i]!;
+      if (this.time >= t.at) {
+        this.timers.splice(i, 1);
+        t.fn();
+      }
+    }
+  }
+
+  /** Window before a telegraphed hit lands in which a manual dodge counts as perfect. */
+  static readonly PERFECT_WINDOW = 0.35;
+  /** Set by a perfect dodge: the warrior's next basic hit is a guaranteed critical. */
+  private perfectCrit = false;
+
+  dodge(manual = true): boolean {
     if (this.phase === "victory" || this.phase === "defeat" || this.player.dead) return false;
     if (this.dodgeCooldown > 0) return false;
     if (this.player.state === "dodge") return false;
+    const p = this.player;
+    const perfect =
+      manual &&
+      Array.from(this.entities.values()).some(
+        (e) => !e.dead && e.faction === "enemy" && e.state === "windup" && (e.pendingTargetId === p.id || e.kind === "boss") && e.stateDuration - e.stateTime <= World.PERFECT_WINDOW && dist(e.pos, p.pos) < e.stats.range + 120,
+      );
     playerDodge(this);
+    if (perfect) {
+      this.perfectCrit = true;
+      this.gainEnergy(15);
+      this.timeScale = 0.3;
+      this.finisher = { timer: 0.35 };
+      this.events.push({ type: "perfect_dodge", pos: { ...p.pos } });
+    }
     this.dodgeCooldown = ABILITIES.shadow_dash.cooldown * this.loadout.mods.dodgeCooldownMult;
     this.cooldowns.shadow_dash = this.dodgeCooldown;
     return true;
@@ -401,7 +440,7 @@ export class World {
       else updateEnemyAi(this, e, dt);
     }
 
-    flushSimTimeouts(this);
+    this.runTimers();
     this.integrate(dt);
     this.updateProjectiles(dt);
     this.updateHazards(dt);
@@ -637,7 +676,7 @@ export class World {
     // Dodge when an enemy is winding up on us.
     const threat = enemies.some((e) => (e.state === "windup") && e.pendingTargetId === p.id && dist(e.pos, p.pos) < e.stats.range + 40);
     if (threat && this.dodgeCooldown <= 0 && p.hp / p.stats.maxHp < 0.9) {
-      this.dodge();
+      this.dodge(false);
       return;
     }
     if (this.loadout.ultimateUnlocked && this.energy >= ULTIMATE_ENERGY_COST && (enemies.length >= 3 || this.boss)) {
@@ -748,7 +787,9 @@ export class World {
   private playerBasicHit(target: Combatant): void {
     const p = this.player;
     const fx = this.loadout.mods.gearEffects;
-    const res = this.dealDamage(p, target, 1, "physical", false);
+    const forceCrit = this.perfectCrit;
+    this.perfectCrit = false;
+    const res = this.dealDamage(p, target, forceCrit ? 1.5 : 1, "physical", forceCrit, 1, forceCrit);
     if (!res) return;
     this.gainEnergy(6);
     this.basicHits += 1;
@@ -815,7 +856,7 @@ export class World {
   }
 
   /** Full damage pipeline with crits, marks, shields, invulnerability and death. Returns null if no damage was dealt. */
-  dealDamage(source: Combatant, target: Combatant, power: number, element: Element, heavy: boolean, bonusMult = 1): { amount: number; crit: boolean } | null {
+  dealDamage(source: Combatant, target: Combatant, power: number, element: Element, heavy: boolean, bonusMult = 1, forceCrit?: boolean): { amount: number; crit: boolean } | null {
     if (target.dead || source.dead) return null;
     // Invariant: nothing ever damages its own side.
     if (source.faction === target.faction) return null;
@@ -832,7 +873,7 @@ export class World {
       if (heavy && this.rng.chance(0.35)) addStatus(target, { kind: "shield", remaining: 4, value: Math.round(target.stats.maxHp * 0.08), sourceId: target.id });
     }
     const res = computeDamage(
-      { attack: source.stats.attack, power, critChance: source.stats.critChance, critDamage: source.stats.critDamage, targetDefense: target.stats.defense, bonusMultiplier: bonus },
+      { attack: source.stats.attack, power, critChance: source.stats.critChance, critDamage: source.stats.critDamage, targetDefense: target.stats.defense, bonusMultiplier: bonus, forceCrit: forceCrit || undefined },
       this.rng,
     );
     this.applyRawDamage(target, res.amount, element, source.id, res.crit, heavy);
