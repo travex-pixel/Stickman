@@ -47,7 +47,12 @@ Combat is hybrid. Basic attacks are automatic; you choose when to cast and when 
 
 Stages 1 to 6 are The Ashen Verge, where each stage introduces one new idea (brutes, elite champions, shieldbearers, summoners). Stage 7 opens The Drowned Hollow: the Drowned Lurker sinks out of reach and surfaces under its prey, and the Drowned Warden's Undertow and Riptide ask you to read the field rather than outlast it. Stage 16 opens The Shattered Crown, a ruined royal city in amber dusk: Ashen Runner packs, Gilded Sentries, Crown Arbalests, and the Bannerman, whose banner hastens and hardens every foe near it (tap it to focus it first). Its boss, the Crownless King, issues Royal Decrees (lanes across the whole field with gaps to dash into), sweeps his scepter, and calls his guard. Every boss shows a one-line counter at its entrance.
 
-**Ascension** opens at stage 20: start the climb over (campaign, gold and stat levels) for Aether, each point a permanent +2% Attack and Health and +1% gold. Everything collected is kept. Deeper climbs pay more Aether.
+**The Rift Depths.** The campaign does not end at the Crown. From stage 31 the three regions come round again every 30 stages, one Rift Depth deeper, each painted in its own light and carrying one twist that changes how fights play: Frenzied (faster foes), Bloodbound (foes heal from their blows), Volatile (the slain burst after a telegraphed fuse), Swarming (more, frailer foes) and Elite Tide (elites everywhere). Each depth pays 20% more and its bosses give an extra Rift Core.
+
+**Ascension** opens at stage 20: start the climb over (campaign, gold and stat levels) for Aether, each point a permanent +2% Attack and Health and +1% gold. Everything collected is kept. Deeper climbs pay more Aether, and past stage 60 every stage deeper is worth 10% more, so the frontier keeps moving for weeks.
+
+- **Rift Memory**: gates you broke in an earlier climb stay open, and while you are crushing that remembered ground each cycle surges up to five stages. New ground still needs a real BOSS CHALLENGE.
+- **Aether tree**: spend Aether on Might, Vigor, Fortune and Insight (compounding, always another level to buy), Treasury (keep gold through an ascension), Oathbinder (BIND chance), Patience (offline hours), Command (another shadow) and Limit Break (higher stat caps). Spending never lowers the flat bonus.
 
 ## Oathbound: the summoning system
 
@@ -79,6 +84,7 @@ Enemies marked with a pale light leave their oath behind when they fall. Tap **B
 | Relic Crypt | After stage 4 | Elites drop gear for the day's featured slot, a tier up; a Crypt Keeper closes the run. 3 keys a day |
 | Endless Ascent | After stage 5 | Climb waves until you fall, records kept |
 | Boss Hunt | After stage 3 | Rematch a boss you have beaten: half its stage reward, boss gear, a Rift Core chance and another chance at its shadow. Progress is never at stake. 3 a day |
+| Rift Tyrant | After stage 9 | The weekly boss: one minute against this week's Tyrant at your deepest stage. It cannot fall; every broken bar raises it again, harder-hitting. Seven reward tiers a week (gold, essence, cores, gear), 2 tries a day. Boss and twist rotate every Monday |
 | Rank Trial | Level milestones | The breakthrough fight for the next Ascendant rank |
 
 Daily keys refill each day and never stack into an obligation.

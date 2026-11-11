@@ -107,7 +107,7 @@ function PerkChip() {
       className="absolute left-2 bottom-[122px] z-20 flex items-center gap-1.5 rounded-full border border-gold/70 bg-[#231c0d]/95 pl-2.5 pr-3 py-1 shadow-[0_6px_16px_rgba(0,0,0,0.5)]"
       onClick={() => c.openPerkChoice()}
       data-testid="perk-chip"
-      aria-label="Choose an ascension perk"
+      aria-label="Choose a perk"
     >
       <motion.span animate={{ scale: [1, 1.25, 1] }} transition={{ duration: 1.2, repeat: Infinity }} className="text-gold-2">
         <Icon name="star" size={12} />

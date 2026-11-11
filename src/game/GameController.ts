@@ -828,18 +828,18 @@ export class GameController {
     p.player.skillPoints += skillPointsBetween(p.player.level - levels, p.player.level);
     p.player.pendingPerkChoices += levels;
     this.sfx("level_up", { volume: 0.9 });
-    this.toast(`Warrior level ${p.player.level}`, "level");
+    // One toast: a second would replace this one before it could be read.
+    this.toast(`Level ${p.player.level}! ${levels > 1 ? `${levels} perks` : "A perk"} to choose`, "level");
     this.renderer?.levelUpBurst();
     if (this.world && !this.world.player.dead) {
       this.world.player.hp = Math.min(this.world.player.stats.maxHp, this.world.player.hp + this.world.player.stats.maxHp * 0.3);
     }
     for (const id of Object.keys(ABILITIES) as AbilityId[]) {
-      if (ABILITIES[id].unlockLevel === p.player.level) this.toast(`New ability: ${ABILITIES[id].name}`, "level");
+      if (ABILITIES[id].unlockLevel === p.player.level) this.toast(`Level ${p.player.level}! New ability: ${ABILITIES[id].name}`, "level");
     }
     this.uiStore.update((u) => ({ ...u, newBadges: { ...u.newBadges, skills: true } }));
     this.refreshLoadout();
     // Perks wait for the player: a chip pulses in the HUD instead of a modal freezing the fight.
-    this.toast("Ascension ready: choose a perk", "level");
   }
 
   /** Many perks waiting (a long absence): take the first offer of each, in one tap. */

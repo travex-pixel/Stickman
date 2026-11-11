@@ -67,6 +67,8 @@ Shadows are earned in combat, which ties the collection directly to the fighting
 | Ascension (prestige for Aether) | Working | `src/game/progression/ascension.ts` |
 | Boss Hunts (rematch cleared bosses) | Working | `src/game/data/modes.ts`, `GameController.startHunt` |
 | Aether tree (Might, Vigor, Fortune, Insight, Treasury, Oathbinder, Patience, Command) | Working | `src/game/progression/ascension.ts` |
+| Rift Tyrant: weekly rotating boss, one-minute bar-breaking score, seven weekly tiers | Working | `src/game/progression/tyrant.ts`, `World.tyrantBreak` |
+| Rift Memory: remembered gates stay open after an ascension; surges up to 5 stages a cycle | Working | `src/game/progression/campaign.ts` (`isRemembered`, `surgeLeap`) |
 | Rift Depths: regions cycle every 30 stages from 31 with a twist each (Frenzied, Bloodbound, Volatile, Swarming, Elite Tide), tinted backdrops, +20% rewards and +1 boss core per depth | Working | `src/game/data/depths.ts`, `World.twist` |
 | Six abilities incl. ultimate with time dilation, dodge with i-frames | Working | `src/game/abilities/execute.ts` |
 | Enemy archetypes: grunt, brute, ranger, arcanist, shieldbearer, summoner | Working | `src/game/enemies/ai.ts` |
@@ -86,7 +88,7 @@ Shadows are earned in combat, which ties the collection directly to the fighting
 | Modes: campaign, Gold Vault, Essence Rift, Endless Ascent, Rank Trial | Working | `src/game/data/modes.ts` |
 | Quests, achievements, journal, bestiary | Working | `src/game/progression/quests.ts` |
 | Gift codes (signed, once per save) | Working | `src/game/economy/codes.ts`, `scripts/make-code.mjs` |
-| IndexedDB saves: versioned (v11), validated, backed up, migrated, unload-safe | Working | `src/persistence/` |
+| IndexedDB saves: versioned (v12), validated, backed up, migrated, unload-safe | Working | `src/persistence/` |
 | Capped offline rewards | Working | `src/persistence/OfflineRewards.ts` |
 | Runtime-synthesised audio | Working, untested on devices | `src/game/audio/` |
 

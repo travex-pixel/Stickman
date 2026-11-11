@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
 import { Icon, type IconName } from "@/components/ui/Icon";
 import { HoldButton } from "@/components/ui/HoldButton";
 import { useController, useProfileRef } from "@/hooks/useGame";
@@ -34,10 +36,7 @@ export default function HeroPanel() {
   return (
     <div className="flex flex-col h-full min-h-0 px-2 pt-1.5 pb-1.5 gap-1.5">
       <div className="flex items-center justify-between px-1">
-        <div className="flex items-baseline gap-2">
-          <span className="font-display text-[12px] tracking-[0.2em] text-mist">POWER</span>
-          <span className="font-display text-[18px] text-gold-2 text-glow-gold tabular-nums" data-testid="combat-power">{fmt(power)}</span>
-        </div>
+        <PowerReadout power={power} />
         <div className="flex items-center gap-1.5">
           <AscendBadge />
           <RankBadge />
@@ -155,5 +154,41 @@ function AscendBadge() {
       <span className="text-[11px] font-bold text-ivory tabular-nums mt-0.5">{can ? `+${fmt(gain)} ✦` : `${fmt(a.aether)} ✦`}</span>
       {spendableAether(profile) > 0 && <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-gold-2 border-2 border-ink" aria-hidden="true" />}
     </button>
+  );
+}
+
+/** Power, with a pop and a "+x%" whenever an upgrade raises it: every purchase visibly lands. */
+function PowerReadout({ power }: { power: number }) {
+  const prev = useRef(power);
+  const [gain, setGain] = useState<{ id: number; pct: number } | null>(null);
+  useEffect(() => {
+    const before = prev.current;
+    prev.current = power;
+    if (before > 0 && power > before * 1.0005) {
+      const id = Date.now();
+      // Deferred a tick: the readout re-renders from the store, not from this effect.
+      const t = setTimeout(() => setGain({ id, pct: (power / before - 1) * 100 }), 0);
+      const clear = setTimeout(() => setGain((g) => (g?.id === id ? null : g)), 1200);
+      return () => {
+        clearTimeout(t);
+        clearTimeout(clear);
+      };
+    }
+    return undefined;
+  }, [power]);
+  return (
+    <div className="flex items-baseline gap-2 relative">
+      <span className="font-display text-[12px] tracking-[0.2em] text-mist">POWER</span>
+      <motion.span key={gain?.id ?? 0} className="font-display text-[18px] text-gold-2 text-glow-gold tabular-nums inline-block origin-left" initial={gain ? { scale: 1.18 } : false} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 420, damping: 16 }} data-testid="combat-power">
+        {fmt(power)}
+      </motion.span>
+      <AnimatePresence>
+        {gain && (
+          <motion.span key={gain.id} className="absolute left-full ml-1 whitespace-nowrap text-[11px] font-extrabold text-jade-2 tabular-nums" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: -4 }} exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.35 }} data-testid="power-gain">
+            +{gain.pct < 0.1 ? gain.pct.toFixed(2) : gain.pct < 10 ? gain.pct.toFixed(1) : Math.round(gain.pct)}%
+          </motion.span>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
