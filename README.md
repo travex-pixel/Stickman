@@ -20,7 +20,7 @@ The whole game fits one phone screen with no scrolling, from 320x568 to 430x932:
 
 Combat is hybrid. Basic attacks are automatic; you choose when to cast and when to dodge. A manual dodge in the last instant before an enemy blow lands is a **perfect dodge**: a moment of slow motion, ultimate energy and a guaranteed critical on your next strike. AUTO can take over abilities once the tutorial has taught them, but it never earns perfect dodges.
 
-Stages 1 to 6 are The Ashen Verge, where each stage introduces one new idea (brutes, elite champions, shieldbearers, summoners). Stage 7 opens The Drowned Hollow and the Drowned Warden, whose Undertow and Riptide moves ask you to read the field rather than outlast it. Every boss shows a one-line counter at its entrance.
+Stages 1 to 6 are The Ashen Verge, where each stage introduces one new idea (brutes, elite champions, shieldbearers, summoners). Stage 7 opens The Drowned Hollow: the Drowned Lurker sinks out of reach and surfaces under its prey, and the Drowned Warden's Undertow and Riptide ask you to read the field rather than outlast it. Every boss shows a one-line counter at its entrance.
 
 ## Oathbound: the summoning system
 
@@ -29,7 +29,7 @@ Enemies marked with a pale light leave their oath behind when they fall. Tap **B
 - **Roles**: Vanguard, Reaper, Ranger, Arcanist, Sentinel (guards the warrior), Caller (raises temporary shades mid-fight) and Sovereign (the Hollow Warden).
 - **Army**: deploy two to start, a third at rank C and a fourth at rank S. Commands (Follow, Attack, Guard) change positioning and targeting immediately.
 - **Growth**: deployed shadows earn XP, benched ones a share. Bond is raised with essence. Binding a species you already own gives shards, and shards plus Rift Cores raise **stars**. Evolution needs stars and level.
-- **Oath Codex**: every species you own grants a small permanent bonus to the warrior, so collecting widely matters, not just the strongest summon.
+- **Oath Codex**: every species you own grants a permanent bonus to the warrior, and the bonus grows with that species' best star (x3.5 at five stars). Collecting widely and deeply both matter, not just the strongest summon.
 
 ## Progression
 
@@ -38,6 +38,8 @@ Enemies marked with a pale light leave their oath behind when they fall. Tap **B
 - **Gear**: six slots. Epic and legendary drops can carry build-defining effects such as Thunderclap, Bloodthirst, Executioner and Shadowbound.
 - **Skills**: three seal paths (Power, Soul, Command) bought with skill points, and a weapon path choice.
 - **Arts**: each ability ranks from I to V with gold, gated by level, for +18% power and -5% cooldown per rank.
+- **Techniques**: earned alternate forms for ability slots. Blade Tempest (clear stage 4) can replace Arc Slash, Chain Hook (defeat a Crypt Keeper) can replace Thunder Strike, and Blood Pact (reach rank C) can replace Soul Burst. Each one learned adds +4% attack forever, equipped or not.
+- **Forge**: three unequipped items of one rarity fuse into a random item of the next rarity in the chosen slot, keeping half their upgrade levels.
 - **Perks** on level-up, quests, achievements, a journal and a bestiary.
 
 ## Game modes
@@ -47,6 +49,7 @@ Enemies marked with a pale light leave their oath behind when they fall. Tap **B
 | Campaign | Start | Push through regions and bosses |
 | Gold Vault | After stage 2 | 45 seconds of sevenfold gold, 3 keys a day |
 | Essence Rift | After stage 3 | Every foe drops an oath, shards for the army, 3 keys a day |
+| Relic Crypt | After stage 4 | Elites drop gear for the day's featured slot, a tier up; a Crypt Keeper closes the run. 3 keys a day |
 | Endless Ascent | After stage 5 | Climb waves until you fall, records kept |
 | Rank Trial | Level milestones | The breakthrough fight for the next Ascendant rank |
 

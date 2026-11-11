@@ -25,8 +25,15 @@ Read from epicstickman.wiki.gg (Heros, Summoning, Activities, Shop, Asher pages)
 - **Weaknesses** the community itself names: heavy pay-to-win, ad-gated summons, real-time timer
   walls on research.
 
-What ASCEND takes: collection value (the Oath Codex), gated stat unlocks, resource-specific
-modes (Gold Vault, Essence Rift), a readable pale-hero-versus-ink-enemies battlefield.
+A second pass over the wiki (Heros, Summoning, Activities, Dungeons) sharpened four lessons:
+owned effects grow with depth (hero levels 10/25/50/75/100), duplicates always convert into
+something (maxed items fuse upward), each dungeon farms one specific thing (Ring, Gold, Relic,
+Trait), and build variety comes from choosing which of many skills fill six auto-cast slots.
+
+What ASCEND takes: collection value that deepens with stars (the Oath Codex), gated stat unlocks,
+resource-specific modes (Gold Vault, Essence Rift, and the Relic Crypt for one gear slot a day),
+the Forge for surplus gear, techniques that swap into ability slots and stay as owned power, and
+a readable pale-hero-versus-ink-enemies battlefield.
 What ASCEND rejects: pay-to-win, ads, timers that gate progress, and summoning by currency.
 Shadows are earned in combat, which ties the collection directly to the fighting.
 
@@ -51,6 +58,9 @@ Shadows are earned in combat, which ties the collection directly to the fighting
 | Two-phase Warden boss; Drowned Warden with Undertow and Riptide; empowered trial version | Working | `src/game/bosses/hollowWarden.ts` |
 | Perfect dodge (manual only), kill chain, finisher slow-mo | Working | `src/game/engine/World.ts` |
 | Ability ranks (Arts) I to V | Working | `src/game/progression/abilityRanks.ts` |
+| Techniques: earned alternate ability forms, owned attack bonus | Working | `src/game/progression/techniques.ts` |
+| Forge (3 of a rarity into the next) and Relic Crypt | Working | `src/game/economy/loot.ts`, `src/game/data/modes.ts` |
+| Drowned Lurker (submerging enemy) and Tidestalker shadow | Working | `src/game/enemies/ai.ts`, `src/game/summons/ai.ts` |
 | Reward presentation: count-ups, loot cards, tiered summon reveals | Working | `src/components/rewards/` |
 | BIND extraction with chance, pity, boss attempts, failure feedback | Working | `src/game/summons/extraction.ts` |
 | Shadow roles: reaper, vanguard, ranger, arcanist, sentinel, caller, sovereign | Working | `src/game/summons/ai.ts` |
@@ -60,7 +70,7 @@ Shadows are earned in combat, which ties the collection directly to the fighting
 | Modes: campaign, Gold Vault, Essence Rift, Endless Ascent, Rank Trial | Working | `src/game/data/modes.ts` |
 | Quests, achievements, journal, bestiary | Working | `src/game/progression/quests.ts` |
 | Gift codes (signed, once per save) | Working | `src/game/economy/codes.ts`, `scripts/make-code.mjs` |
-| IndexedDB saves: versioned (v7), validated, backed up, migrated, unload-safe | Working | `src/persistence/` |
+| IndexedDB saves: versioned (v8), validated, backed up, migrated, unload-safe | Working | `src/persistence/` |
 | Capped offline rewards | Working | `src/persistence/OfflineRewards.ts` |
 | Runtime-synthesised audio | Working, untested on devices | `src/game/audio/` |
 
