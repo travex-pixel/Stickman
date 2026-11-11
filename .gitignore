@@ -16,3 +16,6 @@ tsconfig.tsbuildinfo
 # local review and screenshot scripts
 .review-*.mjs
 .look.mjs
+
+# Agent worktrees (local working copies, never part of the project)
+.claude/worktrees/
