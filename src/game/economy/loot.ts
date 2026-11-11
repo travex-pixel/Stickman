@@ -2,7 +2,7 @@ import type { Rng } from "../engine/rng";
 import type { EquipSlot, Rarity, StatKey } from "../data/ids";
 import { RARITY_ORDER } from "../data/ids";
 import { EQUIPMENT_TEMPLATES, RARITY_MULT, RARITY_SUBSTATS, STAT_BASE } from "../data/equipment";
-import type { EquipmentItem } from "../progression/profile";
+import type { EquipmentItem, Profile } from "../progression/profile";
 import { GEAR_EFFECT_IDS } from "../data/gearEffects";
 
 let itemCounter = 0;
@@ -70,4 +70,41 @@ export function itemScore(item: EquipmentItem): number {
   let score = item.mainValue * weight[item.mainStat] + (item.effect ? 120 : 0);
   for (const s of item.substats) score += s.value * weight[s.stat];
   return Math.round(score * levelMult);
+}
+
+/** Items forged together into one of the next rarity. */
+export const FUSE_COUNT = 3;
+
+/**
+ * Forge fodder for fusing `uid`: the item itself plus the weakest other unequipped items of the
+ * same rarity. Null when the item is equipped, legendary, or there are not enough of its rarity.
+ */
+export function fusionSet(profile: Profile, uid: string): EquipmentItem[] | null {
+  const equipped = new Set(Object.values(profile.equipment.equipped));
+  const item = profile.equipment.inventory.find((i) => i.uid === uid);
+  if (!item || equipped.has(uid)) return null;
+  if (RARITY_ORDER.indexOf(item.rarity) >= RARITY_ORDER.length - 1) return null;
+  const others = profile.equipment.inventory
+    .filter((i) => i.uid !== uid && i.rarity === item.rarity && !equipped.has(i.uid))
+    .sort((a, b) => itemScore(a) - itemScore(b))
+    .slice(0, FUSE_COUNT - 1);
+  return others.length === FUSE_COUNT - 1 ? [item, ...others] : null;
+}
+
+/**
+ * Forge three of a rarity into one random item of the next rarity in the chosen item's slot.
+ * Half of the levels poured into the inputs carry over, so upgrades are not thrown away.
+ */
+export function fuseItems(profile: Profile, uid: string, rng: Rng, stage: number): EquipmentItem | null {
+  const set = fusionSet(profile, uid);
+  if (!set) return null;
+  const head = set[0]!;
+  const next = RARITY_ORDER[RARITY_ORDER.indexOf(head.rarity) + 1]!;
+  const out = generateItem(rng, Math.max(1, stage), next, head.slot);
+  const carried = Math.floor(set.reduce((a, i) => a + (i.level - 1), 0) / 2);
+  out.level = Math.min(EQUIPMENT_LEVEL_CAP, 1 + carried);
+  const gone = new Set(set.map((i) => i.uid));
+  profile.equipment.inventory = profile.equipment.inventory.filter((i) => !gone.has(i.uid));
+  profile.equipment.inventory.push(out);
+  return out;
 }

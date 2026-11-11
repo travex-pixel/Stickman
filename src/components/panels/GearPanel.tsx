@@ -7,7 +7,8 @@ import { useController, useProfileRef, useUi } from "@/hooks/useGame";
 import { EQUIP_SLOTS, type EquipSlot } from "@/game/data/ids";
 import { EQUIPMENT_TEMPLATES, SLOT_LABEL, STAT_LABEL } from "@/game/data/equipment";
 import { GEAR_EFFECTS } from "@/game/data/gearEffects";
-import { EQUIPMENT_LEVEL_CAP, equipmentUpgradeCost, itemScore, salvageValue } from "@/game/economy/loot";
+import { EQUIPMENT_LEVEL_CAP, FUSE_COUNT, equipmentUpgradeCost, fusionSet, itemScore, salvageValue } from "@/game/economy/loot";
+import { RARITY_ORDER } from "@/game/data/ids";
 import type { EquipmentItem } from "@/game/progression/profile";
 import { itemStatTotals } from "@/game/progression/stats";
 import { fmt, fmtStat } from "@/lib/format";
@@ -94,6 +95,9 @@ function ItemDetail({ item, equippedUid, inv, gold }: { item: EquipmentItem; equ
   const cost = equipmentUpgradeCost(item);
   const capped = item.level >= EQUIPMENT_LEVEL_CAP;
   const template = EQUIPMENT_TEMPLATES.find((t) => t.id === item.templateId);
+  const profile = useProfileRef();
+  const fuse = fusionSet(profile, item.uid);
+  const nextRarity = RARITY_ORDER[Math.min(RARITY_ORDER.length - 1, RARITY_ORDER.indexOf(item.rarity) + 1)]!;
   return (
     <div className={cn("card flex-1 min-h-0 p-1.5 flex flex-col gap-1", `border-rarity-${item.rarity}`)} data-testid="item-detail">
       <div className="flex items-baseline justify-between gap-1 leading-tight">
@@ -144,6 +148,17 @@ function ItemDetail({ item, equippedUid, inv, gold }: { item: EquipmentItem; equ
             </span>
           </span>
         </HoldButton>
+        {fuse && (
+          <button
+            className="shrink-0 h-[32px] px-2 rounded-lg border border-gold/60 bg-gold/10 leading-none"
+            onClick={() => c.fuseItem(item.uid)}
+            aria-label={`Forge ${FUSE_COUNT} ${item.rarity} items into one ${nextRarity}`}
+            data-testid="fuse-button"
+          >
+            <span className="block font-display text-[11px] text-gold-2">Forge ×{FUSE_COUNT}</span>
+            <span className={cn("block text-[10px] capitalize", `rarity-${nextRarity}`)}>{nextRarity}</span>
+          </button>
+        )}
         <button className="btn-ghost !px-2 !py-1.5 text-[10px] text-mist" onClick={() => c.salvageItem(item.uid)} aria-label={`Salvage for ${salvageValue(item)} gold`} data-testid="salvage-button">
           <Icon name="coin" size={12} className="text-gold inline" /> {salvageValue(item)}
         </button>

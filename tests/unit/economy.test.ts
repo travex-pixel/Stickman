@@ -78,3 +78,39 @@ describe("gear effects", () => {
     expect(m.summonDamageMult).toBeCloseTo(before + 0.25);
   });
 });
+
+describe("forge fusion", () => {
+  it("three of a rarity become one of the next rarity in the chosen slot, carrying half the levels", async () => {
+    const { createDefaultProfile } = await import("@/game/progression/profile");
+    const { fuseItems, fusionSet, generateItem } = await import("@/game/economy/loot");
+    const { Rng } = await import("@/game/engine/rng");
+    const rng = new Rng(9);
+    const p = createDefaultProfile();
+    const a = generateItem(rng, 3, "rare", "helm");
+    const b = generateItem(rng, 3, "rare", "boots");
+    const c = generateItem(rng, 3, "rare", "weapon");
+    const d = generateItem(rng, 3, "uncommon", "weapon");
+    a.level = 5;
+    b.level = 3;
+    p.equipment.inventory.push(a, b, c, d);
+    p.equipment.equipped.weapon = c.uid;
+    expect(fusionSet(p, a.uid)).toBeNull(); // c is equipped, so only two spare rares
+    delete p.equipment.equipped.weapon;
+    expect(fusionSet(p, a.uid)).toHaveLength(3);
+    const out = fuseItems(p, a.uid, rng, 3)!;
+    expect(out.rarity).toBe("epic");
+    expect(out.slot).toBe("helm");
+    expect(out.level).toBe(1 + Math.floor((4 + 2 + 0) / 2));
+    expect(p.equipment.inventory.map((i) => i.uid)).toEqual([d.uid, out.uid]);
+  });
+  it("legendaries cannot be forged further", async () => {
+    const { createDefaultProfile } = await import("@/game/progression/profile");
+    const { fusionSet, generateItem } = await import("@/game/economy/loot");
+    const { Rng } = await import("@/game/engine/rng");
+    const rng = new Rng(2);
+    const p = createDefaultProfile();
+    const items = [0, 1, 2].map(() => generateItem(rng, 5, "legendary"));
+    p.equipment.inventory.push(...items);
+    expect(fusionSet(p, items[0]!.uid)).toBeNull();
+  });
+});

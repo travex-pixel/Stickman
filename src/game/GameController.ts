@@ -26,7 +26,7 @@ import { RANK_STEPS, nextRankStep, promote } from "./progression/ranks";
 import { ELITES } from "./data/elites";
 import { GEAR_EFFECTS } from "./data/gearEffects";
 import { stageScale } from "./data/regions";
-import { EQUIPMENT_LEVEL_CAP, equipmentUpgradeCost, salvageValue } from "./economy/loot";
+import { EQUIPMENT_LEVEL_CAP, equipmentUpgradeCost, fuseItems, salvageValue } from "./economy/loot";
 import { INVENTORY_CAP } from "./data/equipment";
 import { IndexedDbSaveManager } from "@/persistence/SaveManager";
 import { computeOfflineReward, type OfflineReward } from "@/persistence/OfflineRewards";
@@ -911,6 +911,26 @@ export class GameController {
     item.level += 1;
     this.sfx("upgrade", { volume: 0.5, minInterval: 30 });
     this.refreshLoadout();
+    this.commit();
+    return true;
+  }
+
+  /** Forge three of a rarity into one of the next rarity, in the chosen item's slot. */
+  fuseItem(uid: string): boolean {
+    this.userGesture();
+    const p = this.profile;
+    const out = fuseItems(p, uid, this.rng, Math.max(1, p.progress.bestStage));
+    if (!out) {
+      this.sfx("error", { volume: 0.3 });
+      return false;
+    }
+    const rare = out.rarity === "epic" || out.rarity === "legendary";
+    this.sfx("equip", { volume: 0.6, rate: 0.8 });
+    this.sfx(rare ? "quest" : "upgrade", { volume: 0.5 });
+    this.renderer?.flash(rare ? 0xe9c97a : 0xd9cdb2, rare ? 0.3 : 0.15);
+    this.toast(`Forged: ${itemName(out)} · ${out.rarity}${out.effect ? ` ✦ ${GEAR_EFFECTS[out.effect].name}` : ""}`, rare ? "gold" : "level");
+    this.uiStore.update((u) => ({ ...u, selectedItem: out.uid }));
+    this.afterProgression();
     this.commit();
     return true;
   }
