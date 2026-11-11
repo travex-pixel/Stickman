@@ -72,7 +72,7 @@ export function ascend(p: Profile): AscendResult | null {
  * The Ascension tree. Lifetime Aether keeps its flat bonus; Aether can also be spent here on
  * choices that shape every later climb. Spending never lowers the flat bonus.
  */
-export type TreeNodeId = "might" | "vigor" | "fortune" | "insight" | "patience" | "oathbinder" | "command" | "treasury";
+export type TreeNodeId = "might" | "vigor" | "fortune" | "insight" | "patience" | "oathbinder" | "command" | "treasury" | "limit";
 
 export interface TreeNode {
   id: TreeNodeId;
@@ -83,11 +83,21 @@ export interface TreeNode {
   cost: (level: number) => number;
 }
 
+/**
+ * Might, Vigor, Fortune and Insight compound and their costs grow 30% a level, so however much
+ * Aether a deep climb brings home there is always a next level worth buying.
+ */
+export const TREE_COMPOUND = { might: 0.05, vigor: 0.05, fortune: 0.08, insight: 0.08 } as const;
+export const LIMIT_BREAK_STEP = 40;
+
+const growing = (base: number) => (l: number) => Math.ceil(base * Math.pow(1.3, l));
+
 export const TREE: TreeNode[] = [
-  { id: "might", name: "Might", per: "+6% Attack", max: 25, cost: (l) => 2 + 2 * l },
-  { id: "vigor", name: "Vigor", per: "+6% Health", max: 25, cost: (l) => 2 + 2 * l },
-  { id: "fortune", name: "Fortune", per: "+10% gold", max: 20, cost: (l) => 3 + 2 * l },
-  { id: "insight", name: "Insight", per: "+10% XP", max: 20, cost: (l) => 3 + 2 * l },
+  { id: "might", name: "Might", per: "+5% Attack, compounding", max: 100, cost: growing(2) },
+  { id: "vigor", name: "Vigor", per: "+5% Health, compounding", max: 100, cost: growing(2) },
+  { id: "fortune", name: "Fortune", per: "+8% gold, compounding", max: 60, cost: growing(3) },
+  { id: "insight", name: "Insight", per: "+8% XP, compounding", max: 60, cost: growing(3) },
+  { id: "limit", name: "Limit Break", per: `+${LIMIT_BREAK_STEP} to the Attack, Health and Defence level caps`, max: 10, cost: (l) => 500 * Math.pow(4, l) },
   { id: "treasury", name: "Treasury", per: "Keep 10% of your gold when you ascend", max: 3, cost: (l) => 12 * (l + 1) },
   { id: "oathbinder", name: "Oathbinder", per: "+3% BIND chance", max: 5, cost: (l) => 8 * (l + 1) },
   { id: "patience", name: "Patience", per: "+1 hour of offline time", max: 4, cost: (l) => 15 * (l + 1) },

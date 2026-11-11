@@ -14,6 +14,7 @@ import { ABILITIES, ABILITY_SLOTS, ULTIMATE_ENERGY_COST, ULTIMATE_ID } from "../
 import { enemyDef } from "../data/enemies";
 import { bossForStage, bossScale, regionForStage, stageScale, type WaveDef } from "../data/regions";
 import { TWISTS, twistForStage, type TwistId } from "../data/depths";
+import { TYRANT_BREAK_FURY } from "../progression/tyrant";
 import { computeDamage } from "../combat/damage";
 import { addStatus, hasStatus, speedMultiplier, statusValue, tickStatuses } from "../combat/statuses";
 import { nearestHostile, hostilesWithin, factionWithin } from "../combat/targeting";
@@ -36,6 +37,8 @@ export interface WorldSnapshot {
   mode: ModeId;
   /** Seconds left in timed modes, otherwise null. */
   timeLeft: number | null;
+  /** Rift Tyrant: bars broken so far (fractional), otherwise null. */
+  tyrantScore: number | null;
   phase: RunPhase;
   /** Campaign farming loop (as opposed to a boss challenge or another mode). */
   farming: boolean;
@@ -73,6 +76,8 @@ export interface WorldOptions {
   mode?: ModeId;
   /** Relic Crypt: the slot every elite drop belongs to. */
   cryptSlot?: EquipSlot;
+  /** Rift Tyrant: this week's boss and twist. */
+  tyrant?: { bossId: string; twist: TwistId | null };
 }
 
 interface WaveRunner {
@@ -166,6 +171,12 @@ export class World {
   readonly cryptSlot: EquipSlot;
   /** Seconds spent fighting in this run (drives the Gold Vault timer). */
   modeTime = 0;
+  /** Rift Tyrant: this week's boss and twist, and how many times its bar has broken. */
+  readonly tyrant: { bossId: string; twist: TwistId | null } | null;
+  tyrantBreaks = 0;
+  /** Damage the warrior took this farming cycle, and the last cycle's share of their health. */
+  private cycleHurt = 0;
+  lastCycleHurt = 0;
 
   constructor(opts: WorldOptions) {
     this.stage = Math.max(1, opts.stage);
@@ -174,6 +185,7 @@ export class World {
     this.modeDef = MODES[this.mode];
     this.rng = new Rng(opts.seed ?? (this.stage * 7919 + 17));
     this.cryptSlot = opts.cryptSlot ?? "weapon";
+    this.tyrant = opts.tyrant ?? null;
     this.regionWaves =
       this.mode === "vault" ? vaultWaves() : this.mode === "rift" ? riftWaves(this.stage) : this.mode === "crypt" ? cryptWaves(this.stage) : this.mode === "trial" ? regionForStage(this.stage).waves(this.stage).slice(0, 1) : regionForStage(this.stage).waves(this.stage);
     if (this.mode === "vault") this.modeGoldMult = VAULT_GOLD_MULT;
@@ -298,7 +310,15 @@ export class World {
 
   /** The Rift Depth's twist on this fight: campaign farming, its boss gates and hunts only. */
   get twist(): TwistId | null {
+    if (this.mode === "tyrant") return this.tyrant?.twist ?? null;
     return this.mode === "campaign" || this.mode === "boss" || this.mode === "hunt" ? twistForStage(this.stage) : null;
+  }
+
+  /** Rift Tyrant score: bars broken, plus the share of the current bar. */
+  get tyrantScore(): number {
+    const b = this.entities.get(this.bossId);
+    const bar = b && b.stats.maxHp > 0 ? 1 - Math.max(0, b.hp) / b.stats.maxHp : 0;
+    return this.tyrantBreaks + Math.max(0, Math.min(1, bar));
   }
 
   get pendingTimers(): number {
@@ -555,6 +575,7 @@ export class World {
     return {
       mode: this.mode,
       timeLeft: this.modeDef.duration ? Math.max(0, this.modeDef.duration - this.modeTime) : null,
+      tyrantScore: this.mode === "tyrant" ? this.tyrantScore : null,
       phase: this.phase,
       farming: this.farming,
       cycle: this.cycles,
@@ -686,7 +707,9 @@ export class World {
             // A cycle is complete: catch a breath, and let the controller decide where the next one is fought.
             this.cycles += 1;
             this.restoreAfterCycle();
-            this.events.push({ type: "encounters_cleared", stage: this.stage, cycle: this.cycles });
+            this.lastCycleHurt = this.player.stats.maxHp > 0 ? this.cycleHurt / this.player.stats.maxHp : 0;
+            this.cycleHurt = 0;
+            this.events.push({ type: "encounters_cleared", stage: this.stage, cycle: this.cycles, hurt: this.lastCycleHurt });
           }
         }
         break;
@@ -714,6 +737,12 @@ export class World {
         break;
       case "boss": {
         const b = this.entities.get(this.bossId);
+        if (this.mode === "tyrant") {
+          // The clock only runs while the Tyrant is on its feet and fighting.
+          this.modeTime += rawDt;
+          if (this.modeTime >= (this.modeDef.duration ?? 60) && !this.player.dead) this.endRun();
+          break;
+        }
         if (b && b.dead && this.enemies().length === 0) this.endRun();
         break;
       }
@@ -758,7 +787,7 @@ export class World {
     }
     this.phase = "victory";
     this.phaseTimer = 1.2;
-    if (this.mode === "boss" || this.mode === "trial") this.celebrate(99);
+    if (this.mode === "boss" || this.mode === "trial" || this.mode === "tyrant") this.celebrate(99);
     this.events.push({ type: "stage_cleared", stage: this.stage, mode: this.mode, wave: this.wave, time: this.modeTime });
   }
 
@@ -797,7 +826,7 @@ export class World {
   }
 
   private startBossIntro(): void {
-    const def = enemyDef(bossForStage(this.stage, this.mode));
+    const def = enemyDef(this.mode === "tyrant" && this.tyrant ? this.tyrant.bossId : bossForStage(this.stage, this.mode));
     const base = stageScale(this.stage);
     const gate = bossScale(this.stage);
     const scale = { ...base, hp: base.hp * gate.hp, attack: base.attack * gate.attack };
@@ -1224,6 +1253,8 @@ export class World {
 
   applyRawDamage(target: Combatant, amount: number, element: Element, sourceId: number, crit: boolean, heavy = false): void {
     if (target.dead || hasStatus(target, "submerged")) return;
+    // The Tyrant's clock starts when it does: no free score during its entrance.
+    if (this.mode === "tyrant" && target.kind === "boss" && this.phase !== "boss") return;
     let remaining = amount;
     if (target.shield > 0) {
       const absorbed = Math.min(target.shield, remaining);
@@ -1234,6 +1265,7 @@ export class World {
       if (target.shield <= 0) target.statuses = target.statuses.filter((x) => x.kind !== "shield");
     }
     target.hp -= remaining;
+    if (target.kind === "player") this.cycleHurt += Math.max(0, remaining);
     target.hitFlash = 0.12;
     if (amount >= 1 && sourceId !== -1) {
       this.events.push({ type: "hit", targetId: target.id, sourceId, amount: Math.round(amount), crit, pos: { x: target.pos.x, y: target.pos.y }, element, faction: target.faction, targetKind: target.kind, heavy });
@@ -1244,6 +1276,7 @@ export class World {
     if (target.faction === "enemy" && heavy && target.kind !== "boss" && target.state !== "dead") {
       this.setState(target, "stagger", 0.35);
     }
+    if (target.hp <= 0 && target.kind === "boss" && this.mode === "tyrant") this.tyrantBreak(target);
     if (target.hp <= 0) this.kill(target, sourceId);
   }
 
@@ -1356,6 +1389,21 @@ export class World {
   addTelegraph(pos: Vec2, radius: number, duration: number, shape: Telegraph["shape"] = "circle", dir: 1 | -1 = 1, length = 0, color = 0xff4d6d, hostile = true): void {
     this.telegraphs.push({ id: this.allocId(), pos: { ...pos }, radius, remaining: duration, total: duration, shape, dir, length, color, hostile });
     this.events.push({ type: "telegraph", pos: { ...pos }, radius, duration });
+  }
+
+  /**
+   * The Tyrant's bar breaks: it rises again at once, carrying the overflow, and hits harder for the
+   * rest of the fight. The score is the number of breaks.
+   */
+  private tyrantBreak(b: Combatant): void {
+    this.tyrantBreaks += 1;
+    const overflow = Math.min(b.stats.maxHp * 0.9, -b.hp);
+    b.hp = b.stats.maxHp - overflow;
+    b.stats.attack = Math.round(b.stats.attack * (1 + TYRANT_BREAK_FURY) * 10) / 10;
+    this.events.push({ type: "tyrant_break", id: b.id, count: this.tyrantBreaks, pos: { ...b.pos } });
+    this.events.push({ type: "shake", strength: 9 });
+    this.events.push({ type: "freeze", duration: 0.08 });
+    this.gainEnergy(12);
   }
 
   /** Volatile depth: a slain foe bursts after a fuse, shown as a ring the warrior can leave or dodge through. */

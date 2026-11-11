@@ -11,7 +11,7 @@ import { aetherFor, canAscend, romanAscension, spendableAether } from "@/game/pr
 const SHORT_LABEL: Partial<Record<string, string>> = { attackSpeed: "Atk Speed", critChance: "Crit Rate", critDamage: "Crit Dmg" };
 /** The narrowest phones (320 px) get labels that never truncate. */
 const TINY_LABEL: Record<string, string> = { attack: "ATK", maxHp: "HP", defense: "DEF", attackSpeed: "SPD", critChance: "CRIT", critDamage: "CDMG" };
-import { combatPower, computePlayerStats, isStatUnlocked, MILESTONE_EVERY, MILESTONE_MULT, statUnlockRule, statUpgradeCost, STAT_UPGRADE_CAP } from "@/game/progression/stats";
+import { combatPower, computePlayerStats, isStatUnlocked, MILESTONE_EVERY, MILESTONE_MULT, statUnlockRule, statUpgradeCost, statCap } from "@/game/progression/stats";
 import type { Profile } from "@/game/progression/profile";
 import { canAttemptTrial, nextRankStep, rankLetter } from "@/game/progression/ranks";
 import { fmt, fmtStat } from "@/lib/format";
@@ -45,7 +45,7 @@ export default function HeroPanel() {
       </div>
       <div className="grid grid-cols-2 grid-rows-3 gap-1.5 flex-1 min-h-0">
         {STATS.map((s) => (
-          <StatCard key={s.key} stat={s.key} icon={s.icon} value={fmtStat(s.key, stats[s.key])} next={fmtStat(s.key, previewNext(profile, s.key)[s.key])} level={profile.player.statLevels[s.key]} gold={profile.player.gold} unlocked={isStatUnlocked(profile, s.key)} onUpgrade={() => c.upgradeStat(s.key).ok} />
+          <StatCard key={s.key} stat={s.key} icon={s.icon} value={fmtStat(s.key, stats[s.key])} next={fmtStat(s.key, previewNext(profile, s.key)[s.key])} level={profile.player.statLevels[s.key]} cap={statCap(profile, s.key)} gold={profile.player.gold} unlocked={isStatUnlocked(profile, s.key)} onUpgrade={() => c.upgradeStat(s.key).ok} />
         ))}
       </div>
     </div>
@@ -58,9 +58,9 @@ function previewNext(profile: Profile, stat: UpgradeableStat) {
   return computePlayerStats(clone);
 }
 
-function StatCard({ stat, icon, value, next, level, gold, unlocked, onUpgrade }: { stat: UpgradeableStat; icon: IconName; value: string; next: string; level: number; gold: number; unlocked: boolean; onUpgrade: () => boolean }) {
+function StatCard({ stat, icon, value, next, level, cap, gold, unlocked, onUpgrade }: { stat: UpgradeableStat; icon: IconName; value: string; next: string; level: number; cap: number; gold: number; unlocked: boolean; onUpgrade: () => boolean }) {
   const cost = statUpgradeCost(stat, level);
-  const capped = level >= STAT_UPGRADE_CAP[stat];
+  const capped = level >= cap;
   const affordable = gold >= cost;
   const rule = statUnlockRule(stat);
   if (!unlocked && rule) {

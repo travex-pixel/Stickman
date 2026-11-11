@@ -107,12 +107,12 @@ export function sanitizeProfile(raw: unknown): { profile: Profile; repaired: boo
       riftCores: num(p.riftCores, 0),
       skillPoints: num(p.skillPoints, 0),
       statLevels: {
-        attack: num(statLevels.attack, 1, 1, 400),
-        maxHp: num(statLevels.maxHp, 1, 1, 400),
+        attack: num(statLevels.attack, 1, 1, 400 + 40 * 10),
+        maxHp: num(statLevels.maxHp, 1, 1, 400 + 40 * 10),
         attackSpeed: num(statLevels.attackSpeed, 1, 1, 120),
         critChance: num(statLevels.critChance, 1, 1, 150),
         critDamage: num(statLevels.critDamage, 1, 1, 300),
-        defense: num(statLevels.defense, 1, 1, 250),
+        defense: num(statLevels.defense, 1, 1, 250 + 40 * 10),
       },
       weaponPath,
       perks,
@@ -154,13 +154,17 @@ export function sanitizeProfile(raw: unknown): { profile: Profile; repaired: boo
     objectives: sanitizeObjectives(raw.objectives),
     ascension: (() => {
       const a = isObj(raw.ascension) ? raw.ascension : {};
-      const aether = num(a.aether, 0, 0, 1e7);
+      const aether = num(a.aether, 0, 0, 1e15);
       const nodes = isObj(a.nodes) ? Object.fromEntries(Object.entries(a.nodes).filter(([k, v]) => TREE.some((n) => n.id === k) && isNum(v) && v >= 0).map(([k, v]) => [k, Math.min(TREE.find((n) => n.id === k)!.max, Math.floor(v as number))])) : {};
-      return { count: num(a.count, 0, 0, 9999), aether, bestEver: num(a.bestEver, 0, 0, 9999), spent: Math.min(aether, num(a.spent, 0, 0, 1e7)), nodes };
+      return { count: num(a.count, 0, 0, 9999), aether, bestEver: num(a.bestEver, 0, 0, 9999), spent: Math.min(aether, num(a.spent, 0, 0, 1e15)), nodes };
+    })(),
+    tyrant: (() => {
+      const t = isObj(raw.tyrant) ? raw.tyrant : {};
+      return { week: isStr(t.week) ? t.week : "", best: numF(t.best, 0, 0, 1e6), claimed: Math.floor(num(t.claimed, 0, 0, 7)), allTimeBest: numF(t.allTimeBest, 0, 0, 1e6) };
     })(),
     modes: {
       keyDay: isStr(md.keyDay) ? md.keyDay : "",
-      keys: { vault: num(mk.vault, 3, 0, 3), rift: num(mk.rift, 3, 0, 3), crypt: num(mk.crypt, 3, 0, 3), hunt: num(mk.hunt, 3, 0, 3) },
+      keys: { vault: num(mk.vault, 3, 0, 3), rift: num(mk.rift, 3, 0, 3), crypt: num(mk.crypt, 3, 0, 3), hunt: num(mk.hunt, 3, 0, 3), tyrant: num(mk.tyrant, 2, 0, 2) },
       endlessBest: num(md.endlessBest, 0),
       vaultBest: num(md.vaultBest, 0),
     },

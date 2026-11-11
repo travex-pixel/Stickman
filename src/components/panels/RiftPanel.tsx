@@ -4,6 +4,8 @@ import { Icon, type IconName } from "@/components/ui/Icon";
 import { useController, useHud, useProfileRef } from "@/hooks/useGame";
 import { regionForStage } from "@/game/data/regions";
 import { TWISTS, depthLabel, twistForStage } from "@/game/data/depths";
+import { ENEMIES } from "@/game/data/enemies";
+import { TYRANT_TIERS, fmtBars, tyrantForWeek } from "@/game/progression/tyrant";
 import { JOURNAL } from "@/game/data/lore";
 import { MODES, cryptSlot, isKeyedMode, type ModeId } from "@/game/data/modes";
 import { SLOT_LABEL } from "@/game/data/equipment";
@@ -12,7 +14,7 @@ import { cn } from "@/lib/cn";
 import { useShortScreen } from "@/hooks/useShortScreen";
 import { claimableObjectives } from "@/game/progression/objectives";
 
-const MODE_ICON: Record<Exclude<ModeId, "campaign">, IconName> = { boss: "skull", hunt: "skull", vault: "coin", rift: "summons", crypt: "relic", endless: "level", trial: "star" };
+const MODE_ICON: Record<Exclude<ModeId, "campaign">, IconName> = { boss: "skull", hunt: "skull", vault: "coin", rift: "summons", crypt: "relic", endless: "level", trial: "star", tyrant: "skull" };
 
 /** The journey: where you are on the campaign, and the trials that sit beside it. */
 export default function RiftPanel() {
@@ -28,7 +30,10 @@ export default function RiftPanel() {
   const short = useShortScreen();
   const claimable = claimableObjectives(profile);
   const step = nextRankStep(profile);
-  const modes: Exclude<ModeId, "campaign" | "boss">[] = ["trial", "hunt", "vault", "rift", "crypt", "endless"];
+  const modes: Exclude<ModeId, "campaign" | "boss">[] = ["tyrant", "trial", "hunt", "vault", "rift", "crypt", "endless"];
+  const week = tyrantForWeek(new Date());
+  const weekBest = profile.tyrant.week === week.week ? profile.tyrant.best : 0;
+  const weekTiers = profile.tyrant.week === week.week ? profile.tyrant.claimed : 0;
   const today = cryptSlot();
   return (
     <div className="flex flex-col h-full min-h-0 px-2 pt-1.5 pb-1.5 gap-1.5">
@@ -68,18 +73,18 @@ export default function RiftPanel() {
           </button>
         ))}
       </div>
-      <div className="grid grid-cols-2 grid-rows-3 gap-1 flex-1 min-h-0">
+      <div className="grid grid-cols-2 grid-rows-4 gap-1 flex-1 min-h-0">
         {modes.map((m) => {
           const def = MODES[m];
           const avail = c.modeAvailability(m);
           const keys = isKeyedMode(m) ? profile.modes.keys[m] : null;
           const title = m === "trial" ? (step ? `Rank Trial ${rankLetter(step.to - 1)} → ${rankLetter(step.to)}` : "Rank S") : def.name;
-          const sub = m === "hunt" && avail.ok ? "Rematch a fallen boss" : m === "trial" ? (step ? (avail.ok ? "Your breakthrough awaits." : avail.reason) : "Nothing above you.") : m === "endless" && profile.modes.endlessBest > 0 ? `Best: wave ${profile.modes.endlessBest}` : m === "crypt" && avail.ok ? `Today: ${SLOT_LABEL[today]} relics from every elite.` : avail.ok ? def.tagline : avail.reason;
+          const sub = m === "tyrant" && avail.ok ? `${ENEMIES[week.bossId]?.name ?? "Tyrant"} · ${TWISTS[week.twist].name} · ${weekTiers}/${TYRANT_TIERS.length} tiers${weekBest > 0 ? ` · best ${fmtBars(weekBest)}` : ""}` : m === "hunt" && avail.ok ? "Rematch a fallen boss" : m === "trial" ? (step ? (avail.ok ? "Your breakthrough awaits." : avail.reason) : "Nothing above you.") : m === "endless" && profile.modes.endlessBest > 0 ? `Best: wave ${profile.modes.endlessBest}` : m === "crypt" && avail.ok ? `Today: ${SLOT_LABEL[today]} relics from every elite.` : avail.ok ? def.tagline : avail.reason;
           return (
             <button
               key={m}
-              className={cn("card text-left px-2 py-1 flex flex-col justify-center gap-0.5 min-h-0 overflow-hidden", avail.ok ? (m === "trial" ? "card-active" : "") : "card-locked opacity-75")}
-              onClick={() => (m === "hunt" && avail.ok ? c.openHunts() : c.startMode(m))}
+              className={cn("card text-left px-2 py-1 flex flex-col justify-center gap-0.5 min-h-0 overflow-hidden", m === "tyrant" && "col-span-2", avail.ok ? (m === "trial" ? "card-active" : m === "tyrant" ? "border-crimson/50 bg-crimson/[0.06]" : "") : "card-locked opacity-75")}
+              onClick={() => (m === "hunt" && avail.ok ? c.openHunts() : m === "tyrant" && avail.ok ? c.openTyrant() : c.startMode(m))}
               data-testid={`mode-${m}`}
               aria-label={`${title}${avail.ok ? "" : `, ${avail.reason}`}`}
             >
@@ -88,7 +93,7 @@ export default function RiftPanel() {
                   <Icon name={avail.ok ? MODE_ICON[m] : "lock"} size={14} />
                   <span className="font-display text-[13px] text-ivory truncate">{title}</span>
                 </span>
-                {keys !== null && avail.ok && <span className="text-[10px] font-bold text-parch shrink-0">{keys}/3</span>}
+                {keys !== null && avail.ok && <span className="text-[10px] font-bold text-parch shrink-0">{keys}/{def.dailyKeys ?? 3}</span>}
               </div>
               <div className="text-[10px] text-mist leading-snug truncate">{sub}</div>
             </button>

@@ -6,7 +6,7 @@ import { EQUIP_SLOTS } from "../data/ids";
 import { equipmentUpgradeCost, EQUIPMENT_LEVEL_CAP } from "../economy/loot";
 import { buildLoadout } from "./loadout";
 import type { Profile } from "./profile";
-import { computeModifiers, isStatUnlocked, statUpgradeCost, STAT_UPGRADE_CAP } from "./stats";
+import { computeModifiers, isStatUnlocked, statCap, statUpgradeCost } from "./stats";
 import { anyAbilityRankReady } from "./abilityRanks";
 import { canStarUp } from "../summons/progression";
 
@@ -105,7 +105,7 @@ export const TIER_LABEL: Record<ReadinessTier, string> = { ready: "Ready", even:
 /** How many stat upgrades the current gold buys, cheapest first. */
 export function affordableUpgrades(p: Profile): number {
   const stats = (["attack", "maxHp", "defense", "attackSpeed", "critChance", "critDamage"] as const).filter((st) => isStatUnlocked(p, st));
-  const caps = STAT_UPGRADE_CAP;
+  const caps = Object.fromEntries(stats.map((st) => [st, statCap(p, st)])) as Record<(typeof stats)[number], number>;
   const levels = { ...p.player.statLevels };
   let gold = p.player.gold;
   let n = 0;

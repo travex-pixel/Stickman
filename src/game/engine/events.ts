@@ -20,10 +20,11 @@ export type GameEvent =
   | { type: "wave_cleared"; wave: number }
   | { type: "boss_intro"; id: number; defId: string }
   | { type: "boss_phase"; id: number; phase: number }
+  | { type: "tyrant_break"; id: number; count: number; pos: Vec2 }
   | { type: "telegraph"; pos: Vec2; radius: number; duration: number }
   | { type: "stage_cleared"; stage: number; mode: string; wave: number; time: number }
   /** Campaign farming: every ordinary encounter of the stage is cleared (once per cycle). */
-  | { type: "encounters_cleared"; stage: number; cycle: number }
+  | { type: "encounters_cleared"; stage: number; cycle: number; hurt: number }
   /** Campaign farming moved to another stage in place, without a new world. */
   | { type: "stage_advanced"; from: number; stage: number }
   | { type: "player_defeated"; stage: number; wave: number; mode: string }

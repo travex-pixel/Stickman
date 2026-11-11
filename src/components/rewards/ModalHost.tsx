@@ -17,7 +17,10 @@ import { fmt, fmtDuration } from "@/lib/format";
 import { bossForStage, isBossStage } from "@/game/data/regions";
 import { affordableUpgrades } from "@/game/progression/readiness";
 import { nextMilestone } from "@/game/progression/milestones";
-import { AETHER_GOLD, AETHER_POWER, ASCEND_MIN_STAGE, TREE, aetherFor, canAscend, nextNodeCost, nodeLevel, romanAscension, spendableAether } from "@/game/progression/ascension";
+import { TWISTS } from "@/game/data/depths";
+import { SURGE_MAX } from "@/game/progression/campaign";
+import { TYRANT_DAILY_TRIES, TYRANT_TIERS, fmtBars, msUntilNextWeek, tierReward, tyrantForWeek, tyrantStage } from "@/game/progression/tyrant";
+import { AETHER_GOLD, AETHER_POWER, ASCEND_MIN_STAGE, LIMIT_BREAK_STEP, TREE, TREE_COMPOUND, aetherFor, canAscend, nextNodeCost, nodeLevel, romanAscension, spendableAether, type TreeNodeId } from "@/game/progression/ascension";
 import { DAILY_BONUS, objectiveDef, objectivePayout } from "@/game/progression/objectives";
 import { cn } from "@/lib/cn";
 import { SettingsModal } from "@/components/settings/SettingsModal";
@@ -58,6 +61,8 @@ function ModalBody({ modal }: { modal: Modal }) {
       return <Objectives />;
     case "ascend":
       return <AscendSheet />;
+    case "tyrant":
+      return <TyrantSheet />;
     case "hunt_pick":
       return <HuntPick />;
     case "rank_up":
@@ -400,6 +405,19 @@ export function ModeResult({ modal }: { modal: Extract<Modal, { kind: "mode_resu
         <div className={cn("caps", modal.success ? "text-gold-2" : "text-crimson-2")}>{modal.subtitle}</div>
         <div className="font-display text-[20px] text-ivory leading-none">{modal.title}</div>
         {modal.record && <div className="text-[10px] font-bold text-gold-2 tracking-[0.2em]">NEW BEST</div>}
+        {modal.tyrant && (
+          <div className="w-full grid grid-cols-7 gap-1 mt-0.5" data-testid="tyrant-track">
+            {TYRANT_TIERS.map((t, i) => {
+              const fresh = modal.tyrant!.newTiers.includes(i);
+              const done = i < modal.tyrant!.claimed;
+              return (
+                <motion.div key={t} className={cn("h-6 rounded-md border flex items-center justify-center text-[10px] font-bold tabular-nums", done ? "border-gold/70 bg-gold/15 text-gold-2" : "border-white/10 text-mist")} initial={fresh ? { scale: 0.4, opacity: 0 } : false} animate={{ scale: 1, opacity: 1 }} transition={{ delay: 0.25 + 0.15 * modal.tyrant!.newTiers.indexOf(i), type: "spring", stiffness: 320, damping: 14 }}>
+                  {t < 1 ? `${t * 100}%` : t}
+                </motion.div>
+              );
+            })}
+          </div>
+        )}
         <div className="w-full grid grid-cols-3 gap-1 mt-1">
           {modal.lines.map((l, i) => (
             <motion.div key={l.label} className="card px-1.5 py-1.5" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 + i * 0.12 }}>
@@ -564,10 +582,13 @@ function AetherTree() {
                   {lvl}/{n.max}
                 </span>
               </div>
-              <div className="text-[10px] text-parch truncate">{n.per}{lvl > 0 && n.max > 1 ? ` (now ${lvl}×)` : ""}</div>
+              <div className="text-[10px] text-parch truncate">
+                {n.per}
+                {lvl > 0 && n.max > 1 && <span className="text-gold-2"> · now {nodeTotal(n.id, lvl)}</span>}
+              </div>
             </div>
             <button className={cn("shrink-0 h-8 min-w-[64px] rounded-md text-[11px] font-bold", cost === null ? "text-mist" : can ? "btn-primary !py-0 !px-2" : "border border-white/10 text-mist")} disabled={!can} onClick={() => c.buyAscensionNode(n.id)} data-testid={`buy-${n.id}`}>
-              {cost === null ? "Max" : `${cost} ✦`}
+              {cost === null ? "Max" : `${fmt(cost)} ✦`}
             </button>
           </div>
         );
@@ -577,6 +598,19 @@ function AetherTree() {
       </button>
     </div>
   );
+}
+
+/** A tree node's total effect at `lvl`, in words. */
+function nodeTotal(id: TreeNodeId, lvl: number): string {
+  if (id in TREE_COMPOUND) {
+    const v = Math.pow(1 + TREE_COMPOUND[id as keyof typeof TREE_COMPOUND], lvl) - 1;
+    return v < 10 ? `+${Math.round(v * 100)}%` : `×${fmt(v + 1)}`;
+  }
+  if (id === "limit") return `+${LIMIT_BREAK_STEP * lvl} caps`;
+  if (id === "treasury") return `${10 * lvl}% kept`;
+  if (id === "oathbinder") return `+${3 * lvl}%`;
+  if (id === "patience") return `+${lvl}h`;
+  return `${lvl}`;
 }
 
 function AscendBody() {
@@ -620,12 +654,18 @@ function AscendBody() {
             <div className="text-parch">Shadows, gear, level, skills, techniques, perks, rank, Codex</div>
           </div>
         </div>
-        {!can && <p className="text-[11px] text-mist text-center">Reach stage {ASCEND_MIN_STAGE} to ascend. Deeper stages grant more Aether.</p>}
+        {can ? (
+          <p className="text-[11px] text-parch text-center leading-snug" data-testid="rift-memory">
+            <b className="text-ivory">Rift Memory:</b> every gate up to stage {Math.max(profile.progress.bestStage, a.bestEver)} stays open, and you surge through that ground up to {SURGE_MAX} stages a cycle.
+          </p>
+        ) : (
+          <p className="text-[11px] text-mist text-center">Reach stage {ASCEND_MIN_STAGE} to ascend. Deeper stages grant more Aether.</p>
+        )}
         <div className="flex gap-2 mt-1">
           <button className="btn-ghost flex-1 !py-2" onClick={() => c.closeModal()} data-testid="ascend-later">
             Not yet
           </button>
-          <HoldConfirm disabled={!can} onConfirm={() => c.confirmAscend()} label={`Hold to ascend (+${gain})`} />
+          <HoldConfirm disabled={!can} onConfirm={() => c.confirmAscend()} label={`Hold to ascend (+${fmt(gain)})`} />
         </div>
       </div>
     </>
@@ -671,6 +711,70 @@ function HoldConfirm({ disabled, onConfirm, label }: { disabled: boolean; onConf
       <span className="absolute inset-y-0 left-0 bg-white/30" style={{ width: `${progress * 100}%` }} />
       <span className="relative">{label}</span>
     </button>
+  );
+}
+
+/** The weekly Rift Tyrant: who it is this week, how it changes, what each tier pays, and the tries left. */
+function TyrantSheet() {
+  const c = useController();
+  const profile = useProfileRef();
+  const now = new Date();
+  const week = tyrantForWeek(now);
+  const def = ENEMIES[week.bossId];
+  const twist = TWISTS[week.twist];
+  const stage = tyrantStage(profile);
+  const same = profile.tyrant.week === week.week;
+  const claimed = same ? profile.tyrant.claimed : 0;
+  const best = same ? profile.tyrant.best : 0;
+  const keys = profile.modes.keys.tyrant;
+  const avail = c.modeAvailability("tyrant");
+  const days = Math.max(1, Math.ceil(msUntilNextWeek(now) / 86_400_000));
+  return (
+    <Card>
+      <div className="px-3 pt-3 pb-3 flex flex-col gap-2" data-testid="tyrant-sheet">
+        <div className="flex items-center gap-2.5">
+          <div className="h-12 w-12 shrink-0 rounded-lg overflow-hidden border border-crimson/60 bg-black/30">
+            <SummonPortrait defId={week.bossId} size={48} enemy />
+          </div>
+          <div className="min-w-0 flex-1 leading-tight">
+            <div className="caps !text-crimson-2">
+              Rift Tyrant · {days} day{days === 1 ? "" : "s"} left
+            </div>
+            <div className="font-display text-[17px] text-ivory truncate">{def?.name ?? "The Tyrant"}</div>
+            <div className="text-[10.5px] text-parch truncate">
+              <b className="text-ivory">{twist.name}:</b> {twist.blurb}
+            </div>
+          </div>
+        </div>
+        <p className="text-[11px] text-mist leading-snug">One minute at stage {stage}, your deepest. It cannot fall: every time its bar breaks it rises again, harder-hitting. Each tier pays once a week.</p>
+        <div className="grid grid-cols-7 gap-1" data-testid="tyrant-tiers">
+          {TYRANT_TIERS.map((t, i) => {
+            const r = tierReward(stage, i);
+            const done = i < claimed;
+            return (
+              <div key={t} className={cn("rounded-md border text-center py-1 leading-none", done ? "border-gold/60 bg-gold/10" : "border-white/10 bg-white/[0.03]")} title={`${fmt(r.gold)} gold, ${r.essence} essence${r.cores ? `, ${r.cores} cores` : ""}${r.gear ? ", gear" : ""}`}>
+                <div className={cn("font-display text-[12px] tabular-nums", done ? "text-gold-2" : "text-ivory")}>{t < 1 ? `${t * 100}%` : `${t}`}</div>
+                <div className="text-[8px] text-mist mt-0.5 uppercase tracking-wide">{done ? "Won" : r.gear ? "Gear" : r.cores ? `${r.cores} core${r.cores > 1 ? "s" : ""}` : "Gold"}</div>
+              </div>
+            );
+          })}
+        </div>
+        <div className="flex items-baseline justify-between text-[11px] px-0.5">
+          <span className="text-mist">
+            Week best <b className="text-ivory tabular-nums">{fmtBars(best)}</b> bars · all-time {fmtBars(profile.tyrant.allTimeBest)}
+          </span>
+          <span className="text-parch shrink-0">{keys}/{TYRANT_DAILY_TRIES} today</span>
+        </div>
+        <div className="flex gap-2">
+          <button className="btn-ghost flex-1 !py-2" onClick={() => c.closeModal()} data-testid="tyrant-close">
+            Close
+          </button>
+          <button className="btn-primary flex-[1.4] !py-2" disabled={!avail.ok} onClick={() => c.startMode("tyrant")} data-testid="tyrant-fight">
+            {avail.ok ? "Face the Tyrant" : avail.reason}
+          </button>
+        </div>
+      </div>
+    </Card>
   );
 }
 

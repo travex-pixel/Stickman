@@ -1,12 +1,12 @@
 import type { WaveDef } from "./regions";
 import { EQUIP_SLOTS, type EquipSlot } from "./ids";
 
-export type ModeId = "campaign" | "boss" | "hunt" | "vault" | "rift" | "crypt" | "endless" | "trial";
+export type ModeId = "campaign" | "boss" | "hunt" | "vault" | "rift" | "crypt" | "endless" | "trial" | "tyrant";
 /** Modes that spend a daily key. */
-export type KeyedMode = "vault" | "rift" | "crypt" | "hunt";
-export const KEYED_MODES: KeyedMode[] = ["vault", "rift", "crypt", "hunt"];
+export type KeyedMode = "vault" | "rift" | "crypt" | "hunt" | "tyrant";
+export const KEYED_MODES: KeyedMode[] = ["vault", "rift", "crypt", "hunt", "tyrant"];
 export function isKeyedMode(m: ModeId): m is KeyedMode {
-  return m === "vault" || m === "rift" || m === "crypt" || m === "hunt";
+  return m === "vault" || m === "rift" || m === "crypt" || m === "hunt" || m === "tyrant";
 }
 
 export interface ModeDef {
@@ -35,6 +35,8 @@ export const MODES: Record<ModeId, ModeDef> = {
   hunt: { id: "hunt", name: "Boss Hunt", tagline: "Rematch a fallen boss for gear, Rift Cores and another chance at its shadow.", unlockAfterStage: 3, dailyKeys: 3, waves: 0, boss: true },
   crypt: { id: "crypt", name: "Relic Crypt", tagline: "Elites guard today's relics. Each one drops gear for the featured slot.", unlockAfterStage: 4, dailyKeys: 3, waves: 3, boss: false },
   endless: { id: "endless", name: "Endless Ascent", tagline: "How far can your army climb?", unlockAfterStage: 5, waves: Infinity, boss: false },
+  // The weekly boss: one minute, a boss that rises again every time it breaks, seven tiers a week.
+  tyrant: { id: "tyrant", name: "Rift Tyrant", tagline: "One minute against this week's Tyrant. Each time it breaks, it rises again.", unlockAfterStage: 9, dailyKeys: 2, duration: 60, waves: 0, boss: true },
   trial: { id: "trial", name: "Rank Trial", tagline: "Prove yourself against an empowered Warden.", unlockAfterStage: 0, waves: 1, boss: true },
 };
 

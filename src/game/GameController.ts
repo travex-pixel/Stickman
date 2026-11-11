@@ -20,7 +20,7 @@ import { claimEssence as doClaimEssence, setDeployed, type ClaimOutcome } from "
 import { CODEX_STAR_STEP, resolveExtraction, speciesStars } from "./summons/extraction";
 import { SLOT_LABEL, STAT_LABEL } from "./data/equipment";
 import { bondCost, BOND_CAP, canStarUp, checkEvolution, evolveSummon, grantSummonXp, REFINE_SHARDS, refineShards as doRefineShards, starCost, starUp } from "./summons/progression";
-import { enemyDef } from "./data/enemies";
+import { ENEMIES, enemyDef } from "./data/enemies";
 import { MODES, RIFT_ESSENCE_PER_KILL, cryptSlot, isKeyedMode, type ModeId } from "./data/modes";
 import { RARITY_ORDER } from "./data/ids";
 import { REPEAT_BOSS_CORE_CHANCE, shadowXpShare, skillPointsBetween, stageClearGold, stageClearXp } from "./economy/rewards";
@@ -44,7 +44,8 @@ import { generateItem } from "./economy/loot";
 import { ABILITIES } from "./data/abilities";
 import { bossForStage, isBossStage, regionForStage } from "./data/regions";
 import { TWISTS, depthForStage, romanDepth, twistForDepth, type TwistId } from "./data/depths";
-import { clampFarmStage, frontierStage, normalizeCampaign, resolveBossDefeat, resolveBossVictory, resolveCycle, resolveFarmingDefeat } from "./progression/campaign";
+import { TYRANT_TIERS, fmtBars, recordTyrant, syncTyrantWeek, tierReward, tyrantForWeek, tyrantStage, tyrantUnlocked } from "./progression/tyrant";
+import { clampFarmStage, frontierStage, normalizeCampaign, resolveBossDefeat, resolveBossVictory, resolveCycle, resolveFarmingDefeat, surgeLeap } from "./progression/campaign";
 import { bossFightStepper, readinessTips, summarizeForecast, FORECAST_SEEDS, type BossForecast, type FightResult, type ReadinessTip } from "./progression/readiness";
 import { ascend as doAscend, buyNode as doBuyNode, romanAscension, type TreeNodeId } from "./progression/ascension";
 import { claimObjective as doClaimObjective, objectiveDef, recordObjective, refreshObjectives, type ObjectiveCounter } from "./progression/objectives";
@@ -77,6 +78,7 @@ export type Modal =
   | { kind: "boss_ready"; stage: number }
   | { kind: "boss_victory"; stage: number; defId: string; gold: number; xp: number; cores: number; items: EquipmentItem[]; nextStage: number; unlocks: string[]; seconds: number; firstWin: boolean; orbId?: number; hunt?: boolean }
   | { kind: "hunt_pick" }
+  | { kind: "tyrant" }
   | { kind: "boss_defeat"; stage: number; defId: string; bossHpLeft: number; bossPhase: number; seconds: number; casts: number; dodges: number; perfect: number; summonsLost: number; farmStage: number; tips: ReadinessTip[] }
   | { kind: "offline"; summary: OfflineSummary; levels: number }
   | { kind: "settings" }
@@ -86,7 +88,7 @@ export type Modal =
   | { kind: "ascend" }
   | { kind: "boss_intro"; defId: string }
   | { kind: "technique"; id: AbilityId }
-  | { kind: "mode_result"; mode: ModeId; title: string; subtitle: string; lines: { label: string; value: string; tone?: "gold" | "jade" | "violet" }[]; success: boolean; record?: boolean; items?: EquipmentItem[] }
+  | { kind: "mode_result"; mode: ModeId; title: string; subtitle: string; lines: { label: string; value: string; tone?: "gold" | "jade" | "violet" }[]; success: boolean; record?: boolean; items?: EquipmentItem[]; tyrant?: { claimed: number; newTiers: number[]; score: number } }
   | { kind: "rank_up"; from: number; to: number; rewards: string[] };
 
 export interface Toast {
@@ -131,6 +133,9 @@ interface ProfileWrap {
  * GameController owns the whole runtime: profile, world, loop, renderer, audio, persistence and UI state.
  * React talks to it through stores and methods; the simulation never imports React.
  */
+/** Cards that would interrupt a fight: they wait in the queue until the warrior is farming. */
+const DEFERRED_IN_FIGHT = new Set<Modal["kind"]>(["technique", "perk_choice"]);
+
 export class GameController {
   readonly profileStore = new Store<ProfileWrap>({ profile: createDefaultProfile(), v: 0 });
   readonly hudStore = new Store<WorldSnapshot | null>(null);
@@ -386,11 +391,13 @@ export class GameController {
     this.pending = null;
     this.world?.dispose();
     const loadout = buildLoadout(this.profile);
-    this.world = new World({ stage, loadout, mode, seed: (Date.now() ^ (stage * 2654435761)) >>> 0, cryptSlot: cryptSlot() });
+    this.world = new World({ stage, loadout, mode, seed: (Date.now() ^ (stage * 2654435761)) >>> 0, cryptSlot: cryptSlot(), tyrant: mode === "tyrant" ? tyrantForWeek(new Date()) : undefined });
     this.run = newTally(mode);
     if (mode === "boss") this.run.farmStage = this.challengeFrom;
     this.renderer?.setWorld(this.world);
     this.hudStore.set(this.world.snapshot());
+    // Back to farming: anything held back during the fight can show now.
+    if (mode === "campaign" && !this.uiStore.get().modal) this.flushModalQueue();
   }
 
   /** Per-run tallies for the result screens. */
@@ -406,7 +413,7 @@ export class GameController {
     const m = this.profile.modes;
     if (m.keyDay !== day) {
       m.keyDay = day;
-      m.keys = { vault: MODES.vault.dailyKeys ?? 3, rift: MODES.rift.dailyKeys ?? 3, crypt: MODES.crypt.dailyKeys ?? 3, hunt: MODES.hunt.dailyKeys ?? 3 };
+      m.keys = { vault: MODES.vault.dailyKeys ?? 3, rift: MODES.rift.dailyKeys ?? 3, crypt: MODES.crypt.dailyKeys ?? 3, hunt: MODES.hunt.dailyKeys ?? 3, tyrant: MODES.tyrant.dailyKeys ?? 2 };
       this.commit();
     }
   }
@@ -420,7 +427,9 @@ export class GameController {
       if (p.player.level < step.level) return { ok: false, reason: `Reach level ${step.level}` };
       return { ok: true };
     }
-    if (p.progress.bestStage < def.unlockAfterStage) return { ok: false, reason: `Clear stage ${def.unlockAfterStage}` };
+    if (mode === "tyrant") {
+      if (!tyrantUnlocked(p)) return { ok: false, reason: `Clear stage ${def.unlockAfterStage}` };
+    } else if (p.progress.bestStage < def.unlockAfterStage) return { ok: false, reason: `Clear stage ${def.unlockAfterStage}` };
     if (isKeyedMode(mode) && p.modes.keys[mode] <= 0) return { ok: false, reason: "Keys refill tomorrow" };
     return { ok: true };
   }
@@ -448,7 +457,7 @@ export class GameController {
     const p = this.profile;
     if (isKeyedMode(mode)) p.modes.keys[mode] -= 1;
     const frontier = Math.max(1, p.progress.bestStage);
-    const stage = mode === "trial" ? (nextRankStep(p)?.trialStage ?? frontier) : frontier;
+    const stage = mode === "trial" ? (nextRankStep(p)?.trialStage ?? frontier) : mode === "tyrant" ? tyrantStage(p) : frontier;
     this.closeModal();
     this.commit();
     this.startRun(stage, mode);
@@ -462,6 +471,8 @@ export class GameController {
     this.userGesture();
     const retreat = (this.world?.mode === "boss" || this.world?.mode === "hunt") && this.world.phase !== "victory" && this.world.phase !== "defeat";
     this.closeModal();
+    // Leaving the Tyrant early still banks the bars already broken.
+    if (this.world?.mode === "tyrant" && !this.run.resolved && this.world.phase !== "victory" && this.world.phase !== "defeat") this.onTyrantEnd(false);
     this.startRun(this.profile.progress.currentStage, "campaign");
     if (retreat) this.toast("You withdrew. The boss waits for your return.", "info");
   }
@@ -657,10 +668,15 @@ export class GameController {
           break;
         case "boss_phase":
           this.sfx("void_nova", { volume: 0.9 });
-          this.toast("The Warden remembers its oath. Phase two.", "warn");
+          this.toast(this.world?.mode === "tyrant" ? "The Tyrant rages. Phase two." : "The Warden remembers its oath. Phase two.", "warn");
+          break;
+        case "tyrant_break":
+          this.sfx("boss_intro", { volume: 0.8, rate: 1.3 + Math.min(0.5, e.count * 0.05) });
+          this.renderer?.flash(0xe9c97a, 0.35);
+          if (TYRANT_TIERS.includes(e.count)) this.toast(`${e.count} bar${e.count === 1 ? "" : "s"} broken: a reward tier`, "gold", true);
           break;
         case "encounters_cleared":
-          if (this.world?.farming) this.onEncountersCleared(e.stage);
+          if (this.world?.farming) this.onEncountersCleared(e.stage, e.hurt);
           dirty = true;
           break;
         case "stage_advanced":
@@ -676,6 +692,7 @@ export class GameController {
           if (e.mode === "endless") this.onEndlessOver(e.wave);
           else if (e.mode === "campaign") this.onFarmingDefeat(e.stage);
           else if (e.mode === "boss") this.onBossDefeat(e.stage);
+          else if (e.mode === "tyrant") this.onTyrantEnd(true);
           else this.enqueueModal({ kind: "mode_result", mode: e.mode as ModeId, title: "You fell", subtitle: MODES[e.mode as ModeId].name, lines: [{ label: "Kills", value: `${this.run.kills}` }, { label: "Gold kept", value: `${this.run.gold}` }], success: false });
           break;
         case "loot":
@@ -771,6 +788,7 @@ export class GameController {
     if (cleared) {
       if (cleared.mode === "boss") this.onBossVictory(cleared.stage);
       else if (cleared.mode === "hunt") this.onHuntVictory(cleared.stage);
+      else if (cleared.mode === "tyrant") this.onTyrantEnd(false);
       else this.onModeCleared(cleared.mode as ModeId, cleared.wave, cleared.time);
     }
     if (dirty) {
@@ -858,10 +876,10 @@ export class GameController {
   // ---------------------------------------------------------------------
 
   /** Every ordinary encounter of the farmed stage is down: pay the cycle, then move on or hold. */
-  private onEncountersCleared(stage: number): void {
+  private onEncountersCleared(stage: number, hurt = 1): void {
     const p = this.profile;
     const mods = computeModifiers(p);
-    const res = resolveCycle(p, stage, mods.goldFind);
+    const res = resolveCycle(p, stage, mods.goldFind, surgeLeap(p, stage, hurt));
     p.player.gold += res.gold;
     this.run.gold += res.gold;
     const lv = applyXp(p.player.level, p.player.xp, Math.round(res.xp * mods.xpMult));
@@ -874,9 +892,14 @@ export class GameController {
       this.renderer?.flash(0xc4453f, 0.18);
       this.uiStore.update((u) => ({ ...u, gateFlash: stage }));
       this.requestForecast(true);
+    } else if (res.leapt > 1) {
+      // Rift Memory: remembered ground falls away under a warrior this strong.
+      this.sfx("level_up", { volume: 0.55, rate: 1.4 });
+      this.renderer?.flash(0x9fd3ff, 0.14);
+      this.toast(`Surge! Stages ${stage}–${stage + res.leapt - 1} · +${fmt(res.gold)} gold`, "level");
     } else if (res.stageCleared) {
       this.sfx("quest", { volume: 0.6 });
-      this.toast(`Stage ${stage} cleared · +${fmt(res.gold)} gold`, "gold");
+      this.toast(res.rememberedGate ? `Rift Memory: the gate at stage ${stage} opens · +${fmt(res.gold)} gold` : `Stage ${stage} cleared · +${fmt(res.gold)} gold`, "gold");
     } else {
       this.toast(`Stage ${stage} · +${fmt(res.gold)} gold`, "gold", true);
     }
@@ -1119,6 +1142,61 @@ export class GameController {
     this.userGesture();
     this.refreshKeys();
     this.uiStore.update((u) => ({ ...u, modal: { kind: "hunt_pick" } }));
+  }
+
+  /** The Rift Tyrant sheet: this week's boss, its twist, the tiers and the tries left. */
+  openTyrant(): void {
+    this.userGesture();
+    this.refreshKeys();
+    syncTyrantWeek(this.profile, new Date());
+    this.uiStore.update((u) => ({ ...u, modal: { kind: "tyrant" } }));
+  }
+
+  /** The minute is up, or the warrior fell: the score stands either way. */
+  private onTyrantEnd(fell: boolean): void {
+    if (this.run.resolved) return;
+    this.run.resolved = true;
+    const p = this.profile;
+    const now = new Date();
+    const week = tyrantForWeek(now);
+    const stage = this.world?.stage ?? tyrantStage(p);
+    const before = p.tyrant.claimed;
+    const res = recordTyrant(p, this.world?.tyrantScore ?? 0, now);
+    let gold = 0;
+    let essence = 0;
+    let cores = 0;
+    const items: EquipmentItem[] = [];
+    for (const t of res.newTiers) {
+      const r = tierReward(stage, t);
+      gold += r.gold;
+      essence += r.essence;
+      cores += r.cores;
+      if (r.gear) {
+        const item = generateItem(this.rng, stage, t >= 6 ? "legendary" : "epic");
+        this.addItem(item);
+        items.push(item);
+      }
+    }
+    p.player.gold += gold;
+    p.player.essence += essence;
+    p.player.riftCores += cores;
+    this.objectiveEvent("modeRuns", 1);
+    if (res.newTiers.length > 0) {
+      this.sfx("level_up", { volume: 0.9, rate: 0.95 });
+      this.renderer?.flash(0xe9c97a, 0.3);
+    } else this.sfx("quest", { volume: 0.6 });
+    const boss = ENEMIES[week.bossId]?.name ?? "The Tyrant";
+    const lines: { label: string; value: string; tone?: "gold" | "jade" | "violet" }[] = [
+      { label: "Bars broken", value: fmtBars(res.score), tone: "gold" },
+      { label: "Week best", value: fmtBars(p.tyrant.best) },
+      { label: "Tiers", value: `${p.tyrant.claimed}/${TYRANT_TIERS.length}` },
+    ];
+    if (gold > 0) lines.push({ label: "Gold", value: `+${fmt(gold)}`, tone: "gold" });
+    if (essence > 0) lines.push({ label: "Essence", value: `+${fmt(essence)}`, tone: "violet" });
+    if (cores > 0) lines.push({ label: "Cores", value: `+${cores}`, tone: "jade" });
+    this.enqueueModal({ kind: "mode_result", mode: "tyrant", title: fell ? "The Tyrant stands" : "Time!", subtitle: `${boss} · ${TWISTS[week.twist].name}`, lines, success: !fell || res.score > 0, record: res.newBest && before > 0, items, tyrant: { claimed: p.tyrant.claimed, newTiers: res.newTiers, score: res.score } });
+    this.afterProgression();
+    this.commit();
   }
 
   /** Rematch a cleared boss. Spends a hunt key; never changes campaign progress. */
@@ -1889,12 +1967,21 @@ export class GameController {
 
   private enqueueModal(modal: Modal): void {
     const ui = this.uiStore.get();
-    if (ui.modal === null || ui.modal.kind === "boss_intro") this.uiStore.set({ ...ui, modal });
+    if ((ui.modal === null || ui.modal.kind === "boss_intro") && !(this.inFight() && DEFERRED_IN_FIGHT.has(modal.kind))) this.uiStore.set({ ...ui, modal });
     else this.modalQueue.push(modal);
   }
 
+  /** A boss, a Tyrant or a mode run still being fought (not farming, not over). */
+  private inFight(): boolean {
+    const w = this.world;
+    return !!w && !w.farming && w.phase !== "victory" && w.phase !== "defeat";
+  }
+
+  /** Shows the next queued card. Cards that would interrupt a fight wait for farming. */
   private flushModalQueue(): void {
-    const next = this.modalQueue.shift();
+    const idx = this.inFight() ? this.modalQueue.findIndex((m) => !DEFERRED_IN_FIGHT.has(m.kind)) : 0;
+    if (idx < 0 || idx >= this.modalQueue.length) return;
+    const [next] = this.modalQueue.splice(idx, 1);
     if (next) this.uiStore.update((u) => ({ ...u, modal: next }));
   }
 

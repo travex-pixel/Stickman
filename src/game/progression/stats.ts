@@ -7,7 +7,7 @@ import { codexBonus } from "../summons/extraction";
 import { TECHNIQUE_OWNED_ATTACK } from "../data/abilities";
 import type { GearEffectId } from "../data/gearEffects";
 import { GEAR_SETS, setCounts } from "../data/gearSets";
-import { aetherGoldMult, aetherPowerMult, nodeLevel } from "./ascension";
+import { LIMIT_BREAK_STEP, TREE_COMPOUND, aetherGoldMult, aetherPowerMult, nodeLevel } from "./ascension";
 
 /** Each Ascendant rank multiplies core stats. Rank is earned in Rank Trials, not bought. */
 export const RANK_STAT_STEP = 0.08;
@@ -53,6 +53,15 @@ export const STAT_UPGRADE_CAP: Record<UpgradeableStat, number> = {
   critDamage: 300,
   defense: 250,
 };
+
+/** Stats the Aether tree's Limit Break raises the cap of. */
+export const LIMIT_BREAK_STATS: readonly UpgradeableStat[] = ["attack", "maxHp", "defense"];
+export const LIMIT_BREAK_MAX_LEVELS = 10;
+
+/** A stat's level cap for this warrior: the base cap, plus Limit Break for Attack, Health and Defence. */
+export function statCap(profile: Profile, stat: UpgradeableStat): number {
+  return STAT_UPGRADE_CAP[stat] + (LIMIT_BREAK_STATS.includes(stat) ? LIMIT_BREAK_STEP * nodeLevel(profile, "limit") : 0);
+}
 
 export interface StatUnlockRule {
   stat: UpgradeableStat;
@@ -221,8 +230,8 @@ export function computeModifiers(profile: Profile): PlayerModifiers {
     m.extractionBonus += 0.05;
   }
   if (m.gearEffects.has("tempest")) m.cooldownMult *= 0.85;
-  m.goldFind *= aetherGoldMult(profile) * (1 + 0.1 * nodeLevel(profile, "fortune"));
-  m.xpMult *= 1 + 0.1 * nodeLevel(profile, "insight");
+  m.goldFind *= aetherGoldMult(profile) * Math.pow(1 + TREE_COMPOUND.fortune, nodeLevel(profile, "fortune"));
+  m.xpMult *= Math.pow(1 + TREE_COMPOUND.insight, nodeLevel(profile, "insight"));
   m.extractionBonus += 0.03 * nodeLevel(profile, "oathbinder");
   m.deploySlots += nodeLevel(profile, "command");
   if (profile.player.rank >= 2) m.deploySlots += 1;
@@ -256,8 +265,8 @@ export function computePlayerStats(profile: Profile): CombatStats {
   s.maxHp *= milestoneMult(lv.maxHp);
   // Aether from past ascensions: permanent, compounding with everything else.
   const aether = aetherPowerMult(profile);
-  s.attack *= aether * (1 + 0.06 * nodeLevel(profile, "might"));
-  s.maxHp *= aether * (1 + 0.06 * nodeLevel(profile, "vigor"));
+  s.attack *= aether * Math.pow(1 + TREE_COMPOUND.might, nodeLevel(profile, "might"));
+  s.maxHp *= aether * Math.pow(1 + TREE_COMPOUND.vigor, nodeLevel(profile, "vigor"));
 
   // Warrior level: steady compounding power.
   const levelMult = 1 + (profile.player.level - 1) * 0.045;

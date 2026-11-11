@@ -105,6 +105,8 @@ export interface Profile {
   };
   /** Ascension: restart the climb for permanent Aether. */
   ascension: { count: number; aether: number; bestEver: number; spent: number; nodes: Partial<Record<string, number>> };
+  /** The weekly Rift Tyrant: this week's best score (bars broken), tiers claimed, and the all-time best. */
+  tyrant: { week: string; best: number; claimed: number; allTimeBest: number };
   /** Optional daily and weekly objectives. Missing a day never costs anything. */
   objectives: {
     day: string;
@@ -117,7 +119,7 @@ export interface Profile {
   modes: {
     /** Local calendar day (YYYY-MM-DD) the keys were last refilled. */
     keyDay: string;
-    keys: { vault: number; rift: number; crypt: number; hunt: number };
+    keys: { vault: number; rift: number; crypt: number; hunt: number; tyrant: number };
     endlessBest: number;
     vaultBest: number;
   };
@@ -125,7 +127,7 @@ export interface Profile {
   settings: { music: number; sfx: number; reducedEffects: boolean; diagnostics: boolean; battleSpeed: 1 | 2; autoAdvance: boolean };
 }
 
-export const PROFILE_VERSION = 11;
+export const PROFILE_VERSION = 12;
 
 export function createDefaultProfile(now = Date.now()): Profile {
   return {
@@ -172,7 +174,8 @@ export function createDefaultProfile(now = Date.now()): Profile {
     },
     objectives: { day: "", week: "", daily: [], weekly: [], dailyBonusDay: "" },
     ascension: { count: 0, aether: 0, bestEver: 0, spent: 0, nodes: {} },
-    modes: { keyDay: "", keys: { vault: 3, rift: 3, crypt: 3, hunt: 3 }, endlessBest: 0, vaultBest: 0 },
+    tyrant: { week: "", best: 0, claimed: 0, allTimeBest: 0 },
+    modes: { keyDay: "", keys: { vault: 3, rift: 3, crypt: 3, hunt: 3, tyrant: 2 }, endlessBest: 0, vaultBest: 0 },
     tutorial: { completed: [], finished: false },
     settings: { music: 0.6, sfx: 0.8, reducedEffects: false, diagnostics: false, battleSpeed: 1, autoAdvance: true },
   };

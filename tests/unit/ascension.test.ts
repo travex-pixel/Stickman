@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { createDefaultProfile } from "@/game/progression/profile";
 import { ascend, aetherFor, aetherPowerMult, buyNode, canAscend, nextNodeCost, nodeLevel, spendableAether, ASCEND_MIN_STAGE, TREE } from "@/game/progression/ascension";
 import { offlineCapSeconds } from "@/game/progression/offline";
-import { computeModifiers, computePlayerStats } from "@/game/progression/stats";
+import { computeModifiers, computePlayerStats, statCap, STAT_UPGRADE_CAP } from "@/game/progression/stats";
+import { canUpgradeStat } from "@/game/progression/upgrades";
 import { claimEssence } from "@/game/summons/recruitment";
 import { runMigrations } from "@/persistence/migrations";
 import { sanitizeProfile } from "@/persistence/SaveSchema";
@@ -71,23 +72,27 @@ describe("ascension", () => {
 });
 
 describe("the Aether tree", () => {
-  it("spends Aether at rising costs, stops at the cap, and never lowers the flat bonus", () => {
+  it("spends Aether at costs that grow 30% a level, stops at the cap, and never lowers the flat bonus", () => {
     const p = createDefaultProfile();
     p.ascension.aether = 10;
     const flat = aetherPowerMult(p);
     expect(nextNodeCost(p, "might")).toBe(2);
     expect(buyNode(p, "might")).toBe(true);
+    expect(nextNodeCost(p, "might")).toBe(3);
+    expect(buyNode(p, "might")).toBe(true);
     expect(nextNodeCost(p, "might")).toBe(4);
     expect(buyNode(p, "might")).toBe(true);
-    expect(spendableAether(p)).toBe(4);
-    expect(buyNode(p, "might")).toBe(false); // costs 6
-    expect(nodeLevel(p, "might")).toBe(2);
+    expect(spendableAether(p)).toBe(1);
+    expect(buyNode(p, "might")).toBe(false);
+    expect(nodeLevel(p, "might")).toBe(3);
     expect(aetherPowerMult(p)).toBe(flat);
     p.ascension.aether = 1000;
     expect(buyNode(p, "command")).toBe(true);
     expect(nextNodeCost(p, "command")).toBeNull();
     expect(buyNode(p, "command")).toBe(false);
     for (const n of TREE) expect(n.cost(0)).toBeGreaterThan(0);
+    // Late on there is always something worth buying: the compounding nodes run deep.
+    expect(TREE.find((n) => n.id === "might")!.cost(60)).toBeGreaterThan(1e6);
   });
 
   it("each node changes the numbers it names", () => {
@@ -99,15 +104,27 @@ describe("the Aether tree", () => {
     p.ascension.nodes = { might: 5, vigor: 5, fortune: 3, insight: 4, oathbinder: 2, command: 1 };
     const flat = aetherPowerMult(p);
     const s = computePlayerStats(p);
-    expect(s.attack / base.attack / flat).toBeCloseTo(1.3, 3);
-    expect(s.maxHp / base.maxHp / flat).toBeCloseTo(1.3, 3);
+    expect(s.attack / base.attack / flat).toBeCloseTo(Math.pow(1.05, 5), 3);
+    expect(s.maxHp / base.maxHp / flat).toBeCloseTo(Math.pow(1.05, 5), 3);
     const m = computeModifiers(p);
-    expect(m.xpMult / mods.xpMult).toBeCloseTo(1.4, 5);
+    expect(m.xpMult / mods.xpMult).toBeCloseTo(Math.pow(1.08, 4), 5);
     expect(m.extractionBonus - mods.extractionBonus).toBeCloseTo(0.06, 5);
     expect(m.deploySlots).toBe(mods.deploySlots + 1);
-    expect(m.goldFind / mods.goldFind).toBeCloseTo((1 + 0.01 * 10_000) * 1.3, 3);
+    expect(m.goldFind / mods.goldFind).toBeCloseTo((1 + 0.01 * 10_000) * Math.pow(1.08, 3), 3);
     expect(offlineCapSeconds(0, 0)).toBe(2 * 3600);
     expect(offlineCapSeconds(0, 2)).toBe(4 * 3600);
+  });
+
+  it("Limit Break raises the Attack, Health and Defence caps", () => {
+    const p = createDefaultProfile();
+    expect(statCap(p, "attack")).toBe(STAT_UPGRADE_CAP.attack);
+    p.ascension.nodes = { limit: 3 };
+    expect(statCap(p, "attack")).toBe(STAT_UPGRADE_CAP.attack + 120);
+    expect(statCap(p, "defense")).toBe(STAT_UPGRADE_CAP.defense + 120);
+    expect(statCap(p, "attackSpeed")).toBe(STAT_UPGRADE_CAP.attackSpeed);
+    p.player.statLevels.attack = STAT_UPGRADE_CAP.attack;
+    p.player.gold = 1e300;
+    expect(canUpgradeStat(p, "attack").ok).toBe(true);
   });
 
   it("Treasury keeps a share of the gold through an ascension", () => {
@@ -128,7 +145,7 @@ describe("the Aether tree", () => {
     bad.ascension = { count: 1, aether: 20, bestEver: 25, spent: 99, nodes: { might: 400, bogus: 3, command: -1 } };
     const a = sanitizeProfile(bad).profile.ascension;
     expect(a.spent).toBeLessThanOrEqual(a.aether);
-    expect(a.nodes.might).toBe(25);
+    expect(a.nodes.might).toBe(100);
     expect("bogus" in a.nodes).toBe(false);
     expect(a.nodes.command ?? 0).toBe(0);
   });

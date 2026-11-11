@@ -122,3 +122,58 @@ describe("next milestone", () => {
     expect(nextMilestone(p)).toMatch(/rank/i);
   });
 });
+
+describe("Rift Memory (after an ascension)", () => {
+  async function ascended() {
+    const { createDefaultProfile } = await import("@/game/progression/profile");
+    const p = createDefaultProfile();
+    p.ascension.bestEver = 40;
+    p.ascension.count = 1;
+    return p;
+  }
+
+  it("gates broken in an earlier climb stay open; new ground still needs a challenge", async () => {
+    const { isGateStage, resolveCycle } = await import("@/game/progression/campaign");
+    const p = await ascended();
+    p.progress.bestStage = 2;
+    p.progress.currentStage = 3;
+    expect(isGateStage(p, 3)).toBe(false);
+    const r = resolveCycle(p, 3);
+    expect(r.gateReached).toBe(false);
+    expect(r.rememberedGate).toBe(true);
+    expect(p.progress.bestStage).toBe(3);
+    expect(isGateStage(p, 42)).toBe(true);
+  });
+
+  it("surges up to five stages a cycle while the warrior is barely touched, never past the memory", async () => {
+    const { resolveCycle, surgeLeap, SURGE_MAX } = await import("@/game/progression/campaign");
+    const { stageClearGold } = await import("@/game/economy/rewards");
+    const p = await ascended();
+    p.progress.bestStage = 10;
+    p.progress.currentStage = 11;
+    expect(surgeLeap(p, 11, 0.02)).toBe(SURGE_MAX);
+    expect(surgeLeap(p, 11, 0.3)).toBe(2);
+    expect(surgeLeap(p, 11, 0.9)).toBe(1);
+    expect(surgeLeap(p, 9, 0.0)).toBe(1); // holding below the frontier: no surge
+    const r = resolveCycle(p, 11, 1, 5);
+    expect(r.leapt).toBe(5);
+    expect(p.progress.bestStage).toBe(15);
+    expect(r.next).toBe(16);
+    expect(r.gold).toBe([11, 12, 13, 14, 15].reduce((g, s) => g + stageClearGold(s), 0));
+    p.progress.bestStage = 38;
+    p.progress.currentStage = 39;
+    expect(surgeLeap(p, 39, 0)).toBe(2);
+    resolveCycle(p, 39, 1, 2);
+    expect(p.progress.bestStage).toBe(40);
+    expect(surgeLeap(p, 41, 0)).toBe(1);
+  });
+
+  it("a player who never ascended is unaffected", async () => {
+    const { createDefaultProfile } = await import("@/game/progression/profile");
+    const { isGateStage, surgeLeap } = await import("@/game/progression/campaign");
+    const p = createDefaultProfile();
+    p.progress.bestStage = 5;
+    expect(isGateStage(p, 6)).toBe(true);
+    expect(surgeLeap(p, 6, 0)).toBe(1);
+  });
+});

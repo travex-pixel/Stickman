@@ -842,6 +842,14 @@ export class BattleRenderer {
           this.flash(0x7f9fd0, 0.35);
           break;
         }
+        case "tyrant_break": {
+          const sx = this.sx(e.pos.x);
+          const sy = this.sy(e.pos.y);
+          this.numbers.spawn(sx, sy - 160 * u, `BREAK ×${e.count}`, 0xe9c97a, 1.25, true);
+          this.fx.push({ kind: "ring", x: sx, y: sy - 40 * u, r0: 20 * u, r1: 150 * u, life: 0.55, total: 0.55, color: 0xe9c97a, width: 5, squash: 0.55 });
+          this.fx.push({ kind: "ring", x: sx, y: sy - 40 * u, r0: 10 * u, r1: 95 * u, life: 0.4, total: 0.4, color: 0xfff1c9, width: 3, squash: 0.55 });
+          break;
+        }
         case "perfect_dodge": {
           const sx = this.sx(e.pos.x);
           const sy = this.sy(e.pos.y);

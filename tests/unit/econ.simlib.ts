@@ -7,7 +7,7 @@ import { buildLoadout } from "@/game/progression/loadout";
 import { createDefaultProfile, type Profile } from "@/game/progression/profile";
 import { applyXp } from "@/game/progression/xp";
 import { claimQuest } from "@/game/progression/quests";
-import { isStatUnlocked, statUpgradeCost, computeModifiers, computePlayerStats, combatPower, STAT_UPGRADE_CAP } from "@/game/progression/stats";
+import { isStatUnlocked, statUpgradeCost, computeModifiers, computePlayerStats, combatPower, statCap } from "@/game/progression/stats";
 import { upgradeStat } from "@/game/progression/upgrades";
 import { resolveExtraction } from "@/game/summons/extraction";
 import { claimEssence, setDeployed } from "@/game/summons/recruitment";
@@ -21,7 +21,7 @@ import { summonDef } from "@/game/data/summons";
 import { Rng } from "@/game/engine/rng";
 import { canAttemptTrial, nextRankStep, promote } from "@/game/progression/ranks";
 import { REPEAT_BOSS_CORE_CHANCE, shadowXpShare, skillPointsBetween } from "@/game/economy/rewards";
-import { resolveBossDefeat, resolveBossVictory, resolveCycle, resolveFarmingDefeat, clampFarmStage } from "@/game/progression/campaign";
+import { resolveBossDefeat, resolveBossVictory, resolveCycle, resolveFarmingDefeat, clampFarmStage, surgeLeap } from "@/game/progression/campaign";
 import { forecastBoss } from "@/game/progression/readiness";
 import { learnTechniques } from "@/game/progression/techniques";
 import { ascend, buyNode, canAscend, nextNodeCost, spendableAether, type TreeNodeId } from "@/game/progression/ascension";
@@ -297,7 +297,7 @@ export class Sim {
       while (claimQuest(p)) {
         /* claim all */
       }
-      const opts = (["attack", "maxHp", "defense", "attackSpeed", "critChance", "critDamage"] as const).filter((s) => isStatUnlocked(p, s) && p.player.statLevels[s] < STAT_UPGRADE_CAP[s]);
+      const opts = (["attack", "maxHp", "defense", "attackSpeed", "critChance", "critDamage"] as const).filter((s) => isStatUnlocked(p, s) && p.player.statLevels[s] < statCap(p, s));
       if (opts.length === 0) break;
       const s = opts.sort((a, b) => statUpgradeCost(a, p.player.statLevels[a]) - statUpgradeCost(b, p.player.statLevels[b]))[0]!;
       const r = upgradeStat(p, s);
@@ -311,7 +311,7 @@ export class Sim {
 
   nextUpgradeCost(): number {
     const p = this.p;
-    const opts = (["attack", "maxHp", "defense", "attackSpeed", "critChance", "critDamage"] as const).filter((s) => isStatUnlocked(p, s) && p.player.statLevels[s] < STAT_UPGRADE_CAP[s]);
+    const opts = (["attack", "maxHp", "defense", "attackSpeed", "critChance", "critDamage"] as const).filter((s) => isStatUnlocked(p, s) && p.player.statLevels[s] < statCap(p, s));
     return Math.min(...opts.map((s) => statUpgradeCost(s, p.player.statLevels[s])));
   }
 
@@ -407,7 +407,7 @@ export class Sim {
         const st = (this.stageTime[stage] ??= { sec: 0, cycles: 0 });
         st.sec += cyc;
         st.cycles++;
-        const res = resolveCycle(p, stage, computeModifiers(p).goldFind);
+        const res = resolveCycle(p, stage, computeModifiers(p).goldFind, surgeLeap(p, stage, w.lastCycleHurt));
         this.addGold(res.gold);
         this.gainXp(res.xp);
         this.c.cycles++;
@@ -510,7 +510,7 @@ export class Sim {
   /** Aether policy: Command first, then whichever of Might, Vigor, Fortune, Insight is cheapest. */
   private spendAether(): void {
     const p = this.p;
-    const order: TreeNodeId[] = ["command", "might", "vigor", "fortune", "insight", "patience"];
+    const order: TreeNodeId[] = ["command", "might", "vigor", "fortune", "insight", "patience", "limit"];
     for (let guard = 0; guard < 500; guard++) {
       if (nextNodeCost(p, "command") !== null && spendableAether(p) >= 60 && buyNode(p, "command")) continue;
       let best: TreeNodeId | null = null;

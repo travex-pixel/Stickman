@@ -108,6 +108,16 @@ export const MIGRATIONS: Migration[] = [
       return { ...raw, version: 11, ascension: { count: 0, aether: 0, bestEver: 0, ...a, spent: a.spent ?? 0, nodes: a.nodes ?? {} } };
     },
   },
+  {
+    // The weekly Rift Tyrant: a weekly record and a daily key.
+    from: 11,
+    to: 12,
+    migrate: (raw) => {
+      const modes = (raw.modes as Record<string, unknown> | undefined) ?? {};
+      const keys = (modes.keys as Record<string, unknown> | undefined) ?? {};
+      return { ...raw, version: 12, tyrant: { week: "", best: 0, claimed: 0, allTimeBest: 0 }, modes: { ...modes, keys: { ...keys, tyrant: 2 } } };
+    },
+  },
 ];
 
 export function runMigrations(raw: Record<string, unknown>, targetVersion: number): { raw: Record<string, unknown>; migrated: boolean } {

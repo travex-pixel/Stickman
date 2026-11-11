@@ -170,3 +170,45 @@ test.describe("boss hunts", () => {
     expect(await game<string>(page, "c => c.world.mode")).toBe("campaign");
   });
 });
+
+test.describe("the long game", () => {
+  test("Aether can be spent in the tree, and the tab shows what is spare", async ({ page }) => {
+    await waitForGame(page);
+    await game(page, "c => { const p = c.profile; p.tutorial.finished = true; p.ascension.count = 1; p.ascension.aether = 20; p.ascension.bestEver = 30; c['commit'](); }");
+    await page.getByTestId("tab-hero").click();
+    await page.getByTestId("ascend-badge").click();
+    await page.getByTestId("ascend-tab-tree").click();
+    await expect(page.getByTestId("aether-tree")).toBeVisible();
+    await page.getByTestId("buy-might").click();
+    await expect(page.getByTestId("node-might")).toContainText("1/100");
+    expect(await game<number>(page, "c => c.profile.ascension.spent")).toBe(2);
+    // Too dear: Command costs 60.
+    await expect(page.getByTestId("buy-command")).toBeDisabled();
+  });
+
+  test("the weekly Rift Tyrant: sheet, a timed fight with a live score, and a banked result", async ({ page }) => {
+    await waitForGame(page);
+    await game(page, "c => { const p = c.profile; p.tutorial.finished = true; p.progress.bestStage = 12; p.progress.currentStage = 12; c['commit'](); }");
+    await page.getByTestId("tab-rift").click();
+    await page.getByTestId("mode-tyrant").click();
+    await expect(page.getByTestId("tyrant-sheet")).toBeVisible();
+    await expect(page.getByTestId("tyrant-tiers")).toBeVisible();
+    await page.getByTestId("tyrant-fight").click();
+    expect(await game<string>(page, "c => c.world.mode")).toBe("tyrant");
+    expect(await game<number>(page, "c => c.profile.modes.keys.tyrant")).toBe(1);
+    await expect(page.getByTestId("tyrant-score")).toBeVisible({ timeout: 15_000 });
+    // Leaving early banks what was broken.
+    await page.getByTestId("mode-leave").click();
+    await expect(page.getByTestId("mode-result")).toBeVisible();
+    await expect(page.getByTestId("tyrant-track")).toBeVisible();
+    expect(await game<string>(page, "c => c.profile.tyrant.week")).toMatch(/^W\d{4}-/);
+  });
+
+  test("past stage 30 the Rift panel names the depth and its twist", async ({ page }) => {
+    await waitForGame(page);
+    await game(page, "c => { const p = c.profile; p.tutorial.finished = true; p.progress.bestStage = 31; p.progress.currentStage = 31; c['commit'](); c.startRun(31); }");
+    await page.getByTestId("tab-rift").click();
+    await expect(page.getByTestId("depth-chip")).toContainText("Depth II");
+    expect(await game<string>(page, "c => c.world.twist")).toBe("frenzy");
+  });
+});
