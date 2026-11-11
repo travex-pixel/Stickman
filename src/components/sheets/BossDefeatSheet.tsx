@@ -18,7 +18,7 @@ export function BossDefeatSheet({ modal, open }: { modal: Extract<Modal, { kind:
   return (
     <Sheet open={open} onDismiss={() => c.closeModal()} testId="modal-boss_defeat" labelledBy="boss-defeat-title">
       <div data-testid="boss-defeat">
-        <span className="t-eyebrow text-crimson">Stage {modal.stage} · Not yet</span>
+        <span className="t-eyebrow text-threat">Stage {modal.stage} · Not yet</span>
         <h2 id="boss-defeat-title" className="t-display text-t1 mt-1.5">
           {name} stands
         </h2>

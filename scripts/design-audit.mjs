@@ -49,7 +49,11 @@ function measure() {
   const solidBehind = (el) => {
     for (let n = el; n && n !== document.documentElement; n = n.parentElement) {
       const cs = getComputedStyle(n);
-      if (cs.backgroundImage && cs.backgroundImage !== "none") return null; // gradient or image: unknown
+      const img = cs.backgroundImage && cs.backgroundImage !== "none" ? cs.backgroundImage : "";
+      // A gradient or a picture behind text: unknown. A faint SVG texture over a solid colour (the
+      // panel's paper grain) does not change the colour text is read against: use the colour.
+      const textureOnly = img !== "" && !img.includes("gradient") && /^url\("?data:image\/svg\+xml/.test(img);
+      if (img !== "" && !textureOnly) return null;
       if (n.tagName === "CANVAS" || n.dataset?.testid === "battlefield") return null; // over the painting
       const bg = parse(cs.backgroundColor);
       if (bg && bg.a >= 0.9) return bg;

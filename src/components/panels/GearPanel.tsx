@@ -187,7 +187,7 @@ function ItemDetail({ item, equippedUid, inv, gold, short, onBack }: { item: Equ
               </span>
             ))}
           {lost.map((k) => (
-            <span key={k} className="tnum whitespace-nowrap text-crimson">
+            <span key={k} className="tnum whitespace-nowrap text-threat">
               {STAT_LABEL[k]} −{fmtStat(k, currentTotals[k] ?? 0)}
             </span>
           ))}
@@ -263,5 +263,5 @@ function ItemDetail({ item, equippedUid, inv, gold, short, onBack }: { item: Equ
 }
 
 function Delta({ v, k }: { v: number; k: keyof typeof STAT_LABEL }) {
-  return <span className={cn("t-label font-semibold tnum", v > 0 ? "text-jade" : "text-crimson")}>{v > 0 ? `+${fmtStat(k, v)}` : `−${fmtStat(k, -v)}`}</span>;
+  return <span className={cn("t-label font-semibold tnum", v > 0 ? "text-jade" : "text-threat")}>{v > 0 ? `+${fmtStat(k, v)}` : `−${fmtStat(k, -v)}`}</span>;
 }

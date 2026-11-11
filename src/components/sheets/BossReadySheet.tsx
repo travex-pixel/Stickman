@@ -17,7 +17,7 @@ import { TIER_LABEL, readinessTips, type ReadinessTier, type ReadinessTip } from
 import { cn } from "@/lib/cn";
 import { fmt } from "@/lib/format";
 
-export const TIER_TONE: Record<ReadinessTier, string> = { ready: "text-jade", even: "text-t1", hard: "text-gold", deadly: "text-crimson" };
+export const TIER_TONE: Record<ReadinessTier, string> = { ready: "text-jade", even: "text-t1", hard: "text-gold", deadly: "text-threat" };
 
 /** Readiness tips as tappable rows: each closes the sheet on the panel that fixes it. */
 export function TipRows({ tips, max }: { tips: ReadinessTip[]; max: number }) {
@@ -66,7 +66,7 @@ export function BossReadySheet({ modal, open }: { modal: Extract<Modal, { kind: 
   return (
     <Sheet open={open} onDismiss={() => c.closeModal()} testId="modal-boss_ready" labelledBy="boss-ready-title">
       <div data-testid="boss-ready">
-        <span className="t-eyebrow text-crimson">Boss · Stage {modal.stage}</span>
+        <span className="t-eyebrow text-threat">Boss · Stage {modal.stage}</span>
         <h2 id="boss-ready-title" className="t-display text-t1 mt-1.5">
           {boss?.name ?? "The Warden"}
         </h2>

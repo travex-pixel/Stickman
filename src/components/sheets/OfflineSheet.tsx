@@ -73,7 +73,7 @@ export function OfflineSheet({ modal, open }: { modal: Extract<Modal, { kind: "o
           )}
           <MomentItem className="mt-4">
             {boss ? (
-              <Row className="rounded-[14px] bg-[var(--tint-crimson)] shadow-none" leading={<Icon name="skull" size={18} className="text-crimson" />} title={`${boss.name} waits at stage ${r.bossWaiting}`} detail="It is never fought without you." data-testid="offline-boss" />
+              <Row className="rounded-[14px] bg-[var(--tint-crimson)] shadow-none" leading={<Icon name="skull" size={18} className="text-threat" />} title={`${boss.name} waits at stage ${r.bossWaiting}`} detail="It is never fought without you." data-testid="offline-boss" />
             ) : (
               <Row gutter={false} title={nextMilestone(profile)} detail="Next" data-testid="offline-next" />
             )}

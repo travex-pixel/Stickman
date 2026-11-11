@@ -19,6 +19,8 @@
   --color-gold: #dab86c;
   --color-gold-ink: #1b1508;
   --color-crimson: #cc3f4b;
+  /* Crimson for TEXT: the fill crimson is under 4.5:1 on the dark surfaces, this one is 6.2:1 on bg-1. */
+  --color-threat: #e3737d;
   --color-jade: #5ecaa8;
   --color-common: #9a968e;
   --color-uncommon: #6cc49a;

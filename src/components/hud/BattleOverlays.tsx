@@ -139,7 +139,7 @@ function ModeHud() {
   return (
     <div className="pointer-events-auto self-center flex items-center gap-3 rounded-full glass h-11 pl-4 pr-1 max-w-full" data-testid="mode-hud">
       <span className="t-label text-t1 whitespace-nowrap truncate">{MODES[mode].name}</span>
-      {status && <span className={cn("t-num-m whitespace-nowrap", timeLeft !== null && timeLeft < 10 ? "text-crimson" : "text-t2")}>{status}</span>}
+      {status && <span className={cn("t-num-m whitespace-nowrap", timeLeft !== null && timeLeft < 10 ? "text-threat" : "text-t2")}>{status}</span>}
       {tyrantScore !== null && (
         <span className="t-num-m text-gold whitespace-nowrap" data-testid="tyrant-score">
           {tyrantScore.toFixed(2)} bars
@@ -311,7 +311,7 @@ function GateBanner() {
     <AnimatePresence>
       {shown > 0 && (
         <motion.div key={shown} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.48, ease: EASE_OUT }} className="pointer-events-none absolute inset-x-0 top-[22%] z-20 flex flex-col items-center px-6 text-center" data-testid="gate-banner">
-          <span className="t-eyebrow text-crimson legible">Boss · Stage {shown}</span>
+          <span className="t-eyebrow text-threat legible">Boss · Stage {shown}</span>
           <span className="t-display text-t1 mt-2 legible">{name} awaits</span>
           <span className="t-label text-t2 mt-2 legible">Keep farming. Fight when you choose.</span>
         </motion.div>

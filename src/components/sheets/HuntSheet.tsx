@@ -37,7 +37,7 @@ export function HuntSheet({ open }: { open: boolean }) {
                 }
                 title={ENEMIES[id]?.name ?? "Boss"}
                 detail={`Stage ${s}`}
-                trailing={<span className="t-label text-crimson">Hunt</span>}
+                trailing={<span className="t-label text-threat">Hunt</span>}
                 disabled={keys <= 0}
                 onClick={() => c.startHunt(s)}
                 data-testid={`hunt-${s}`}

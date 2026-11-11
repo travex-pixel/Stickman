@@ -24,7 +24,7 @@ export function ModeResultSheet({ modal, open }: { modal: Extract<Modal, { kind:
       <MomentGroup className="flex flex-col">
         <div data-testid="mode-result">
           <MomentItem>
-            <span className={cn("t-eyebrow", modal.success ? "text-gold" : "text-crimson")}>{modal.subtitle}</span>
+            <span className={cn("t-eyebrow", modal.success ? "text-gold" : "text-threat")}>{modal.subtitle}</span>
             <h2 id="mode-result-title" className="t-display text-t1 mt-1.5">
               {modal.title}
             </h2>

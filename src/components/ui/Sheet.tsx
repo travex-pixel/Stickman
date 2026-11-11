@@ -22,7 +22,7 @@ interface SheetProps {
 
 const EASE_OUT = [0.16, 1, 0.3, 1] as const;
 
-const TONE: Record<"t2" | "gold" | "crimson" | "jade", string> = { t2: "text-t2", gold: "text-gold", crimson: "text-crimson", jade: "text-jade" };
+const TONE: Record<"t2" | "gold" | "crimson" | "jade", string> = { t2: "text-t2", gold: "text-gold", crimson: "text-threat", jade: "text-jade" };
 
 /**
  * The top of a sheet: one eyebrow (the only uppercase in the view), the title, a quiet line.

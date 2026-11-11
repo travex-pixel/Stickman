@@ -27,7 +27,7 @@ export function TyrantSheet({ open }: { open: boolean }) {
   return (
     <Sheet open={open} onDismiss={() => c.closeModal()} testId="modal-tyrant" labelledBy="tyrant-title">
       <div data-testid="tyrant-sheet">
-        <span className="t-eyebrow text-crimson">
+        <span className="t-eyebrow text-threat">
           Rift Tyrant · {days} day{days === 1 ? "" : "s"} left
         </span>
         <h2 id="tyrant-title" className="t-display text-t1 mt-1.5">

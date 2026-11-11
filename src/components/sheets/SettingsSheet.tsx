@@ -37,7 +37,7 @@ export function SettingsSheet({ open }: { open: boolean }) {
             Replay guidance
           </Button>
           {!confirmReset ? (
-            <Button variant="plain" className="justify-start px-0 !text-crimson" onClick={() => setConfirmReset(true)} data-testid="reset-save">
+            <Button variant="plain" className="justify-start px-0 !text-threat" onClick={() => setConfirmReset(true)} data-testid="reset-save">
               Reset save
             </Button>
           ) : (
@@ -45,7 +45,7 @@ export function SettingsSheet({ open }: { open: boolean }) {
               <Button variant="plain" className="shrink-0 px-0" onClick={() => setConfirmReset(false)}>
                 Keep it
               </Button>
-              <HoldConfirm variant="plain" className="flex-1 !text-crimson bg-[var(--tint-crimson)]" ms={1200} onConfirm={() => void c.resetSave()} testId="reset-save-confirm" label="Hold to erase everything">
+              <HoldConfirm variant="plain" className="flex-1 !text-threat bg-[var(--tint-crimson)]" ms={1200} onConfirm={() => void c.resetSave()} testId="reset-save-confirm" label="Hold to erase everything">
                 Hold to erase everything
               </HoldConfirm>
             </div>

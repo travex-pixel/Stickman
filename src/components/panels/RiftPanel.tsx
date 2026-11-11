@@ -180,7 +180,7 @@ function ModeGrid({ modes, cols, sortAvailable = false }: { modes: ListedMode[];
             data-testid={`mode-${m}`}
             aria-label={`${title}${avail.ok ? "" : `, ${avail.reason}`}`}
           >
-            <Icon name={avail.ok ? MODE_ICON[m] : "lock"} size={18} className={cn("shrink-0", avail.ok ? (m === "tyrant" ? "text-crimson" : m === "trial" ? "text-gold" : "text-t2") : "text-t3")} />
+            <Icon name={avail.ok ? MODE_ICON[m] : "lock"} size={18} className={cn("shrink-0", avail.ok ? (m === "tyrant" ? "text-threat" : m === "trial" ? "text-gold" : "text-t2") : "text-t3")} />
             <span className="flex min-w-0 flex-1 flex-col">
               <span className={cn("t-label truncate", avail.ok ? "text-t1" : "text-t2")}>{title}</span>
               <span className="t-caption text-t3 truncate">{sub}</span>
@@ -217,7 +217,7 @@ function ModeRows() {
             data-testid={`mode-${m}`}
             aria-label={`${title}${avail.ok ? "" : `, ${avail.reason}`}`}
           >
-            <Icon name={avail.ok ? MODE_ICON[m] : "lock"} size={18} className={cn("shrink-0", avail.ok ? (m === "tyrant" ? "text-crimson" : m === "trial" ? "text-gold" : "text-t2") : "text-t3")} />
+            <Icon name={avail.ok ? MODE_ICON[m] : "lock"} size={18} className={cn("shrink-0", avail.ok ? (m === "tyrant" ? "text-threat" : m === "trial" ? "text-gold" : "text-t2") : "text-t3")} />
             <span className="flex min-w-0 flex-1 flex-col">
               <span className={cn("t-body flex items-center gap-2", avail.ok ? "text-t1" : "text-t2")}>
                 {title}
