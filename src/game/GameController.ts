@@ -1107,6 +1107,11 @@ export class GameController {
     this.userGesture();
     const p = this.profile;
     const world = this.world;
+    if (this.pending || world?.player.dead) {
+      // The fall beat decides first; pushing then would be silently undone.
+      this.toast("Your warrior is regrouping", "warn");
+      return;
+    }
     p.progress.autoPush = true;
     const next = clampFarmStage(p, (world?.farming ? world.stage : p.progress.currentStage) + 1);
     if (world?.farming && next !== world.stage) {

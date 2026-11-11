@@ -164,7 +164,8 @@ export function BossVictory({ modal }: { modal: Extract<Modal, { kind: "boss_vic
     return () => clearTimeout(t);
   }, [left, auto, c]);
   const boss = ENEMIES[modal.defId];
-  const chance = orb ? extractionChance(profile, orb.summonId, { elite: orb.elite, bonus: computeModifiers(profile).extractionBonus }) : 0;
+  // The very first oath always holds, so the card says so.
+  const chance = orb ? (!profile.summons.firstSummonSeen ? 1 : extractionChance(profile, orb.summonId, { elite: orb.elite, bonus: computeModifiers(profile).extractionBonus })) : 0;
   return (
     <Sheet testId="boss-victory" tone="gold">
       <div className="px-4 pt-3 pb-3 text-center flex flex-col gap-1.5 items-center short-tight">
@@ -217,7 +218,7 @@ export function BossVictory({ modal }: { modal: Extract<Modal, { kind: "boss_vic
         )}
         <button className="btn-primary w-full mt-1" onClick={() => c.continueAfterVictory()} data-testid="victory-continue">
           Onward to stage {modal.nextStage}
-          {left > 0 && <span className="ml-1.5 inline-block rounded-full bg-black/25 px-1.5 text-[11px] font-sans font-bold tabular-nums align-middle">{left}s</span>}
+          {auto && left > 0 && <span className="ml-1.5 inline-block rounded-full bg-black/25 px-1.5 text-[11px] font-sans font-bold tabular-nums align-middle">{left}s</span>}
         </button>
       </div>
     </Sheet>

@@ -26,7 +26,7 @@ export function TopBar() {
   const xpFrac = Math.min(1, xp / xpForLevel(level));
   const accent = weaponPathDef(path)?.color ?? "#cfa95e";
   return (
-    <header className="relative z-20 flex items-center gap-1 px-1.5 pt-1.5 pb-1 h-[48px] min-w-0 w-full overflow-hidden" data-testid="top-bar">
+    <header className="relative z-20 flex items-center gap-0.5 min-[360px]:gap-1 px-1 min-[360px]:px-1.5 pt-1.5 pb-1 h-[48px] min-w-0 w-full overflow-hidden" data-testid="top-bar">
       <div className="relative flex items-center gap-1.5 shrink-0">
         <div className="rounded-[9px] p-[1px]" style={{ background: "linear-gradient(180deg, rgba(233,211,154,0.55), rgba(142,111,51,0.35))" }}>
           <WarriorPortrait size={30} accent={accent} />
@@ -48,7 +48,7 @@ export function TopBar() {
         )}
       </div>
       <button
-        className={`h-9 w-9 shrink-0 flex items-center justify-center rounded-lg border text-[11px] font-extrabold tabular-nums ${speedUnlocked && speed === 2 ? "border-gold/70 bg-gold/15 text-gold-2" : "border-white/10 bg-white/5 text-mist"}`}
+        className={`h-9 w-8 min-[360px]:w-9 shrink-0 flex items-center justify-center rounded-lg border text-[11px] font-extrabold tabular-nums ${speedUnlocked && speed === 2 ? "border-gold/70 bg-gold/15 text-gold-2" : "border-white/10 bg-white/5 text-mist"}`}
         onClick={() => c.toggleBattleSpeed()}
         aria-label={speedUnlocked ? `Battle speed ${speed}x` : "Battle speed, unlocks after stage 3"}
         data-testid="speed-toggle"
@@ -70,7 +70,7 @@ export function TopBar() {
           <Icon name="skull" size={12} className={phase === "boss" || phase === "boss_intro" ? "text-crimson-2" : gate === stage && mode === "campaign" ? "text-crimson-2 animate-pulse" : "text-mist"} />
         </div>
       </div>
-      <button className="h-9 w-9 shrink-0 flex items-center justify-center rounded-lg border border-white/10 bg-white/5 text-parch" onClick={() => c.openSettings()} aria-label="Menu" data-testid="menu-button">
+      <button className="h-9 w-8 min-[360px]:w-9 shrink-0 flex items-center justify-center rounded-lg border border-white/10 bg-white/5 text-parch" onClick={() => c.openSettings()} aria-label="Menu" data-testid="menu-button">
         <Icon name="menu" size={15} />
       </button>
     </header>

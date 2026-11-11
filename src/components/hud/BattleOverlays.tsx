@@ -160,12 +160,15 @@ function PushChip() {
   const autoPush = useProfile((p) => p.progress.autoPush);
   const frontier = useProfile((p) => p.progress.bestStage + 1);
   const modal = useUi((u) => u.modal);
-  if (!farming || autoPush || stage >= frontier || (modal && isBattlefieldModal(modal.kind))) return null;
+  const alive = useHud((s) => s?.player.alive ?? true);
+  const perks = useProfile((p) => p.player.pendingPerkChoices);
+  // Hidden while the warrior is down: the fall beat decides where farming goes first.
+  if (!farming || !alive || autoPush || stage >= frontier || (modal && isBattlefieldModal(modal.kind))) return null;
   return (
     <motion.button
-      initial={{ opacity: 0, y: -6 }}
+      initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      className="absolute left-1/2 -translate-x-1/2 top-1.5 z-20 flex items-center gap-2 rounded-full border border-gold/60 bg-ink/85 pl-3 pr-1 py-0.5"
+      className={cn("absolute left-2 z-20 flex items-center gap-2 rounded-full border border-gold/60 bg-ink/85 pl-3 pr-1 py-0.5", perks > 0 ? "bottom-[160px]" : "bottom-[122px]")}
       onClick={() => c.pushStage()}
       data-testid="push-stage"
       aria-label={`Holding at stage ${stage}. Push to stage ${stage + 1}`}
@@ -314,6 +317,9 @@ function EssencePrompts() {
     let top = Math.max(40, view.offsetY + o.y * view.depthScale - 84);
     // Never cover the army's command strip in the top-left corner.
     if (hasArmy && top < 118 && left - 56 < 200) top = 118;
+    // Nor the bottom HUD band (boss plaque, perk chip, quest pill, abilities): a pill there
+    // would sit on those controls and steal their taps.
+    top = Math.min(top, view.height - 236);
     for (let guard = 0; guard < 6 && placed.some((q) => Math.abs(q.left - left) < 104 && Math.abs(q.top - top) < 46); guard++) top -= 48;
     const pos = { left, top: Math.max(30, top) };
     placed.push(pos);

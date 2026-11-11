@@ -112,3 +112,19 @@ test.describe("onboarding", () => {
     expect(errors, errors.join("\n")).toEqual([]);
   });
 });
+
+test.describe("robustness", () => {
+  test("fast tab switching always ends on the selected panel", async ({ page }) => {
+    await waitForGame(page);
+    const order = ["hero", "skills", "summons", "rift", "gear"];
+    for (let i = 0; i < 25; i++) {
+      await page.getByTestId(`tab-${order[i % order.length]}`).click({ delay: 0 });
+    }
+    const last = order[24 % order.length];
+    await expect(page.locator(`[data-panel=${last}]`)).toBeVisible({ timeout: 5_000 });
+    await expect(page.locator("[data-panel]")).toHaveCount(1);
+    await page.getByTestId("tab-hero").click();
+    await expect(page.locator("[data-panel=hero]")).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByTestId("upgrade-attack")).toBeVisible();
+  });
+});

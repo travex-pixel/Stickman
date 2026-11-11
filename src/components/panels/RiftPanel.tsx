@@ -8,6 +8,7 @@ import { MODES, cryptSlot, isKeyedMode, type ModeId } from "@/game/data/modes";
 import { SLOT_LABEL } from "@/game/data/equipment";
 import { nextRankStep, rankLetter } from "@/game/progression/ranks";
 import { cn } from "@/lib/cn";
+import { useShortScreen } from "@/hooks/useShortScreen";
 import { claimableObjectives } from "@/game/progression/objectives";
 
 const MODE_ICON: Record<Exclude<ModeId, "campaign">, IconName> = { boss: "skull", vault: "coin", rift: "summons", crypt: "relic", endless: "level", trial: "star" };
@@ -22,6 +23,7 @@ export default function RiftPanel() {
   const maxStage = profile.progress.bestStage + 1;
   const first = Math.max(1, Math.min(maxStage, stage) - 2);
   const stages = Array.from({ length: 5 }, (_, i) => first + i).filter((s) => s <= maxStage);
+  const short = useShortScreen();
   const claimable = claimableObjectives(profile);
   const step = nextRankStep(profile);
   const modes: Exclude<ModeId, "campaign">[] = ["trial", "vault", "rift", "crypt", "endless"];
@@ -34,11 +36,11 @@ export default function RiftPanel() {
           <div className="text-[10px] text-mist italic truncate">{region.subtitle}</div>
         </div>
         <div className="flex gap-1 shrink-0">
-          <button className="btn-ghost relative !py-1 !px-2 text-[10px] flex items-center gap-1" onClick={() => c.openObjectives()} data-testid="objectives-button" aria-label={`Objectives${claimable ? `, ${claimable} ready to claim` : ""}`}>
+          <button className="btn-ghost relative !py-0 h-8 !px-2.5 text-[11px] flex items-center gap-1" onClick={() => c.openObjectives()} data-testid="objectives-button" aria-label={`Objectives${claimable ? `, ${claimable} ready to claim` : ""}`}>
             <Icon name="check" size={12} /> Goals
             {claimable > 0 && <span className="absolute -top-1 -right-1 h-4 min-w-4 px-1 rounded-full bg-gold-2 text-ink text-[9px] font-extrabold leading-4 text-center">{claimable}</span>}
           </button>
-          <button className="btn-ghost !py-1 !px-2 text-[10px] flex items-center gap-1" onClick={() => c.openJournal()} data-testid="journal-button">
+          <button className="btn-ghost !py-0 h-8 !px-2.5 text-[11px] flex items-center gap-1" onClick={() => c.openJournal()} data-testid="journal-button">
             <Icon name="book" size={12} /> {profile.progress.journal.length}/{JOURNAL.length}
           </button>
         </div>
@@ -47,12 +49,12 @@ export default function RiftPanel() {
         {stages.map((s) => (
           <button
             key={s}
-            className={cn("flex-1 card py-1 text-center", s === stage && mode === "campaign" && "card-active")}
+            className={cn("flex-1 card text-center", short ? "h-8 flex items-center justify-center gap-1" : "py-1", s === stage && mode === "campaign" && "card-active")}
             onClick={() => c.selectStage(s)}
             data-testid={`stage-${s}`}
             aria-label={`Stage ${s}`}
           >
-            <div className="caps !text-[10px]">Stage</div>
+            {!short && <div className="caps !text-[10px]">Stage</div>}
             <div className="font-display text-[15px] text-ivory leading-none">{s}</div>
             <div className="h-3 flex items-center justify-center">{s <= profile.progress.bestStage ? <Icon name="check" size={10} className="text-jade-2" /> : <span className="text-[10px] text-gold">new</span>}</div>
           </button>
