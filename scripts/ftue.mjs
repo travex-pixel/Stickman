@@ -143,13 +143,14 @@ while (sim < SECONDS && wall() < SECONDS * 5) {
   }
 
   // Cards: anything that takes the screen from the fight.
+  // Cards pause the game, so how long one stays open is measured on the wall clock.
   if (s.modal !== (openCard?.kind ?? null)) {
-    if (openCard) cards.push({ kind: openCard.kind, at: openCard.at, seconds: Number((now() - openCard.at).toFixed(1)) });
-    openCard = s.modal ? { kind: s.modal, at: Number(now().toFixed(1)) } : null;
+    if (openCard) cards.push({ kind: openCard.kind, at: openCard.at, seconds: Number((wall() - openCard.wallAt).toFixed(1)) });
+    openCard = s.modal ? { kind: s.modal, at: Number(now().toFixed(1)), wallAt: wall() } : null;
   }
 
   if (s.modal) {
-    const age = now() - openCard.at;
+    const age = wall() - openCard.wallAt;
     if (s.modal === "perk_choice") await tap("[data-testid^=perk-]:not([data-testid=perk-chip]):not([data-testid=perk-auto])");
     else if (s.modal === "boss_ready") {
       // A newcomer fights when told they are ready (or when the tutorial points at Fight).
@@ -182,6 +183,7 @@ while (sim < SECONDS && wall() < SECONDS * 5) {
 }
 
 const end = await read();
+const endedOnWall = sim < SECONDS;
 await browser.close();
 
 const events = [...Object.entries(firsts).map(([k, t]) => ({ t, what: k })), ...steps.filter((x) => x.done !== null).map((x) => ({ t: x.done, what: `step done: ${x.label}` }))].sort((a, b) => a.t - b.t);
@@ -195,6 +197,8 @@ const cardTime = cards.reduce((a, c) => a + c.seconds, 0);
 const meanFps = fpsSamples.length ? Math.round(fpsSamples.reduce((a, b) => a + b, 0) / fpsSamples.length) : 0;
 const report = {
   seconds: SECONDS,
+  gameSecondsReached: Number(sim.toFixed(1)),
+  endedOnWall,
   wallSeconds: Number(wall().toFixed(0)),
   meanFps,
   firsts,
@@ -205,12 +209,13 @@ const report = {
   fallbackCloses,
   pageErrors: errors.length,
 };
+if (endedOnWall) console.log(`INCOMPLETE: stopped on the wall-clock limit after ${sim.toFixed(1)} game seconds; the figures below cover only that much.`);
 console.log(`RUN: ${SECONDS} game seconds took ${wall().toFixed(0)}s of wall time at a mean ${meanFps} fps${meanFps < 45 ? " (machine was busy; game-time figures still hold, but repeat on a quiet machine before quoting them)" : ""}`);
 console.log("FIRSTS (game seconds)");
 for (const [k, t] of Object.entries(firsts).sort((a, b) => a[1] - b[1])) console.log(`  ${String(t).padStart(6)}  ${k}`);
 console.log("TUTORIAL STEPS (shown at, waited)");
 for (const x of report.tutorialSteps) console.log(`  ${String(x.shown).padStart(6)}  ${String(x.waited ?? "open").padStart(6)}  ${x.label}`);
-console.log(`CARDS: ${cards.length} took the screen for ${cardTime.toFixed(1)}s (${(100 * cardTime / SECONDS).toFixed(1)}% of the session): ${cards.map((c) => `${c.kind}@${c.at}`).join(", ")}`);
+console.log(`CARDS: ${cards.length} took the screen for ${cardTime.toFixed(1)}s of real time (the game is paused under some cards): ${cards.map((c) => `${c.kind}@${c.at}`).join(", ")}`);
 console.log(`DEAD AIR: longest stretch with no first and no step completed: ${deadAir.seconds}s (${deadAir.from}s to ${deadAir.to}s)`);
 console.log(`END after ${SECONDS} game seconds: level ${end.level}, stage ${end.stage} cleared, ${end.shadows} shadows, ${end.upgrades} upgrades, bosses ${end.bossWins}W/${end.bossLosses}L, tutorial ${end.tutorialDone ? "finished" : "NOT finished"}; cards with no visible action: ${fallbackCloses}; page errors: ${errors.length}`);
 if (process.env.OUT) {
