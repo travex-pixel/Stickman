@@ -279,6 +279,20 @@ describe("Ascendant Fury: the blink-strike flurry", () => {
     }
   });
 
+  it("keeps him within sword's reach of a foe pinned at the wall, stepping in depth instead", () => {
+    const w = quietWorld(31);
+    const foe = dummy(w, "ashborn_brute", ARENA.maxX, 80);
+    const p = w.player;
+    const steps = runFury(w);
+    expect(steps).toHaveLength(FURY_STRIKES);
+    for (let i = 0; i < steps.length; i++) {
+      const s = steps[i]!;
+      // In melee range by the warrior's own rule (range + half the foe's body), so his blows land.
+      expect(Math.hypot(s.to.x - s.targetPos.x, s.to.y - s.targetPos.y)).toBeLessThanOrEqual(p.stats.range + foe.radius * 0.5);
+      if (i > 0) expect(Math.abs(s.to.x - steps[i - 1]!.to.x) + Math.abs(s.to.y - steps[i - 1]!.to.y)).toBeGreaterThan(10);
+    }
+  });
+
   it("is deterministic: the same seed and inputs give the same blinks", () => {
     const trace = (): number[] => {
       const p = createDefaultProfile();

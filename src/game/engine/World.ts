@@ -121,6 +121,12 @@ export interface FuryState {
 export const FURY_STRIKES = 7;
 export const FURY_FIRST = 0.25;
 export const FURY_GAP = 0.16;
+/** The depth step a blink takes instead when the arena wall would land him where he stands. */
+export const FURY_DEPTH_STEP = 24;
+/** Economy-simulator knob (A/B): 0 keeps the warrior in place through Ascendant Fury (no blinks in the simulation). */
+export const FURY_BLINKS = Number(process.env.ASCEND_FURY_BLINKS ?? 1) !== 0;
+/** Economy-simulator knob (A/B): 0 always throws all seven strikes, even once the field is clear. */
+export const FURY_EARLY_END = Number(process.env.ASCEND_FURY_EARLY_END ?? 1) !== 0;
 
 /** Rift Depth twists (see data/depths.ts). */
 export const BLOODBOUND_LIFESTEAL = 0.15;
@@ -1669,7 +1675,7 @@ export class World {
     u.timer -= rawDt;
     u.nextStrike -= rawDt;
     if (u.nextStrike <= 0 && u.strikes < FURY_STRIKES) {
-      if (u.strikes > 0 && this.enemies().length === 0) {
+      if (FURY_EARLY_END && u.strikes > 0 && this.enemies().length === 0) {
         // Nothing left to cut: the flurry ends here rather than slow time over an empty field.
         this.endUltimate(true);
         return;
@@ -1681,7 +1687,7 @@ export class World {
       const lead = this.furyLead(final);
       if (lead) {
         const from = { ...p.pos };
-        this.furyBlink(lead);
+        if (FURY_BLINKS) this.furyBlink(lead);
         this.events.push({ type: "fury_step", id: p.id, from, to: { ...p.pos }, targetId: lead.id, targetPos: { ...lead.pos }, facing: p.facing, index: u.strikes, final });
       }
       const enemies = this.enemies();
@@ -1800,13 +1806,14 @@ export class World {
    * crowd), else opposite his last landing (so a lone boss is crossed on every strike), inside the
    * arena, facing it. Where the arena edge leaves no room on
    * that side (the clamp would put him on top of it or past it), he lands on the other; if that
-   * is where he already stands, he lands a step further out, so every blink visibly moves him.
+   * is where he already stands, he steps across in depth beside it, so every blink visibly moves
+   * him and he stays in reach of it.
    */
   private furyBlink(lead: Combatant): void {
     const u = this.ultimate;
     const p = this.player;
     // Melee reach (capped, so a long-reach build still lands at sword's length) plus its body.
-    let offset = lead.radius + Math.max(p.radius + 8, Math.min(p.stats.range, 60) * 0.6);
+    const offset = lead.radius + Math.max(p.radius + 8, Math.min(p.stats.range, 60) * 0.6);
     let side = u.wantSide !== 0 ? u.wantSide : u.side === 0 ? (p.pos.x <= lead.pos.x ? -1 : 1) : -u.side;
     const placeX = (s: number) => clamp(lead.pos.x + s * offset, ARENA.minX, ARENA.maxX);
     let x = placeX(side);
@@ -1814,11 +1821,12 @@ export class World {
       side = -side;
       x = placeX(side);
     }
-    const y = clamp(lead.pos.y, ARENA.minY, ARENA.maxY);
+    let y = clamp(lead.pos.y, ARENA.minY, ARENA.maxY);
     if (u.side !== 0 && Math.abs(x - p.pos.x) < 10 && Math.abs(y - p.pos.y) < 10) {
-      // The wall sent him back where he already stands: land a step further out instead.
-      offset *= 1.8;
-      x = placeX(side);
+      // The wall sent him back where he already stands: step across in depth instead, staying
+      // within sword's reach of the foe (a step further out would leave his own blows short).
+      const dir = y + FURY_DEPTH_STEP <= ARENA.maxY && (u.strikes % 2 === 0 || y - FURY_DEPTH_STEP < ARENA.minY) ? 1 : -1;
+      y = clamp(y + dir * FURY_DEPTH_STEP, ARENA.minY, ARENA.maxY);
     }
     p.pos.x = x;
     p.pos.y = y;
