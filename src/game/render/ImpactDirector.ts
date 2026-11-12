@@ -74,6 +74,11 @@ export class ImpactDirector {
    * strike from alternating sides, and the camera holds the whole fight instead.
    */
   kickScale = 1;
+  /**
+   * When set (>= 0), the warrior's blows whiten only this body; others take the tint. The
+   * Ascendant Fury sets it to each strike's lead so the cut it follows is the one that flashes.
+   */
+  whiteOnly = -1;
   private readonly emitOpts: EmitOptions = { x: 0, y: 0, count: 0, texture: undefined as unknown as Texture, color: 0, speed: [0, 0], angle: [0, 0], life: [0, 0], scale: [0, 0], endScale: 0, alpha: 1, spin: 0, additive: true, gravity: 0, drag: 0.9 };
 
   constructor(private readonly host: ImpactHost) {}
@@ -138,7 +143,8 @@ export class ImpactDirector {
       // The flash is time-based and decided by one rule (FlashState): bosses and elites only go
       // fully white on a warrior crit, heavy or ability hit, the army never whitens anything.
       const tcls: FlashTarget = onWarrior ? "warrior" : target.kind === "boss" || !!target.enemy?.elite ? "boss" : target.faction === "ally" ? "ally" : "foe";
-      const scls: FlashSource = byWarrior ? "warrior" : byArmy ? "army" : "other";
+      const lit = this.whiteOnly < 0 || e.targetId === this.whiteOnly;
+      const scls: FlashSource = byWarrior ? (lit ? "warrior" : "other") : byArmy ? "army" : "other";
       tv.flash.hit(tcls, scls, e.crit, e.heavy || ability, this.now);
     }
     h.chest(target, this.p);

@@ -1,7 +1,7 @@
 import { Store } from "@/lib/store";
 import { World, FIXED_DT, type WorldSnapshot } from "./engine/World";
 import { GameLoop } from "./engine/GameLoop";
-import type { GameEvent } from "./engine/events";
+import { startsCast, type GameEvent } from "./engine/events";
 import { Rng } from "./engine/rng";
 import type { AbilityId, EquipSlot, PanelId, SummonCommand, UpgradeableStat, WeaponPath } from "./data/ids";
 import { createDefaultProfile, type EquipmentItem, type Profile, type SummonInstance } from "./progression/profile";
@@ -652,13 +652,20 @@ export class GameController {
           break;
         case "cast":
           if (e.id === this.world?.player.id) {
-            this.run.casts += 1;
-            this.objectiveEvent("casts", 1);
-            p.progress.abilityCasts += 1;
-            if (e.ability !== "shadow_dash") this.completeTutorialIf("ability");
-            dirty = true;
-            // Ascendant Fury's light is the renderer's (one flash on the seventh cut, none with reduced effects).
-            this.sfx(castSfx(e.ability), { volume: e.ability === "ascendant_fury" ? 1 : 0.8, minInterval: 150 });
+            // One ultimate is one cast, though each of its seven strikes repeats the event.
+            if (startsCast(e)) {
+              this.run.casts += 1;
+              this.objectiveEvent("casts", 1);
+              p.progress.abilityCasts += 1;
+              if (e.ability !== "shadow_dash") this.completeTutorialIf("ability");
+              dirty = true;
+            }
+            // Ascendant Fury's light is the renderer's (one flash on the seventh cut, none with
+            // reduced effects). Its strikes rise in pitch; the seventh lands with a heavy blow.
+            if (e.ability === "ascendant_fury" && e.strike !== undefined) {
+              this.sfx("ultimate", { volume: 1, rate: 1 + 0.045 * (e.strike - 1), minInterval: 60 });
+              if (e.strike >= 7) this.sfx("boss_impact", { volume: 0.8, rate: 0.85, minInterval: 60 });
+            } else this.sfx(castSfx(e.ability), { volume: e.ability === "ascendant_fury" ? 1 : 0.8, minInterval: 150 });
           }
           break;
         case "dodge":

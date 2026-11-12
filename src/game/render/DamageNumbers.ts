@@ -22,6 +22,12 @@ const LABEL_CHARS = NUMERAL_CHARS + "'’:!?()";
 /** Pop on spawn: 1.25 to 1 over 80ms. */
 const POP_FROM = 1.25;
 const POP_TIME = 0.08;
+/** The running total: serif numerals rasterised at this size, shown at TALLY_SIZE screen px. */
+const TALLY_BASE = 56;
+const TALLY_SIZE = 40;
+const TALLY_CHARS = "0123456789.KMBT";
+/** Seconds the closed total holds before it fades. */
+const TALLY_HOLD = 0.9;
 /** Numbers that land together within this long stack upward instead of overlapping. */
 const STACK_WINDOW = 0.22;
 
@@ -80,6 +86,13 @@ export class DamageNumbers {
   private labelH = LABEL_BASE;
   /** The warrior's box in base px; numbers are kept out of it. */
   private readonly avoidBox = { minX: 0, minY: 0, maxX: 0, maxY: 0, on: false };
+  /**
+   * One running total in the serif numeral face (the Ascendant Fury's damage): it counts up toward
+   * its value, pops on each addition, pops large when closed, then fades.
+   */
+  private readonly tallyHolder = new Container();
+  private tallyText!: BitmapText;
+  private readonly tallyState = { on: false, value: 0, shown: -1, age: 1, closed: false, fade: 0, color: 0xe9c97a };
 
   /**
    * Load the numeral face before any BitmapText is built (glyphs rasterise on first use). Falls
@@ -124,6 +137,76 @@ export class DamageNumbers {
       this.pool.push({ holder, text, label, suffix, life: 0, total: 1, age: 0, vx: 0, vy: 0, gravity: 0, active: false, size: 1, style: "normal", w: 0, h: 0, dir: 1, avoid: false });
     }
     this.prewarm(numStyle, labelStyle);
+    const serif = serifFamily();
+    const tallyStyle = { fontFamily: serif, fontSize: TALLY_BASE, fontWeight: "400" as const, fill: 0xffffff, dropShadow: { ...shadow, alpha: 0.7, distance: 3 } };
+    this.tallyText = new BitmapText({ text: TALLY_CHARS, style: tallyStyle });
+    // Reading the size lays it out, which rasterises the glyphs now rather than mid-fight.
+    void this.tallyText.width;
+    this.tallyText.anchor.set(0.5);
+    this.tallyText.text = "0";
+    this.tallyHolder.addChild(this.tallyText);
+    this.tallyHolder.visible = false;
+    this.container.addChild(this.tallyHolder);
+  }
+
+  /** Add to the running total (opening it when closed), popping it. */
+  tallyAdd(amount: number, color: number): void {
+    const t = this.tallyState;
+    if (!t.on || t.closed) {
+      t.on = true;
+      t.closed = false;
+      t.value = 0;
+      t.shown = 0;
+      t.fade = 0;
+    }
+    t.value += amount;
+    t.color = color;
+    t.age = 0;
+    this.tallyHolder.visible = true;
+  }
+
+  /** Close the total: it lands on its value with a large pop, holds, then fades. */
+  tallyClose(): void {
+    const t = this.tallyState;
+    if (!t.on || t.closed) return;
+    t.closed = true;
+    t.shown = t.value;
+    t.age = 0;
+    t.fade = 0;
+  }
+
+  /** Base-px position of the total (the renderer keeps it at the top middle of the view). */
+  placeTally(x: number, y: number): void {
+    this.tallyHolder.position.set(x, y);
+  }
+
+  get tallyOn(): boolean {
+    return this.tallyState.on;
+  }
+
+  private updateTally(dt: number): void {
+    const t = this.tallyState;
+    if (!t.on) return;
+    t.age += dt;
+    // Count up toward the value rather than jump to it.
+    if (t.shown < t.value) t.shown = Math.min(t.value, t.shown + Math.max(1, (t.value - t.shown) * Math.min(1, dt * 18)));
+    const text = fmtNum(t.shown);
+    if (this.tallyText.text !== text) this.tallyText.text = text;
+    const popFrom = t.closed ? 1.6 : 1.18;
+    const popTime = t.closed ? 0.22 : POP_TIME;
+    const pop = t.age < popTime ? popFrom - (popFrom - 1) * easeOutCubic(t.age / popTime) : 1;
+    const size = (t.closed ? TALLY_SIZE * 1.2 : TALLY_SIZE) / TALLY_BASE;
+    this.tallyHolder.scale.set((size * pop) / this.zoom);
+    this.tallyText.tint = t.closed && t.age < 0.06 ? 0xffffff : t.color;
+    if (t.closed) {
+      // Hold, then fade over 0.4s.
+      if (t.age > TALLY_HOLD) t.fade = Math.min(1, (t.age - TALLY_HOLD) / 0.4);
+      this.tallyHolder.alpha = 1 - easeOutCubic(t.fade);
+      if (t.fade >= 1) {
+        t.on = false;
+        this.tallyHolder.visible = false;
+      }
+    } else this.tallyHolder.alpha = 1;
   }
 
   /** Fill both glyph atlases and measure every glyph once (mount time, never mid-fight). */
@@ -317,6 +400,7 @@ export class DamageNumbers {
 
   update(dt: number): void {
     this.now += dt;
+    this.updateTally(dt);
     for (const n of this.pool) {
       if (!n.active) continue;
       n.life -= dt;
@@ -344,6 +428,8 @@ export class DamageNumbers {
   }
 
   clear(): void {
+    this.tallyState.on = false;
+    this.tallyHolder.visible = false;
     for (const n of this.pool) {
       n.active = false;
       n.holder.visible = false;
@@ -363,6 +449,13 @@ function isFigure(s: string): boolean {
     if (!((c >= 48 && c <= 57) || c === 46 || c === 44 || c === 75 || c === 77 || c === 66)) return false;
   }
   return s.length > 0;
+}
+
+/** The display serif (the big numbers of the interface), resolved like the sans below. */
+function serifFamily(): string {
+  if (typeof document === "undefined") return "Georgia, serif";
+  const v = getComputedStyle(document.documentElement).getPropertyValue("--font-instrument-serif").trim();
+  return v ? `${v}, Georgia, serif` : "Georgia, serif";
 }
 
 /** The interface sans, resolved from the CSS variables next/font sets, with safe fallbacks. */

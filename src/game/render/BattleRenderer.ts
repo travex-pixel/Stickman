@@ -127,6 +127,18 @@ const FURY_SWING = 0.16;
 const FURY_GHOST_LIFE = 0.3;
 const FURY_GOLD = 0xe9c97a;
 const FURY_INK = 0x15141a;
+/** How far the backdrop sinks toward FURY_DIM_COLOR during the flurry. */
+const FURY_DIM = 0.45;
+const FURY_DIM_COLOR = 0x23262c;
+/** Camera follow speed (lambda) while the flurry's frame settles and holds. */
+const FURY_SETTLE = 14;
+/**
+ * Where the flurry's running total sits, in canvas px: right of centre and high, the band the
+ * interface leaves free between the army commands (left) and the army strip (right), below the
+ * boss bar when there is one.
+ */
+const TALLY_SCREEN_X = 0.65;
+const TALLY_SCREEN_Y = 84;
 
 type FuryStepEvent = Extract<GameEvent, { type: "fury_step" }>;
 
@@ -219,6 +231,12 @@ export class BattleRenderer implements ImpactHost {
   /** The steady frame of the whole fight during the flurry (grows, never chases a blink). */
   private readonly furyBox: Box = { minX: 0, minY: 0, maxX: 0, maxY: 0 };
   private furyBoxSet = false;
+  /** The current strike's lead while the flurry runs (-1 otherwise): only it shows a number. */
+  private furyLead = -1;
+  /** The seventh cut landed in this batch: close the running total after its hits. */
+  private furyClose = false;
+  /** Backdrop dim during the flurry (0 to 1), eased in and out. */
+  private furyDim = 0;
   /** The warrior's facing as last drawn (an afterimage keeps the stance he blinked out of). */
   private playerFacing: 1 | -1 = 1;
   private resizeObs: ResizeObserver | null = null;
@@ -599,7 +617,7 @@ export class BattleRenderer implements ImpactHost {
     const fxDt = frozen ? 0 : dt;
     const entDt = paused || frozen ? 0 : dt;
     this.background?.update(paused ? dt * 0.3 : dt);
-    this.updateFury(world, entDt);
+    this.updateFury(world, entDt, dt);
     if (perf) this.sec(0);
     this.syncEntities(world, alpha, entDt, fxDt, paused ? 0 : dt);
     if (perf) this.sec(1);
@@ -628,6 +646,10 @@ export class BattleRenderer implements ImpactHost {
     this.particles.update(fxDt);
     this.numbers.setBounds(this.vis.minX, this.vis.maxX);
     this.numbers.setZoom(o.scale);
+    if (this.numbers.tallyOn) {
+      this.camera.unproject(this.width * TALLY_SCREEN_X, TALLY_SCREEN_Y, this.pt);
+      this.numbers.placeTally(this.pt.x, this.pt.y);
+    }
     this.numbers.update(dt);
     if (perf) this.sec(6);
     this.updateCinematic(dt);
@@ -1399,6 +1421,7 @@ export class BattleRenderer implements ImpactHost {
     let tint = this.skyDarken > 0.01 ? mix(0xffffff, this.skyColor, this.skyDarken) : 0xffffff;
     if (this.bossTint > 0) tint = mix(tint, this.bossTintColor, this.bossTint);
     if (this.cineTint > 0.005) tint = mix(tint, this.cineTintColor, this.cineTint);
+    if (this.furyDim > 0) tint = mix(tint, FURY_DIM_COLOR, this.furyDim);
     // Setting a tint dirties the whole backdrop subtree, so only when it changes.
     if (tint !== this.skyTint || bg !== this.skyTintBg) {
       bg.container.tint = tint;
@@ -1691,6 +1714,11 @@ export class BattleRenderer implements ImpactHost {
         case "hit": {
           this.impact.onHit(e);
           const target = world.entities.get(e.targetId);
+          if (this.furyLead >= 0 && e.sourceId === world.player.id && e.faction === "enemy") {
+            // The flurry folds its damage into one running total; only the lead shows its own.
+            this.numbers.tallyAdd(e.amount, FURY_GOLD);
+            if (e.targetId !== this.furyLead) break;
+          }
           if (e.amount > 0 && target) {
             this.chest(target, this.pt);
             const taken = e.targetKind === "player";
@@ -1746,6 +1774,9 @@ export class BattleRenderer implements ImpactHost {
         }
         case "fury_step":
           this.furyStep(e);
+          break;
+        case "fury_end":
+          this.furyEnd(e.early, e.pos);
           break;
         case "chain": {
           const ay = this.sy(e.from.y) - CHEST * this.figureScale(e.from.y);
@@ -1938,6 +1969,10 @@ export class BattleRenderer implements ImpactHost {
       }
     }
     for (const v of this.views.values()) v.swungThisBatch = false;
+    if (this.furyClose) {
+      this.furyClose = false;
+      this.numbers.tallyClose();
+    }
   }
 
   private castFx(ability: string, id: number, pos: { x: number; y: number }, facing: 1 | -1, target: { x: number; y: number } | null): void {
@@ -2261,6 +2296,9 @@ export class BattleRenderer implements ImpactHost {
     }
     this.fury.on = true;
     this.fury.t = 0;
+    this.furyLead = e.targetId;
+    this.impact.whiteOnly = e.targetId;
+    if (e.final) this.furyClose = true;
     // Forehand and rising backhand alternate; the seventh is the overhead.
     this.fury.variant = e.final ? 2 : (e.index - 1) % 2;
     this.impact.kickScale = 0;
@@ -2319,7 +2357,7 @@ export class BattleRenderer implements ImpactHost {
   }
 
   /** Advance the arrival pose; the flurry's presentation ends with the warrior's cast. */
-  private updateFury(world: World, dt: number): void {
+  private updateFury(world: World, dt: number, realDt: number): void {
     const p = world.player;
     const running = world.ultimate.active || (p.state === "cast" && p.pendingAbility === "ascendant_fury" && !p.dead);
     if (this.fury.on) {
@@ -2329,67 +2367,95 @@ export class BattleRenderer implements ImpactHost {
         this.impact.kickScale = 1;
       }
     }
+    if (!world.ultimate.active && this.furyLead >= 0) {
+      this.furyLead = -1;
+      this.impact.whiteOnly = -1;
+    }
+    // The backdrop sinks a little while the flurry runs, so ink and gold read against it.
+    this.furyDim = damp(this.furyDim, world.ultimate.active ? (this.reduced ? FURY_DIM * 0.5 : FURY_DIM) : 0, 10, realDt);
+    if (this.furyDim < 0.004) this.furyDim = 0;
     if (!this.fury.on && !world.ultimate.active && this.furyGhosts.count > 0 && !this.furyGhosts.anyLive) this.furyGhosts.release();
   }
 
-  /** The flurry is cut short (new world, unmount): drop its pose and afterimages. */
+  /**
+   * The ultimate ended. Early (the field was cleared before the seventh cut): a short closing
+   * beat where he stands, the bars release and the total closes. After the seventh, its own beat
+   * already played.
+   */
+  private furyEnd(early: boolean, pos: { x: number; y: number }): void {
+    this.furyLead = -1;
+    this.impact.whiteOnly = -1;
+    this.camera.boost = 0;
+    if (!early) return;
+    this.fury.on = false;
+    this.impact.kickScale = 1;
+    this.letterboxT = 0;
+    this.numbers.tallyClose();
+    const u = this.unit();
+    const sx = this.sx(pos.x);
+    const sy = this.sy(pos.y);
+    this.ringFx(sx, sy, 8, 120 * u, 0.5, FURY_GOLD, 3, 0.42);
+    this.starFlash(sx, sy - CHEST * this.figureScale(pos.y), 0.8, 0xfff1c9);
+    this.camera.punch(0.03);
+  }
+
+  /** The flurry is cut short (new world, unmount): drop its pose, afterimages and total. */
   private endFury(): void {
     this.fury.on = false;
     this.fury.t = 0;
     this.furyBoxSet = false;
+    this.furyLead = -1;
+    this.furyClose = false;
+    this.furyDim = 0;
     this.impact.kickScale = 1;
+    this.impact.whiteOnly = -1;
+    this.camera.boost = 0;
     this.furyGhosts.release();
   }
 
   /**
-   * During the flurry the camera holds the fight (the warrior and the foes around each landing,
-   * the boss always), centred on it rather than leaning toward the warrior, and the frame only
-   * grows, so it settles once and does not chase the blinks.
+   * During the flurry the camera holds the whole fight: the frame is set once, at the cast, around
+   * the warrior and every foe on the field, and reached quickly (the 0.25s before the first blink),
+   * centred rather than leaning toward the warrior. It then holds; it only widens if a blink would
+   * take him out of it.
    */
   private frameFury(world: World): void {
     const p = world.player;
     const b = this.box;
+    const f = this.furyBox;
     const pv = this.views.get(p.id);
     const px = this.sx(p.pos.x);
     const py = this.sy(p.pos.y);
-    b.minX = b.maxX = px;
-    b.maxY = py;
-    b.minY = py - (pv?.rig.top ?? 82) * this.figureScale(p.pos.y);
-    const r2 = FRAME_RADIUS * FRAME_RADIUS;
-    for (const e of world.entities.values()) {
-      if (e.faction !== "enemy" || e.dead || hasStatus(e, "submerged")) continue;
-      // Foes still walking in from beyond the edge, and stragglers far from the cuts, stay out:
-      // the frame holds the fight he is cutting through (the boss always counts).
-      if (e.pos.x < ARENA.minX || e.pos.x > ARENA.maxX) continue;
-      const dx = e.pos.x - p.pos.x;
-      const dy = e.pos.y - p.pos.y;
-      if (e.kind !== "boss" && dx * dx + dy * dy > r2) continue;
-      const ex = this.sx(e.pos.x);
-      const ey = this.sy(e.pos.y);
-      const et = (this.views.get(e.id)?.rig.top ?? 82) * this.figureScale(e.pos.y);
-      if (ex < b.minX) b.minX = ex;
-      if (ex > b.maxX) b.maxX = ex;
-      if (ey > b.maxY) b.maxY = ey;
-      if (ey - et < b.minY) b.minY = ey - et;
-    }
-    const f = this.furyBox;
+    const ptop = py - (pv?.rig.top ?? 82) * this.figureScale(p.pos.y);
     if (!this.furyBoxSet) {
-      f.minX = b.minX;
-      f.maxX = b.maxX;
-      f.minY = b.minY;
-      f.maxY = b.maxY;
+      f.minX = f.maxX = px;
+      f.maxY = py;
+      f.minY = ptop;
+      for (const e of world.entities.values()) {
+        if (e.faction !== "enemy" || e.dead || hasStatus(e, "submerged")) continue;
+        // Foes still walking in from beyond the edge stay out of the frame.
+        if (e.pos.x < ARENA.minX || e.pos.x > ARENA.maxX) continue;
+        const ex = this.sx(e.pos.x);
+        const ey = this.sy(e.pos.y);
+        const et = (this.views.get(e.id)?.rig.top ?? 82) * this.figureScale(e.pos.y);
+        if (ex < f.minX) f.minX = ex;
+        if (ex > f.maxX) f.maxX = ex;
+        if (ey > f.maxY) f.maxY = ey;
+        if (ey - et < f.minY) f.minY = ey - et;
+      }
       this.furyBoxSet = true;
     } else {
-      f.minX = Math.min(f.minX, b.minX);
-      f.maxX = Math.max(f.maxX, b.maxX);
-      f.minY = Math.min(f.minY, b.minY);
-      f.maxY = Math.max(f.maxY, b.maxY);
+      f.minX = Math.min(f.minX, px);
+      f.maxX = Math.max(f.maxX, px);
+      f.minY = Math.min(f.minY, ptop);
+      f.maxY = Math.max(f.maxY, py);
     }
     const pad = FRAME_PAD * this.unit();
     b.minX = f.minX - pad;
     b.maxX = f.maxX + pad;
     b.minY = f.minY - pad * 0.5;
     b.maxY = f.maxY + pad * 0.35;
+    this.camera.boost = world.ultimate.active ? FURY_SETTLE : 0;
     this.camera.frame(b, (b.minX + b.maxX) / 2, (b.minY + b.maxY) / 2);
   }
 

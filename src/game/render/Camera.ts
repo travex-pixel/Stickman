@@ -66,6 +66,8 @@ export class Camera {
    * follow speeds up to `lambda`, so a boss entrance can pan and zoom onto the spawn point.
    */
   readonly hold = { x: 0, y: 0, zoom: 1.3, weight: 0, lambda: 6 };
+  /** A faster follow (lambda) while set: a frame that must be reached quickly, then held. */
+  boost = 0;
 
   /** Output transform (apply to the camera layer): pivot = centre, position = anchor + offset. */
   readonly out = { x: 0, y: 0, pivotX: 0, pivotY: 0, scale: 1, rotation: 0 };
@@ -161,8 +163,8 @@ export class Camera {
     this.time += dt;
     this.settled = true;
     const w = Math.min(1, this.hold.weight);
-    const follow = 4 + (Math.max(4, this.hold.lambda) - 4) * w;
-    this.zoom = damp(this.zoom, this.targetZoom, 2.5 + (Math.max(2.5, this.hold.lambda) - 2.5) * w, dt);
+    const follow = Math.max(4 + (Math.max(4, this.hold.lambda) - 4) * w, this.boost);
+    this.zoom = damp(this.zoom, this.targetZoom, Math.max(2.5 + (Math.max(2.5, this.hold.lambda) - 2.5) * w, this.boost), dt);
     this.cx = damp(this.cx, this.targetX, follow, dt);
     this.cy = damp(this.cy, this.targetY, follow, dt);
     this.clampCentre();

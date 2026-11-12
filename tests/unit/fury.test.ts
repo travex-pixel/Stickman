@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { World, FIXED_DT, ARENA, FURY_STRIKES } from "@/game/engine/World";
 import { buildLoadout } from "@/game/progression/loadout";
 import { createDefaultProfile } from "@/game/progression/profile";
-import type { GameEvent } from "@/game/engine/events";
+import { startsCast, type GameEvent } from "@/game/engine/events";
 import type { Combatant } from "@/game/entities/types";
 import { addStatus } from "@/game/combat/statuses";
 import { computeDamage } from "@/game/combat/damage";
@@ -69,8 +69,8 @@ describe("Ascendant Fury: the blink-strike flurry", () => {
       const b = landings[i]!;
       expect(Math.hypot(b.x - a.x, b.y - a.y)).toBeGreaterThan(20);
     }
-    // Consecutive blinks change target while there is more than one foe.
-    for (let i = 1; i < steps.length; i++) expect(steps[i]!.targetId).not.toBe(steps[i - 1]!.targetId);
+    // Between the first and the last, consecutive blinks change target while there is a choice.
+    for (let i = 1; i < steps.length - 1; i++) expect(steps[i]!.targetId).not.toBe(steps[i - 1]!.targetId);
     // Every foe is visited, and the warrior lands beside each lead, not on it.
     expect(new Set(steps.map((s) => s.targetId)).size).toBe(foes.length);
     for (const s of steps) {
@@ -82,6 +82,85 @@ describe("Ascendant Fury: the blink-strike flurry", () => {
     // He stays where the last blink left him.
     const last = steps[steps.length - 1]!;
     expect(Math.abs(w.player.pos.x - last.to.x)).toBeLessThan(6);
+  });
+
+  it("crosses the field on every blink, taking foes from the ends inward and landing outside them", () => {
+    const w = quietWorld();
+    const xs = [120, 230, 330, 430, 540];
+    const foes = xs.map((x, i) => dummy(w, "husk", x, 30 + i * 22));
+    const steps = runFury(w);
+    expect(steps).toHaveLength(FURY_STRIKES);
+    const spread = xs[xs.length - 1]! - xs[0]!;
+    // Strikes 2 to 6 alternate between the two ends of the field and each travels far.
+    for (let i = 1; i <= 5; i++) {
+      const s = steps[i]!;
+      expect(Math.abs(s.to.x - s.from.x)).toBeGreaterThan(spread * 0.3);
+      if (i >= 2) expect(Math.sign(s.to.x - s.from.x)).toBe(-Math.sign(steps[i - 1]!.to.x - steps[i - 1]!.from.x));
+    }
+    // Ends inward: the left and right ends first, then their neighbours.
+    const order = steps.slice(1, 5).map((s) => foes.findIndex((f) => f.id === s.targetId));
+    expect([...order].sort((a, b) => a - b)).toEqual([0, 1, 3, 4]);
+    // In a crowd he lands on the outer side: left of foes left of the middle, right of the others.
+    for (const s of steps.slice(1, 6)) {
+      const idx = foes.findIndex((f) => f.id === s.targetId);
+      if (idx < 2) expect(s.to.x).toBeLessThan(s.targetPos.x);
+      if (idx > 2) expect(s.to.x).toBeGreaterThan(s.targetPos.x);
+    }
+  });
+
+  it("leaves foes still walking in from beyond the edge alone while others are on the field", () => {
+    const w = quietWorld();
+    dummy(w, "husk", 250, 60);
+    dummy(w, "husk", 450, 90);
+    const outside = dummy(w, "husk", ARENA.maxX + 30, 70);
+    // Held beyond the edge, as a foe still walking in is (a standing dummy would be clamped in).
+    const steps = runFury(w, () => {
+      outside.pos.x = ARENA.maxX + 30;
+    });
+    for (const s of steps) expect(s.targetId).not.toBe(outside.id);
+  });
+
+  it("ends early when the field is cleared, without slowing time over nothing", () => {
+    const w = quietWorld();
+    const weak = [dummy(w, "husk", 300, 60), dummy(w, "husk", 420, 100)];
+    for (const e of weak) {
+      e.stats.maxHp = 1;
+      e.hp = 1;
+    }
+    w.energy = 100;
+    expect(w.castAbility("ascendant_fury")).toBe(true);
+    const ev: GameEvent[] = [];
+    let endedAt = -1;
+    for (let i = 0; i < Math.round(1.2 / FIXED_DT); i++) {
+      w.update(FIXED_DT);
+      const batch = w.drainEvents();
+      ev.push(...batch);
+      if (endedAt < 0 && batch.some((e) => e.type === "fury_end")) endedAt = i;
+    }
+    const end = ev.find((e) => e.type === "fury_end");
+    expect(end && end.type === "fury_end" && end.early).toBe(true);
+    expect(end && end.type === "fury_end" ? end.strikes : -1).toBe(1);
+    expect(ev.filter((e) => e.type === "fury_step")).toHaveLength(1);
+    // The next strike was due 0.16s after the first (0.25s in): it ends there, not at 1.6s.
+    expect(endedAt * FIXED_DT).toBeLessThan(0.25 + 0.16 + 0.05);
+    expect(w.ultimate.active).toBe(false);
+    expect(w.player.state).not.toBe("cast");
+    expect(w.timeScale).toBeGreaterThan(0.9);
+  });
+
+  it("counts one ultimate as one cast, though each strike repeats the event", () => {
+    const w = quietWorld();
+    dummy(w, "husk", 300, 60);
+    w.energy = 100;
+    expect(w.castAbility("ascendant_fury")).toBe(true);
+    const ev: GameEvent[] = [];
+    for (let i = 0; i < Math.round(2 / FIXED_DT); i++) {
+      w.update(FIXED_DT);
+      ev.push(...w.drainEvents());
+    }
+    const casts = ev.filter((e): e is Extract<GameEvent, { type: "cast" }> => e.type === "cast" && e.ability === "ascendant_fury");
+    expect(casts.length).toBeGreaterThanOrEqual(7);
+    expect(casts.filter(startsCast)).toHaveLength(1);
   });
 
   it("starts on the focus target", () => {

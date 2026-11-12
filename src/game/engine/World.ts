@@ -99,11 +99,15 @@ export interface FuryState {
   strikes: number;
   /** Raw seconds to the next strike. */
   nextStrike: number;
-  /** The enemy the last blink landed beside (-1 before the first), and its x then. */
+  /** The enemy the last blink landed beside (-1 before the first). */
   leadId: number;
-  leadX: number;
-  /** Direction the flurry walks the field (by x): 1, -1, or 0 until the second strike sets it. */
-  sweep: number;
+  /** The end of the field the next blink goes to (-1 left, 1 right; 0 until the second strike). */
+  next: number;
+  /** Foes taken so far from the left and right ends of the field (ends-inward order). */
+  lo: number;
+  hi: number;
+  /** The side of its lead the coming blink must land on (-1 left, 1 right), or 0 to alternate. */
+  wantSide: number;
   /** Side of its lead target the warrior last landed on: -1 left, 1 right (0 before the first). */
   side: number;
   /** Where the warrior stood when the ultimate began; shields still judge the blows from there. */
@@ -171,7 +175,7 @@ export class World {
   energy = 0;
   cooldowns: Record<AbilityId, number>;
   dodgeCooldown = 0;
-  ultimate: FuryState = { active: false, timer: 0, strikes: 0, nextStrike: 0, leadId: -1, leadX: 0, sweep: 0, side: 0, originX: 0 };
+  ultimate: FuryState = { active: false, timer: 0, strikes: 0, nextStrike: 0, leadId: -1, next: 0, lo: 0, hi: 0, wantSide: 0, side: 0, originX: 0 };
   pendingLoot: LootDrop[] = [];
   /** Game-mode reward multiplier on enemy gold (the Gold Vault sets this). */
   modeGoldMult = 1;
@@ -1640,7 +1644,7 @@ export class World {
    */
   beginUltimate(): void {
     const p = this.player;
-    this.ultimate = { active: true, timer: 1.6, strikes: 0, nextStrike: FURY_FIRST, leadId: -1, leadX: p.pos.x, sweep: 0, side: 0, originX: p.pos.x };
+    this.ultimate = { active: true, timer: 1.6, strikes: 0, nextStrike: FURY_FIRST, leadId: -1, next: 0, lo: 0, hi: 0, wantSide: 0, side: 0, originX: p.pos.x };
     this.timeScale = 0.3;
     this.stopPlayerDrift();
     this.events.push({ type: "shake", strength: 6 });
@@ -1662,6 +1666,11 @@ export class World {
     u.timer -= rawDt;
     u.nextStrike -= rawDt;
     if (u.nextStrike <= 0 && u.strikes < FURY_STRIKES) {
+      if (u.strikes > 0 && this.enemies().length === 0) {
+        // Nothing left to cut: the flurry ends here rather than slow time over an empty field.
+        this.endUltimate(true);
+        return;
+      }
       u.strikes += 1;
       u.nextStrike = FURY_GAP;
       const final = u.strikes === FURY_STRIKES;
@@ -1678,61 +1687,73 @@ export class World {
         this.dealDamage(p, e, ABILITIES.ascendant_fury.power * this.abilityPower("ascendant_fury"), "soul", final, 1, undefined, u.originX);
         if (final) this.applyKnockback(e, p.pos, 260);
       }
-      this.events.push({ type: "cast", id: p.id, ability: "ascendant_fury", pos: { ...p.pos }, facing: p.facing, targetPos: lead ? { ...lead.pos } : enemies[0] ? { ...enemies[0].pos } : null });
+      this.events.push({ type: "cast", id: p.id, ability: "ascendant_fury", pos: { ...p.pos }, facing: p.facing, targetPos: lead ? { ...lead.pos } : enemies[0] ? { ...enemies[0].pos } : null, strike: u.strikes });
       this.events.push({ type: "shake", strength: final ? 14 : 4 });
     }
-    if (u.timer <= 0) {
-      u.active = false;
-      addStatus(this.player, { kind: "invuln", remaining: 0.3, value: 1, sourceId: this.player.id });
-    }
+    if (u.timer <= 0) this.endUltimate(false);
+  }
+
+  /**
+   * The ultimate is over: the usual short invulnerability. Ended early (the field is clear), the
+   * remaining strikes are not thrown and the warrior is free to act at once.
+   */
+  private endUltimate(early: boolean): void {
+    const u = this.ultimate;
+    const p = this.player;
+    u.active = false;
+    addStatus(p, { kind: "invuln", remaining: 0.3, value: 1, sourceId: p.id });
+    if (early && p.state === "cast" && p.pendingAbility === "ascendant_fury") this.setState(p, "idle");
+    this.events.push({ type: "fury_end", id: p.id, early, strikes: u.strikes, pos: { ...p.pos } });
   }
 
   /**
    * The enemy the next blink lands beside. The first goes to the focus target, else the boss,
-   * else the nearest foe; the seventh to the boss, else the most dangerous foe. Those between walk
-   * the living foes in order across the field, turning at either end, so consecutive blinks cross
-   * it; a lone foe is struck again and again.
+   * else the nearest foe; the seventh to the boss, else the most dangerous foe. Those between take
+   * the foes from the two ends of the field inward (leftmost, rightmost, second leftmost, ...),
+   * starting with the end farther from him, so every blink crosses as much of the field as there
+   * is; in a crowd he lands on the outer side of each, sweeping through the group. A lone foe is
+   * crossed on alternate sides. Foes still walking in from beyond the edge are only chosen when
+   * nothing else is left.
    */
   private furyLead(final: boolean): Combatant | null {
     const u = this.ultimate;
     const p = this.player;
-    const living = this.enemies().filter((e) => !isHidden(e));
-    if (living.length === 0) return null;
+    u.wantSide = 0;
+    const all = this.enemies().filter((e) => !isHidden(e));
+    if (all.length === 0) return null;
+    const inside = all.filter((e) => e.pos.x >= ARENA.minX && e.pos.x <= ARENA.maxX);
+    const living = inside.length > 0 ? inside : all;
     const boss = this.boss;
     const bossOk = boss && !isHidden(boss) ? boss : null;
     if (final) return bossOk ?? mostDangerous(p, living);
     if (u.leadId < 0) return this.focusTarget() ?? bossOk ?? nearestHostile(p, living);
-    if (living.length === 1) return living[0]!;
-    living.sort((a, b) => a.pos.x - b.pos.x || a.id - b.id);
     const n = living.length;
-    const i = living.findIndex((e) => e.id === u.leadId);
-    if (u.sweep === 0) {
-      // Head for the far side of the field first.
-      const at = i >= 0 ? i : living.findIndex((e) => e.pos.x >= u.leadX);
-      u.sweep = at >= 0 && at < (n - 1) / 2 ? 1 : -1;
+    if (n === 1) return living[0]!;
+    living.sort((a, b) => a.pos.x - b.pos.x || a.id - b.id);
+    if (u.lo + u.hi >= n) {
+      // Every foe has been taken once: start again from the ends.
+      u.lo = 0;
+      u.hi = 0;
     }
-    if (i < 0) {
-      // The last lead fell: step on from where it stood (between its neighbours by x).
-      const found = living.findIndex((e) => e.pos.x >= u.leadX);
-      const above = found < 0 ? n : found;
-      let next = u.sweep > 0 ? above : above - 1;
-      if (next < 0 || next >= n) {
-        u.sweep = -u.sweep;
-        next = u.sweep > 0 ? above : above - 1;
-      }
-      return living[clamp(next, 0, n - 1)]!;
+    if (u.next === 0) u.next = Math.abs(p.pos.x - living[0]!.pos.x) >= Math.abs(p.pos.x - living[n - 1]!.pos.x) ? -1 : 1;
+    const at = () => (u.next < 0 ? Math.min(u.lo, n - 1) : Math.max(n - 1 - u.hi, 0));
+    if (living[at()]!.id === u.leadId) {
+      // Never the foe he is already beside: take the next one in from that end.
+      if (u.next < 0) u.lo += 1;
+      else u.hi += 1;
     }
-    let next = i + u.sweep;
-    if (next < 0 || next >= n) {
-      u.sweep = -u.sweep;
-      next = i + u.sweep;
-    }
-    return living[clamp(next, 0, n - 1)]!;
+    const lead = living[at()]!;
+    if (u.next < 0) u.lo += 1;
+    else u.hi += 1;
+    u.wantSide = u.next;
+    u.next = -u.next;
+    return lead;
   }
 
   /**
-   * Teleport the warrior beside `lead`, on the side opposite his last landing (so a lone boss is
-   * crossed on every strike), inside the arena, facing it. Where the arena edge leaves no room on
+   * Teleport the warrior beside `lead`, on the side the lead choice asked for (the outer side in a
+   * crowd), else opposite his last landing (so a lone boss is crossed on every strike), inside the
+   * arena, facing it. Where the arena edge leaves no room on
    * that side (the clamp would put him on top of it or past it), he lands on the other; if that
    * is where he already stands, he lands a step further out, so every blink visibly moves him.
    */
@@ -1741,7 +1762,7 @@ export class World {
     const p = this.player;
     // Melee reach (capped, so a long-reach build still lands at sword's length) plus its body.
     let offset = lead.radius + Math.max(p.radius + 8, Math.min(p.stats.range, 60) * 0.6);
-    let side = u.side === 0 ? (p.pos.x <= lead.pos.x ? -1 : 1) : -u.side;
+    let side = u.wantSide !== 0 ? u.wantSide : u.side === 0 ? (p.pos.x <= lead.pos.x ? -1 : 1) : -u.side;
     const placeX = (s: number) => clamp(lead.pos.x + s * offset, ARENA.minX, ARENA.maxX);
     let x = placeX(side);
     if ((x - lead.pos.x) * side < lead.radius * 0.5) {
@@ -1762,7 +1783,6 @@ export class World {
     p.targetId = lead.id;
     u.side = side;
     u.leadId = lead.id;
-    u.leadX = lead.pos.x;
   }
 }
 

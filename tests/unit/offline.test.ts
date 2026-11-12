@@ -66,7 +66,8 @@ describe("offline progression", () => {
     p.progress.bossWins = 20;
     const gold0 = p.player.gold;
     const shards0 = p.summons.collection[0]!.shards;
-    const s = applyOfflineProgress(p, 3 * 24 * 3600, 7)!;
+    // Seed 3: its one sampled cycle meets a husk worth a shard (about a third of seeds do not).
+    const s = applyOfflineProgress(p, 3 * 24 * 3600, 3)!;
     expect(s.capped).toBe(true);
     expect(s.seconds).toBe(OFFLINE_CAP_SECONDS);
     expect(s.foughtSeconds).toBeLessThanOrEqual(OFFLINE_CAP_SECONDS * OFFLINE_FIGHT_SHARE + 1);

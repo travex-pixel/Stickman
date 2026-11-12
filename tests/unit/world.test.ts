@@ -110,7 +110,13 @@ describe("abilities and cooldowns", () => {
     expect(w.castAbility("ascendant_fury")).toBe(true);
     expect(w.energy).toBe(0);
     step(w, 2, ev);
-    expect(ev.filter((e) => e.type === "cast" && e.ability === "ascendant_fury").length).toBeGreaterThanOrEqual(7);
+    const strikes = ev.filter((e) => e.type === "cast" && e.ability === "ascendant_fury").length;
+    // Seven strikes, unless the field was cleared first: then it ends after the strike that did it.
+    const end = ev.find((e) => e.type === "fury_end");
+    if (end?.type === "fury_end" && end.early) {
+      expect(strikes).toBe(end.strikes);
+      expect(strikes).toBeGreaterThanOrEqual(1);
+    } else expect(strikes).toBeGreaterThanOrEqual(7);
   });
   it("auto-cast fires abilities without input", () => {
     const p = createDefaultProfile();
