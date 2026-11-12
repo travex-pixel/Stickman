@@ -553,7 +553,8 @@ Elites add a ring in their affix colour. Bosses are in section D.
 - Ascendant Fury: letterbox 20px, slowed time, the camera holding the whole fight. The warrior
   blinks foe to foe, seven cuts 160ms apart, alternating sides: an ink afterimage with a gold rim
   where he was, a thin streak, a crossing cut through the target and a short stop on each; the
-  seventh is wider, with a ring, trauma 0.6 and a longer stop.
+  seventh is wider, with a ring, trauma 0.6 and a longer stop. He then blinks back to where he
+  began and settles; the ring and the running total's pop close it around him.
 - Technique forms follow the same grammar.
 
 **Telegraphs.** Keep true sizes. Draw as a thin rim that fills inward with the remaining time,

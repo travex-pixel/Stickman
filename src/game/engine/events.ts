@@ -14,8 +14,12 @@ export type GameEvent =
    * Ascendant Fury: one blink of the flurry. The warrior left `from` and now stands at `to`, beside
    * the lead target, facing it. `index` runs 1 to 7; `final` marks the seventh cut.
    */
-  /** Ascendant Fury is over; `early` when the field was cleared before all seven strikes. */
-  | { type: "fury_end"; id: number; early: boolean; strikes: number; pos: Vec2 }
+  /**
+   * Ascendant Fury is over (`early` when the field was cleared before all seven strikes, after
+   * `strikes` of them). The warrior blinked back from `from` (his last landing) to `to`, where he
+   * began the cast (or the nearest free spot), and now faces `facing`.
+   */
+  | { type: "fury_end"; id: number; early: boolean; strikes: number; from: Vec2; to: Vec2; facing: 1 | -1 }
   | { type: "fury_step"; id: number; from: Vec2; to: Vec2; targetId: number; targetPos: Vec2; facing: 1 | -1; index: number; final: boolean }
   | { type: "chain"; from: Vec2; to: Vec2; color: number }
   | { type: "dodge"; id: number; from: Vec2; to: Vec2 }

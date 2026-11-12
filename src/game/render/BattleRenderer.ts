@@ -226,15 +226,13 @@ export class BattleRenderer implements ImpactHost {
   /** Seconds of hit-stop still running: fighters and effects hold, the camera does not. */
   private stopLeft = 0;
   /** Ascendant Fury: the arrival pose (seconds into it, combo swing) while the flurry runs. */
-  private readonly fury = { on: false, t: 0, variant: 0 };
+  private readonly fury = { on: false, t: 0, variant: 0, settled: false };
   private readonly furyGhosts = new FuryGhosts(this.entityLayer);
   /** The steady frame of the whole fight during the flurry (grows, never chases a blink). */
   private readonly furyBox: Box = { minX: 0, minY: 0, maxX: 0, maxY: 0 };
   private furyBoxSet = false;
   /** The current strike's lead while the flurry runs (-1 otherwise): only it shows a number. */
   private furyLead = -1;
-  /** The seventh cut landed in this batch: close the running total after its hits. */
-  private furyClose = false;
   /** Backdrop dim during the flurry (0 to 1), eased in and out. */
   private furyDim = 0;
   /** The warrior's facing as last drawn (an afterimage keeps the stance he blinked out of). */
@@ -792,7 +790,9 @@ export class BattleRenderer implements ImpactHost {
         rig.animate("cast", 0.5, 1, e.seed, e.facing, false, 0, 0, this.frameDt, 0);
       } else if (this.fury.on && e.id === player.id && !e.dead) {
         // Ascendant Fury: the committed cut he arrived with, held through its follow-through.
-        rig.animate("attack", this.fury.t, FURY_SWING, e.seed, e.facing, false, 0, 0, dt, this.fury.variant);
+        // After the return blink he stands settled in guard until the cast lets him go.
+        if (this.fury.settled) rig.animate("idle", 0, 0, e.seed, e.facing, false, 0, 0, dt, 0);
+        else rig.animate("attack", this.fury.t, FURY_SWING, e.seed, e.facing, false, 0, 0, dt, this.fury.variant);
       } else if (!held) rig.animate(e.state, e.stateTime, e.stateDuration, e.seed, e.facing, moving, speedFrac, e.deathTime, dt, variant);
       if (e.id === player.id) this.playerFacing = e.facing;
       rig.setHitFlash(e.hitFlash);
@@ -1776,7 +1776,7 @@ export class BattleRenderer implements ImpactHost {
           this.furyStep(e);
           break;
         case "fury_end":
-          this.furyEnd(e.early, e.pos);
+          this.furyEnd(e);
           break;
         case "chain": {
           const ay = this.sy(e.from.y) - CHEST * this.figureScale(e.from.y);
@@ -1969,10 +1969,6 @@ export class BattleRenderer implements ImpactHost {
       }
     }
     for (const v of this.views.values()) v.swungThisBatch = false;
-    if (this.furyClose) {
-      this.furyClose = false;
-      this.numbers.tallyClose();
-    }
   }
 
   private castFx(ability: string, id: number, pos: { x: number; y: number }, facing: 1 | -1, target: { x: number; y: number } | null): void {
@@ -2248,57 +2244,17 @@ export class BattleRenderer implements ImpactHost {
   private furyStep(e: FuryStepEvent): void {
     const world = this.world;
     if (!world) return;
-    const p = world.player;
-    const v = this.views.get(p.id);
     const u = this.unit();
     const reduced = this.reduced;
     const first = !this.fury.on;
-    const fromFs = this.figureScale(e.from.y);
-    const toFs = this.figureScale(e.to.y);
-    const fx = this.sx(e.from.x);
-    const fy = this.sy(e.from.y);
-    const tx = this.sx(e.to.x);
-    const ty = this.sy(e.to.y);
     const travel: 1 | -1 = e.to.x > e.from.x + 0.5 ? 1 : e.to.x < e.from.x - 0.5 ? -1 : e.facing;
 
-    // The afterimage he blinked out of (every other blink with reduced effects).
-    if (!reduced || e.index % 2 === 1) {
-      const state = first ? p.state : "attack";
-      this.furyGhosts.spawn(world.loadout.weaponPath, fx, fy, fromFs, e.from.y, this.playerFacing, p.seed, state, first ? p.stateTime : FURY_SWING, first ? p.stateDuration : FURY_SWING, this.fury.variant, FURY_GHOST_LIFE, !reduced);
-    }
-
-    // The streak: an ink stroke with a thin gold core, chest high, from where he was to where he is.
-    const fc = fy - CHEST * fromFs;
-    const tc = ty - CHEST * toFs;
-    this.lineFx(fx, fc, tx, tc, 0.16, FURY_INK, 5 * u + 2);
-    this.lineFx(fx, fc, tx, tc, 0.13, FURY_GOLD, 1.2 * u + 0.8);
-    if (!reduced) {
-      for (let i = 0; i < 2; i++) {
-        const k = i === 0 ? 0.55 : 1.45;
-        this.lineFx(fx, fy - CHEST * fromFs * k, tx, ty - CHEST * toFs * k, 0.12, 0xf0eadc, 1, 0.012 * (i + 1));
-      }
-    }
-
-    // The warrior is there now: no hold, slide or ribbon may draw him at the old place.
-    if (v) {
-      v.holdLeft = 0;
-      v.holdFresh = false;
-      v.releaseLeft = 0;
-      v.slide = 0;
-      v.squash = 0;
-      v.drawX = tx;
-      v.drawY = ty;
-      if (v.trail) {
-        this.trails.release(v.trail);
-        v.trail = null;
-      }
-      v.rig.snap();
-    }
+    this.furyTravel(e.from, e.to, first ? "first" : "strike", !reduced || e.index % 2 === 1);
     this.fury.on = true;
     this.fury.t = 0;
+    this.fury.settled = false;
     this.furyLead = e.targetId;
     this.impact.whiteOnly = e.targetId;
-    if (e.final) this.furyClose = true;
     // Forehand and rising backhand alternate; the seventh is the overhead.
     this.fury.variant = e.final ? 2 : (e.index - 1) % 2;
     this.impact.kickScale = 0;
@@ -2356,6 +2312,54 @@ export class BattleRenderer implements ImpactHost {
     }
   }
 
+  /**
+   * One blink's travel: the afterimage he left (`ghost`; posed as he stood before the first blink,
+   * else in the follow-through of his last cut), the ink-and-gold streak from there to where he
+   * is now, and his view snapped to the new place so no hold, slide or ribbon draws him between.
+   */
+  private furyTravel(from: { x: number; y: number }, to: { x: number; y: number }, pose: "first" | "strike", ghost: boolean): void {
+    const world = this.world;
+    if (!world) return;
+    const p = world.player;
+    const v = this.views.get(p.id);
+    const u = this.unit();
+    const reduced = this.reduced;
+    const fromFs = this.figureScale(from.y);
+    const toFs = this.figureScale(to.y);
+    const fx = this.sx(from.x);
+    const fy = this.sy(from.y);
+    const tx = this.sx(to.x);
+    const ty = this.sy(to.y);
+    if (ghost) {
+      const first = pose === "first";
+      this.furyGhosts.spawn(world.loadout.weaponPath, fx, fy, fromFs, from.y, this.playerFacing, p.seed, first ? p.state : "attack", first ? p.stateTime : FURY_SWING, first ? p.stateDuration : FURY_SWING, this.fury.variant, FURY_GHOST_LIFE, !reduced);
+    }
+    const fc = fy - CHEST * fromFs;
+    const tc = ty - CHEST * toFs;
+    this.lineFx(fx, fc, tx, tc, 0.16, FURY_INK, 5 * u + 2);
+    this.lineFx(fx, fc, tx, tc, 0.13, FURY_GOLD, 1.2 * u + 0.8);
+    if (!reduced) {
+      for (let i = 0; i < 2; i++) {
+        const k = i === 0 ? 0.55 : 1.45;
+        this.lineFx(fx, fy - CHEST * fromFs * k, tx, ty - CHEST * toFs * k, 0.12, 0xf0eadc, 1, 0.012 * (i + 1));
+      }
+    }
+    if (v) {
+      v.holdLeft = 0;
+      v.holdFresh = false;
+      v.releaseLeft = 0;
+      v.slide = 0;
+      v.squash = 0;
+      v.drawX = tx;
+      v.drawY = ty;
+      if (v.trail) {
+        this.trails.release(v.trail);
+        v.trail = null;
+      }
+      v.rig.snap();
+    }
+  }
+
   /** Advance the arrival pose; the flurry's presentation ends with the warrior's cast. */
   private updateFury(world: World, dt: number, realDt: number): void {
     const p = world.player;
@@ -2382,20 +2386,28 @@ export class BattleRenderer implements ImpactHost {
    * beat where he stands, the bars release and the total closes. After the seventh, its own beat
    * already played.
    */
-  private furyEnd(early: boolean, pos: { x: number; y: number }): void {
+  private furyEnd(e: Extract<GameEvent, { type: "fury_end" }>): void {
+    const world = this.world;
     this.furyLead = -1;
     this.impact.whiteOnly = -1;
-    this.camera.boost = 0;
-    if (!early) return;
-    this.fury.on = false;
     this.impact.kickScale = 1;
+    this.camera.boost = 0;
     this.letterboxT = 0;
+    if (!world) return;
+    // The return blink: from his last cut back to where he began, arriving settled.
+    const moved = Math.abs(e.to.x - e.from.x) + Math.abs(e.to.y - e.from.y) > 1;
+    if (moved) this.furyTravel(e.from, e.to, this.fury.on ? "strike" : "first", true);
+    else this.views.get(world.player.id)?.rig.snap();
+    this.fury.on = true;
+    this.fury.settled = true;
+    this.fury.t = 0;
+    // The closing beat plays around him where he stands now: a ring, a glint, the total's pop.
     this.numbers.tallyClose();
     const u = this.unit();
-    const sx = this.sx(pos.x);
-    const sy = this.sy(pos.y);
+    const sx = this.sx(e.to.x);
+    const sy = this.sy(e.to.y);
     this.ringFx(sx, sy, 8, 120 * u, 0.5, FURY_GOLD, 3, 0.42);
-    this.starFlash(sx, sy - CHEST * this.figureScale(pos.y), 0.8, 0xfff1c9);
+    this.starFlash(sx, sy - CHEST * this.figureScale(e.to.y), 0.8, 0xfff1c9);
     this.camera.punch(0.03);
   }
 
@@ -2405,7 +2417,7 @@ export class BattleRenderer implements ImpactHost {
     this.fury.t = 0;
     this.furyBoxSet = false;
     this.furyLead = -1;
-    this.furyClose = false;
+    this.fury.settled = false;
     this.furyDim = 0;
     this.impact.kickScale = 1;
     this.impact.whiteOnly = -1;

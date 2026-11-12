@@ -79,9 +79,67 @@ describe("Ascendant Fury: the blink-strike flurry", () => {
       expect(gap).toBeGreaterThan(t.radius + w.player.radius * 0.5);
       expect(gap).toBeLessThan(t.radius + w.player.stats.range);
     }
-    // He stays where the last blink left him.
-    const last = steps[steps.length - 1]!;
-    expect(Math.abs(w.player.pos.x - last.to.x)).toBeLessThan(6);
+  });
+
+  it("returns him to where he began when it ends, facing the nearest foe", () => {
+    const w = quietWorld();
+    dummy(w, "husk", 260, 40);
+    dummy(w, "husk", 470, 110);
+    const origin = { ...w.player.pos };
+    let end: Extract<GameEvent, { type: "fury_end" }> | null = null;
+    let lastTo: { x: number; y: number } | null = null;
+    runFury(w, (_world, ev) => {
+      for (const e of ev) {
+        if (e.type === "fury_step") lastTo = e.to;
+        if (e.type === "fury_end") end = e;
+      }
+    });
+    expect(end).not.toBeNull();
+    const fin = end! as Extract<GameEvent, { type: "fury_end" }>;
+    expect(fin.early).toBe(false);
+    expect(fin.from).toEqual(lastTo);
+    expect(fin.to.x).toBeCloseTo(origin.x, 5);
+    expect(fin.to.y).toBeCloseTo(origin.y, 5);
+    // He is still there once the cast lets go (nothing carried him off), facing the nearest foe.
+    expect(Math.abs(w.player.pos.x - origin.x)).toBeLessThan(3);
+    expect(Math.abs(w.player.pos.y - origin.y)).toBeLessThan(3);
+    expect(w.player.facing).toBe(1);
+  });
+
+  it("lands beside a foe that has walked onto his starting place, never on it", () => {
+    const w = quietWorld();
+    const origin = { ...w.player.pos };
+    const squatter = dummy(w, "ashborn_brute", origin.x + 4, origin.y);
+    dummy(w, "husk", 470, 110);
+    let end: Extract<GameEvent, { type: "fury_end" }> | null = null;
+    runFury(w, (_world, ev) => {
+      // Hold the brute on his spot, as if it had walked there during the flurry.
+      squatter.pos.x = origin.x + 4;
+      squatter.pos.y = origin.y;
+      for (const e of ev) if (e.type === "fury_end") end = e;
+    });
+    const fin = end! as Extract<GameEvent, { type: "fury_end" }>;
+    const gap = Math.hypot(fin.to.x - (origin.x + 4), (fin.to.y - origin.y) * 1.6);
+    expect(gap).toBeGreaterThanOrEqual((w.player.radius + squatter.radius) * 0.9);
+    expect(Math.abs(fin.to.x - origin.x) + Math.abs(fin.to.y - origin.y)).toBeLessThan(80);
+    expect(fin.to.x).toBeGreaterThanOrEqual(ARENA.minX);
+    expect(fin.to.x).toBeLessThanOrEqual(ARENA.maxX);
+  });
+
+  it("throws foes away from where he began on the seventh strike", () => {
+    const w = quietWorld();
+    const origin = { ...w.player.pos };
+    const foes = [dummy(w, "husk", origin.x + 120, origin.y - 30), dummy(w, "husk", origin.x + 300, origin.y + 40), dummy(w, "husk", origin.x - 100, origin.y + 20)];
+    const checked = new Set<number>();
+    runFury(w, (world, ev) => {
+      if (!ev.some((e) => e.type === "fury_step" && e.final)) return;
+      for (const f of foes) {
+        expect(Math.sign(f.knockback.x)).toBe(Math.sign(f.pos.x - origin.x));
+        checked.add(f.id);
+      }
+      void world;
+    });
+    expect(checked.size).toBe(foes.length);
   });
 
   it("crosses the field on every blink, taking foes from the ends inward and landing outside them", () => {
@@ -122,6 +180,7 @@ describe("Ascendant Fury: the blink-strike flurry", () => {
 
   it("ends early when the field is cleared, without slowing time over nothing", () => {
     const w = quietWorld();
+    const origin = { ...w.player.pos };
     const weak = [dummy(w, "husk", 300, 60), dummy(w, "husk", 420, 100)];
     for (const e of weak) {
       e.stats.maxHp = 1;
@@ -145,6 +204,10 @@ describe("Ascendant Fury: the blink-strike flurry", () => {
     expect(endedAt * FIXED_DT).toBeLessThan(0.25 + 0.16 + 0.05);
     expect(w.ultimate.active).toBe(false);
     expect(w.player.state).not.toBe("cast");
+    // Back where he began, inside the arena.
+    expect(end && end.type === "fury_end" ? end.to : null).toEqual(origin);
+    expect(w.player.pos.x).toBeGreaterThanOrEqual(ARENA.minX);
+    expect(w.player.pos.x).toBeLessThanOrEqual(ARENA.maxX);
     expect(w.timeScale).toBeGreaterThan(0.9);
   });
 

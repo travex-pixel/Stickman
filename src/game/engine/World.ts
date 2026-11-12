@@ -112,6 +112,9 @@ export interface FuryState {
   side: number;
   /** Where the warrior stood when the ultimate began; shields still judge the blows from there. */
   originX: number;
+  originY: number;
+  /** His facing when the ultimate began (kept on his return when no foe is left). */
+  originFacing: 1 | -1;
 }
 
 /** Ascendant Fury: strikes, the first strike's delay and the gap between strikes (raw seconds). */
@@ -175,7 +178,7 @@ export class World {
   energy = 0;
   cooldowns: Record<AbilityId, number>;
   dodgeCooldown = 0;
-  ultimate: FuryState = { active: false, timer: 0, strikes: 0, nextStrike: 0, leadId: -1, next: 0, lo: 0, hi: 0, wantSide: 0, side: 0, originX: 0 };
+  ultimate: FuryState = { active: false, timer: 0, strikes: 0, nextStrike: 0, leadId: -1, next: 0, lo: 0, hi: 0, wantSide: 0, side: 0, originX: 0, originY: 0, originFacing: 1 };
   pendingLoot: LootDrop[] = [];
   /** Game-mode reward multiplier on enemy gold (the Gold Vault sets this). */
   modeGoldMult = 1;
@@ -1644,7 +1647,7 @@ export class World {
    */
   beginUltimate(): void {
     const p = this.player;
-    this.ultimate = { active: true, timer: 1.6, strikes: 0, nextStrike: FURY_FIRST, leadId: -1, next: 0, lo: 0, hi: 0, wantSide: 0, side: 0, originX: p.pos.x };
+    this.ultimate = { active: true, timer: 1.6, strikes: 0, nextStrike: FURY_FIRST, leadId: -1, next: 0, lo: 0, hi: 0, wantSide: 0, side: 0, originX: p.pos.x, originY: p.pos.y, originFacing: p.facing };
     this.timeScale = 0.3;
     this.stopPlayerDrift();
     this.events.push({ type: "shake", strength: 6 });
@@ -1685,7 +1688,8 @@ export class World {
       for (const e of enemies) {
         // Shields judge the blow from where the warrior began, as before the flurry moved him.
         this.dealDamage(p, e, ABILITIES.ascendant_fury.power * this.abilityPower("ascendant_fury"), "soul", final, 1, undefined, u.originX);
-        if (final) this.applyKnockback(e, p.pos, 260);
+        // The finisher throws them away from where he (and his army) stood, as before the flurry.
+        if (final) this.applyKnockback(e, { x: u.originX, y: u.originY }, 260);
       }
       this.events.push({ type: "cast", id: p.id, ability: "ascendant_fury", pos: { ...p.pos }, facing: p.facing, targetPos: lead ? { ...lead.pos } : enemies[0] ? { ...enemies[0].pos } : null, strike: u.strikes });
       this.events.push({ type: "shake", strength: final ? 14 : 4 });
@@ -1694,16 +1698,57 @@ export class World {
   }
 
   /**
-   * The ultimate is over: the usual short invulnerability. Ended early (the field is clear), the
-   * remaining strikes are not thrown and the warrior is free to act at once.
+   * The ultimate is over: the warrior blinks back to where he began (beside his army), facing the
+   * nearest foe, with the usual short invulnerability. Ended early (the field is clear), the
+   * remaining strikes are not thrown and he is free to act at once.
    */
   private endUltimate(early: boolean): void {
     const u = this.ultimate;
     const p = this.player;
     u.active = false;
+    const from = { ...p.pos };
+    const home = this.furyHome();
+    p.pos.x = home.x;
+    p.pos.y = home.y;
+    p.prevPos.x = home.x;
+    p.prevPos.y = home.y;
+    this.stopPlayerDrift();
+    const near = nearestHostile(p, this.entities.values());
+    p.facing = near ? (near.pos.x >= p.pos.x ? 1 : -1) : u.originFacing;
+    p.targetId = near ? near.id : -1;
     addStatus(p, { kind: "invuln", remaining: 0.3, value: 1, sourceId: p.id });
     if (early && p.state === "cast" && p.pendingAbility === "ascendant_fury") this.setState(p, "idle");
-    this.events.push({ type: "fury_end", id: p.id, early, strikes: u.strikes, pos: { ...p.pos } });
+    this.events.push({ type: "fury_end", id: p.id, early, strikes: u.strikes, from, to: { ...p.pos }, facing: p.facing });
+  }
+
+  /**
+   * Where the return blink lands: the cast origin, clamped to the arena; if a foe's body now
+   * stands on it (closer than the separation the integrator keeps), the nearest free spot,
+   * searched in 10-unit steps along x (away from the nearest foe first), then along depth.
+   */
+  private furyHome(): Vec2 {
+    const u = this.ultimate;
+    const p = this.player;
+    const ox = clamp(u.originX, ARENA.minX, ARENA.maxX);
+    const oy = clamp(u.originY, ARENA.minY, ARENA.maxY);
+    const foes = this.enemies();
+    const free = (x: number, y: number) =>
+      foes.every((e) => Math.hypot(e.pos.x - x, (e.pos.y - y) * 1.6) >= (p.radius + e.radius) * 0.9);
+    if (free(ox, oy)) return { x: ox, y: oy };
+    let nearest: Combatant | null = null;
+    for (const e of foes) if (!nearest || Math.abs(e.pos.x - ox) + Math.abs(e.pos.y - oy) < Math.abs(nearest.pos.x - ox) + Math.abs(nearest.pos.y - oy)) nearest = e;
+    const away = nearest && nearest.pos.x > ox ? -1 : 1;
+    for (let k = 1; k <= 20; k++) {
+      for (const s of [away, -away]) {
+        const x = clamp(ox + s * k * 10, ARENA.minX, ARENA.maxX);
+        if (free(x, oy)) return { x, y: oy };
+      }
+      for (const s of [1, -1]) {
+        const y = clamp(oy + s * k * 6, ARENA.minY, ARENA.maxY);
+        if (free(ox, y)) return { x: ox, y };
+      }
+    }
+    return { x: ox, y: oy };
   }
 
   /**
