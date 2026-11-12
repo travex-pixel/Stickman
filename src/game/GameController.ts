@@ -657,8 +657,8 @@ export class GameController {
             p.progress.abilityCasts += 1;
             if (e.ability !== "shadow_dash") this.completeTutorialIf("ability");
             dirty = true;
+            // Ascendant Fury's light is the renderer's (one flash on the seventh cut, none with reduced effects).
             this.sfx(castSfx(e.ability), { volume: e.ability === "ascendant_fury" ? 1 : 0.8, minInterval: 150 });
-            if (e.ability === "ascendant_fury") this.renderer?.flash(0xffd36b, 0.35);
           }
           break;
         case "dodge":

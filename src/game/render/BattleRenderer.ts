@@ -28,6 +28,7 @@ import { ImpactDirector, elementColor, type ImpactHost, type ImpactState } from 
 import { Trails, type Ribbon } from "./Trail";
 import { FlashState } from "./hitStop";
 import { BossDeath, BossEntrance, PHASE, type BossHost } from "./cinematics/boss";
+import { FuryGhosts } from "./FuryGhosts";
 import { AriseCinematic, FailedBind, REDUCED_FADE, REVEAL_LENGTH, type AriseHost, type RevealStaging } from "./cinematics/arise";
 
 interface EntityView extends ImpactState {
@@ -121,6 +122,13 @@ const FRAME_PAD = 55;
 const BLEED = 24;
 /** A held body eases back to its live position over this long. */
 const HOLD_RELEASE = 0.06;
+/** Ascendant Fury: the arrival swing (real seconds), and how long each afterimage fades. */
+const FURY_SWING = 0.16;
+const FURY_GHOST_LIFE = 0.3;
+const FURY_GOLD = 0xe9c97a;
+const FURY_INK = 0x15141a;
+
+type FuryStepEvent = Extract<GameEvent, { type: "fury_step" }>;
 
 /** The mapping the interface uses to place things over the battlefield. */
 export interface BattleView {
@@ -205,8 +213,14 @@ export class BattleRenderer implements ImpactHost {
   private time = 0;
   /** Seconds of hit-stop still running: fighters and effects hold, the camera does not. */
   private stopLeft = 0;
-  private furyCount = 0;
-  private furyAt = -10;
+  /** Ascendant Fury: the arrival pose (seconds into it, combo swing) while the flurry runs. */
+  private readonly fury = { on: false, t: 0, variant: 0 };
+  private readonly furyGhosts = new FuryGhosts(this.entityLayer);
+  /** The steady frame of the whole fight during the flurry (grows, never chases a blink). */
+  private readonly furyBox: Box = { minX: 0, minY: 0, maxX: 0, maxY: 0 };
+  private furyBoxSet = false;
+  /** The warrior's facing as last drawn (an afterimage keeps the stance he blinked out of). */
+  private playerFacing: 1 | -1 = 1;
   private resizeObs: ResizeObserver | null = null;
   /** The BIND / ARISE sequence while it runs, and failed binds collapsing. */
   private arise: AriseCinematic | null = null;
@@ -328,6 +342,7 @@ export class BattleRenderer implements ImpactHost {
     for (const f of this.fails) f.dispose();
     this.fails.length = 0;
     this.disposeBoss();
+    this.endFury();
     this.particles.destroy();
     this.trails.destroy();
     this.numbers?.destroy();
@@ -373,6 +388,7 @@ export class BattleRenderer implements ImpactHost {
     for (const f of this.fails) f.dispose();
     this.fails.length = 0;
     this.disposeBoss();
+    this.endFury();
     this.cineTint = 0;
     this.bossTint = 0;
     this.syncBackground();
@@ -583,6 +599,7 @@ export class BattleRenderer implements ImpactHost {
     const fxDt = frozen ? 0 : dt;
     const entDt = paused || frozen ? 0 : dt;
     this.background?.update(paused ? dt * 0.3 : dt);
+    this.updateFury(world, entDt);
     if (perf) this.sec(0);
     this.syncEntities(world, alpha, entDt, fxDt, paused ? 0 : dt);
     if (perf) this.sec(1);
@@ -656,6 +673,11 @@ export class BattleRenderer implements ImpactHost {
    * always), padded, biased toward the warrior. The camera follows it with damping.
    */
   private frameCamera(world: World, alpha: number): void {
+    if (world.ultimate.active || this.fury.on) {
+      this.frameFury(world);
+      return;
+    }
+    this.furyBoxSet = false;
     const p = world.player;
     const b = this.box;
     const u = this.unit();
@@ -746,7 +768,11 @@ export class BattleRenderer implements ImpactHost {
       } else if (this.claimHold && e.id === player.id && !e.dead) {
         // BIND: the warrior raises a hand to take the essence (the fight itself is paused).
         rig.animate("cast", 0.5, 1, e.seed, e.facing, false, 0, 0, this.frameDt, 0);
+      } else if (this.fury.on && e.id === player.id && !e.dead) {
+        // Ascendant Fury: the committed cut he arrived with, held through its follow-through.
+        rig.animate("attack", this.fury.t, FURY_SWING, e.seed, e.facing, false, 0, 0, dt, this.fury.variant);
       } else if (!held) rig.animate(e.state, e.stateTime, e.stateDuration, e.seed, e.facing, moving, speedFrac, e.deathTime, dt, variant);
+      if (e.id === player.id) this.playerFacing = e.facing;
       rig.setHitFlash(e.hitFlash);
       // Time-based impact flash: full white, a light tint, or nothing (FlashState decides).
       rig.setWhite(v.flash.step(realDt > 0 ? realDt : this.frameDt));
@@ -1718,6 +1744,9 @@ export class BattleRenderer implements ImpactHost {
           this.castFx(e.ability, e.id, e.pos, e.facing, e.targetPos);
           break;
         }
+        case "fury_step":
+          this.furyStep(e);
+          break;
         case "chain": {
           const ay = this.sy(e.from.y) - CHEST * this.figureScale(e.from.y);
           const bx = this.sx(e.to.x);
@@ -1994,30 +2023,11 @@ export class BattleRenderer implements ImpactHost {
         }
         break;
       }
-      case "ascendant_fury": {
-        // Seven strikes 0.16s apart: letterbox, a punch on the first, gold blades that each stop
-        // briefly, and a final ring with heavy trauma.
-        if (this.time - this.furyAt > 1.2) this.furyCount = 0;
-        this.furyAt = this.time;
-        this.furyCount += 1;
+      case "ascendant_fury":
+        // The flurry's look is driven by its fury_step events (see furyStep); each strike keeps
+        // the bars in.
         this.letterboxT = 1.9;
-        if (this.furyCount === 1) this.camera.punch(0.05);
-        const enemies = this.world?.enemies() ?? [];
-        for (const en of enemies) {
-          const ex = this.sx(en.pos.x);
-          const ey = this.sy(en.pos.y) - CHEST * this.figureScale(en.pos.y);
-          const ang = Math.random() * Math.PI;
-          const len = 90 * u;
-          this.lineFx(ex - Math.cos(ang) * len, ey - Math.sin(ang) * len, ex + Math.cos(ang) * len, ey + Math.sin(ang) * len, 0.25, 0xe9c97a, 5);
-          this.particles.emit({ x: ex, y: ey, count: 8, texture: spark(), color: 0xe9c97a, speed: [100, 300], life: [0.2, 0.4], scale: [0.4, 1.0], endScale: 0.1, alignToVelocity: true });
-        }
-        this.impact.stop(0.033, "fury", 0.1);
-        if (this.furyCount >= 7) {
-          this.ringFx(sx, sy, 10, 220 * u, 0.7, 0xe9c97a, 5, 0.42);
-          this.camera.shake(0.6);
-        } else this.ringFx(sx, sy, 10, 100 * u, 0.5, 0xe9c97a, 3, 0.42);
         break;
-      }
       case "blade_tempest":
         // A whirlwind: full-circle slashes that linger for the four pulses.
         this.slashFx(sx, bodyY, 1, 118 * u, 1.0, 0xf0eadc, 10 * u, Math.PI * 2);
@@ -2176,6 +2186,7 @@ export class BattleRenderer implements ImpactHost {
   private updateCinematic(dt: number): void {
     this.updateBoss(dt);
     this.updateGhost(dt);
+    this.furyGhosts.update(dt);
     const a = this.arise;
     if (a) {
       a.update(dt);
@@ -2186,6 +2197,200 @@ export class BattleRenderer implements ImpactHost {
       f.update(dt);
       if (f.done) this.fails.splice(i, 1);
     }
+  }
+
+  // ---------------------------------------------------------------------
+  // Ascendant Fury: the blink-strike flurry
+  // ---------------------------------------------------------------------
+
+  /**
+   * One blink of the flurry. The warrior is already at `to` in the simulation (moved before the
+   * frame's positions were recorded, so he is never drawn in between): his view snaps there, an
+   * ink afterimage with a gold rim stays at `from`, a thin streak joins the two, and a crossing cut
+   * runs through the lead target along his travel, alternating its angle. Everyone else struck by
+   * the same blow gets a lighter gold cut. The seventh is the heavy beat.
+   */
+  private furyStep(e: FuryStepEvent): void {
+    const world = this.world;
+    if (!world) return;
+    const p = world.player;
+    const v = this.views.get(p.id);
+    const u = this.unit();
+    const reduced = this.reduced;
+    const first = !this.fury.on;
+    const fromFs = this.figureScale(e.from.y);
+    const toFs = this.figureScale(e.to.y);
+    const fx = this.sx(e.from.x);
+    const fy = this.sy(e.from.y);
+    const tx = this.sx(e.to.x);
+    const ty = this.sy(e.to.y);
+    const travel: 1 | -1 = e.to.x > e.from.x + 0.5 ? 1 : e.to.x < e.from.x - 0.5 ? -1 : e.facing;
+
+    // The afterimage he blinked out of (every other blink with reduced effects).
+    if (!reduced || e.index % 2 === 1) {
+      const state = first ? p.state : "attack";
+      this.furyGhosts.spawn(world.loadout.weaponPath, fx, fy, fromFs, e.from.y, this.playerFacing, p.seed, state, first ? p.stateTime : FURY_SWING, first ? p.stateDuration : FURY_SWING, this.fury.variant, FURY_GHOST_LIFE, !reduced);
+    }
+
+    // The streak: an ink stroke with a thin gold core, chest high, from where he was to where he is.
+    const fc = fy - CHEST * fromFs;
+    const tc = ty - CHEST * toFs;
+    this.lineFx(fx, fc, tx, tc, 0.16, FURY_INK, 5 * u + 2);
+    this.lineFx(fx, fc, tx, tc, 0.13, FURY_GOLD, 1.2 * u + 0.8);
+    if (!reduced) {
+      for (let i = 0; i < 2; i++) {
+        const k = i === 0 ? 0.55 : 1.45;
+        this.lineFx(fx, fy - CHEST * fromFs * k, tx, ty - CHEST * toFs * k, 0.12, 0xf0eadc, 1, 0.012 * (i + 1));
+      }
+    }
+
+    // The warrior is there now: no hold, slide or ribbon may draw him at the old place.
+    if (v) {
+      v.holdLeft = 0;
+      v.holdFresh = false;
+      v.releaseLeft = 0;
+      v.slide = 0;
+      v.squash = 0;
+      v.drawX = tx;
+      v.drawY = ty;
+      if (v.trail) {
+        this.trails.release(v.trail);
+        v.trail = null;
+      }
+      v.rig.snap();
+    }
+    this.fury.on = true;
+    this.fury.t = 0;
+    // Forehand and rising backhand alternate; the seventh is the overhead.
+    this.fury.variant = e.final ? 2 : (e.index - 1) % 2;
+    this.impact.kickScale = 0;
+    this.letterboxT = 1.9;
+
+    // The cut through the lead target, along the travel, its angle alternating.
+    const target = world.entities.get(e.targetId);
+    const tv = target ? this.views.get(target.id) : undefined;
+    if (target) this.chest(target, this.pt);
+    else {
+      this.pt.x = this.sx(e.targetPos.x);
+      this.pt.y = this.sy(e.targetPos.y) - CHEST * this.figureScale(e.targetPos.y);
+    }
+    const cx = this.pt.x;
+    const cy = this.pt.y;
+    const height = (tv ? tv.rig.top : CHEST / 0.62) * this.figureScale(e.targetPos.y);
+    const half = height * (e.final ? 0.85 : 0.62);
+    const tilt = (e.index % 2 === 1 ? 0.62 : -0.5) * (e.final ? 1.15 : 1);
+    const dx = Math.cos(tilt) * travel;
+    const dy = Math.sin(tilt);
+    const w = e.final ? 9 : 5;
+    this.lineFx(cx - dx * half, cy - dy * half, cx + dx * half, cy + dy * half, e.final ? 0.34 : 0.22, FURY_GOLD, w * u + 1.5);
+    this.lineFx(cx - dx * half * 0.9, cy - dy * half * 0.9, cx + dx * half * 0.9, cy + dy * half * 0.9, e.final ? 0.2 : 0.12, 0xffffff, (w * 0.35) * u + 0.8);
+    this.slashFx(cx, cy, travel, half * 0.78, e.final ? 0.3 : 0.2, FURY_GOLD, (e.final ? 6 : 3.5) * u + 1, Math.PI * (e.final ? 1.1 : 0.75));
+    const sparkAng = Math.atan2(dy, dx);
+    this.particles.emit({ x: cx, y: cy, count: reduced ? 4 : e.final ? 22 : 10, texture: spark(), color: FURY_GOLD, speed: [120, e.final ? 420 : 300], angle: [sparkAng - 0.5, sparkAng + 0.5], life: [0.15, 0.35], scale: [0.4, 1.0], endScale: 0.1, alignToVelocity: true });
+
+    // Everyone else the blow found: a lighter gold cut so their damage still reads.
+    for (const o of world.entities.values()) {
+      if (o.faction !== "enemy" || o.dead || o.id === e.targetId || hasStatus(o, "submerged")) continue;
+      this.chest(o, this.pt);
+      const ov = this.views.get(o.id);
+      const oh = (ov ? ov.rig.top : CHEST / 0.62) * this.figureScale(o.pos.y) * 0.38;
+      const a = (Math.random() - 0.5) * 1.6;
+      const ax = Math.cos(a) * oh;
+      const ay = Math.sin(a) * oh;
+      this.lineFx(this.pt.x - ax, this.pt.y - ay, this.pt.x + ax, this.pt.y + ay, 0.18, FURY_GOLD, 2 * u + 1);
+      if (!reduced) this.particles.emit({ x: this.pt.x, y: this.pt.y, count: 3, texture: spark(), color: FURY_GOLD, speed: [80, 200], life: [0.12, 0.25], scale: [0.3, 0.7], endScale: 0.1, alignToVelocity: true });
+    }
+
+    if (e.final) {
+      // The heavy beat: a wider cut, a ring from the lead's feet, trauma and a longer stop.
+      const gx = this.sx(e.targetPos.x);
+      const gy = this.sy(e.targetPos.y);
+      this.ringFx(gx, gy, 10, 220 * u, 0.7, FURY_GOLD, 5, 0.42);
+      this.ringFx(gx, gy, 6, 120 * u, 0.45, 0xfff1c9, 3, 0.42, 0.04);
+      this.starFlash(cx, cy, 1.3, 0xfff1c9);
+      this.camera.punch(0.06);
+      this.camera.shake(0.6);
+      this.impact.stop(0.07, "fury-final", 0);
+      if (!reduced) this.flash(0xffd36b, 0.3, 0.3);
+    } else {
+      this.camera.punch(first ? 0.05 : 0.02);
+      this.impact.stop(0.033, "fury", 0.1);
+    }
+  }
+
+  /** Advance the arrival pose; the flurry's presentation ends with the warrior's cast. */
+  private updateFury(world: World, dt: number): void {
+    const p = world.player;
+    const running = world.ultimate.active || (p.state === "cast" && p.pendingAbility === "ascendant_fury" && !p.dead);
+    if (this.fury.on) {
+      if (running) this.fury.t += dt;
+      else {
+        this.fury.on = false;
+        this.impact.kickScale = 1;
+      }
+    }
+    if (!this.fury.on && !world.ultimate.active && this.furyGhosts.count > 0 && !this.furyGhosts.anyLive) this.furyGhosts.release();
+  }
+
+  /** The flurry is cut short (new world, unmount): drop its pose and afterimages. */
+  private endFury(): void {
+    this.fury.on = false;
+    this.fury.t = 0;
+    this.furyBoxSet = false;
+    this.impact.kickScale = 1;
+    this.furyGhosts.release();
+  }
+
+  /**
+   * During the flurry the camera holds the fight (the warrior and the foes around each landing,
+   * the boss always), centred on it rather than leaning toward the warrior, and the frame only
+   * grows, so it settles once and does not chase the blinks.
+   */
+  private frameFury(world: World): void {
+    const p = world.player;
+    const b = this.box;
+    const pv = this.views.get(p.id);
+    const px = this.sx(p.pos.x);
+    const py = this.sy(p.pos.y);
+    b.minX = b.maxX = px;
+    b.maxY = py;
+    b.minY = py - (pv?.rig.top ?? 82) * this.figureScale(p.pos.y);
+    const r2 = FRAME_RADIUS * FRAME_RADIUS;
+    for (const e of world.entities.values()) {
+      if (e.faction !== "enemy" || e.dead || hasStatus(e, "submerged")) continue;
+      // Foes still walking in from beyond the edge, and stragglers far from the cuts, stay out:
+      // the frame holds the fight he is cutting through (the boss always counts).
+      if (e.pos.x < ARENA.minX || e.pos.x > ARENA.maxX) continue;
+      const dx = e.pos.x - p.pos.x;
+      const dy = e.pos.y - p.pos.y;
+      if (e.kind !== "boss" && dx * dx + dy * dy > r2) continue;
+      const ex = this.sx(e.pos.x);
+      const ey = this.sy(e.pos.y);
+      const et = (this.views.get(e.id)?.rig.top ?? 82) * this.figureScale(e.pos.y);
+      if (ex < b.minX) b.minX = ex;
+      if (ex > b.maxX) b.maxX = ex;
+      if (ey > b.maxY) b.maxY = ey;
+      if (ey - et < b.minY) b.minY = ey - et;
+    }
+    const f = this.furyBox;
+    if (!this.furyBoxSet) {
+      f.minX = b.minX;
+      f.maxX = b.maxX;
+      f.minY = b.minY;
+      f.maxY = b.maxY;
+      this.furyBoxSet = true;
+    } else {
+      f.minX = Math.min(f.minX, b.minX);
+      f.maxX = Math.max(f.maxX, b.maxX);
+      f.minY = Math.min(f.minY, b.minY);
+      f.maxY = Math.max(f.maxY, b.maxY);
+    }
+    const pad = FRAME_PAD * this.unit();
+    b.minX = f.minX - pad;
+    b.maxX = f.maxX + pad;
+    b.minY = f.minY - pad * 0.5;
+    b.maxY = f.maxY + pad * 0.35;
+    this.camera.frame(b, (b.minX + b.maxX) / 2, (b.minY + b.maxY) / 2);
   }
 
   /** Perfect dodge: a gold afterimage of the warrior where the blow would have landed. */

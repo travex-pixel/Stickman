@@ -9,6 +9,11 @@ export type GameEvent =
   | { type: "death"; id: number; kind: EntityKind; defId: string; pos: Vec2; killerId: number; elite?: boolean }
   | { type: "attack_swing"; id: number; kind: EntityKind; heavy: boolean; pos: Vec2; facing: 1 | -1 }
   | { type: "cast"; id: number; ability: AbilityId; pos: Vec2; facing: 1 | -1; targetPos: Vec2 | null }
+  /**
+   * Ascendant Fury: one blink of the flurry. The warrior left `from` and now stands at `to`, beside
+   * the lead target, facing it. `index` runs 1 to 7; `final` marks the seventh cut.
+   */
+  | { type: "fury_step"; id: number; from: Vec2; to: Vec2; targetId: number; targetPos: Vec2; facing: 1 | -1; index: number; final: boolean }
   | { type: "chain"; from: Vec2; to: Vec2; color: number }
   | { type: "dodge"; id: number; from: Vec2; to: Vec2 }
   | { type: "projectile_spawn"; id: number; kind: string; pos: Vec2 }

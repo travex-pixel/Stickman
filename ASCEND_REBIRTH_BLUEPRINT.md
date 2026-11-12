@@ -550,8 +550,10 @@ Elites add a ring in their affix colour. Bosses are in section D.
   pulse jade once.
 - Void Nova: the field desaturates for 400ms; a dark disc expands with a bright rim, debris is
   pulled in then thrown out.
-- Ascendant Fury: letterbox 20px, time at 35% for 0.5s, camera punch ×1.05, six gold blades
-  land in sequence 50ms apart, each with its own 20ms stop; final ring and trauma 0.6.
+- Ascendant Fury: letterbox 20px, slowed time, the camera holding the whole fight. The warrior
+  blinks foe to foe, seven cuts 160ms apart, alternating sides: an ink afterimage with a gold rim
+  where he was, a thin streak, a crossing cut through the target and a short stop on each; the
+  seventh is wider, with a ring, trauma 0.6 and a longer stop.
 - Technique forms follow the same grammar.
 
 **Telegraphs.** Keep true sizes. Draw as a thin rim that fills inward with the remaining time,

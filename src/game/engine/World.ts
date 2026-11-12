@@ -17,7 +17,7 @@ import { TWISTS, twistForStage, type TwistId } from "../data/depths";
 import { TYRANT_BREAK_FURY } from "../progression/tyrant";
 import { computeDamage } from "../combat/damage";
 import { addStatus, hasStatus, speedMultiplier, statusValue, tickStatuses } from "../combat/statuses";
-import { nearestHostile, hostilesWithin, factionWithin } from "../combat/targeting";
+import { nearestHostile, hostilesWithin, factionWithin, isHidden, mostDangerous } from "../combat/targeting";
 import { updateEnemyAi } from "../enemies/ai";
 import { updateBossAi } from "../bosses/hollowWarden";
 import { rankCooldownMult, rankPowerMult } from "../progression/abilityRanks";
@@ -90,6 +90,31 @@ interface LootDrop {
   item: EquipmentItem;
 }
 
+/** Ascendant Fury in progress: its clock, and where the blink-strike flurry has taken the warrior. */
+export interface FuryState {
+  active: boolean;
+  /** Raw seconds left in the ultimate. */
+  timer: number;
+  /** Strikes landed so far (0 to 7). */
+  strikes: number;
+  /** Raw seconds to the next strike. */
+  nextStrike: number;
+  /** The enemy the last blink landed beside (-1 before the first), and its x then. */
+  leadId: number;
+  leadX: number;
+  /** Direction the flurry walks the field (by x): 1, -1, or 0 until the second strike sets it. */
+  sweep: number;
+  /** Side of its lead target the warrior last landed on: -1 left, 1 right (0 before the first). */
+  side: number;
+  /** Where the warrior stood when the ultimate began; shields still judge the blows from there. */
+  originX: number;
+}
+
+/** Ascendant Fury: strikes, the first strike's delay and the gap between strikes (raw seconds). */
+export const FURY_STRIKES = 7;
+export const FURY_FIRST = 0.25;
+export const FURY_GAP = 0.16;
+
 /** Rift Depth twists (see data/depths.ts). */
 export const BLOODBOUND_LIFESTEAL = 0.15;
 export const VOLATILE_RADIUS = 46;
@@ -146,7 +171,7 @@ export class World {
   energy = 0;
   cooldowns: Record<AbilityId, number>;
   dodgeCooldown = 0;
-  ultimate: { active: boolean; timer: number; strikes: number; nextStrike: number } = { active: false, timer: 0, strikes: 0, nextStrike: 0 };
+  ultimate: FuryState = { active: false, timer: 0, strikes: 0, nextStrike: 0, leadId: -1, leadX: 0, sweep: 0, side: 0, originX: 0 };
   pendingLoot: LootDrop[] = [];
   /** Game-mode reward multiplier on enemy gold (the Gold Vault sets this). */
   modeGoldMult = 1;
@@ -1187,7 +1212,7 @@ export class World {
   }
 
   /** Full damage pipeline with crits, marks, shields, invulnerability and death. Returns null if no damage was dealt. */
-  dealDamage(source: Combatant, target: Combatant, power: number, element: Element, heavy: boolean, bonusMult = 1, forceCrit?: boolean): { amount: number; crit: boolean } | null {
+  dealDamage(source: Combatant, target: Combatant, power: number, element: Element, heavy: boolean, bonusMult = 1, forceCrit?: boolean, blockFromX?: number): { amount: number; crit: boolean } | null {
     if (target.dead || source.dead) return null;
     // Invariant: nothing ever damages its own side.
     if (source.faction === target.faction) return null;
@@ -1199,7 +1224,7 @@ export class World {
     // Court: the bound Crownless King lends the army 3% attack per other deployed shadow.
     if (source.faction === "ally" && this.courtBonus > 0) bonus *= 1 + this.courtBonus;
     if (source.faction === "ally") bonus *= 1 + 0.04 * this.shadeCount();
-    const block = this.blockFactor(target, source.pos.x, heavy);
+    const block = this.blockFactor(target, blockFromX ?? source.pos.x, heavy);
     bonus *= block;
     const fx = this.loadout.mods.gearEffects;
     if (source.kind === "player" && fx.has("executioner") && target.hp / target.stats.maxHp < 0.3) bonus *= 1.4;
@@ -1436,6 +1461,8 @@ export class World {
   }
 
   applyKnockback(target: Combatant, from: Vec2, strength: number): void {
+    // Mid-flurry the warrior goes only where his blinks take him.
+    if (target === this.player && this.ultimate.active) return;
     if (target.kind === "boss") strength *= 0.25;
     if (target.enemy?.elite && ELITES[target.enemy.elite].knockbackImmune) return;
     if (target.enemy?.archetype === "shieldbearer" && !hasStatus(target, "opening")) strength *= 0.3;
@@ -1489,6 +1516,8 @@ export class World {
     }
     // Separation can nudge bodies past the edge; the arena bounds always win.
     for (const e of list) e.pos.y = clamp(e.pos.y, ARENA.minY, ARENA.maxY);
+    // Mid-flurry a crowd at the wall must not shove the warrior out through it.
+    if (this.ultimate.active) this.player.pos.x = clamp(this.player.pos.x, ARENA.minX, ARENA.maxX);
   }
 
   private updateProjectiles(dt: number): void {
@@ -1601,35 +1630,139 @@ export class World {
   }
 
   // ---------------------------------------------------------------------
-  // Ultimate: time dilation and seven blades
+  // Ultimate: time dilation and a blink-strike flurry
   // ---------------------------------------------------------------------
 
+  /**
+   * Ascendant Fury: time slows and the warrior blinks from foe to foe, cutting on each arrival.
+   * Every strike still hits every enemy on the field (the blink only chooses where he lands), so
+   * its damage is that of seven blows to all, whatever the positions.
+   */
   beginUltimate(): void {
-    this.ultimate = { active: true, timer: 1.6, strikes: 0, nextStrike: 0.25 };
+    const p = this.player;
+    this.ultimate = { active: true, timer: 1.6, strikes: 0, nextStrike: FURY_FIRST, leadId: -1, leadX: p.pos.x, sweep: 0, side: 0, originX: p.pos.x };
     this.timeScale = 0.3;
+    this.stopPlayerDrift();
     this.events.push({ type: "shake", strength: 6 });
+  }
+
+  private stopPlayerDrift(): void {
+    const p = this.player;
+    p.vel.x = 0;
+    p.vel.y = 0;
+    p.knockback.x = 0;
+    p.knockback.y = 0;
   }
 
   private updateUltimate(rawDt: number): void {
     const u = this.ultimate;
     if (!u.active) return;
+    // The blinks alone move the warrior: nothing carries him between them.
+    this.stopPlayerDrift();
     u.timer -= rawDt;
     u.nextStrike -= rawDt;
-    if (u.nextStrike <= 0 && u.strikes < 7) {
+    if (u.nextStrike <= 0 && u.strikes < FURY_STRIKES) {
       u.strikes += 1;
-      u.nextStrike = 0.16;
+      u.nextStrike = FURY_GAP;
+      const final = u.strikes === FURY_STRIKES;
+      const p = this.player;
+      const lead = this.furyLead(final);
+      if (lead) {
+        const from = { ...p.pos };
+        this.furyBlink(lead);
+        this.events.push({ type: "fury_step", id: p.id, from, to: { ...p.pos }, targetId: lead.id, targetPos: { ...lead.pos }, facing: p.facing, index: u.strikes, final });
+      }
       const enemies = this.enemies();
       for (const e of enemies) {
-        this.dealDamage(this.player, e, ABILITIES.ascendant_fury.power * this.abilityPower("ascendant_fury"), "soul", u.strikes === 7);
-        if (u.strikes === 7) this.applyKnockback(e, this.player.pos, 260);
+        // Shields judge the blow from where the warrior began, as before the flurry moved him.
+        this.dealDamage(p, e, ABILITIES.ascendant_fury.power * this.abilityPower("ascendant_fury"), "soul", final, 1, undefined, u.originX);
+        if (final) this.applyKnockback(e, p.pos, 260);
       }
-      this.events.push({ type: "cast", id: this.player.id, ability: "ascendant_fury", pos: { ...this.player.pos }, facing: this.player.facing, targetPos: enemies[0] ? { ...enemies[0].pos } : null });
-      this.events.push({ type: "shake", strength: u.strikes === 7 ? 14 : 4 });
+      this.events.push({ type: "cast", id: p.id, ability: "ascendant_fury", pos: { ...p.pos }, facing: p.facing, targetPos: lead ? { ...lead.pos } : enemies[0] ? { ...enemies[0].pos } : null });
+      this.events.push({ type: "shake", strength: final ? 14 : 4 });
     }
     if (u.timer <= 0) {
       u.active = false;
       addStatus(this.player, { kind: "invuln", remaining: 0.3, value: 1, sourceId: this.player.id });
     }
+  }
+
+  /**
+   * The enemy the next blink lands beside. The first goes to the focus target, else the boss,
+   * else the nearest foe; the seventh to the boss, else the most dangerous foe. Those between walk
+   * the living foes in order across the field, turning at either end, so consecutive blinks cross
+   * it; a lone foe is struck again and again.
+   */
+  private furyLead(final: boolean): Combatant | null {
+    const u = this.ultimate;
+    const p = this.player;
+    const living = this.enemies().filter((e) => !isHidden(e));
+    if (living.length === 0) return null;
+    const boss = this.boss;
+    const bossOk = boss && !isHidden(boss) ? boss : null;
+    if (final) return bossOk ?? mostDangerous(p, living);
+    if (u.leadId < 0) return this.focusTarget() ?? bossOk ?? nearestHostile(p, living);
+    if (living.length === 1) return living[0]!;
+    living.sort((a, b) => a.pos.x - b.pos.x || a.id - b.id);
+    const n = living.length;
+    const i = living.findIndex((e) => e.id === u.leadId);
+    if (u.sweep === 0) {
+      // Head for the far side of the field first.
+      const at = i >= 0 ? i : living.findIndex((e) => e.pos.x >= u.leadX);
+      u.sweep = at >= 0 && at < (n - 1) / 2 ? 1 : -1;
+    }
+    if (i < 0) {
+      // The last lead fell: step on from where it stood (between its neighbours by x).
+      const found = living.findIndex((e) => e.pos.x >= u.leadX);
+      const above = found < 0 ? n : found;
+      let next = u.sweep > 0 ? above : above - 1;
+      if (next < 0 || next >= n) {
+        u.sweep = -u.sweep;
+        next = u.sweep > 0 ? above : above - 1;
+      }
+      return living[clamp(next, 0, n - 1)]!;
+    }
+    let next = i + u.sweep;
+    if (next < 0 || next >= n) {
+      u.sweep = -u.sweep;
+      next = i + u.sweep;
+    }
+    return living[clamp(next, 0, n - 1)]!;
+  }
+
+  /**
+   * Teleport the warrior beside `lead`, on the side opposite his last landing (so a lone boss is
+   * crossed on every strike), inside the arena, facing it. Where the arena edge leaves no room on
+   * that side (the clamp would put him on top of it or past it), he lands on the other; if that
+   * is where he already stands, he lands a step further out, so every blink visibly moves him.
+   */
+  private furyBlink(lead: Combatant): void {
+    const u = this.ultimate;
+    const p = this.player;
+    // Melee reach (capped, so a long-reach build still lands at sword's length) plus its body.
+    let offset = lead.radius + Math.max(p.radius + 8, Math.min(p.stats.range, 60) * 0.6);
+    let side = u.side === 0 ? (p.pos.x <= lead.pos.x ? -1 : 1) : -u.side;
+    const placeX = (s: number) => clamp(lead.pos.x + s * offset, ARENA.minX, ARENA.maxX);
+    let x = placeX(side);
+    if ((x - lead.pos.x) * side < lead.radius * 0.5) {
+      side = -side;
+      x = placeX(side);
+    }
+    const y = clamp(lead.pos.y, ARENA.minY, ARENA.maxY);
+    if (u.side !== 0 && Math.abs(x - p.pos.x) < 10 && Math.abs(y - p.pos.y) < 10) {
+      // The wall sent him back where he already stands: land a step further out instead.
+      offset *= 1.8;
+      x = placeX(side);
+    }
+    p.pos.x = x;
+    p.pos.y = y;
+    p.prevPos.x = p.pos.x;
+    p.prevPos.y = p.pos.y;
+    p.facing = side < 0 ? 1 : -1;
+    p.targetId = lead.id;
+    u.side = side;
+    u.leadId = lead.id;
+    u.leadX = lead.pos.x;
   }
 }
 

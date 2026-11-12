@@ -948,6 +948,16 @@ export class Rig {
     this.toParent(x, y, out);
   }
 
+  /**
+   * The next `animate` jumps straight to its pose instead of blending, and lets go of a planted
+   * foot: for a body that was just teleported (a blink of the Ascendant Fury).
+   */
+  snap(): void {
+    this.fresh = true;
+    this.planted = false;
+    this.plantW = 0;
+  }
+
   /** Prepare the white impact copies of this kind's parts (cached per kind; cheap after the first). */
   prewarmWhite(): void {
     for (const c of this.parts) whiteOf(c);

@@ -69,6 +69,11 @@ export class ImpactDirector {
   private readonly q = { x: 0, y: 0 };
   /** Real time (seconds), advanced by the renderer. */
   now = 0;
+  /**
+   * Scales the camera kick of the warrior's blows. The Ascendant Fury sets it to 0: its blinks
+   * strike from alternating sides, and the camera holds the whole fight instead.
+   */
+  kickScale = 1;
   private readonly emitOpts: EmitOptions = { x: 0, y: 0, count: 0, texture: undefined as unknown as Texture, color: 0, speed: [0, 0], angle: [0, 0], life: [0, 0], scale: [0, 0], endScale: 0, alpha: 1, spin: 0, additive: true, gravity: 0, drag: 0.9 };
 
   constructor(private readonly host: ImpactHost) {}
@@ -152,7 +157,7 @@ export class ImpactDirector {
         // Ability impacts hold the targets, not the caster; a heavy basic holds both.
         this.impact("heavy", ability ? -1 : e.sourceId, e.targetId, "w-heavy", 0.1);
         if (this.cool("kick-heavy", 0.08)) {
-          h.camera.kick(dir * 9, 2);
+          h.camera.kick(dir * 9 * this.kickScale, 2 * this.kickScale);
           h.camera.shake(0.25);
         }
         this.react(tv, target, dir, 0.08, 14, 2);
@@ -160,7 +165,7 @@ export class ImpactDirector {
         this.sparks(x, y, ang, e.crit ? 10 : 6, e.crit ? 0xe9c97a : elementColor(e.element), 1);
       } else if (e.crit) {
         this.impact("crit", e.sourceId, e.targetId, "w-crit", 0.09);
-        h.camera.kick(dir * 7, 1.5);
+        h.camera.kick(dir * 7 * this.kickScale, 1.5 * this.kickScale);
         h.camera.punch(0.025);
         this.react(tv, target, dir, 0.1, 10, 2);
         this.sparks(x, y, ang, 12, 0xe9c97a, 1.25);
@@ -168,7 +173,7 @@ export class ImpactDirector {
         h.shockRing(x, y, 46, 0xe9c97a);
       } else {
         this.impact("normal", e.sourceId, e.targetId, "w-hit", 0);
-        h.camera.kick(dir * 3, 0.8);
+        h.camera.kick(dir * 3 * this.kickScale, 0.8 * this.kickScale);
         this.react(tv, target, dir, 0.06, 4, 1);
         this.sparks(x, y, ang, 5, elementColor(e.element), 0.9);
         this.flashDisc(x, y, 0.9, elementColor(e.element));
@@ -210,7 +215,7 @@ export class ImpactDirector {
     if (e.killerId === h.playerId() && e.kind !== "summon") {
       // The victim holds a beat longer before its death plays; elites also stop the world.
       this.impact(e.elite ? "eliteKill" : "kill", -1, e.id, "kill", 0.06);
-      if (this.cool("kick-kill", 0.06)) h.camera.kick(v.lastHitDir * 5, 1);
+      if (this.cool("kick-kill", 0.06)) h.camera.kick(v.lastHitDir * 5 * this.kickScale, this.kickScale);
     }
     if (variant === DEATH_DISSOLVE && target) {
       h.chest(target, this.p);
