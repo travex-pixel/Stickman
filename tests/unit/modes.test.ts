@@ -106,18 +106,27 @@ describe("Relic Crypt", () => {
     const w = new World({ stage: 5, loadout: buildLoadout(p), seed: 4, mode: "crypt", cryptSlot: "boots" });
     const items: { slot: string; rarity: string }[] = [];
     let elites = 0;
+    const affixed: string[] = [];
     let keeper = false;
     for (let i = 0; i < 60 * 240 && w.phase !== "victory" && w.phase !== "defeat"; i++) {
       w.update(FIXED_DT);
-      for (const e of w.drainEvents()) if (e.type === "elite_spawn") elites++;
+      for (const e of w.drainEvents()) {
+        if (e.type !== "elite_spawn") continue;
+        elites++;
+        affixed.push(`${e.defId}:${e.affix}`);
+      }
       for (const e of w.entities.values()) if (e.enemy?.keeper) keeper = true;
       for (const l of w.takeLoot()) items.push(l.item);
     }
     expect(w.phase).toBe("victory");
     expect(keeper).toBe(true);
-    // Six elites by design, plus any the ordinary elite roll adds (how many depends on the fight's
-    // random stream): every one of them drops, and nothing else does.
+    // The six designed elites always come (each its own species and affix); the other ten spawns of
+    // the three waves may each roll an ordinary elite, so 6 to 16 in all, whatever the random
+    // stream. Every elite drops, and nothing else does.
+    const designed = ["husk:hasted", "veilshot:armored", "bastion_husk:vampiric", "ashborn_brute:brutal", "veilshot:hasted", "ashborn_brute:armored"];
+    for (const d of designed) expect(affixed).toContain(d);
     expect(elites).toBeGreaterThanOrEqual(6);
+    expect(elites).toBeLessThanOrEqual(16);
     expect(items).toHaveLength(elites);
     expect(items.every((i) => i.slot === "boots")).toBe(true);
     expect(items.every((i) => i.rarity !== "common")).toBe(true);
