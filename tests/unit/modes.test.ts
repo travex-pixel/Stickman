@@ -115,8 +115,10 @@ describe("Relic Crypt", () => {
     }
     expect(w.phase).toBe("victory");
     expect(keeper).toBe(true);
-    expect(elites).toBe(6);
-    expect(items).toHaveLength(6);
+    // Six elites by design, plus any the ordinary elite roll adds (how many depends on the fight's
+    // random stream): every one of them drops, and nothing else does.
+    expect(elites).toBeGreaterThanOrEqual(6);
+    expect(items).toHaveLength(elites);
     expect(items.every((i) => i.slot === "boots")).toBe(true);
     expect(items.every((i) => i.rarity !== "common")).toBe(true);
   });

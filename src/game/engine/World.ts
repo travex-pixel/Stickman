@@ -957,7 +957,9 @@ export class World {
       if (p.stateTime >= p.stateDuration) this.setState(p, "idle");
       return;
     }
-    if (this.loadout.autoCast) this.autoCast(dt);
+    // A cast AUTO starts this tick stands: its cast (or dodge) state must not be overwritten by the
+    // movement and attack logic below, or the ability never resolves and the lock never holds.
+    if (this.loadout.autoCast && this.autoCast(dt)) return;
 
     const target = this.acquireTarget(p);
     p.targetId = target ? target.id : -1;
@@ -984,12 +986,13 @@ export class World {
     else if (p.state !== "idle") this.setState(p, "idle");
   }
 
-  private autoCast(dt: number): void {
+  /** AUTO's choices, four times a second. Returns whether it cast or dodged this tick. */
+  private autoCast(dt: number): boolean {
     this.autoCastTimer -= dt;
-    if (this.autoCastTimer > 0) return;
+    if (this.autoCastTimer > 0) return false;
     this.autoCastTimer = 0.25;
     const enemies = this.enemies();
-    if (enemies.length === 0) return;
+    if (enemies.length === 0) return false;
     const near = hostilesWithin(this.player, enemies, 170).length;
     const p = this.player;
     // AUTO dodges at the last moment, and only about half the time: reading the fight is the player's edge.
@@ -998,24 +1001,24 @@ export class World {
       this.autoDodgeRolled.add(threat.id);
       if (this.autoDodgeRolled.size > 64) this.autoDodgeRolled.clear();
       if (p.hp / p.stats.maxHp < 0.95 && this.rng.chance(0.5)) {
-        this.dodge(false);
-        return;
+        return this.dodge(false);
       }
     }
     if (this.loadout.ultimateUnlocked && this.energy >= ULTIMATE_ENERGY_COST && (enemies.length >= 3 || this.boss)) {
-      if (this.castAbility(ULTIMATE_ID)) return;
+      if (this.castAbility(ULTIMATE_ID)) return true;
     }
     const soul = this.slot("soul_burst");
     const arc = this.slot("arc_slash");
     const bolt = this.slot("thunder_strike");
     const ready = (id: AbilityId) => this.cooldowns[id] <= 0;
-    if (soul === "soul_burst" && p.hp / p.stats.maxHp < 0.55 && ready(soul) && near > 0 && this.castAbility(soul)) return;
-    if (soul === "blood_pact" && near >= 1 && ready(soul) && (p.hp / p.stats.maxHp < 0.7 || near >= 3) && this.castAbility(soul)) return;
-    if (near >= 3 && ready("void_nova") && this.castAbility("void_nova")) return;
-    if (near >= 2 && ready(arc) && this.castAbility(arc)) return;
-    if (bolt === "chain_hook" && ready(bolt) && enemies.some((e) => e.enemy && (e.enemy.archetype === "ranger" || e.enemy.archetype === "arcanist" || e.enemy.archetype === "summoner")) && this.castAbility(bolt)) return;
-    if (near >= 1 && ready(bolt) && this.castAbility(bolt)) return;
-    if (near >= 1 && ready(arc) && enemies.length >= 1 && this.castAbility(arc)) return;
+    if (soul === "soul_burst" && p.hp / p.stats.maxHp < 0.55 && ready(soul) && near > 0 && this.castAbility(soul)) return true;
+    if (soul === "blood_pact" && near >= 1 && ready(soul) && (p.hp / p.stats.maxHp < 0.7 || near >= 3) && this.castAbility(soul)) return true;
+    if (near >= 3 && ready("void_nova") && this.castAbility("void_nova")) return true;
+    if (near >= 2 && ready(arc) && this.castAbility(arc)) return true;
+    if (bolt === "chain_hook" && ready(bolt) && enemies.some((e) => e.enemy && (e.enemy.archetype === "ranger" || e.enemy.archetype === "arcanist" || e.enemy.archetype === "summoner")) && this.castAbility(bolt)) return true;
+    if (near >= 1 && ready(bolt) && this.castAbility(bolt)) return true;
+    if (near >= 1 && ready(arc) && enemies.length >= 1 && this.castAbility(arc)) return true;
+    return false;
   }
 
   // ---------------------------------------------------------------------
