@@ -27,13 +27,13 @@ import { forecastBoss } from "@/game/progression/readiness";
 import { learnTechniques, slotForm } from "@/game/progression/techniques";
 import { abilityRank, abilityRankCost, canRankAbility, rankAbility } from "@/game/progression/abilityRanks";
 import { ABILITIES, ABILITY_SLOTS, ULTIMATE_ID } from "@/game/data/abilities";
+import { ascend, buyNode, canAscend, nextNodeCost, spendableAether, type TreeNodeId } from "@/game/progression/ascension";
 
 /**
  * Arts ranks: a sensible player ranks the arts in their loadout (and the ultimate) once a rank
  * costs no more than this share of the gold in hand, cheapest first; the rest goes to stats.
  */
 export const RANK_GOLD_SHARE = 0.25;
-import { ascend, buyNode, canAscend, nextNodeCost, spendableAether, type TreeNodeId } from "@/game/progression/ascension";
 
 const SKILL_ORDER = ["c1", "p1", "s1", "c2", "p2", "s2", "c3", "p3", "c4", "s3", "p4", "s4", "c5", "p5", "s5"];
 
