@@ -123,6 +123,22 @@ export const FURY_FIRST = 0.25;
 export const FURY_GAP = 0.16;
 /** The depth step a blink takes instead when the arena wall would land him where he stands. */
 export const FURY_DEPTH_STEP = 24;
+/**
+ * The first boss gate (stages 2 to FIRST_GATE_STAGE) carries this much more health. With AUTO's
+ * arts landing and its dodges dashing, a player who has only just reached it would otherwise walk
+ * through it (99% of forecast fights won, against a third before); 1.65 brings it back to about a
+ * third on the economy simulator's saved profiles.
+ */
+export const FIRST_GATE_STAGE = 3;
+export const FIRST_GATE_HP = 1.65;
+/**
+ * Each blink also lands a real sword cut on its lead: a basic blow (his attack, crits, on-hit
+ * effects, the energy a basic hit gives), at this strength relative to an ordinary one. It gives
+ * back the swings the cast lock now takes from him during the ultimate: 0.25 brings late boss
+ * fights back to their earlier odds (a full blow, 1.0, wins far more of them: each cut also feeds
+ * the next ultimate's energy).
+ */
+export const FURY_CUT_POWER = 0.25;
 /** Economy-simulator knob (A/B): 0 keeps the warrior in place through Ascendant Fury (no blinks in the simulation). */
 export const FURY_BLINKS = Number(process.env.ASCEND_FURY_BLINKS ?? 1) !== 0;
 /** Economy-simulator knob (A/B): 0 always throws all seven strikes, even once the field is clear. */
@@ -878,14 +894,18 @@ export class World {
     boss.kind = "boss";
     if (this.stage === 1 && this.mode !== "trial") {
       // The first Warden is a lesson, not a wall: always the same, shown honestly in its forecast.
-      boss.stats.maxHp = Math.round(boss.stats.maxHp * 0.7);
-      boss.hp = boss.stats.maxHp;
+      // Its blows are softened; its health is its full stage strength (it was 70% while AUTO's
+      // arts never landed, and a fresh AUTO player then beat it as a matter of course).
       boss.stats.attack = Math.round(boss.stats.attack * 0.8 * 10) / 10;
     }
     if (this.mode === "trial") {
       // The trial Warden is empowered: brutal, and it remembers its second phase sooner.
       makeElite(boss, "brutal");
       boss.stats.maxHp = Math.round(boss.stats.maxHp * 1.15);
+      boss.hp = boss.stats.maxHp;
+    }
+    if (this.stage > 1 && this.stage <= FIRST_GATE_STAGE && this.mode !== "trial") {
+      boss.stats.maxHp = Math.round(boss.stats.maxHp * FIRST_GATE_HP);
       boss.hp = boss.stats.maxHp;
     }
     if (this.twist === "frenzy") applyTwist(boss, "frenzy");
@@ -1148,12 +1168,13 @@ export class World {
     else this.dealDamage(e, target, 1, "physical", e.enemy?.archetype === "brute" || e.kind === "boss");
   }
 
-  private playerBasicHit(target: Combatant): void {
+  /** A landed basic blow (or the Ascendant Fury's cut, at `power` times a basic blow): damage and every on-hit effect. */
+  private playerBasicHit(target: Combatant, power = 1): void {
     const p = this.player;
     const fx = this.loadout.mods.gearEffects;
     const forceCrit = this.perfectCrit;
     this.perfectCrit = false;
-    const res = this.dealDamage(p, target, forceCrit ? 1.5 : 1, "physical", forceCrit, 1, forceCrit);
+    const res = this.dealDamage(p, target, (forceCrit ? 1.5 : 1) * power, "physical", forceCrit, 1, forceCrit);
     if (!res) return;
     this.gainEnergy(6);
     this.basicHits += 1;
@@ -1692,6 +1713,7 @@ export class World {
         const from = { ...p.pos };
         if (FURY_BLINKS) this.furyBlink(lead);
         this.events.push({ type: "fury_step", id: p.id, from, to: { ...p.pos }, targetId: lead.id, targetPos: { ...lead.pos }, facing: p.facing, index: u.strikes, final });
+        this.furyCut(lead, final);
       }
       const enemies = this.enemies();
       for (const e of enemies) {
@@ -1758,6 +1780,17 @@ export class World {
       }
     }
     return { x: ox, y: oy };
+  }
+
+  /** Strength of the Fury's sword cut for this world (FURY_CUT_POWER; 0 leaves it out, for tests). */
+  furyCutPower = FURY_CUT_POWER;
+
+  /** The sword cut on arrival: a swing and a basic blow on the lead, judged from where he now stands. */
+  private furyCut(lead: Combatant, heavy: boolean): void {
+    if (this.furyCutPower <= 0 || lead.dead) return;
+    const p = this.player;
+    this.events.push({ type: "attack_swing", id: p.id, kind: "player", heavy, pos: { ...p.pos }, facing: p.facing });
+    this.playerBasicHit(lead, this.furyCutPower);
   }
 
   /**

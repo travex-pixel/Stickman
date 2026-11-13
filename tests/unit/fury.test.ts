@@ -3,6 +3,8 @@ import { World, FIXED_DT, ARENA, FURY_STRIKES } from "@/game/engine/World";
 import { buildLoadout } from "@/game/progression/loadout";
 import { createDefaultProfile } from "@/game/progression/profile";
 import { startsCast, type GameEvent } from "@/game/engine/events";
+import { FURY_CUT_POWER } from "@/game/engine/World";
+import { hasStatus } from "@/game/combat/statuses";
 import type { Combatant } from "@/game/entities/types";
 import { addStatus } from "@/game/combat/statuses";
 import { computeDamage } from "@/game/combat/damage";
@@ -312,8 +314,10 @@ describe("Ascendant Fury: the blink-strike flurry", () => {
     expect(a).toEqual(b);
   });
 
-  it("deals exactly the damage of seven blows to every foe, as before the flurry", () => {
+  it("deals exactly the damage of seven blows to every foe, as before the flurry (the cut aside)", () => {
     const w = quietWorld(41);
+    // The sword cut on each lead is a separate blow (tested below); leave it out here.
+    w.furyCutPower = 0;
     const foes = [dummy(w, "husk", 240, 50), dummy(w, "ashborn_brute", 380, 100), dummy(w, "veilshot", 520, 30)];
     // A shieldbearer facing the warrior: its guard still judges the blows from where he began.
     foes.push(dummy(w, "bastion_husk", 300, 120));
@@ -332,5 +336,49 @@ describe("Ascendant Fury: the blink-strike flurry", () => {
     }
     runFury(w);
     for (const f of foes) expect(f.stats.maxHp - f.hp).toBe(expected.get(f.id));
+  });
+
+  it("lands a sword cut on each lead, and only on the lead, as a basic blow", () => {
+    const w = quietWorld(52);
+    const foes = [dummy(w, "husk", 260, 50), dummy(w, "husk", 400, 100), dummy(w, "husk", 520, 70)];
+    expect(w.furyCutPower).toBe(FURY_CUT_POWER);
+    const leads: number[] = [];
+    const cuts: { targetId: number; amount: number }[] = [];
+    let soulOnLead = 0;
+    let swings = 0;
+    runFury(w, (world, ev) => {
+      let lead = -1;
+      for (const e of ev) {
+        if (e.type === "fury_step") {
+          lead = e.targetId;
+          leads.push(lead);
+        }
+        if (e.type === "attack_swing" && e.id === world.player.id) swings++;
+        if (e.type === "hit" && e.sourceId === world.player.id && e.element === "physical") cuts.push({ targetId: e.targetId, amount: e.amount });
+        if (e.type === "hit" && e.sourceId === world.player.id && e.element === "soul" && e.targetId === lead) soulOnLead++;
+      }
+    });
+    expect(leads).toHaveLength(FURY_STRIKES);
+    // One cut per strike, each on that strike's lead, besides the strike that hits everyone.
+    expect(cuts.map((c) => c.targetId)).toEqual(leads);
+    expect(swings).toBe(FURY_STRIKES);
+    expect(soulOnLead).toBe(FURY_STRIKES);
+    // A quarter of a basic blow: well under the strike, but a real hit.
+    for (const c of cuts) expect(c.amount).toBeGreaterThan(0);
+    void foes;
+  });
+
+  it("gives the energy a basic hit gives, and carries on-hit effects", () => {
+    const w = quietWorld(53);
+    w.loadout = { ...w.loadout, weaponPath: "infernal" };
+    const foe = dummy(w, "husk", 300, 70);
+    let energyAtEnd = -1;
+    runFury(w, (world, ev) => {
+      if (ev.some((e) => e.type === "fury_end")) energyAtEnd = world.energy;
+    });
+    // Seven cuts at 6 energy each (crits add more); the strikes alone give energy only on crits.
+    expect(energyAtEnd).toBeGreaterThanOrEqual(7 * 6 * w.loadout.mods.ultimateGainMult - 0.01);
+    // The infernal path's burn rides on a basic blow: the cut set it.
+    expect(hasStatus(foe, "burn")).toBe(true);
   });
 });

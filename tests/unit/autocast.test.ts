@@ -152,7 +152,7 @@ describe("AUTO casts land and hold their lock", () => {
     expect(dashes).toBeGreaterThanOrEqual(1);
   });
 
-  it("holds him through an AUTO ultimate: no walking or swinging between blinks", () => {
+  it("holds him through an AUTO ultimate: no walking, and no swings but the seven cuts", () => {
     const p = createDefaultProfile();
     p.player.level = 12;
     p.player.autoCast = true;
@@ -185,7 +185,8 @@ describe("AUTO casts land and hold their lock", () => {
     }
     expect(began).toBe(true);
     expect(strikes).toBe(7);
-    expect(swings).toBe(0);
+    // His only swings are the Fury's own cuts, one per blink.
+    expect(swings).toBe(7);
     expect([...states]).toEqual(["cast"]);
   });
 });
