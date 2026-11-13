@@ -5,6 +5,7 @@ import { createDefaultProfile } from "@/game/progression/profile";
 import { startsCast, type GameEvent } from "@/game/engine/events";
 import { FURY_AFTER_INVULN, FURY_CUT_POWER } from "@/game/engine/World";
 import { hasStatus } from "@/game/combat/statuses";
+import { claimEssence } from "@/game/summons/recruitment";
 import type { Combatant } from "@/game/entities/types";
 import { addStatus } from "@/game/combat/statuses";
 import { computeDamage } from "@/game/combat/damage";
@@ -394,7 +395,19 @@ describe("Ascendant Fury: the blink-strike flurry", () => {
   });
 
   it("charges nothing while it runs: no energy from the cut, the strikes, kills or the army", () => {
-    const w = quietWorld(54);
+    const p = createDefaultProfile();
+    p.player.level = 5;
+    claimEssence(p, "husk_blade");
+    p.summons.collection[0]!.deployed = true;
+    const w = new World({ stage: 1, loadout: buildLoadout(p), seed: 54 });
+    w.phase = "between";
+    w.phaseTimer = 999;
+    const shade = w.summonEntities()[0]!;
+    // A foe only the army kills, mid-flurry (its kill would give energy).
+    const armyFoe = w.spawnEnemy("husk", { pos: { x: 120, y: 120 }, minion: true });
+    armyFoe.stats.maxHp = 1e8;
+    armyFoe.hp = armyFoe.stats.maxHp;
+    let armyKilled = false;
     dummy(w, "husk", 300, 70);
     // Two weak foes the strikes kill (kills give energy), and crits forced on every blow.
     for (const x of [360, 420]) {
@@ -414,9 +427,18 @@ describe("Ascendant Fury: the blink-strike flurry", () => {
       w.update(FIXED_DT);
       const ev = w.drainEvents();
       if (w.ultimate.active && ev.some((e) => e.type === "ultimate_ready")) readyMid = true;
+      if (w.ultimate.active && w.ultimate.strikes >= 3 && !armyKilled) {
+        // The army lands the killing blow (the strikes cannot: it has all but infinite health).
+        armyFoe.hp = 1;
+        armyFoe.statuses = armyFoe.statuses.filter((st) => st.kind !== "invuln");
+        w.dealDamage(shade, armyFoe, 5, "physical", false);
+        armyKilled = armyFoe.dead;
+        expect(w.energy).toBe(0);
+      }
       if (atEnd < 0 && ev.some((e) => e.type === "fury_end")) atEnd = w.energy;
       if (atEnd >= 0 && after < 0 && w.energy > atEnd) after = w.energy;
     }
+    expect(armyKilled).toBe(true);
     expect(readyMid).toBe(false);
     expect(atEnd).toBe(paid);
     // Charging resumes with his next ordinary blows.
@@ -461,14 +483,35 @@ describe("Ascendant Fury: the blink-strike flurry", () => {
 
   it("keeps a perfect dodge's crit for his next ordinary blow; the cut does not spend it", () => {
     const w = quietWorld(63);
-    dummy(w, "husk", 300, 70);
+    const foe = dummy(w, "husk", w.player.pos.x + 45, w.player.pos.y);
+    // No natural crits, so any crit is the perfect dodge's.
+    w.player.stats.critChance = 0;
+    const flag = () => (w as unknown as { perfectCrit: boolean }).perfectCrit;
     (w as unknown as { perfectCrit: boolean }).perfectCrit = true;
+    w.energy = 100;
+    expect(w.castAbility("ascendant_fury")).toBe(true);
     const cutCrits: boolean[] = [];
-    runFury(w, (world, ev) => {
-      for (const e of ev) if (e.type === "hit" && e.sourceId === world.player.id && e.element === "physical") cutCrits.push(e.crit);
-    });
-    expect(cutCrits.length).toBe(FURY_STRIKES);
-    expect((w as unknown as { perfectCrit: boolean }).perfectCrit).toBe(true);
+    let next: { crit: boolean } | null = null;
+    let flagAfterNext = true;
+    for (let i = 0; i < Math.round(5 / FIXED_DT) && !next; i++) {
+      const during = w.ultimate.active;
+      w.update(FIXED_DT);
+      for (const e of w.drainEvents()) {
+        if (e.type !== "hit" || e.sourceId !== w.player.id || e.element !== "physical") continue;
+        if (during) cutCrits.push(e.crit);
+        else if (!next && e.targetId === foe.id) {
+          next = { crit: e.crit };
+          flagAfterNext = flag();
+        }
+      }
+      if (during) expect(flag()).toBe(true);
+    }
+    // The seven cuts were not the forced crit; the flag survived the whole ultimate.
+    expect(cutCrits).toEqual(Array(FURY_STRIKES).fill(false));
+    // His next ordinary blow is the forced crit, and spends it.
+    expect(next).not.toBeNull();
+    expect(next!.crit).toBe(true);
+    expect(flagAfterNext).toBe(false);
   });
 
   it("leaves only the short invulnerability when it ends: a blow lands on him soon after", () => {

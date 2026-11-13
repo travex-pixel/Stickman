@@ -46,7 +46,7 @@ export interface FightResult {
  * One simulated boss challenge with AUTO on, advanced a slice at a time so the caller can spread
  * it over frames. Deterministic for a given profile and seed.
  */
-export function bossFightStepper(profile: Profile, stage: number, seed: number): { step: (maxSteps: number) => FightResult | null } {
+export function bossFightStepper(profile: Profile, stage: number, seed: number): { step: (maxSteps: number) => FightResult | null; world: World } {
   const p: Profile = JSON.parse(JSON.stringify(profile));
   p.player.autoCast = true;
   const w = new World({ stage, loadout: buildLoadout(p), seed, mode: "boss" });
@@ -54,6 +54,7 @@ export function bossFightStepper(profile: Profile, stage: number, seed: number):
   let bossMax = 1;
   let bossHp = 1;
   return {
+    world: w,
     step(maxSteps: number): FightResult | null {
       for (let i = 0; i < maxSteps; i++) {
         w.update(FIXED_DT);
