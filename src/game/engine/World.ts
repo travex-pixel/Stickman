@@ -131,10 +131,13 @@ export const FURY_AFTER_INVULN = 0.3;
  * arts are 43% of his damage at gate 3, about a third from gate 12 on), and this keeps each gate
  * where it was.
  * Fitted per gate on the boss probe (forecast fights on the simulator's saved profiles): x1.55 at
- * stage 3, x1.3 at 20, x1.1 at 33, none from stage 40.
+ * stage 3, x1.29 at 20, x1.12 at 30, none from stage 39. It applies to every boss but the stage-1
+ * Warden and the Rank Trial's Warden: Boss Hunts keep it (rematches of gates beaten at the lifted
+ * health), and so does the Rift Tyrant: measured on saved profiles, its bars broken stay within
+ * -15% to +6% of before with the lift, against +6% to +21% without it.
  */
 export const BOSS_LIFT_AT_FIRST_GATE = 0.55;
-export const BOSS_LIFT_FADE_PER_STAGE = 0.015;
+export const BOSS_LIFT_FADE_PER_STAGE = 0.0155;
 export function bossHealthLift(stage: number): number {
   if (stage <= 1) return 1;
   return 1 + Math.max(0, BOSS_LIFT_AT_FIRST_GATE - BOSS_LIFT_FADE_PER_STAGE * Math.max(0, stage - 3));

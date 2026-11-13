@@ -19,7 +19,7 @@ describe("boss health lift", () => {
       expect(m).toBeGreaterThanOrEqual(1);
       prev = m;
     }
-    expect(bossHealthLift(40)).toBe(1);
+    expect(bossHealthLift(39)).toBe(1);
   });
 
   /** The boss a world raises at `stage`, once its entrance has begun. */
