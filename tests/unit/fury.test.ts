@@ -90,10 +90,14 @@ describe("Ascendant Fury: the blink-strike flurry", () => {
     const origin = { ...w.player.pos };
     let end: Extract<GameEvent, { type: "fury_end" }> | null = null;
     let lastTo: { x: number; y: number } | null = null;
-    runFury(w, (_world, ev) => {
+    let atEnd: { x: number; y: number; facing: number } | null = null;
+    runFury(w, (world, ev) => {
       for (const e of ev) {
         if (e.type === "fury_step") lastTo = e.to;
-        if (e.type === "fury_end") end = e;
+        if (e.type === "fury_end") {
+          end = e;
+          atEnd = { x: world.player.pos.x, y: world.player.pos.y, facing: world.player.facing };
+        }
       }
     });
     expect(end).not.toBeNull();
@@ -102,10 +106,11 @@ describe("Ascendant Fury: the blink-strike flurry", () => {
     expect(fin.from).toEqual(lastTo);
     expect(fin.to.x).toBeCloseTo(origin.x, 5);
     expect(fin.to.y).toBeCloseTo(origin.y, 5);
-    // He is still there once the cast lets go (nothing carried him off), facing the nearest foe.
-    expect(Math.abs(w.player.pos.x - origin.x)).toBeLessThan(3);
-    expect(Math.abs(w.player.pos.y - origin.y)).toBeLessThan(3);
-    expect(w.player.facing).toBe(1);
+    // He stands there as the ultimate ends (nothing carried him off), facing the nearest foe.
+    const at = atEnd! as { x: number; y: number; facing: number };
+    expect(Math.abs(at.x - origin.x)).toBeLessThan(3);
+    expect(Math.abs(at.y - origin.y)).toBeLessThan(3);
+    expect(at.facing).toBe(1);
   });
 
   it("lands beside a foe that has walked onto his starting place, never on it", () => {
@@ -334,8 +339,12 @@ describe("Ascendant Fury: the blink-strike flurry", () => {
         expected.set(f.id, expected.get(f.id)! + r.amount);
       }
     }
-    runFury(w);
-    for (const f of foes) expect(f.stats.maxHp - f.hp).toBe(expected.get(f.id));
+    // Read the damage as the ultimate ends (he is free to fight on afterwards).
+    const dealt = new Map<number, number>();
+    runFury(w, (_world, ev) => {
+      if (ev.some((e) => e.type === "fury_end")) for (const f of foes) dealt.set(f.id, f.stats.maxHp - f.hp);
+    });
+    for (const f of foes) expect(dealt.get(f.id)).toBe(expected.get(f.id));
   });
 
   it("lands a sword cut on each lead, and only on the lead, as a basic blow", () => {
@@ -346,8 +355,11 @@ describe("Ascendant Fury: the blink-strike flurry", () => {
     const cuts: { targetId: number; amount: number }[] = [];
     let soulOnLead = 0;
     let swings = 0;
+    let over = false;
     runFury(w, (world, ev) => {
       let lead = -1;
+      if (over) return; // after the ultimate he fights on with ordinary blows
+      if (ev.some((e) => e.type === "fury_end")) over = true;
       for (const e of ev) {
         if (e.type === "fury_step") {
           lead = e.targetId;
@@ -380,5 +392,53 @@ describe("Ascendant Fury: the blink-strike flurry", () => {
     expect(energyAtEnd).toBeGreaterThanOrEqual(7 * 6 * w.loadout.mods.ultimateGainMult - 0.01);
     // The infernal path's burn rides on a basic blow: the cut set it.
     expect(hasStatus(foe, "burn")).toBe(true);
+  });
+
+  it("frees him the moment he returns: he fights on within one attack interval", () => {
+    const w = quietWorld(61);
+    dummy(w, "husk", w.player.pos.x + 40, w.player.pos.y);
+    dummy(w, "husk", 450, 100);
+    let ended = -1;
+    let acted = -1;
+    let i = 0;
+    runFury(w, (world, ev) => {
+      i++;
+      if (ended < 0 && ev.some((e) => e.type === "fury_end")) {
+        ended = i;
+        expect(world.player.state).not.toBe("cast");
+      }
+      if (ended >= 0 && acted < 0 && ev.some((e) => (e.type === "attack_swing" || e.type === "cast") && e.id === world.player.id && i > ended)) acted = i;
+    });
+    expect(ended).toBeGreaterThan(0);
+    // His next blow comes within a normal attack interval (cooldown plus wind-up), not after a long idle.
+    const interval = 1 / w.player.stats.attackSpeed + 0.13;
+    expect(acted).toBeGreaterThan(0);
+    expect((acted - ended) * FIXED_DT).toBeLessThanOrEqual(interval + 0.1);
+  });
+
+  it("leaves an ordinary ability's cast lock as it was", () => {
+    const w = quietWorld(62);
+    dummy(w, "husk", w.player.pos.x + 40, w.player.pos.y);
+    w.cooldowns.arc_slash = 0;
+    expect(w.castAbility("arc_slash")).toBe(true);
+    let ticks = 0;
+    for (let k = 0; k < 120 && w.player.state === "cast"; k++) {
+      w.update(FIXED_DT);
+      w.drainEvents();
+      if (w.player.state === "cast") ticks++;
+    }
+    expect(ticks * FIXED_DT).toBeGreaterThanOrEqual(0.3 - 2 * FIXED_DT);
+  });
+
+  it("keeps a perfect dodge's crit for his next ordinary blow; the cut does not spend it", () => {
+    const w = quietWorld(63);
+    dummy(w, "husk", 300, 70);
+    (w as unknown as { perfectCrit: boolean }).perfectCrit = true;
+    const cutCrits: boolean[] = [];
+    runFury(w, (world, ev) => {
+      for (const e of ev) if (e.type === "hit" && e.sourceId === world.player.id && e.element === "physical") cutCrits.push(e.crit);
+    });
+    expect(cutCrits.length).toBe(FURY_STRIKES);
+    expect((w as unknown as { perfectCrit: boolean }).perfectCrit).toBe(true);
   });
 });

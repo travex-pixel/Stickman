@@ -1168,12 +1168,15 @@ export class World {
     else this.dealDamage(e, target, 1, "physical", e.enemy?.archetype === "brute" || e.kind === "boss");
   }
 
-  /** A landed basic blow (or the Ascendant Fury's cut, at `power` times a basic blow): damage and every on-hit effect. */
-  private playerBasicHit(target: Combatant, power = 1): void {
+  /**
+   * A landed basic blow (or the Ascendant Fury's cut, at `power` times a basic blow): damage and
+   * every on-hit effect. Only an ordinary blow spends the crit a perfect dodge earned.
+   */
+  private playerBasicHit(target: Combatant, power = 1, ordinary = true): void {
     const p = this.player;
     const fx = this.loadout.mods.gearEffects;
-    const forceCrit = this.perfectCrit;
-    this.perfectCrit = false;
+    const forceCrit = ordinary && this.perfectCrit;
+    if (ordinary) this.perfectCrit = false;
     const res = this.dealDamage(p, target, (forceCrit ? 1.5 : 1) * power, "physical", forceCrit, 1, forceCrit);
     if (!res) return;
     this.gainEnergy(6);
@@ -1730,8 +1733,8 @@ export class World {
 
   /**
    * The ultimate is over: the warrior blinks back to where he began (beside his army), facing the
-   * nearest foe, with the usual short invulnerability. Ended early (the field is clear), the
-   * remaining strikes are not thrown and he is free to act at once.
+   * nearest foe, with the usual short invulnerability, free to act at once. Ended early (the field
+   * is clear), the remaining strikes are not thrown.
    */
   private endUltimate(early: boolean): void {
     const u = this.ultimate;
@@ -1748,7 +1751,9 @@ export class World {
     p.facing = near ? (near.pos.x >= p.pos.x ? 1 : -1) : u.originFacing;
     p.targetId = near ? near.id : -1;
     addStatus(p, { kind: "invuln", remaining: 0.3, value: 1, sourceId: p.id });
-    if (early && p.state === "cast" && p.pendingAbility === "ascendant_fury") this.setState(p, "idle");
+    // The cast ends with the ultimate (its 1.6s cast time is world time, which would hold him idle
+    // for about a second after the flurry): he is free the moment he returns.
+    if (p.state === "cast" && p.pendingAbility === "ascendant_fury") this.setState(p, "idle");
     this.events.push({ type: "fury_end", id: p.id, early, strikes: u.strikes, from, to: { ...p.pos }, facing: p.facing });
   }
 
@@ -1790,7 +1795,7 @@ export class World {
     if (this.furyCutPower <= 0 || lead.dead) return;
     const p = this.player;
     this.events.push({ type: "attack_swing", id: p.id, kind: "player", heavy, pos: { ...p.pos }, facing: p.facing });
-    this.playerBasicHit(lead, this.furyCutPower);
+    this.playerBasicHit(lead, this.furyCutPower, false);
   }
 
   /**
