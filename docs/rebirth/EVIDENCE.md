@@ -400,18 +400,25 @@ arts paid for their own locks at every gate.
 | The ultimate's lock ends with the ultimate | The idle second was the whole late-game loss |
 | Each blink lands a sword cut on its lead, a quarter of a basic blow | Asked for by the owner; kept small, for feel, after a full blow won every fight |
 | Nothing charges the ultimate while it runs | Without it AUTO recast every 2 s in late fights, the least possible: 58 ultimates in one 119 s boss fight. Now every 4 to 5 s (2.8 to 3.6 s before the fix) |
-| Bosses after stage 1 carry extra health, x1.55 at the first gate fading to none from stage 40 | Arts are now a quarter to two fifths of his damage in AUTO; this puts each gate back |
+| His invulnerability ends 0.3 s after the ultimate does | It was sized for the old lock, so once freed he fought untouchable for about a second (found in review) |
+| No dodging while the ultimate runs | A dodge broke him out of the flurry (an older hole, found in review) |
+| Bosses after stage 1 carry extra health, x1.55 at the first gate fading to none from stage 39 | Arts are now a quarter to two fifths of his damage in AUTO; this puts each gate back |
 
 **Against the build before the fix** (measured by the implementing agent with the instruments
 above; both sides use a simulated player who buys Arts ranks, which the simulator's player never
 did before):
 
-- Boss forecasts, 120 to 288 fights per gate: every gate from 3 to 42 within 7.5 points of its
+- Boss forecasts, 120 to 288 fights per gate: every gate from 3 to 42 within 8.7 points of its
   earlier odds.
 - Economy simulator, 24 seeds, 90 minutes, three runs a side: gates 6 to 24 arrive as before.
-  **Gates 30 to 39 arrive 2 to 8% sooner.** The gates are as hard as before; farming is faster
-  from stage 29 (cycles 3 to 8% shorter) because the arts now land. No lever was added for it.
-- First-session bot: first boss win at 73 to 76 game seconds (81 to 82 before).
+  **Gates 30 to 39 arrive 1 to 7% sooner.** The gates are as hard as before; farming is faster
+  late because the arts now land. No lever was added for it.
+- **The weekly Rift Tyrant shares the boss health rule, and scores 15% lower at gate 12** (bars
+  broken: 1.54 before, 1.30 now), 7.5% lower at gate 24 and within 6% from gate 30. Without the
+  rule it would score 6 to 21% higher. The rule was kept as the closer of the two; gate 12 is
+  outside the 10% asked for and is an open decision.
+- First-session bot (measured before the last three rules): first boss win at 73 to 76 game
+  seconds (81 to 82 before).
 
 **An error of mine on the way, kept on the record.** I first read a 6-seed simulator run as "a
 known cost" of the flurry, then as noise, then as real after 24 seeds. Runs with one or two extra
@@ -419,18 +426,20 @@ random draws per ultimate showed the 24-seed baseline itself was a favourable dr
 simulator moves late gates by minutes on one draw. Every comparison since uses three such runs
 a side and the boss forecasts, which are far less noisy.
 
-**Review.** An independent review of the first round of code, by an agent that did not write it,
-found no fault in the simulation and one in presentation: the cut's swing made the renderer treat every
+**Review.** Two independent reviews, by agents that did not write the code. The first found no
+fault in the simulation and one in presentation: the cut's swing made the renderer treat every
 strike of the ultimate as a basic blow (lighter impact, no dissolve on kills). Fixed, with a test
 that fails on the old behaviour. It also found the cut spending a perfect dodge's guaranteed crit
-(fixed) and one test loosened to pass (tightened again). A second review, of the later rules
-(the lock's end, no charge during the ultimate, the boss health rule, held toasts), was still
-running when this was written.
+(fixed) and one test loosened to pass (tightened again). The second, of the later rules, found
+the two faults in the table above (the long invulnerability, by a probe; the dodge), the boss
+health rule reaching the Tyrant unmeasured, a way for a cut-short ultimate to hold back every
+later toast (its running total never closed), and three tests weaker than their names. All were
+fixed or measured; the reviewer's re-check of those fixes was still running when this was
+written.
 
-**Checks run by me:** on the final build, type check, lint and production build clean, 295 unit
-tests pass, 3 skipped. The browser suite passed 51 of 51 on the build before the last two rules
-(no charge during the ultimate, the refitted boss health); its run on the final build had not
-finished when this was written.
+**Checks run by me:** on the final build, type check, lint and production build clean, 302 unit
+tests pass, 3 skipped. The browser suite passed 51 of 51 on the build before the review fixes;
+its run on the final build had not finished when this was written.
 
 **Not established.** Whether the flurry is more compelling to watch is the owner's judgement and
 a playtest's, not something these instruments measure. The contact sheets show what it does, not
