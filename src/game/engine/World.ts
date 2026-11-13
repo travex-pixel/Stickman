@@ -124,13 +124,17 @@ export const FURY_GAP = 0.16;
 /** The depth step a blink takes instead when the arena wall would land him where he stands. */
 export const FURY_DEPTH_STEP = 24;
 /**
- * The first boss gate (stages 2 to FIRST_GATE_STAGE) carries this much more health. With AUTO's
- * arts landing and its dodges dashing, a player who has only just reached it would otherwise walk
- * through it (99% of forecast fights won, against a third before); 1.65 brings it back to about a
- * third on the economy simulator's saved profiles.
+ * Bosses past the stage-1 Warden carry extra health, largest at the first gate and fading by a
+ * fixed step per stage: since AUTO's arts land, the warrior's power rises most early (the arts
+ * are 38% of his damage at gate 3, 19% by gate 36), and these keep each gate where it was.
+ * Fitted on the boss probe: x1.85 at stage 3, x1.55 at 27, x1.35 at 43, none from stage 71.
  */
-export const FIRST_GATE_STAGE = 3;
-export const FIRST_GATE_HP = 1.65;
+export const BOSS_LIFT_AT_FIRST_GATE = 0.85;
+export const BOSS_LIFT_FADE_PER_STAGE = 0.0125;
+export function bossHealthLift(stage: number): number {
+  if (stage <= 1) return 1;
+  return 1 + Math.max(0, BOSS_LIFT_AT_FIRST_GATE - BOSS_LIFT_FADE_PER_STAGE * Math.max(0, stage - 3));
+}
 /**
  * Each blink also lands a real sword cut on its lead: a basic blow (his attack, crits, on-hit
  * effects, the energy a basic hit gives), at this strength relative to an ordinary one. It gives
@@ -904,8 +908,8 @@ export class World {
       boss.stats.maxHp = Math.round(boss.stats.maxHp * 1.15);
       boss.hp = boss.stats.maxHp;
     }
-    if (this.stage > 1 && this.stage <= FIRST_GATE_STAGE && this.mode !== "trial") {
-      boss.stats.maxHp = Math.round(boss.stats.maxHp * FIRST_GATE_HP);
+    if (this.stage > 1 && this.mode !== "trial") {
+      boss.stats.maxHp = Math.round(boss.stats.maxHp * bossHealthLift(this.stage));
       boss.hp = boss.stats.maxHp;
     }
     if (this.twist === "frenzy") applyTwist(boss, "frenzy");
