@@ -1794,7 +1794,7 @@ export class World {
   private furyCut(lead: Combatant, heavy: boolean): void {
     if (this.furyCutPower <= 0 || lead.dead) return;
     const p = this.player;
-    this.events.push({ type: "attack_swing", id: p.id, kind: "player", heavy, pos: { ...p.pos }, facing: p.facing });
+    this.events.push({ type: "attack_swing", id: p.id, kind: "player", heavy, pos: { ...p.pos }, facing: p.facing, cut: true });
     this.playerBasicHit(lead, this.furyCutPower, false);
   }
 

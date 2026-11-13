@@ -365,7 +365,11 @@ describe("Ascendant Fury: the blink-strike flurry", () => {
           lead = e.targetId;
           leads.push(lead);
         }
-        if (e.type === "attack_swing" && e.id === world.player.id) swings++;
+        if (e.type === "attack_swing" && e.id === world.player.id) {
+          swings++;
+          // Marked as the Fury's cut, so the renderer keeps the strikes an ability's.
+          expect(e.cut).toBe(true);
+        }
         if (e.type === "hit" && e.sourceId === world.player.id && e.element === "physical") cuts.push({ targetId: e.targetId, amount: e.amount });
         if (e.type === "hit" && e.sourceId === world.player.id && e.element === "soul" && e.targetId === lead) soulOnLead++;
       }

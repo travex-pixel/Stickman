@@ -1703,7 +1703,7 @@ export class BattleRenderer implements ImpactHost {
     for (const e of events) {
       switch (e.type) {
         case "attack_swing": {
-          this.impact.onSwing(e.id);
+          this.impact.onSwing(e.id, e.cut === true);
           if (e.heavy && e.kind !== "player") {
             // A brute or boss blow lands: a dust ring where it struck.
             const sx = this.sx(e.pos.x) + e.facing * 40 * u;

@@ -7,7 +7,8 @@ export type GameEvent =
   | { type: "hit"; targetId: number; sourceId: number; amount: number; crit: boolean; pos: Vec2; element: Element; faction: Faction; targetKind: EntityKind; heavy: boolean }
   | { type: "heal"; targetId: number; amount: number; pos: Vec2 }
   | { type: "death"; id: number; kind: EntityKind; defId: string; pos: Vec2; killerId: number; elite?: boolean }
-  | { type: "attack_swing"; id: number; kind: EntityKind; heavy: boolean; pos: Vec2; facing: 1 | -1 }
+  /** `cut`: the Ascendant Fury's sword cut (not a swing of his combo; its strikes stay an ability's). */
+  | { type: "attack_swing"; id: number; kind: EntityKind; heavy: boolean; pos: Vec2; facing: 1 | -1; cut?: boolean }
   /** `strike`: Ascendant Fury sends one per strike (1 to 7); only the first starts a cast. */
   | { type: "cast"; id: number; ability: AbilityId; pos: Vec2; facing: 1 | -1; targetPos: Vec2 | null; strike?: number }
   /**

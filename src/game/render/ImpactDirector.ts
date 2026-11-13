@@ -87,8 +87,12 @@ export class ImpactDirector {
     this.policy.reduced = v;
   }
 
-  /** An `attack_swing`: count the combo. */
-  onSwing(id: number): void {
+  /**
+   * An `attack_swing`: count the combo. The Ascendant Fury's cut is not a combo swing: it must not
+   * advance the combo, nor make the strikes that land with it read as basic blows.
+   */
+  onSwing(id: number, cut = false): void {
+    if (cut) return;
     const v = this.host.views.get(id);
     if (!v) return;
     v.swings += 1;
