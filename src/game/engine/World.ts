@@ -408,6 +408,8 @@ export class World {
     if (this.phase === "victory" || this.phase === "defeat" || this.player.dead) return false;
     if (this.dodgeCooldown > 0) return false;
     if (this.player.state === "dodge") return false;
+    // Not mid-flurry: the Fury holds him (and he is untouchable through it anyway).
+    if (this.ultimate.active) return false;
     const p = this.player;
     const perfect = manual && this.impendingThreat(World.PERFECT_WINDOW) !== null;
     playerDodge(this);

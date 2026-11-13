@@ -496,4 +496,22 @@ describe("Ascendant Fury: the blink-strike flurry", () => {
     expect(hurtAfter).toBeGreaterThan(endedAt);
   });
 
+  it("refuses a dodge while the flurry runs", () => {
+    const w = quietWorld(72);
+    dummy(w, "husk", 300, 70);
+    w.energy = 100;
+    expect(w.castAbility("ascendant_fury")).toBe(true);
+    let tried = 0;
+    for (let i = 0; i < Math.round(2 / FIXED_DT) && w.ultimate.active; i++) {
+      w.update(FIXED_DT);
+      w.drainEvents();
+      if (w.ultimate.active && w.ultimate.strikes > 0) {
+        tried++;
+        w.dodgeCooldown = 0;
+        expect(w.dodge()).toBe(false);
+        expect(w.player.state).toBe("cast");
+      }
+    }
+    expect(tried).toBeGreaterThan(10);
+  });
 });

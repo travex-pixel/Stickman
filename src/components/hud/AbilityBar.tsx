@@ -77,6 +77,8 @@ function AbilityDisc({ slot, id, level }: { slot: AbilityId; id: AbilityId; leve
   const cooling = unlocked && cd > 0;
   const progress = max > 0 ? 1 - Math.min(1, cd / max) : 1;
   const isDodge = id === "shadow_dash";
+  // While Ascendant Fury runs nothing else can be cast or dodged: the discs read held, not ready.
+  const held = useHud((s) => s?.ultimateActive ?? false);
   const disc = useRef<HTMLSpanElement>(null);
   const flash = useRef<SVGCircleElement>(null);
   // A cast, by hand or by AUTO, shows on the disc: it dips and its ring flashes.
@@ -91,7 +93,7 @@ function AbilityDisc({ slot, id, level }: { slot: AbilityId; id: AbilityId; leve
   return (
     <button
       className="ab-slot flex shrink-0 items-center justify-center"
-      data-ready={unlocked && !cooling}
+      data-ready={unlocked && !cooling && !held}
       data-guide={isDodge ? "ability-dodge" : `ability-${slot}`}
       data-testid={`ability-${slot}`}
       data-form={id}
@@ -99,10 +101,10 @@ function AbilityDisc({ slot, id, level }: { slot: AbilityId; id: AbilityId; leve
       aria-label={unlocked ? `${def.name}${cooling ? `, ${cd.toFixed(1)} seconds` : ", ready"}` : `${def.name}, unlocks at level ${unlockLevel}`}
       aria-disabled={!unlocked}
     >
-      <span ref={disc} className={cn("ab-disc press relative flex items-center justify-center rounded-full glass-flat", unlocked && !cooling && "medallion-ready")}>
+      <span ref={disc} className={cn("ab-disc press relative flex items-center justify-center rounded-full glass-flat", unlocked && !cooling && !held && "medallion-ready")}>
         {unlocked ? (
           <>
-            <Icon name={ABILITY_ICON[id]} size={20} strokeWidth={1.8} className={cn("text-t1 transition-opacity duration-200", cooling && "opacity-25")} />
+            <Icon name={ABILITY_ICON[id]} size={20} strokeWidth={1.8} className={cn("text-t1 transition-opacity duration-200", (cooling || held) && "opacity-25")} />
             <svg className="absolute inset-0 h-full w-full -rotate-90" viewBox="0 0 46 46" aria-hidden="true">
               {cooling && <circle cx="23" cy="23" r={RING_R} fill="none" stroke="var(--color-t1)" strokeWidth="1.5" strokeDasharray={RING_LEN} strokeDashoffset={RING_LEN * (1 - progress)} strokeLinecap="round" />}
               <circle ref={flash} cx="23" cy="23" r={RING_R} fill="none" stroke="var(--color-t1)" strokeWidth="1.5" opacity="0" />
