@@ -434,12 +434,14 @@ that fails on the old behaviour. It also found the cut spending a perfect dodge'
 the two faults in the table above (the long invulnerability, by a probe; the dodge), the boss
 health rule reaching the Tyrant unmeasured, a way for a cut-short ultimate to hold back every
 later toast (its running total never closed), and three tests weaker than their names. All were
-fixed or measured; the reviewer's re-check of those fixes was still running when this was
-written.
+fixed or measured. The reviewer then re-ran its probes on the fixes (invulnerability left at the
+ultimate's end: 0.3 s, from 1.1 s) and reverted each fix in turn to see its test fail: all
+closed, nothing new broken. Two small things remain in the toast queue: a fourth important toast
+held during one ultimate is dropped, and a toast raised just after the total clears can cut
+short one being released.
 
-**Checks run by me:** on the final build, type check, lint and production build clean, 302 unit
-tests pass, 3 skipped. The browser suite passed 51 of 51 on the build before the review fixes;
-its run on the final build had not finished when this was written.
+**Checks run by me on the final build:** type check, lint and production build clean; 302 unit
+tests pass, 3 skipped; 51 of 51 browser tests.
 
 **Not established.** Whether the flurry is more compelling to watch is the owner's judgement and
 a playtest's, not something these instruments measure. The contact sheets show what it does, not

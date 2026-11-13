@@ -15,7 +15,7 @@ describe("toasts held over the Fury's total", () => {
     expect(h.next()).toBeNull();
   });
 
-  it("keeps an important toast that a routine one arrives after (the single slot lost it)", () => {
+  it("keeps an important toast that a routine one arrives after", () => {
     const h = new ToastHold(3);
     h.add(t("Essence lingers. Claim it before it fades."));
     h.add(t("Husk Blade reached level 9", true));
