@@ -126,7 +126,8 @@ export const FURY_DEPTH_STEP = 24;
 /**
  * Bosses past the stage-1 Warden carry extra health, largest at the first gate and fading by a
  * fixed step per stage to none: since AUTO's arts land, the warrior's power rises most early (the
- * arts are 38% of his damage at gate 3, 19% by gate 36), and this keeps each gate where it was.
+ * arts are 43% of his damage at gate 3, about a third from gate 12 on), and this keeps each gate
+ * where it was.
  * Fitted per gate on the boss probe (forecast fights on the simulator's saved profiles): x1.55 at
  * stage 3, x1.3 at 20, x1.1 at 33, none from stage 40.
  */

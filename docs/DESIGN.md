@@ -168,8 +168,12 @@ been tuned on that. With the fix (`World.updatePlayer` stops when AUTO acted):
 - Ascendant Fury's cast ends with the ultimate: he is free the moment he returns. (Its 1.6 s cast
   time is world time and outlived the slowed flurry, holding him idle for about a second.)
 - Each blink lands a sword cut on its lead, a basic blow at `FURY_CUT_POWER` (0.25), for feel.
-- Bosses past the stage-1 Warden carry extra health, one rule (`bossHealthLift`): x1.85 at the
-  first gate, falling by 0.0125 per stage to none at stage 71. The stage-1 Warden keeps its full
+- Nothing charges the ultimate while it runs (its cut, its strikes' crits and kills, the army's
+  kills): it never pays for the next one. Before this rule AUTO recast it the moment he returned in
+  late fights (every 2 s); now every 4 to 5 s in late boss fights and 4 to 7 s while farming,
+  against 2.8 to 3.6 s and 2.2 to 2.5 s before the AUTO fix.
+- Bosses past the stage-1 Warden carry extra health, one rule (`bossHealthLift`): x1.55 at the
+  first gate, falling by 0.015 per stage to none from stage 40. The stage-1 Warden keeps its full
   stage health (it was 70%).
 - No ordinary enemy and no art changed.
 
@@ -179,21 +183,22 @@ ultimate):
 
 | Gate | Before: basic / arts / ultimate | After: basic / arts / ultimate |
 | --- | --- | --- |
-| 3 | 68% / 0% / 32% | 24% / 38% / 38% |
-| 12 | 57% / 0% / 43% | 21% / 32% / 47% |
-| 24 | 40% / 0% / 60% | 12% / 19% / 69% |
-| 36 | 34% / 0% / 66% | 11% / 19% / 71% |
+| 3 | 68% / 0% / 32% | 31% / 43% / 25% |
+| 12 | 57% / 0% / 43% | 35% / 35% / 30% |
+| 24 | 40% / 0% / 60% | 28% / 30% / 42% |
+| 30 | 29% / 0% / 71% | 21% / 30% / 49% |
+| 36 | 34% / 0% / 66% | 19% / 33% / 49% |
+| 42 | 20% / 0% / 80% | 14% / 26% / 60% |
 
 Measured against the previous build, both with the simulator's rank-buying player:
 
-- Boss forecasts (24 fights per saved profile): every gate from 3 to 42 within 9 points of its
-  earlier odds except gate 24 (+11) and gate 33 (+41, its boss suffers most from the arts).
+- Boss forecasts (24 fights per saved profile): every gate from 3 to 42 within 7.5 points of its
+  earlier odds.
 - Economy simulator (seeds 101 to 124, 90 minutes, three runs each): gates 6 to 24 reached as
-  before; gates 30 to 39 about 2 to 8 minutes sooner, because farming is 5 to 10% faster from
-  stage 29 on (the gates themselves are as hard as before); gate 42 reached by every seed (19 to
-  20 of 24 before); deepest stage 44 against 42 to 44; level about 71 against 64 to 67.
-- Back-to-back ultimates: in late boss fights an ultimate now comes every 2 s (median), against
-  2.8 to 3.6 s before; the Fury's cuts return its energy within the flurry at high gain.
+  before; gates 30 to 39 about 1 to 7 minutes sooner, because farming is faster from stage 29 on
+  (cycles 3 to 8% shorter; the gates themselves are as hard as before); gate 42 reached by 23 to
+  24 seeds (19 to 20 before); deepest stage 44 against 42 to 44; level about 69 to 70 against 64
+  to 67.
 
 ### The weeks-long curve
 
