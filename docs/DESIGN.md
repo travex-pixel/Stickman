@@ -186,8 +186,8 @@ ultimate):
 | 36 | 34% / 0% / 66% | 11% / 19% / 71% |
 
 Measured effect on the simulator (seeds 101 to 124, 90 minutes, three runs each to show the
-noise): gates 6 and 12 about the same; gates 18 to 39 reached 1 to 5 minutes sooner (the middle
-game, where AUTO's arts now land, is faster); gate 42 reached by 19 to 22 seeds of 24 against 19
+noise): gate 6 the same, gate 12 about half a minute sooner, gates 18 to 39 reached 1 to 5
+minutes sooner (the middle game, where AUTO's arts now land, is faster); gate 42 reached by 19 to 22 seeds of 24 against 19
 to 20; deepest stage and level slightly up.
 
 ### The weeks-long curve
