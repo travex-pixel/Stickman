@@ -384,18 +384,43 @@ describe("Ascendant Fury: the blink-strike flurry", () => {
     void foes;
   });
 
-  it("gives the energy a basic hit gives, and carries on-hit effects", () => {
+  it("carries a basic blow's on-hit effects", () => {
     const w = quietWorld(53);
     w.loadout = { ...w.loadout, weaponPath: "infernal" };
     const foe = dummy(w, "husk", 300, 70);
-    let energyAtEnd = -1;
-    runFury(w, (world, ev) => {
-      if (ev.some((e) => e.type === "fury_end")) energyAtEnd = world.energy;
-    });
-    // Seven cuts at 6 energy each (crits add more); the strikes alone give energy only on crits.
-    expect(energyAtEnd).toBeGreaterThanOrEqual(7 * 6 * w.loadout.mods.ultimateGainMult - 0.01);
+    runFury(w);
     // The infernal path's burn rides on a basic blow: the cut set it.
     expect(hasStatus(foe, "burn")).toBe(true);
+  });
+
+  it("charges nothing while it runs: no energy from the cut, the strikes, kills or the army", () => {
+    const w = quietWorld(54);
+    dummy(w, "husk", 300, 70);
+    // Two weak foes the strikes kill (kills give energy), and crits forced on every blow.
+    for (const x of [360, 420]) {
+      const e = w.spawnEnemy("husk", { pos: { x, y: 90 }, minion: true });
+      e.hp = 1;
+      e.stats.maxHp = 1;
+    }
+    w.player.stats.critChance = 1;
+    let readyMid = false;
+    let atEnd = -1;
+    let after = -1;
+    w.energy = 100;
+    expect(w.castAbility("ascendant_fury")).toBe(true);
+    const paid = w.energy;
+    expect(paid).toBe(0);
+    for (let i = 0; i < Math.round(3 / FIXED_DT); i++) {
+      w.update(FIXED_DT);
+      const ev = w.drainEvents();
+      if (w.ultimate.active && ev.some((e) => e.type === "ultimate_ready")) readyMid = true;
+      if (atEnd < 0 && ev.some((e) => e.type === "fury_end")) atEnd = w.energy;
+      if (atEnd >= 0 && after < 0 && w.energy > atEnd) after = w.energy;
+    }
+    expect(readyMid).toBe(false);
+    expect(atEnd).toBe(paid);
+    // Charging resumes with his next ordinary blows.
+    expect(after).toBeGreaterThan(atEnd);
   });
 
   it("frees him the moment he returns: he fights on within one attack interval", () => {

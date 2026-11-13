@@ -137,7 +137,8 @@ export function bossHealthLift(stage: number): number {
 }
 /**
  * Each blink also lands a real sword cut on its lead: a basic blow (his attack, crits, on-hit
- * effects, the energy a basic hit gives) at this strength relative to an ordinary one. It is there
+ * effects; no energy, as nothing charges the ultimate while it runs) at this strength relative to
+ * an ordinary one. It is there
  * for feel: the smallest strength that still reads as a hit beside the strike (about a fifth of
  * the lead's number). It does not spend a perfect dodge's crit.
  */
@@ -1249,6 +1250,9 @@ export class World {
 
   gainEnergy(amount: number): void {
     if (!this.loadout.ultimateUnlocked) return;
+    // Ascendant Fury never pays for the next one: nothing charges it while it runs (its cut, its
+    // strikes' crits and kills, the army's kills alike). Charging resumes the moment it ends.
+    if (this.ultimate.active) return;
     const before = this.energy;
     this.energy = clamp(this.energy + amount * this.loadout.mods.ultimateGainMult, 0, ULTIMATE_ENERGY_COST);
     if (before < ULTIMATE_ENERGY_COST && this.energy >= ULTIMATE_ENERGY_COST) this.events.push({ type: "ultimate_ready" });
