@@ -45,7 +45,8 @@ Shadows are earned in combat, which ties the collection directly to the fighting
    returns to farming; nothing retries automatically. Offline time is simulated with the same
    rules and stops at gates. Rules: `src/game/progression/campaign.ts`. Basic attacks are
    automatic; abilities, dodge, focus and BIND are the player's decisions; AUTO is on after the
-   tutorial.
+   tutorial. AUTO really casts: its arts, dodges and Ascendant Fury land and hold their cast time
+   exactly as a cast by hand (see "AUTO casts" below).
 2. Enemies marked with pale light leave a shadow. BIND shows its success chance before the tap.
 3. Spend gold on stats (hold to upgrade), essence on shadow bonds, Rift Cores on evolution.
 4. Level ups offer a choice of three perks. Clearing stages unlocks modes, ranks and regions.
@@ -120,7 +121,9 @@ Shadows are earned in combat, which ties the collection directly to the fighting
 
 Tuned with `tests/unit/economy.sim.test.ts` (opt-in: `ECON_SIM=1`), which plays the gated loop
 headlessly as an engaged player: AUTO on, greedy spending, every shadow bound, rank trials taken,
-and each gate challenged once the real forecast wins 2 of 4.
+and each gate challenged once the real forecast wins 2 of 4. It ranks the arts it uses (and the
+ultimate) whenever a rank costs at most a quarter of the gold in hand (`RANK_GOLD_SHARE`), as a
+sensible player would; before, it never bought ranks.
 
 - Enemy strength has two phases (`stageScale`): x1.27 health and x1.16 attack per stage up to
   stage 18, then x1.17 and x1.10. Early on the player's power arrives in bursts (army, gear,
@@ -154,6 +157,38 @@ condition (`SEEDS=1,...,8 MAXMIN=200 STOPGATE=48 WALL=45`, `ASCEND_SYNERGY=0` vs
 
 Median deepest stage in the window is 44 either way (on: up to 48). A reward for building a good
 army that is felt mid-game without reshaping the curve.
+
+### AUTO casts
+
+Until this change, an ability cast by AUTO was overwritten in the same tick by the movement and
+attack logic: impact arts (Arc Slash, Thunder Strike, Soul Burst, Void Nova and the techniques)
+never landed, AUTO dodges never dashed, and he kept swinging through his ultimate. The balance had
+been tuned on that. With the fix (`World.updatePlayer` stops when AUTO acted) three adjustments
+bring the pace back near where it was:
+
+- Ascendant Fury lands a sword cut on each lead: a basic blow at `FURY_CUT_POWER` (0.25), with
+  its crits, on-hit effects and energy. It gives back the swings the cast lock now takes during
+  the ultimate; late boss fights return to their earlier odds.
+- The first gate's boss (stages 2 to 3) has `FIRST_GATE_HP` (x1.65) health, and the stage-1
+  Warden keeps its full stage health (it was 70%): otherwise a player who has just reached them
+  walks through.
+- No enemy, mid or late, and no art changed.
+
+Share of the warrior's damage in AUTO, from the boss and farming probe on the simulator's saved
+profiles (3 per gate, one farming run and one boss fight each; the Fury's cut counts as
+ultimate):
+
+| Gate | Before: basic / arts / ultimate | After: basic / arts / ultimate |
+| --- | --- | --- |
+| 3 | 68% / 0% / 32% | 24% / 38% / 38% |
+| 12 | 57% / 0% / 43% | 21% / 32% / 47% |
+| 24 | 40% / 0% / 60% | 12% / 19% / 69% |
+| 36 | 34% / 0% / 66% | 11% / 19% / 71% |
+
+Measured effect on the simulator (seeds 101 to 124, 90 minutes, three runs each to show the
+noise): gates 6 and 12 about the same; gates 18 to 39 reached 1 to 5 minutes sooner (the middle
+game, where AUTO's arts now land, is faster); gate 42 reached by 19 to 22 seeds of 24 against 19
+to 20; deepest stage and level slightly up.
 
 ### The weeks-long curve
 
@@ -202,6 +237,7 @@ simulation. Decisions:
 | Health bars leaked on every world swap | Fixed |
 | A pending post-fall beat could overwrite a newly started run | Fixed; runs cannot start while regrouping |
 | Hard wall at gates 30 to 36; gates 1 to 27 trivial | Rebalanced (see Economy); early gates stay quick by choice, as the climb that teaches the loop |
+| AUTO's casts never landed (overwritten in the same tick); dodges never dashed | Fixed; Fury's cut and the first gate's health keep the pace (see AUTO casts) |
 | Eight hours offline erased the curve | Cap now grows with bosses won; 40% fought |
 | Rift Cores starved while shards piled up | Shards refine 25:1 into cores |
 | Boss rematches for repeat rewards | Deferred: refining covers the core shortage without inviting boss farming |

@@ -97,7 +97,7 @@ export const ABILITIES: Record<AbilityId, AbilityDef> = {
     id: "ascendant_fury",
     name: "Ascendant Fury",
     short: "Fury",
-    description: "Your ultimate. Time slows and you blink from foe to foe, cutting on each arrival. Seven strikes, and each one hits every enemy on the field. Then you blink back to where you stood.",
+    description: "Your ultimate. Time slows and you blink from foe to foe. Seven strikes: each lands a sword cut on the foe beside you and hits every enemy on the field. Then you blink back to where you stood.",
     element: "soul",
     cooldown: 0,
     castTime: 1.6,

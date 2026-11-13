@@ -233,6 +233,9 @@ export class BattleRenderer implements ImpactHost {
   private furyBoxSet = false;
   /** The current strike's lead while the flurry runs (-1 otherwise): only it shows a number. */
   private furyLead = -1;
+  /** The lead's damage in the current event batch (the cut and the strike), shown as one number. */
+  private furyLeadSum = 0;
+  private furyLeadCrit = false;
   /** Backdrop dim during the flurry (0 to 1), eased in and out. */
   private furyDim = 0;
   /** The warrior's facing as last drawn (an afterimage keeps the stance he blinked out of). */
@@ -1717,7 +1720,12 @@ export class BattleRenderer implements ImpactHost {
           if (this.furyLead >= 0 && e.sourceId === world.player.id && e.faction === "enemy") {
             // The flurry folds its damage into one running total; only the lead shows its own.
             this.numbers.tallyAdd(e.amount, FURY_GOLD);
-            if (e.targetId !== this.furyLead) break;
+            // The lead takes the sword cut and the strike in the same moment: one number, their sum.
+            if (e.targetId === this.furyLead && e.amount > 0) {
+              this.furyLeadSum += e.amount;
+              this.furyLeadCrit ||= e.crit;
+            }
+            break;
           }
           if (e.amount > 0 && target) {
             this.chest(target, this.pt);
@@ -1969,6 +1977,18 @@ export class BattleRenderer implements ImpactHost {
       }
     }
     for (const v of this.views.values()) v.swungThisBatch = false;
+    if (this.furyLeadSum > 0) {
+      const lead = world.entities.get(this.furyLead);
+      if (lead) {
+        this.chest(lead, this.pt);
+        const lv = this.views.get(lead.id);
+        const halfW = (lv ? lv.rig.top * 0.2 : 16) * this.figureScale(lead.pos.y);
+        const dir = lead.pos.x >= world.player.pos.x ? 1 : -1;
+        this.numbers.hit(this.pt.x, this.pt.y - 6, halfW, dir, fmtNum(this.furyLeadSum), this.furyLeadCrit ? 0xdab86c : 0xf3f0e9, this.furyLeadCrit ? "crit" : "normal", true);
+      }
+      this.furyLeadSum = 0;
+      this.furyLeadCrit = false;
+    }
   }
 
   private castFx(ability: string, id: number, pos: { x: number; y: number }, facing: 1 | -1, target: { x: number; y: number } | null): void {
