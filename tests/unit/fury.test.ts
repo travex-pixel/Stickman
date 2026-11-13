@@ -3,7 +3,7 @@ import { World, FIXED_DT, ARENA, FURY_STRIKES } from "@/game/engine/World";
 import { buildLoadout } from "@/game/progression/loadout";
 import { createDefaultProfile } from "@/game/progression/profile";
 import { startsCast, type GameEvent } from "@/game/engine/events";
-import { FURY_CUT_POWER } from "@/game/engine/World";
+import { FURY_AFTER_INVULN, FURY_CUT_POWER } from "@/game/engine/World";
 import { hasStatus } from "@/game/combat/statuses";
 import type { Combatant } from "@/game/entities/types";
 import { addStatus } from "@/game/combat/statuses";
@@ -470,4 +470,30 @@ describe("Ascendant Fury: the blink-strike flurry", () => {
     expect(cutCrits.length).toBe(FURY_STRIKES);
     expect((w as unknown as { perfectCrit: boolean }).perfectCrit).toBe(true);
   });
+
+  it("leaves only the short invulnerability when it ends: a blow lands on him soon after", () => {
+    const w = quietWorld(71);
+    // A brute that keeps fighting (not stunned) and cannot die.
+    const brute = w.spawnEnemy("ashborn_brute", { pos: { x: w.player.pos.x + 50, y: w.player.pos.y }, minion: true });
+    brute.stats.maxHp = 1e8;
+    brute.hp = brute.stats.maxHp;
+    w.energy = 100;
+    expect(w.castAbility("ascendant_fury")).toBe(true);
+    let endedAt = -1;
+    let hurtAfter = -1;
+    for (let i = 0; i < Math.round(6 / FIXED_DT); i++) {
+      w.update(FIXED_DT);
+      const ev = w.drainEvents();
+      if (endedAt < 0 && ev.some((e) => e.type === "fury_end")) {
+        endedAt = i;
+        const inv = w.player.statuses.filter((st) => st.kind === "invuln");
+        expect(inv).toHaveLength(1);
+        expect(inv[0]!.remaining).toBeLessThanOrEqual(FURY_AFTER_INVULN + 1e-9);
+      }
+      if (endedAt >= 0 && hurtAfter < 0 && ev.some((e) => e.type === "hit" && e.targetKind === "player")) hurtAfter = i;
+    }
+    expect(endedAt).toBeGreaterThan(0);
+    expect(hurtAfter).toBeGreaterThan(endedAt);
+  });
+
 });

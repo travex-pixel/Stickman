@@ -123,6 +123,8 @@ export const FURY_FIRST = 0.25;
 export const FURY_GAP = 0.16;
 /** The depth step a blink takes instead when the arena wall would land him where he stands. */
 export const FURY_DEPTH_STEP = 24;
+/** Invulnerability left when Ascendant Fury ends (world seconds): the usual short window. */
+export const FURY_AFTER_INVULN = 0.3;
 /**
  * Bosses past the stage-1 Warden carry extra health, largest at the first gate and fading by a
  * fixed step per stage to none: since AUTO's arts land, the warrior's power rises most early (the
@@ -1759,7 +1761,10 @@ export class World {
     const near = nearestHostile(p, this.entities.values());
     p.facing = near ? (near.pos.x >= p.pos.x ? 1 : -1) : u.originFacing;
     p.targetId = near ? near.id : -1;
-    addStatus(p, { kind: "invuln", remaining: 0.3, value: 1, sourceId: p.id });
+    // The usual short invulnerability, exactly: the cast's own (its 1.6s cast time, in world time)
+    // would otherwise outlive the slowed flurry by about a second while he fights on.
+    p.statuses = p.statuses.filter((s) => s.kind !== "invuln");
+    addStatus(p, { kind: "invuln", remaining: FURY_AFTER_INVULN, value: 1, sourceId: p.id });
     // The cast ends with the ultimate (its 1.6s cast time is world time, which would hold him idle
     // for about a second after the flurry): he is free the moment he returns.
     if (p.state === "cast" && p.pendingAbility === "ascendant_fury") this.setState(p, "idle");
