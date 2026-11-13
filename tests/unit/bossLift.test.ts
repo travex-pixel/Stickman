@@ -14,5 +14,4 @@ describe("boss health lift", () => {
     }
     expect(bossHealthLift(71)).toBe(1);
   });
-
 });

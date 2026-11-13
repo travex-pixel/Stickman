@@ -137,10 +137,9 @@ export function bossHealthLift(stage: number): number {
 }
 /**
  * Each blink also lands a real sword cut on its lead: a basic blow (his attack, crits, on-hit
- * effects, the energy a basic hit gives), at this strength relative to an ordinary one. It gives
- * back the swings the cast lock now takes from him during the ultimate: 0.25 brings late boss
- * fights back to their earlier odds (a full blow, 1.0, wins far more of them: each cut also feeds
- * the next ultimate's energy).
+ * effects, the energy a basic hit gives) at this strength relative to an ordinary one. It is there
+ * for feel: the smallest strength that still reads as a hit beside the strike (about a fifth of
+ * the lead's number). It does not spend a perfect dodge's crit.
  */
 export const FURY_CUT_POWER = 0.25;
 /** Economy-simulator knob (A/B): 0 keeps the warrior in place through Ascendant Fury (no blinks in the simulation). */

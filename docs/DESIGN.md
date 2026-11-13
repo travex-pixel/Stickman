@@ -163,16 +163,15 @@ army that is felt mid-game without reshaping the curve.
 Until this change, an ability cast by AUTO was overwritten in the same tick by the movement and
 attack logic: impact arts (Arc Slash, Thunder Strike, Soul Burst, Void Nova and the techniques)
 never landed, AUTO dodges never dashed, and he kept swinging through his ultimate. The balance had
-been tuned on that. With the fix (`World.updatePlayer` stops when AUTO acted) three adjustments
-bring the pace back near where it was:
+been tuned on that. With the fix (`World.updatePlayer` stops when AUTO acted):
 
-- Ascendant Fury lands a sword cut on each lead: a basic blow at `FURY_CUT_POWER` (0.25), with
-  its crits, on-hit effects and energy. It gives back the swings the cast lock now takes during
-  the ultimate; late boss fights return to their earlier odds.
-- The first gate's boss (stages 2 to 3) has `FIRST_GATE_HP` (x1.65) health, and the stage-1
-  Warden keeps its full stage health (it was 70%): otherwise a player who has just reached them
-  walks through.
-- No enemy, mid or late, and no art changed.
+- Ascendant Fury's cast ends with the ultimate: he is free the moment he returns. (Its 1.6 s cast
+  time is world time and outlived the slowed flurry, holding him idle for about a second.)
+- Each blink lands a sword cut on its lead, a basic blow at `FURY_CUT_POWER` (0.25), for feel.
+- Bosses past the stage-1 Warden carry extra health, one rule (`bossHealthLift`): x1.85 at the
+  first gate, falling by 0.0125 per stage to none at stage 71. The stage-1 Warden keeps its full
+  stage health (it was 70%).
+- No ordinary enemy and no art changed.
 
 Share of the warrior's damage in AUTO, from the boss and farming probe on the simulator's saved
 profiles (3 per gate, one farming run and one boss fight each; the Fury's cut counts as
@@ -185,10 +184,16 @@ ultimate):
 | 24 | 40% / 0% / 60% | 12% / 19% / 69% |
 | 36 | 34% / 0% / 66% | 11% / 19% / 71% |
 
-Measured effect on the simulator (seeds 101 to 124, 90 minutes, three runs each to show the
-noise): gate 6 the same, gate 12 about half a minute sooner, gates 18 to 39 reached 1 to 5
-minutes sooner (the middle game, where AUTO's arts now land, is faster); gate 42 reached by 19 to 22 seeds of 24 against 19
-to 20; deepest stage and level slightly up.
+Measured against the previous build, both with the simulator's rank-buying player:
+
+- Boss forecasts (24 fights per saved profile): every gate from 3 to 42 within 9 points of its
+  earlier odds except gate 24 (+11) and gate 33 (+41, its boss suffers most from the arts).
+- Economy simulator (seeds 101 to 124, 90 minutes, three runs each): gates 6 to 24 reached as
+  before; gates 30 to 39 about 2 to 8 minutes sooner, because farming is 5 to 10% faster from
+  stage 29 on (the gates themselves are as hard as before); gate 42 reached by every seed (19 to
+  20 of 24 before); deepest stage 44 against 42 to 44; level about 71 against 64 to 67.
+- Back-to-back ultimates: in late boss fights an ultimate now comes every 2 s (median), against
+  2.8 to 3.6 s before; the Fury's cuts return its energy within the flurry at high gain.
 
 ### The weeks-long curve
 
