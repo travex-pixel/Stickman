@@ -125,12 +125,13 @@ export const FURY_GAP = 0.16;
 export const FURY_DEPTH_STEP = 24;
 /**
  * Bosses past the stage-1 Warden carry extra health, largest at the first gate and fading by a
- * fixed step per stage: since AUTO's arts land, the warrior's power rises most early (the arts
- * are 38% of his damage at gate 3, 19% by gate 36), and these keep each gate where it was.
- * Fitted on the boss probe: x1.85 at stage 3, x1.55 at 27, x1.35 at 43, none from stage 71.
+ * fixed step per stage to none: since AUTO's arts land, the warrior's power rises most early (the
+ * arts are 38% of his damage at gate 3, 19% by gate 36), and this keeps each gate where it was.
+ * Fitted per gate on the boss probe (forecast fights on the simulator's saved profiles): x1.55 at
+ * stage 3, x1.3 at 20, x1.1 at 33, none from stage 40.
  */
-export const BOSS_LIFT_AT_FIRST_GATE = 0.85;
-export const BOSS_LIFT_FADE_PER_STAGE = 0.0125;
+export const BOSS_LIFT_AT_FIRST_GATE = 0.55;
+export const BOSS_LIFT_FADE_PER_STAGE = 0.015;
 export function bossHealthLift(stage: number): number {
   if (stage <= 1) return 1;
   return 1 + Math.max(0, BOSS_LIFT_AT_FIRST_GATE - BOSS_LIFT_FADE_PER_STAGE * Math.max(0, stage - 3));
