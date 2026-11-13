@@ -45,8 +45,8 @@ Shadows are earned in combat, which ties the collection directly to the fighting
    returns to farming; nothing retries automatically. Offline time is simulated with the same
    rules and stops at gates. Rules: `src/game/progression/campaign.ts`. Basic attacks are
    automatic; abilities, dodge, focus and BIND are the player's decisions; AUTO is on after the
-   tutorial. AUTO really casts: its arts, dodges and Ascendant Fury land and hold their cast time
-   exactly as a cast by hand (see "AUTO casts" below).
+   tutorial. AUTO really casts: its arts and dodges land and hold their cast time, and its
+   Ascendant Fury holds him until he returns, exactly as a cast by hand (see "AUTO casts" below).
 2. Enemies marked with pale light leave a shadow. BIND shows its success chance before the tap.
 3. Spend gold on stats (hold to upgrade), essence on shadow bonds, Rift Cores on evolution.
 4. Level ups offer a choice of three perks. Clearing stages unlocks modes, ranks and regions.
@@ -166,20 +166,25 @@ never landed, AUTO dodges never dashed, and he kept swinging through his ultimat
 been tuned on that. With the fix (`World.updatePlayer` stops when AUTO acted):
 
 - Ascendant Fury's cast ends with the ultimate: he is free the moment he returns. (Its 1.6 s cast
-  time is world time and outlived the slowed flurry, holding him idle for about a second.)
+  time is world time and outlived the slowed flurry, holding him idle for about a second.) His
+  invulnerability ends with it too, after a short `FURY_AFTER_INVULN` (0.3 s) to land the return
+  blink; it used to outlive the flurry by about a second.
+- He cannot dodge while the Fury runs; every ability disc reads held until he returns.
 - Each blink lands a sword cut on its lead, a basic blow at `FURY_CUT_POWER` (0.25), for feel.
 - Nothing charges the ultimate while it runs (its cut, its strikes' crits and kills, the army's
   kills): it never pays for the next one. Before this rule AUTO recast it the moment he returned in
-  late fights (every 2 s); now every 4 to 5 s in late boss fights and 4 to 7 s while farming,
-  against 2.8 to 3.6 s and 2.2 to 2.5 s before the AUTO fix.
+  late fights (every 2 s); now the median gap is 4 to 4.8 s in late boss fights (gates 30 to 42)
+  and 4 to 7.4 s while farming (stages 29 to 41), against 2.8 to 3.6 s and 2.2 to 2.5 s before the
+  AUTO fix.
 - Bosses past the stage-1 Warden carry extra health, one rule (`bossHealthLift`): x1.55 at the
-  first gate, falling by 0.015 per stage to none from stage 40. The stage-1 Warden keeps its full
-  stage health (it was 70%).
+  first gate, falling by 0.0155 per stage to none from stage 39. Boss Hunts and the Rift Tyrant
+  keep it; Trials do not. The stage-1 Warden keeps its full stage health (it was 70%).
 - No ordinary enemy and no art changed.
 
 Share of the warrior's damage in AUTO, from the boss and farming probe on the simulator's saved
 profiles (3 per gate, one farming run and one boss fight each; the Fury's cut counts as
-ultimate):
+ultimate; measured before the shorter invulnerability, which does not change who deals the
+damage):
 
 | Gate | Before: basic / arts / ultimate | After: basic / arts / ultimate |
 | --- | --- | --- |
@@ -192,13 +197,17 @@ ultimate):
 
 Measured against the previous build, both with the simulator's rank-buying player:
 
-- Boss forecasts (24 fights per saved profile): every gate from 3 to 42 within 7.5 points of its
-  earlier odds.
+- Boss forecasts (24 fights per saved profile, 120 to 288 fights per gate): every gate from 3 to 42
+  within 8.7 points of its earlier odds (3: -4.2, 6: 0, 9: +1.4, 12: 0, 18: +7.6, 24: +8.3,
+  30: -5.2, 33: +0.7, 36: +8.7, 39: +4.9, 42: 0).
+- Rift Tyrant bars broken (4 bosses, 2 twists, 6 saved profiles per gate group): with the lift
+  -15% at gate 12, -7.5% at 24, -4% at 30, +0.5% at 36, +6% at 42; without it +21%, +17%, +11%,
+  +6%, +6%. The lift is the closer of the two, so the Tyrant keeps it.
 - Economy simulator (seeds 101 to 124, 90 minutes, three runs each): gates 6 to 24 reached as
-  before; gates 30 to 39 about 1 to 7 minutes sooner, because farming is faster from stage 29 on
-  (cycles 3 to 8% shorter; the gates themselves are as hard as before); gate 42 reached by 23 to
-  24 seeds (19 to 20 before); deepest stage 44 against 42 to 44; level about 69 to 70 against 64
-  to 67.
+  before; gates 30 to 39 about 1 to 5 minutes sooner, because farming is faster from stage 29 on
+  (cycles 2 to 8% shorter; the gates themselves are as hard as before); gate 42 reached by 21 to
+  23 seeds (19 to 20 before); deepest stage 42 to 44 as before; level about 67.5 to 69 against
+  64 to 66.5.
 
 ### The weeks-long curve
 
@@ -247,7 +256,7 @@ simulation. Decisions:
 | Health bars leaked on every world swap | Fixed |
 | A pending post-fall beat could overwrite a newly started run | Fixed; runs cannot start while regrouping |
 | Hard wall at gates 30 to 36; gates 1 to 27 trivial | Rebalanced (see Economy); early gates stay quick by choice, as the climb that teaches the loop |
-| AUTO's casts never landed (overwritten in the same tick); dodges never dashed | Fixed; Fury's cut and the first gate's health keep the pace (see AUTO casts) |
+| AUTO's casts never landed (overwritten in the same tick); dodges never dashed | Fixed; the ultimate frees him on return and charges nothing while it runs, and one boss-health rule keeps the gates' odds (see AUTO casts) |
 | Eight hours offline erased the curve | Cap now grows with bosses won; 40% fought |
 | Rift Cores starved while shards piled up | Shards refine 25:1 into cores |
 | Boss rematches for repeat rewards | Deferred: refining covers the core shortage without inviting boss farming |
