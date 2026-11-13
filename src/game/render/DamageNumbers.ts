@@ -267,11 +267,16 @@ export class DamageNumbers {
   /**
    * A damage figure beside a target. (x, y) is the target's chest, `halfW` half its drawn width,
    * `dir` the side away from the attacker (+1 right, -1 left). `avoid` keeps it off the warrior.
+   * `life` (real seconds) shortens it, for a quick run of blows like the Ascendant Fury's.
    */
-  hit(x: number, y: number, halfW: number, dir: number, value: string, color: number, style: NumberStyle, avoid = true): void {
+  hit(x: number, y: number, halfW: number, dir: number, value: string, color: number, style: NumberStyle, avoid = true, life?: number): void {
     const n = this.take();
     if (!n) return;
     this.fill(n, value, color, style);
+    if (life !== undefined) {
+      n.total = life;
+      n.life = life;
+    }
     const d = dir >= 0 ? 1 : -1;
     const scale = n.size / this.zoom;
     const half = (n.w * scale) / 2;

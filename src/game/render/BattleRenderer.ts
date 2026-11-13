@@ -137,6 +137,12 @@ const FURY_SETTLE = 14;
  * interface leaves free between the army commands (left) and the army strip (right), below the
  * boss bar when there is one.
  */
+/**
+ * Real seconds each strike's number on the lead lasts. Strikes come about every 0.2 s, so this
+ * keeps about two on screen and the last one gone soon after the return (an ordinary number lasts
+ * 0.72 s, a crit 0.95 s, and they piled up over the flurry).
+ */
+const FURY_NUMBER_LIFE = 0.36;
 const TALLY_SCREEN_X = 0.65;
 const TALLY_SCREEN_Y = 84;
 
@@ -1984,7 +1990,7 @@ export class BattleRenderer implements ImpactHost {
         const lv = this.views.get(lead.id);
         const halfW = (lv ? lv.rig.top * 0.2 : 16) * this.figureScale(lead.pos.y);
         const dir = lead.pos.x >= world.player.pos.x ? 1 : -1;
-        this.numbers.hit(this.pt.x, this.pt.y - 6, halfW, dir, fmtNum(this.furyLeadSum), this.furyLeadCrit ? 0xdab86c : 0xf3f0e9, this.furyLeadCrit ? "crit" : "normal", true);
+        this.numbers.hit(this.pt.x, this.pt.y - 6, halfW, dir, fmtNum(this.furyLeadSum), this.furyLeadCrit ? 0xdab86c : 0xf3f0e9, this.furyLeadCrit ? "crit" : "normal", true, FURY_NUMBER_LIFE);
       }
       this.furyLeadSum = 0;
       this.furyLeadCrit = false;
