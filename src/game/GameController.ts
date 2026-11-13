@@ -200,6 +200,8 @@ export class GameController {
   private loop: GameLoop;
   private hudAccum = 0;
   private toastId = 0;
+  /** A toast that arrived while the Fury's running total was on screen: shown once it clears. */
+  private heldToast: { text: string; tone: Toast["tone"]; low: boolean } | null = null;
   private modalQueue: Modal[] = [];
   private rankBadgeShown = false;
   private explainedBind = false;
@@ -578,6 +580,11 @@ export class GameController {
     if (r) {
       try {
         r.render(alpha, dtReal, this.paused);
+        if (this.heldToast && !r.furyTotalShowing) {
+          const t = this.heldToast;
+          this.heldToast = null;
+          this.toast(t.text, t.tone, t.low);
+        }
       } catch (err) {
         const now = performance.now();
         if (now - this.lastRenderErrorAt > 5000) {
@@ -2090,6 +2097,12 @@ export class GameController {
   }
 
   toast(text: string, tone: Toast["tone"] = "info", low = false): void {
+    // The Fury's gold total sits where toasts land: hold the newest until it clears (only one toast
+    // shows at a time anyway; a routine one never replaces a held important one).
+    if (this.renderer?.furyTotalShowing) {
+      if (!(low && this.heldToast && !this.heldToast.low)) this.heldToast = { text, tone, low };
+      return;
+    }
     // Routine news (a fallen companion, a cycle's gold) never pushes out something more important.
     if (low && this.uiStore.get().toasts.some((t) => !t.low)) return;
     const id = ++this.toastId;

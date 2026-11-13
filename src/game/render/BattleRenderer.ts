@@ -2225,6 +2225,11 @@ export class BattleRenderer implements ImpactHost {
     return a.tl.t >= REVEAL_LENGTH[a.staging] || this.reduced;
   }
 
+  /** The Ascendant Fury's running total is on screen (toasts wait for it to clear). */
+  get furyTotalShowing(): boolean {
+    return this.numbers?.tallyOn ?? false;
+  }
+
   get cinematicActive(): boolean {
     return this.arise !== null;
   }
