@@ -2,6 +2,7 @@ import { Store } from "@/lib/store";
 import { World, FIXED_DT, type WorldSnapshot } from "./engine/World";
 import { GameLoop } from "./engine/GameLoop";
 import { startsCast, type GameEvent } from "./engine/events";
+import { ToastHold } from "./toastHold";
 import { Rng } from "./engine/rng";
 import type { AbilityId, EquipSlot, PanelId, SummonCommand, UpgradeableStat, WeaponPath } from "./data/ids";
 import { createDefaultProfile, type EquipmentItem, type Profile, type SummonInstance } from "./progression/profile";
@@ -200,8 +201,8 @@ export class GameController {
   private loop: GameLoop;
   private hudAccum = 0;
   private toastId = 0;
-  /** A toast that arrived while the Fury's running total was on screen: shown once it clears. */
-  private heldToast: { text: string; tone: Toast["tone"]; low: boolean } | null = null;
+  /** Toasts that arrived while the Fury's running total was on screen: shown once it clears. */
+  private readonly toastHold = new ToastHold<{ text: string; tone: Toast["tone"]; low: boolean }>(3);
   private modalQueue: Modal[] = [];
   private rankBadgeShown = false;
   private explainedBind = false;
@@ -310,6 +311,7 @@ export class GameController {
   }
 
   detachRenderer(): void {
+    this.toastHold.clear();
     this.rendererHost = null;
     this.renderer?.unmount();
     this.renderer = null;
@@ -399,6 +401,8 @@ export class GameController {
   // ---------------------------------------------------------------------
 
   startRun(stage: number, mode: ModeId = "campaign"): void {
+    // Toasts held over a Fury belong to the fight being left.
+    this.toastHold.clear();
     // Whatever replaces a Tyrant fight still in progress, the try it cost is scored and paid.
     this.bankTyrant();
     // Any new run supersedes a pending post-defeat beat: it must never overwrite this one.
@@ -580,9 +584,9 @@ export class GameController {
     if (r) {
       try {
         r.render(alpha, dtReal, this.paused);
-        if (this.heldToast && !r.furyTotalShowing) {
-          const t = this.heldToast;
-          this.heldToast = null;
+        // Held toasts come out one at a time, once the total has cleared and nothing else shows.
+        if (this.toastHold.size > 0 && !r.furyTotalShowing && this.uiStore.get().toasts.length === 0) {
+          const t = this.toastHold.next()!;
           this.toast(t.text, t.tone, t.low);
         }
       } catch (err) {
@@ -2097,10 +2101,9 @@ export class GameController {
   }
 
   toast(text: string, tone: Toast["tone"] = "info", low = false): void {
-    // The Fury's gold total sits where toasts land: hold the newest until it clears (only one toast
-    // shows at a time anyway; a routine one never replaces a held important one).
+    // The Fury's gold total sits where toasts land: hold them until it clears.
     if (this.renderer?.furyTotalShowing) {
-      if (!(low && this.heldToast && !this.heldToast.low)) this.heldToast = { text, tone, low };
+      this.toastHold.add({ text, tone, low });
       return;
     }
     // Routine news (a fallen companion, a cycle's gold) never pushes out something more important.

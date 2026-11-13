@@ -2444,6 +2444,7 @@ export class BattleRenderer implements ImpactHost {
 
   /** The flurry is cut short (new world, unmount): drop its pose, afterimages and total. */
   private endFury(): void {
+    this.numbers?.tallyReset();
     this.fury.on = false;
     this.fury.t = 0;
     this.furyBoxSet = false;

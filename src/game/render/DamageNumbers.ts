@@ -180,6 +180,13 @@ export class DamageNumbers {
     this.tallyHolder.position.set(x, y);
   }
 
+  /** Drop the total at once (the flurry was cut short: a new world, a detach). */
+  tallyReset(): void {
+    this.tallyState.on = false;
+    this.tallyState.closed = false;
+    this.tallyHolder.visible = false;
+  }
+
   get tallyOn(): boolean {
     return this.tallyState.on;
   }
