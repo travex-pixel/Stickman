@@ -486,6 +486,10 @@ fight no control covers another at seven phone sizes, with the hint and a line o
 It failed at 320x568 on its first run: the two stacked down onto Retreat. On screens 700px tall
 or less the army row now steps aside for the hint, and the hint waits out a line of news.
 
+**Checks on the final build, run by me:** type check, lint and production build clean; 309 unit
+tests pass, 3 skipped (17 of them new or changed for this work); 58 of 58 browser tests, 7 of
+them the new boss-fight layout test.
+
 **Not done, and why.**
 - Staggered attack timing and formation spread for the army: both live in the simulation, and
   changing them would move the balance that was just re-measured. Left for a pass that re-runs
