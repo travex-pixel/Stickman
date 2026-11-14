@@ -10,7 +10,7 @@ export class AudioManager {
   private ambience: Howl | null = null;
   private unlocked = false;
   private ready = false;
-  private lastPlayed = new Map<SfxName, number>();
+  private lastPlayed = new Map<string, number>();
   private musicVolume = 0.6;
   private sfxVolume = 0.8;
 
@@ -46,12 +46,17 @@ export class AudioManager {
     if (this.ambience && this.unlocked) this.ambience.volume(music * 0.5);
   }
 
-  play(name: SfxName, opts: { volume?: number; rate?: number; minInterval?: number } = {}): void {
+  /**
+   * `voice` names a separate limiter for the same sound (the army's blows share a sample with the
+   * warrior's but must never swallow his): the interval is kept per voice, not per sample.
+   */
+  play(name: SfxName, opts: { volume?: number; rate?: number; minInterval?: number; voice?: string } = {}): void {
     if (!this.unlocked || this.sfxVolume <= 0) return;
     const now = performance.now();
-    const last = this.lastPlayed.get(name) ?? -Infinity;
+    const key = opts.voice ?? name;
+    const last = this.lastPlayed.get(key) ?? -Infinity;
     if (now - last < (opts.minInterval ?? 40)) return;
-    this.lastPlayed.set(name, now);
+    this.lastPlayed.set(key, now);
     const h = this.sfx.get(name);
     if (!h) return;
     const id = h.play();

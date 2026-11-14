@@ -12,6 +12,11 @@ type HitEvent = Extract<GameEvent, { type: "hit" }>;
 type DeathEvent = Extract<GameEvent, { type: "death" }>;
 
 /** Render-side state the director keeps on each entity view. */
+const SPARK_SPEED: [number, number] = [0, 0];
+const SPARK_ANGLE: [number, number] = [0, 0];
+const SPARK_SCALE: [number, number] = [0, 0];
+const SPARK_LIFE: [number, number] = [0.12, 0.3];
+
 export interface ImpactState {
   rig: Rig;
   /** Combo counter, incremented on `attack_swing`. */
@@ -28,6 +33,10 @@ export interface ImpactState {
   /** Squash (0..1) and slide (rig units, signed) from the last impact; both decay. */
   squash: number;
   slide: number;
+  /** Struck by the blow whose hold is running: the body shudders along the blow while held. */
+  struck: boolean;
+  /** Seconds since this body last wound up, struck or recovered (a combo starts over after a pause). */
+  restFor: number;
 }
 
 export interface ImpactHost {
@@ -139,6 +148,7 @@ export class ImpactDirector {
     // A warrior hit without a swing in this batch came from an ability.
     const ability = byWarrior && !(sv?.swungThisBatch ?? false);
     if (tv) {
+      tv.struck = true;
       tv.lastHitCrit = e.crit;
       tv.lastHitHeavy = e.heavy;
       tv.lastHitAbility = ability || (e.element !== "physical" && !sv?.swungThisBatch);
@@ -162,6 +172,8 @@ export class ImpactDirector {
       ang += dir * tilt;
     } else if (sv && sv.rig.meleeKit === "heavy") ang += dir * 0.6;
 
+    // The third swing of the warrior's combo, the overhead: the beat the other two lead up to.
+    const third = byWarrior && !ability && !!sv && sv.rig.meleeKit === "combo" && swingVariant(sv.swings, "attack") === 2;
     if (byWarrior) {
       if (ability || e.heavy) {
         // Ability impacts hold the targets, not the caster; a heavy basic holds both.
@@ -173,14 +185,27 @@ export class ImpactDirector {
         this.react(tv, target, dir, 0.08, 14, 2);
         this.dust(target);
         this.sparks(x, y, ang, e.crit ? 10 : 6, e.crit ? 0xe9c97a : elementColor(e.element), 1);
+        // A heavy blow rings the air where it lands (rationed: a seven-strike ultimate on a crowd
+        // gets a few rings, not one per body).
+        if (this.cool("ring-heavy", 0.12)) h.shockRing(x, y, 40, e.crit ? 0xe9c97a : elementColor(e.element));
       } else if (e.crit) {
-        this.impact("crit", e.sourceId, e.targetId, "w-crit", 0.09);
+        // A crit on the third swing holds as long as that swing does.
+        this.impact(third ? "finisher" : "crit", e.sourceId, e.targetId, "w-crit", 0.09);
         h.camera.kick(dir * 7 * this.kickScale, 1.5 * this.kickScale);
         h.camera.punch(0.025);
         this.react(tv, target, dir, 0.1, 10, 2);
         this.sparks(x, y, ang, 12, 0xe9c97a, 1.25);
         h.starFlash(x, y, 1.0, 0xfff1c9);
         h.shockRing(x, y, 46, 0xe9c97a);
+      } else if (third) {
+        this.impact("finisher", e.sourceId, e.targetId, "w-fin", 0);
+        h.camera.kick(dir * 6 * this.kickScale, 2.2 * this.kickScale);
+        h.camera.punch(0.015);
+        this.react(tv, target, dir, 0.09, 9, 1);
+        this.sparks(x, y, ang, 9, elementColor(e.element), 1.1);
+        this.flashDisc(x, y, 1.2, elementColor(e.element));
+        h.shockRing(x, y, 30, elementColor(e.element));
+        this.dust(target);
       } else {
         this.impact("normal", e.sourceId, e.targetId, "w-hit", 0);
         h.camera.kick(dir * 3 * this.kickScale, 0.8 * this.kickScale);
@@ -286,10 +311,17 @@ export class ImpactDirector {
     o.count = count;
     o.texture = spark();
     o.color = color;
-    o.speed = [110 * size, 300 * size];
-    o.angle = [ang - CONE / 2, ang + CONE / 2];
-    o.life = [0.12, 0.3];
-    o.scale = [0.45 * size, 1.0 * size];
+    // The ranges are written into the director's own arrays: nothing is allocated per hit.
+    SPARK_SPEED[0] = 110 * size;
+    SPARK_SPEED[1] = 300 * size;
+    SPARK_ANGLE[0] = ang - CONE / 2;
+    SPARK_ANGLE[1] = ang + CONE / 2;
+    SPARK_SCALE[0] = 0.45 * size;
+    SPARK_SCALE[1] = 1.0 * size;
+    o.speed = SPARK_SPEED;
+    o.angle = SPARK_ANGLE;
+    o.life = SPARK_LIFE;
+    o.scale = SPARK_SCALE;
     o.endScale = 0.1;
     o.alpha = 1;
     o.spin = 0;

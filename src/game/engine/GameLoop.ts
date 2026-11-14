@@ -7,7 +7,11 @@ export class GameLoop {
   private last = 0;
   private running = false;
   private raf = 0;
-  private frameTimes: number[] = [];
+  /** The last 30 frame times as a ring with a running sum: nothing allocated per frame. */
+  private readonly frameTimes = new Float64Array(30);
+  private frameHead = 0;
+  private frameCount = 0;
+  private frameSum = 0;
   fps = 0;
   frameMs = 0;
   /** Extra real-time freeze (impact frames). */
@@ -69,9 +73,11 @@ export class GameLoop {
     this.last = now;
     if (dtReal > 0.25) dtReal = 0.25;
     this.frameMs = dtReal * 1000;
-    this.frameTimes.push(dtReal);
-    if (this.frameTimes.length > 30) this.frameTimes.shift();
-    const avg = this.frameTimes.reduce((a, b) => a + b, 0) / this.frameTimes.length;
+    this.frameSum += dtReal - this.frameTimes[this.frameHead]!;
+    this.frameTimes[this.frameHead] = dtReal;
+    this.frameHead = (this.frameHead + 1) % this.frameTimes.length;
+    if (this.frameCount < this.frameTimes.length) this.frameCount++;
+    const avg = this.frameSum / this.frameCount;
     this.fps = avg > 0 ? Math.round(1 / avg) : 0;
 
     const perf = this.perf;

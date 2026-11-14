@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { World, FIXED_DT, ARENA } from "@/game/engine/World";
+import { World, FIXED_DT, ARENA, PERFECT_HOLD, PERFECT_RAMP, PERFECT_SLOW } from "@/game/engine/World";
 import { buildLoadout } from "@/game/progression/loadout";
 import { createDefaultProfile } from "@/game/progression/profile";
 import { claimEssence } from "@/game/summons/recruitment";
@@ -476,6 +476,37 @@ describe("perfect dodge", () => {
     (w as unknown as { playerBasicHit(t: unknown): void }).playerBasicHit(target);
     expect(w.drainEvents().some((e) => e.type === "hit" && e.crit && e.targetId === target.id)).toBe(true);
   });
+  it("slows the world to a quarter, holds, then eases back to full speed without overshoot", () => {
+    const p = createDefaultProfile();
+    p.player.level = 3;
+    const w = new World({ stage: 1, loadout: buildLoadout(p), seed: 5 });
+    step(w, 1);
+    expect(w.perfectFocus).toBe(0);
+    windingUp(w, 0.2);
+    expect(w.dodge()).toBe(true);
+    expect(w.timeScale).toBe(PERFECT_SLOW);
+    expect(w.perfectFocus).toBe(1);
+    // Held for the whole hold (real time), whatever the frame rate.
+    const frames = (seconds: number) => Math.round(seconds / FIXED_DT);
+    for (let i = 0; i < frames(PERFECT_HOLD) - 1; i++) w.update(FIXED_DT);
+    expect(w.timeScale).toBe(PERFECT_SLOW);
+    // Then the return: always rising, fastest at first (a cubic ease-out), and done on time.
+    const scales: number[] = [];
+    for (let i = 0; i < frames(PERFECT_RAMP) + 3; i++) {
+      w.update(FIXED_DT);
+      scales.push(w.timeScale);
+    }
+    for (let i = 1; i < scales.length; i++) expect(scales[i]!).toBeGreaterThanOrEqual(scales[i - 1]!);
+    expect(Math.max(...scales)).toBe(1);
+    const rising = scales.filter((v) => v > PERFECT_SLOW && v < 1);
+    expect(rising.length).toBeGreaterThan(8);
+    // Ease-out: half the way back in under a third of the time.
+    const third = rising[Math.floor(rising.length / 3)]!;
+    expect(third).toBeGreaterThan(PERFECT_SLOW + (1 - PERFECT_SLOW) * 0.5);
+    expect(w.timeScale).toBe(1);
+    expect(w.perfectFocus).toBe(0);
+  });
+
   it("too early is not perfect, and AUTO never earns it", () => {
     const w = freshWorld(1, 5);
     step(w, 1);

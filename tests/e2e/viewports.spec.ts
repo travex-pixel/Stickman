@@ -173,3 +173,83 @@ for (const vp of VIEWPORTS) {
     await onScreen("modal-ascend", "ascend-confirm");
   });
 }
+
+// The boss fight is the busiest moment on the field: the boss bar, the army row, the counter hint
+// (four seconds), the news line, Retreat and the ability bar. None of them may cover another, at
+// any phone size, with the hint up or gone.
+for (const vp of VIEWPORTS) {
+  test(`a boss fight's controls keep apart at ${vp.w}x${vp.h}`, async ({ browser }) => {
+    const ctx = await browser.newContext({ viewport: { width: vp.w, height: vp.h }, deviceScaleFactor: 1, hasTouch: true, isMobile: true });
+    const page = await ctx.newPage();
+    await page.goto("/?debug=1");
+    await waitForGame(page);
+    const started = await page.evaluate(() => {
+      type Shadow = { instanceId: string; defId: string; level: number; xp: number; bond: number; shards: number; stars: number; deployed: boolean; recruitedAt: number };
+      const c = (window as unknown as { __ASCEND__: { profile: { tutorial: { finished: boolean }; progress: { bestStage: number; currentStage: number; bossGate: number }; player: { level: number; autoCast: boolean; statLevels: Record<string, number> }; summons: { collection: Shadow[] } }; commit(): void; startRun(stage: number): void; closeModal(): void; challengeBoss(): boolean; toast(text: string, tone?: string, weight?: number): void } }).__ASCEND__;
+      const p = c.profile;
+      p.tutorial.finished = true;
+      p.progress.bestStage = 2;
+      p.progress.currentStage = 3;
+      p.progress.bossGate = 3;
+      p.player.level = 19;
+      p.player.autoCast = true;
+      p.player.statLevels = { attack: 30, maxHp: 40, attackSpeed: 8, critChance: 6, critDamage: 5, defense: 20 };
+      const mk = (defId: string): Shadow => ({ instanceId: defId + "-1", defId, level: 4, xp: 0, bond: 1, shards: 0, stars: 0, deployed: true, recruitedAt: Date.now() });
+      p.summons.collection = [mk("husk_blade"), mk("veilshot")];
+      c.commit();
+      c.startRun(3);
+      for (let i = 0; i < 6; i++) c.closeModal();
+      return c.challengeBoss();
+    });
+    expect(started, "the boss fight starts").toBe(true);
+    await expect(page.getByTestId("boss-bar")).toBeVisible();
+    await expect(page.getByTestId("mode-leave")).toBeVisible();
+
+    const check = async (label: string) => {
+      const boxes = await page.evaluate(() => {
+        const ids = ["boss-bar", "command-follow", "command-guard", "summon-strip", "boss-counter", "event-pill", "mode-leave", "auto-toggle", "ability-ultimate"];
+        const out: { id: string; l: number; t: number; r: number; b: number }[] = [];
+        for (const id of ids) {
+          const el = document.querySelector(`[data-testid=${id}]`);
+          if (!el) continue;
+          const r = el.getBoundingClientRect();
+          if (r.width === 0 || r.height === 0) continue;
+          out.push({ id, l: r.left, t: r.top, r: r.right, b: r.bottom });
+        }
+        return { out, sw: document.documentElement.scrollWidth, sh: document.documentElement.scrollHeight, iw: window.innerWidth, ih: window.innerHeight };
+      });
+      expect(boxes.sw, `${label}: no sideways scroll`).toBeLessThanOrEqual(boxes.iw);
+      expect(boxes.sh, `${label}: no vertical scroll`).toBeLessThanOrEqual(boxes.ih);
+      const b = boxes.out;
+      expect(b.some((x) => x.id === "mode-leave"), `${label}: Retreat is shown`).toBe(true);
+      for (const x of b) {
+        expect(x.l, `${label}: ${x.id} inside the left edge`).toBeGreaterThanOrEqual(-1);
+        expect(x.r, `${label}: ${x.id} inside the right edge`).toBeLessThanOrEqual(vp.w + 1);
+      }
+      for (let i = 0; i < b.length; i++)
+        for (let j = i + 1; j < b.length; j++) {
+          const p = b[i]!;
+          const q = b[j]!;
+          const overlap = p.l < q.r - 1 && q.l < p.r - 1 && p.t < q.b - 1 && q.t < p.b - 1;
+          expect(overlap, `${label}: ${p.id} overlaps ${q.id}`).toBe(false);
+        }
+      const leave = b.find((x) => x.id === "mode-leave")!;
+      expect(leave.b - leave.t, `${label}: Retreat is a full touch target`).toBeGreaterThanOrEqual(44);
+    };
+
+    // With the counter hint up and a line of news raised at the same moment (the worst case).
+    await page.evaluate(() => (window as unknown as { __ASCEND__: { toast(text: string, tone: string, weight: number): void } }).__ASCEND__.toast("The Warden remembers its oath. Phase two.", "warn", 2));
+    await expect(page.getByTestId("event-pill")).toBeVisible();
+    // On a short screen the hint steps aside for the news: let its fade (a third of a second) finish.
+    await page.waitForTimeout(500);
+    await check("hint and news up");
+    // The hint on its own, once the news has left (the boss's hint lasts four seconds).
+    await expect(page.getByTestId("event-pill")).toHaveCount(0, { timeout: 4000 });
+    if (await page.getByTestId("boss-counter").count()) await check("hint up");
+    // And once both have gone.
+    await page.waitForTimeout(2600);
+    await expect(page.getByTestId("boss-counter")).toHaveCount(0);
+    await check("settled");
+    await ctx.close();
+  });
+}

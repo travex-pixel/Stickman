@@ -150,6 +150,7 @@ export class Rig {
   private squash = 0;
   private lean = 0;
   private hitAmount = 0;
+  private pushed: 1 | -1 | 0 = 0;
   private capeWhite: Graphics | null = null;
 
   constructor(spec: RigSpec) {
@@ -518,10 +519,15 @@ export class Rig {
     this.hitAmount = clamp(amount / 0.12, 0, 1);
   }
 
-  /** Extra reaction from the impact director: squash (0..1) and a lean away from the blow (radians). */
-  setReaction(squash: number, lean: number): void {
+  /**
+   * Extra reaction from the impact director: squash (0..1), a lean away from the blow (radians),
+   * and which way the last blow pushed on screen (1 right, -1 left; 0 if never struck), so the
+   * flinch goes away from the attacker and not simply backwards.
+   */
+  setReaction(squash: number, lean: number, pushed: 1 | -1 | 0 = 0): void {
     this.squash = squash;
     this.lean = lean;
+    this.pushed = pushed;
   }
 
   /**
@@ -645,9 +651,13 @@ export class Rig {
     }
     const h = this.hitAmount;
     const sq = 0.08 * h + this.squash;
-    body.rotation = facing * -(0.12 * h + this.lean);
-    body.scale.set(facing * (1 + sq * 0.7), this.current[Ch.ScaleY]! * (1 - sq));
-    body.x = -facing * 3 * this.u * h;
+    // The flinch rocks away from whoever struck (behind him, he pitches forward).
+    const away = this.pushed !== 0 ? this.pushed : -facing;
+    // A dash stretches the figure along its path and pitches it forward: speed read from one frame.
+    const dash = state === "dodge" ? 1 : 0;
+    body.rotation = away * 0.12 * h - facing * this.lean + facing * 0.16 * dash;
+    body.scale.set(facing * (1 + sq * 0.7) * (1 + 0.14 * dash), this.current[Ch.ScaleY]! * (1 - sq) * (1 - 0.1 * dash));
+    body.x = away * 3 * this.u * h;
     body.y = s.floating ? -8 * this.u + Math.sin(this.clock * 2 + seed * 6) * 3 * this.u : 0;
     this.root.alpha = state === "dodge" ? 0.55 : 1;
     this.eyes.alpha = 1;

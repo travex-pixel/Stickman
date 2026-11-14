@@ -2,7 +2,8 @@ import { Store } from "@/lib/store";
 import { World, FIXED_DT, type WorldSnapshot } from "./engine/World";
 import { GameLoop } from "./engine/GameLoop";
 import { startsCast, type GameEvent } from "./engine/events";
-import { ToastHold } from "./toastHold";
+import { EventPill, type PillContext, type PillPriority } from "./eventPill";
+import { AUTHORED_FREEZE_MAX } from "./render/hitStop";
 import { Rng } from "./engine/rng";
 import type { AbilityId, EquipSlot, PanelId, SummonCommand, UpgradeableStat, WeaponPath } from "./data/ids";
 import { createDefaultProfile, type EquipmentItem, type Profile, type SummonInstance } from "./progression/profile";
@@ -101,6 +102,8 @@ export interface Toast {
   tone: "info" | "gold" | "essence" | "warn" | "level";
   /** Routine news that yields to anything else. */
   low?: boolean;
+  /** Raised this many times while on screen (shown as "x3"). */
+  count?: number;
 }
 
 export interface UiState {
@@ -200,9 +203,13 @@ export class GameController {
   view: ViewTransform = { scale: 1, offsetX: 0, offsetY: 0, depthScale: 1, width: 0, height: 0, project: (x, y) => ({ x, y }), unproject: (x, y) => ({ x, y }) };
   private loop: GameLoop;
   private hudAccum = 0;
-  private toastId = 0;
-  /** Toasts that arrived while the Fury's running total was on screen: shown once it clears. */
-  private readonly toastHold = new ToastHold<{ text: string; tone: Toast["tone"]; low: boolean }>(3);
+  /** The battle screen's one line of news: priorities, repeats counted, news held through a fight. */
+  private readonly pill = new EventPill<Toast["tone"]>();
+  private readonly pillCtx: PillContext = { fighting: false, blocked: false };
+  /** When the player last pressed something: a line raised in answer to it is never made to wait. */
+  private lastGestureAt = -Infinity;
+  private wasWindingUp = false;
+  private essenceHintShown = false;
   private modalQueue: Modal[] = [];
   private rankBadgeShown = false;
   private explainedBind = false;
@@ -299,7 +306,7 @@ export class GameController {
         return;
       }
       this.renderer = renderer;
-      renderer.setReducedEffects(this.profile.settings.reducedEffects);
+      renderer.setReducedEffects(this.reducedEffects());
       if (this.world) renderer.setWorld(this.world);
       void this.drainPortraits();
     } catch (err) {
@@ -311,7 +318,7 @@ export class GameController {
   }
 
   detachRenderer(): void {
-    this.toastHold.clear();
+    this.pill.clear();
     this.rendererHost = null;
     this.renderer?.unmount();
     this.renderer = null;
@@ -334,6 +341,7 @@ export class GameController {
 
   /** Any user gesture unlocks audio. */
   userGesture(): void {
+    this.lastGestureAt = performance.now();
     this.audio.unlock();
   }
 
@@ -401,8 +409,8 @@ export class GameController {
   // ---------------------------------------------------------------------
 
   startRun(stage: number, mode: ModeId = "campaign"): void {
-    // Toasts held over a Fury belong to the fight being left.
-    this.toastHold.clear();
+    // News still waiting its turn belongs to the fight being left.
+    this.pill.clear();
     // Whatever replaces a Tyrant fight still in progress, the try it cost is scored and paid.
     this.bankTyrant();
     // Any new run supersedes a pending post-defeat beat: it must never overwrite this one.
@@ -546,9 +554,9 @@ export class GameController {
     return !this.world?.farming;
   }
 
-  /** 2x battle speed unlocks after clearing stage 3; it never changes the simulation, only how many steps run per frame. */
+  /** 2x battle speed unlocks with the first lessons done (or stage 3 cleared); it never changes the simulation, only how many steps run per frame. */
   get battleSpeedUnlocked(): boolean {
-    return this.profile.progress.bestStage >= 3;
+    return this.profile.progress.bestStage >= 3 || this.profile.tutorial.finished;
   }
 
   private simulate(dt: number): void {
@@ -558,6 +566,10 @@ export class GameController {
     const modal = this.uiStore.get().modal;
     world.holdOrbs = modal !== null && modal.kind !== "boss_intro";
     if (!this.paused) for (let i = 0; i < steps; i++) world.update(dt);
+    // The swing is heard as the blade starts to move (the wind-up), a beat before the hit lands.
+    const swinging = world.player.state === "windup";
+    if (swinging && !this.wasWindingUp) this.sfx("arc_slash", { volume: 0.13, minInterval: 90, rate: 1.3 + Math.random() * 0.35 });
+    this.wasWindingUp = swinging;
     this.processEvents(world.drainEvents());
     if (this.pending) {
       this.pending.left -= dt;
@@ -581,14 +593,14 @@ export class GameController {
 
   private render(alpha: number, dtReal: number): void {
     const r = this.renderer;
+    // The news line retires itself and brings on what was waiting (after the renderer has drawn,
+    // so a Fury total that just closed frees the spot this frame).
+    if (this.pill.current || this.pill.waiting > 0) {
+      if (this.pill.tick(performance.now(), this.pillContext())) this.syncPill();
+    }
     if (r) {
       try {
         r.render(alpha, dtReal, this.paused);
-        // Held toasts come out one at a time, once the total has cleared and nothing else shows.
-        if (this.toastHold.size > 0 && !r.furyTotalShowing && this.uiStore.get().toasts.length === 0) {
-          const t = this.toastHold.next()!;
-          this.toast(t.text, t.tone, t.low);
-        }
       } catch (err) {
         const now = performance.now();
         if (now - this.lastRenderErrorAt > 5000) {
@@ -621,7 +633,11 @@ export class GameController {
     for (const e of events) {
       switch (e.type) {
         case "hit":
-          if (e.faction === "enemy") {
+          if (e.faction === "enemy" && e.sourceId !== this.world?.player.id) {
+            // The army's blows: quieter, lower, and on their own limiter, so a crowd of shadows is
+            // a murmur under the warrior's hits and never takes their place.
+            this.sfx(e.heavy ? "hit_heavy" : "hit_light", { voice: "army_hit", minInterval: 110, volume: e.crit ? 0.34 : 0.24, rate: 0.72 + Math.random() * 0.2 });
+          } else if (e.faction === "enemy") {
             this.sfx(e.crit ? "crit" : e.heavy ? "hit_heavy" : "hit_light", { minInterval: e.crit ? 60 : 45, volume: e.crit ? 0.9 : 0.55, rate: 0.9 + Math.random() * 0.25 });
             // Impact frames (hit-stop) are decided by the renderer's ImpactDirector, one policy for all hits.
           } else this.sfx("hit_heavy", { minInterval: 120, volume: 0.6, rate: 0.8 });
@@ -647,7 +663,7 @@ export class GameController {
             for (const s of p.summons.collection) {
               const before = s.level;
               grantSummonXp(s, shadowXpShare(def.xp, this.world?.scaleStage ?? 1, s.deployed, xpMult));
-              if (s.level > before && s.deployed) this.toast(`${summonDef(s.defId).name} reached level ${s.level}`, "level");
+              if (s.level > before && s.deployed) this.toast(`${summonDef(s.defId).name} reached level ${s.level}`, "level", true);
             }
             dirty = true;
           } else if (e.kind === "summon") {
@@ -687,11 +703,18 @@ export class GameController {
           }
           break;
         case "attack_swing":
-          if (e.kind === "player") this.sfx("arc_slash", { volume: 0.12, minInterval: 90, rate: 1.4 + Math.random() * 0.3 });
+          // An ordinary swing's whoosh plays as he winds up (see `simulate`), so it leads the
+          // impact; the Fury's cuts have no wind-up and keep theirs here.
+          if (e.kind === "player" && e.cut) this.sfx("arc_slash", { volume: 0.12, minInterval: 90, rate: 1.4 + Math.random() * 0.3 });
           break;
         case "essence_available":
           this.sfx("essence_appear", { volume: 0.9 });
-          this.toast(e.isBoss ? "The Warden's essence lingers. Claim it." : "Essence lingers. Claim it before it fades.", "essence");
+          // The BIND pill itself is the call to act: the line explains it once, and for a boss's essence.
+          if (e.isBoss) this.toast("The Warden's essence lingers. Claim it.", "essence", 2);
+          else if (!this.essenceHintShown) {
+            this.essenceHintShown = true;
+            this.toast("Essence lingers. Claim it before it fades.", "essence");
+          }
           break;
         case "command":
           this.sfx("command", { volume: 0.6 });
@@ -705,7 +728,7 @@ export class GameController {
           break;
         case "boss_phase":
           this.sfx("void_nova", { volume: 0.9 });
-          this.toast(this.world?.mode === "tyrant" ? "The Tyrant rages. Phase two." : "The Warden remembers its oath. Phase two.", "warn");
+          this.toast(this.world?.mode === "tyrant" ? "The Tyrant rages. Phase two." : "The Warden remembers its oath. Phase two.", "warn", 2);
           break;
         case "tyrant_break":
           this.sfx("boss_intro", { volume: 0.8, rate: 1.3 + Math.min(0.5, e.count * 0.05) });
@@ -741,8 +764,8 @@ export class GameController {
           const name = `${d.name} ${enemyDef(e.defId).name}`;
           if (!this.seenAffixes.has(e.affix)) {
             this.seenAffixes.add(e.affix);
-            this.toast(`Elite: ${name}. ${d.blurb}`, "warn");
-          } else this.toast(`Elite: ${name}`, "warn");
+            this.toast(`Elite: ${name}. ${d.blurb}`, "warn", 2);
+          }
           this.sfx("boss_intro", { volume: 0.35, rate: 1.8, minInterval: 800 });
           break;
         }
@@ -760,7 +783,7 @@ export class GameController {
           this.sfx("crit", { volume: 0.8, rate: 1.3 });
           if (!this.seenPerfect) {
             this.seenPerfect = true;
-            this.toast("Perfect dodge: your next strike is a guaranteed critical.", "level");
+            this.toast("Perfect dodge: your next strike is a guaranteed critical.", "level", 2);
           }
           break;
         case "kill_streak":
@@ -777,7 +800,8 @@ export class GameController {
           break;
         case "ultimate_ready":
           this.sfx("quest", { volume: 0.5, rate: 0.8 });
-          this.toast("Ascendant Fury is ready", "level");
+          // With AUTO on he casts it himself: the line is for a player holding the button.
+          if (!this.profile.player.autoCast) this.toast("Ascendant Fury is ready", "level", 2);
           break;
         case "summon_ability":
           this.sfx("command", { volume: 0.35, rate: 0.6, minInterval: 300 });
@@ -786,7 +810,8 @@ export class GameController {
           this.renderer?.shake(e.strength);
           break;
         case "freeze":
-          this.loop.addFreeze(e.duration);
+          // A stop of the world is a beat, not a pause: at most about six frames, none with reduced effects.
+          if (!this.reducedEffects()) this.loop.addFreeze(Math.min(e.duration, AUTHORED_FREEZE_MAX));
           break;
         default:
           break;
@@ -850,7 +875,9 @@ export class GameController {
       this.uiStore.update((u) => ({ ...u, newBadges: { ...u.newBadges, skills: true } }));
     }
     const newAch = evaluateAchievements(p);
-    for (const id of newAch) this.toast(`Achievement: ${id.replace(/_/g, " ")}`, "level");
+    // Several earned at once are one line, not a queue of them.
+    if (newAch.length === 1) this.toast(`Achievement: ${newAch[0]!.replace(/_/g, " ")}`, "level");
+    else if (newAch.length > 1) this.toast(`${newAch.length} achievements earned`, "level");
     const newJournal = evaluateJournal(p);
     if (newJournal.length > 0) this.uiStore.update((u) => ({ ...u, newBadges: { ...u.newBadges, rift: true } }));
     const q = currentQuest(p);
@@ -977,7 +1004,7 @@ export class GameController {
         const fallback = resolveFarmingDefeat(p, stage);
         this.commit();
         this.startRun(fallback, "campaign");
-        this.toast(fallback < stage ? `Fallen at stage ${stage}. Regrouping at stage ${fallback}: upgrade, then push on.` : "Fallen. Back on your feet: spend your gold.", "warn");
+        this.toast(fallback < stage ? `Fallen at stage ${stage}. Regrouping at stage ${fallback}: upgrade, then push on.` : "Fallen. Back on your feet: spend your gold.", "warn", 2);
       },
     };
   }
@@ -1487,8 +1514,8 @@ export class GameController {
       const pity = p.summons.pity[peek.summonId] ?? 0;
       const firstRefusal = p.summons.totalAttempts <= 6 && !this.explainedBind;
       this.explainedBind = true;
-      if (firstRefusal) this.toast("BIND is a chance. Every refusal raises the next one until the oath must be kept.", "info");
-      else this.toast(left > 0 ? `The oath is refused. ${left} attempt${left > 1 ? "s" : ""} left.` : `The oath is refused. +${result.essenceOnFail} essence, next attempt +${Math.round(pity * 12)}%`, "warn");
+      if (firstRefusal) this.toast("BIND is a chance. Every refusal raises the next one until the oath must be kept.", "info", 2);
+      else this.toast(left > 0 ? `The oath is refused. ${left} attempt${left > 1 ? "s" : ""} left.` : `The oath is refused. +${result.essenceOnFail} essence, next attempt +${Math.round(pity * 12)}%`, "warn", 2);
       this.afterProgression();
       this.commit();
       return;
@@ -1926,7 +1953,7 @@ export class GameController {
   toggleBattleSpeed(): void {
     this.userGesture();
     if (!this.battleSpeedUnlocked) {
-      this.toast("Clear stage 3 to unlock 2x speed", "info");
+      this.toast("Finish the first lessons to unlock 2x speed", "info");
       return;
     }
     this.profile.settings.battleSpeed = this.profile.settings.battleSpeed === 2 ? 1 : 2;
@@ -2039,7 +2066,7 @@ export class GameController {
     const p = this.profile;
     p.settings = { ...p.settings, ...patch };
     this.audio.setVolumes(p.settings.music, p.settings.sfx);
-    this.renderer?.setReducedEffects(p.settings.reducedEffects);
+    this.renderer?.setReducedEffects(this.reducedEffects());
     this.commit();
   }
 
@@ -2084,6 +2111,12 @@ export class GameController {
     else this.modalQueue.push(modal);
   }
 
+  /** Reduced effects: the game's own setting, or the device asking for less motion. */
+  private reducedEffects(): boolean {
+    if (this.profile.settings.reducedEffects) return true;
+    return typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  }
+
   /** A boss, a Tyrant or a mode run still being fought (not farming, not over). */
   private inFight(): boolean {
     const w = this.world;
@@ -2100,17 +2133,27 @@ export class GameController {
     if (next) this.uiStore.update((u) => ({ ...u, modal: next }));
   }
 
-  toast(text: string, tone: Toast["tone"] = "info", low = false): void {
-    // The Fury's gold total sits where toasts land: hold them until it clears.
-    if (this.renderer?.furyTotalShowing) {
-      this.toastHold.add({ text, tone, low });
-      return;
-    }
-    // Routine news (a fallen companion, a cycle's gold) never pushes out something more important.
-    if (low && this.uiStore.get().toasts.some((t) => !t.low)) return;
-    const id = ++this.toastId;
-    this.uiStore.update((u) => ({ ...u, toasts: [{ id, text, tone, low }] }));
-    setTimeout(() => this.uiStore.update((u) => ({ ...u, toasts: u.toasts.filter((t) => t.id !== id) })), 2200);
+  /**
+   * One line of news over the battlefield. `weight`: true for chatter (shown only when nothing
+   * else wants the spot), 2 for something the player must see now; ordinary news otherwise.
+   */
+  toast(text: string, tone: Toast["tone"] = "info", weight: boolean | PillPriority = 1): void {
+    const now = performance.now();
+    let priority: PillPriority = weight === true ? 0 : weight === false ? 1 : weight;
+    // An answer to the player's own press is never made to wait.
+    if (now - this.lastGestureAt < 30) priority = 2;
+    if (this.pill.push(text, tone, priority, now, this.pillContext())) this.syncPill();
+  }
+
+  private pillContext(): PillContext {
+    this.pillCtx.fighting = this.inFight();
+    this.pillCtx.blocked = this.renderer?.furyTotalShowing ?? false;
+    return this.pillCtx;
+  }
+
+  private syncPill(): void {
+    const cur = this.pill.current;
+    this.uiStore.update((u) => ({ ...u, toasts: cur ? [{ id: cur.id, text: cur.text, tone: cur.tone, low: cur.priority === 0, count: cur.count }] : [] }));
   }
 
   /** UI-side reward cues (count-ups, card reveals). Throttled so a fast count never turns into noise. */
@@ -2120,7 +2163,7 @@ export class GameController {
     else this.sfx("quest", { volume: 0.4 });
   }
 
-  private sfx(name: SfxName, opts?: { volume?: number; rate?: number; minInterval?: number }): void {
+  private sfx(name: SfxName, opts?: { volume?: number; rate?: number; minInterval?: number; voice?: string }): void {
     this.audio.play(name, opts);
   }
 
@@ -2204,7 +2247,8 @@ export class GameController {
   private contextualGuide(panel: string): UiState["guide"] {
     const p = this.profile;
     const q = currentQuest(p);
-    if (q && isQuestComplete(p, q)) return { target: "quest-claim", label: "Claim reward", gesture: "tap" };
+    // The hand teaches claiming once; after the first lessons the gold "Claim" pill speaks for itself.
+    if (q && isQuestComplete(p, q) && !p.tutorial.finished) return { target: "quest-claim", label: "Claim reward", gesture: "tap" };
     if (this.coachUpgrade) {
       const stat = canUpgradeStat(p, "maxHp").ok ? "maxHp" : canUpgradeStat(p, "attack").ok ? "attack" : null;
       if (!stat) return null;

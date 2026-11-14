@@ -1,5 +1,5 @@
 import type { ActionState } from "../../entities/types";
-import { easeInCubic, easeOutBack, easeOutCubic, span } from "../anim/ease";
+import { easeInCubic, easeInOutSine, easeOutBack, easeOutCubic, span } from "../anim/ease";
 
 /**
  * Target poses for the procedural rigs. A pose is a flat Float32Array of channels so the rig can
@@ -65,10 +65,21 @@ export function strikeWindow(windup: number): number {
   return Math.min(windup, Math.max(0.035, Math.min(0.14, windup * 0.3)));
 }
 
-/** Time the contact pose is held at the start of `attack` before the follow-through. */
-export function contactHold(kit: MeleeKit, strike: number): number {
-  return kit === "heavy" ? strike * 0.6 : Math.min(0.04, strike * 0.4);
+/**
+ * Time the contact pose is held at the start of `attack` before the follow-through. The third
+ * swing of a combo (variant 2, the overhead) holds half as long again: it is the heavy beat.
+ */
+export function contactHold(kit: MeleeKit, strike: number, variant = 0): number {
+  if (kit === "heavy") return strike * 0.6;
+  return variant === 2 ? Math.min(0.06, strike * 0.6) : Math.min(0.04, strike * 0.4);
 }
+
+/** The share of the anticipation in which the body reaches its coil; it holds there for the rest. */
+export const ANTIC_REACH = 0.6;
+/** While held, the coil keeps loading: this much further away from the contact pose by the strike. */
+export const ANTIC_LOAD = 0.07;
+/** The share of the recovery for which the follow-through is held before the body settles to guard. */
+export const RECOVER_HOLD = 0.3;
 
 // Keyframes: [torso, head, hipsX, hipsY, armL0, armL1, armR0, armR1, legL0, legL1, legR0, legR1, weapon, scaleY, lean]
 type Key = readonly number[];
@@ -80,19 +91,19 @@ const COMBO: readonly { antic: Key; contact: Key; follow: Key }[] = [
     // Forehand: a downward diagonal cut. At contact the arm is already low and forward with the
     // wrist cocked, so the blade crosses the line of the arm (not a thrust along it), and it
     // follows through down past the hip.
-    antic: k(-0.3, 0.2, -3, 1.5, 0.7, 0.5, -2.5, 0.35, 0.45, 0.3, -0.4, 0.25, 1.15, 1, 0),
-    contact: k(0.35, -0.1, 6, 2.5, -0.3, 0.5, -1.0, 0.25, 0.6, 0.2, -0.7, 0.55, 2.15, 1, 0),
-    follow: k(0.45, 0.05, 7, 3, -0.5, 0.4, -0.35, 0.3, 0.6, 0.2, -0.75, 0.6, 2.35, 1, 0),
+    antic: k(-0.3, 0.2, -4.5, 1.5, 0.7, 0.5, -2.5, 0.35, 0.45, 0.3, -0.4, 0.25, 1.15, 1, -0.08),
+    contact: k(0.35, -0.1, 6, 2.5, -0.3, 0.5, -1.0, 0.25, 0.6, 0.2, -0.7, 0.55, 2.15, 1, 0.06),
+    follow: k(0.45, 0.05, 7, 3, -0.5, 0.4, -0.35, 0.3, 0.6, 0.2, -0.75, 0.6, 2.35, 1, 0.08),
   },
   {
-    antic: k(0.3, 0.1, -2, 3, -0.4, 0.6, 0.55, 0.5, 0.5, 0.45, -0.35, 0.5, 2.35, 1, 0),
-    contact: k(0.05, -0.1, 5, 1, 0.5, 0.4, -1.3, 0.1, 0.55, 0.2, -0.6, 0.45, 2.65, 1, 0),
-    follow: k(-0.2, -0.2, 6, 0, 0.7, 0.5, -2.4, 0.15, 0.5, 0.2, -0.6, 0.4, 2.85, 1, 0),
+    antic: k(0.3, 0.1, -3.5, 3, -0.4, 0.6, 0.55, 0.5, 0.5, 0.45, -0.35, 0.5, 2.35, 1, 0),
+    contact: k(0.05, -0.1, 5, 1, 0.5, 0.4, -1.3, 0.1, 0.55, 0.2, -0.6, 0.45, 2.65, 1, 0.05),
+    follow: k(-0.2, -0.2, 6, 0, 0.7, 0.5, -2.4, 0.15, 0.5, 0.2, -0.6, 0.4, 2.85, 1, 0.04),
   },
   {
-    antic: k(-0.45, 0.25, -4, -1, -2.6, 0.4, -2.9, 0.25, 0.3, 0.2, -0.3, 0.2, 2.6, 1.02, 0),
-    contact: k(0.55, 0.05, 9, 4, -0.9, 0.2, -1.0, 0.1, 0.8, 0.3, -0.95, 0.9, 2.7, 0.97, 0),
-    follow: k(0.7, 0.1, 10, 5, -0.3, 0.3, -0.3, 0.2, 0.8, 0.3, -1.0, 0.95, 2.25, 0.97, 0),
+    antic: k(-0.45, 0.25, -5.5, -1, -2.6, 0.4, -2.9, 0.25, 0.3, 0.2, -0.3, 0.2, 2.6, 1.03, -0.1),
+    contact: k(0.55, 0.05, 9, 4, -0.9, 0.2, -1.0, 0.1, 0.8, 0.3, -0.95, 0.9, 2.7, 0.96, 0.1),
+    follow: k(0.7, 0.1, 10, 5, -0.3, 0.3, -0.3, 0.2, 0.8, 0.3, -1.0, 0.95, 2.25, 0.96, 0.12),
   },
 ];
 
@@ -116,6 +127,11 @@ function setKey(out: Pose, key: Key): void {
 
 function mixKey(out: Pose, a: Key, b: Key, t: number): void {
   for (let i = 0; i < CHANNELS; i++) out[i] = a[i]! + (b[i]! - a[i]!) * t;
+}
+
+/** Push `out` further along the line from `to` back through `from`: the coil loading before a strike. */
+function addLoad(out: Pose, from: Key, to: Key, amount: number): void {
+  for (let i = 0; i < CHANNELS; i++) out[i] = out[i]! + (from[i]! - to[i]!) * amount;
 }
 
 /** Blend the current contents of `out` toward a key. */
@@ -318,11 +334,25 @@ export function computePose(out: Pose, p: PoseInput): void {
       const strike = strikeWindow(duration);
       const s0 = duration - strike;
       if (t < s0) {
-        // Anticipation: weight back, arm up, torso coils away from the target.
-        mixToward(out, set.antic, easeOutCubic(span(t, 0, s0)));
+        // Anticipation: weight back, arm up, torso coils away from the target. The coil is
+        // reached early and then held, still loading, so the wind-up is read before the strike
+        // (eased over the whole window it was barely two thirds formed when the blade left).
+        const reach = s0 * ANTIC_REACH;
+        mixToward(out, set.antic, easeOutCubic(span(t, 0, reach)));
+        if (t > reach) {
+          const c = span(t, reach, s0);
+          addLoad(out, set.antic, set.contact, ANTIC_LOAD * c);
+          // A long wind-up (a brute, a boss) trembles with the effort instead of sitting still.
+          if (s0 > 0.3) {
+            out[Ch.Weapon] = out[Ch.Weapon]! + Math.sin(t * 70) * 0.022 * c;
+            out[Ch.ArmR0] = out[Ch.ArmR0]! + Math.sin(t * 70 + 1.3) * 0.014 * c;
+          }
+        }
       } else {
-        // The strike: accelerate from the raised pose into contact.
-        mixKey(out, set.antic, set.contact, easeInCubic(span(t, s0, duration)));
+        // The strike: accelerate from the loaded coil into contact.
+        const e = easeInCubic(span(t, s0, duration));
+        mixKey(out, set.antic, set.contact, e);
+        addLoad(out, set.antic, set.contact, ANTIC_LOAD * (1 - e));
       }
       return;
     }
@@ -352,14 +382,19 @@ export function computePose(out: Pose, p: PoseInput): void {
         return;
       }
       const set = kit === "heavy" ? HEAVY : kit === "thrust" ? THRUST : COMBO[p.variant % 3]!;
-      const hold = contactHold(kit, duration);
+      const hold = contactHold(kit, duration, kit === "combo" ? p.variant % 3 : 0);
       if (t < hold) setKey(out, set.contact);
       else mixKey(out, set.contact, set.follow, easeOutBack(span(t, hold, duration), 1.4));
       return;
     }
-    case "recover":
-      // Settle to guard: the rig blends there with `damp`, the weapon arriving last.
+    case "recover": {
+      // The follow-through is held for a beat, then the body eases back to guard, the weapon
+      // arriving last (the rig's own lag): the blow has weight because it takes time to leave.
+      if (kit === "archer" || kit === "robed") return;
+      const set = kit === "heavy" ? HEAVY : kit === "thrust" ? THRUST : COMBO[p.variant % 3]!;
+      mixToward(out, set.follow, 1 - easeInOutSine(span(t, duration * RECOVER_HOLD, duration)));
       return;
+    }
     case "cast": {
       const e = Math.sin(kk * Math.PI);
       out[Ch.Torso] = -0.12 * e;
@@ -495,11 +530,13 @@ export function stateLambda(state: ActionState, t: number, duration: number): nu
     case "move":
       return 14;
     case "windup":
-      return t >= duration - strikeWindow(duration) ? 60 : 16;
+      // Fast enough that the coil is actually reached inside a 90ms anticipation.
+      return t >= duration - strikeWindow(duration) ? 60 : 34;
     case "attack":
       return 60;
     case "recover":
-      return 10;
+      // The curve is authored (hold, then settle), so the rig follows it closely.
+      return 20;
     case "hit":
     case "stagger":
       return 45;

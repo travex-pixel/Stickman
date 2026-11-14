@@ -26,7 +26,7 @@ import { summonDef } from "../data/summons";
 import { Camera, type Box } from "./Camera";
 import { ImpactDirector, elementColor, type ImpactHost, type ImpactState } from "./ImpactDirector";
 import { Trails, type Ribbon } from "./Trail";
-import { FlashState } from "./hitStop";
+import { AUTHORED_FREEZE_MAX, FlashState } from "./hitStop";
 import { BossDeath, BossEntrance, PHASE, type BossHost } from "./cinematics/boss";
 import { FuryGhosts } from "./FuryGhosts";
 import { AriseCinematic, FailedBind, REDUCED_FADE, REVEAL_LENGTH, type AriseHost, type RevealStaging } from "./cinematics/arise";
@@ -129,6 +129,13 @@ const FURY_GOLD = 0xe9c97a;
 const FURY_INK = 0x15141a;
 /** How far the backdrop sinks toward FURY_DIM_COLOR during the flurry. */
 const FURY_DIM = 0.45;
+/** The same wash, lighter, for the slowed moment after a perfect dodge. */
+const FOCUS_DIM = 0.38;
+/** The struck body's shudder during a hit-stop, in px at full figure scale, and the hold left below which it dies away. */
+const HOLD_SHUDDER = 2.6;
+const HOLD_SHUDDER_FADE = 0.045;
+/** A combo left alone this long (seconds) starts again from its first swing. */
+const COMBO_RESET = 0.9;
 const FURY_DIM_COLOR = 0x23262c;
 /** Camera follow speed (lambda) while the flurry's frame settles and holds. */
 const FURY_SETTLE = 14;
@@ -239,11 +246,16 @@ export class BattleRenderer implements ImpactHost {
   private furyBoxSet = false;
   /** The current strike's lead while the flurry runs (-1 otherwise): only it shows a number. */
   private furyLead = -1;
+  /** Summon abilities already named in this fight (their label shows once). */
+  private readonly namedAbilities = new Set<string>();
   /** The lead's damage in the current event batch (the cut and the strike), shown as one number. */
   private furyLeadSum = 0;
   private furyLeadCrit = false;
   /** Backdrop dim during the flurry (0 to 1), eased in and out. */
   private furyDim = 0;
+  /** Backdrop wash while a perfect dodge slows time (0 to 1): the fighters stay lit, the world recedes. */
+  private focusDim = 0;
+  private frameNo = 0;
   /** The warrior's facing as last drawn (an afterimage keeps the stance he blinked out of). */
   private playerFacing: 1 | -1 = 1;
   private resizeObs: ResizeObserver | null = null;
@@ -386,6 +398,7 @@ export class BattleRenderer implements ImpactHost {
 
   setWorld(world: World): void {
     this.world = world;
+    this.namedAbilities.clear();
     for (const v of this.views.values()) {
       v.rig.destroy();
       v.bar.destroy();
@@ -616,6 +629,7 @@ export class BattleRenderer implements ImpactHost {
     const perf = this.perf;
     if (perf) this.secT = performance.now();
     this.time += dt;
+    this.frameNo++;
     this.frameDt = dt;
     this.impact.now += dt;
     const frozen = this.stopLeft > 0;
@@ -770,7 +784,14 @@ export class BattleRenderer implements ImpactHost {
         if (v.holdLeft <= 0) v.releaseLeft = HOLD_RELEASE;
         sx = v.heldX;
         sy = v.heldY;
+        // The struck body shudders along the blow while it is held (a few pixels, dying away),
+        // so the stop reads as an impact absorbed and not as a dropped frame.
+        if (v.struck && !this.reduced && v.holdLeft > 0) {
+          const amp = HOLD_SHUDDER * ds * Math.min(1, v.holdLeft / HOLD_SHUDDER_FADE);
+          sx += v.lastHitDir * amp * ((this.frameNo & 1) === 0 ? 1 : -0.55);
+        }
       } else if (v.releaseLeft > 0) {
+        v.struck = false;
         v.releaseLeft = Math.max(0, v.releaseLeft - realDt);
         const k = easeOutCubic(1 - v.releaseLeft / HOLD_RELEASE);
         sx = lerp(v.heldX, sx, k);
@@ -778,12 +799,16 @@ export class BattleRenderer implements ImpactHost {
       }
       v.drawX = sx;
       v.drawY = sy;
+      if (v.holdLeft <= 0) v.struck = false;
       const reactDt = held ? 0 : fxDt;
+      // A combo that has been left alone starts over from its first swing.
+      if (e.state === "windup" || e.state === "attack" || e.state === "recover") v.restFor = 0;
+      else if ((v.restFor += fxDt) > COMBO_RESET && v.swings !== 0) v.swings = 0;
       // Impact reaction: squash and a slide away from the blow that settle back.
       v.squash = damp(v.squash, 0, 16, reactDt);
       v.slide = damp(v.slide, 0, 9, reactDt);
       const rig = v.rig;
-      rig.setReaction(v.squash, v.slide * 0.02 * -e.facing);
+      rig.setReaction(v.squash, v.slide * 0.02 * -e.facing, v.lastHitDir);
       rig.root.position.set(sx + v.slide * ds, sy);
       rig.root.scale.set(ds);
       rig.root.zIndex = y;
@@ -919,6 +944,8 @@ export class BattleRenderer implements ImpactHost {
       kind: e.kind,
       swings: 0,
       swungThisBatch: false,
+      struck: false,
+      restFor: 0,
       lastHitCrit: false,
       lastHitHeavy: false,
       lastHitAbility: false,
@@ -1430,7 +1457,8 @@ export class BattleRenderer implements ImpactHost {
     let tint = this.skyDarken > 0.01 ? mix(0xffffff, this.skyColor, this.skyDarken) : 0xffffff;
     if (this.bossTint > 0) tint = mix(tint, this.bossTintColor, this.bossTint);
     if (this.cineTint > 0.005) tint = mix(tint, this.cineTintColor, this.cineTint);
-    if (this.furyDim > 0) tint = mix(tint, FURY_DIM_COLOR, this.furyDim);
+    const dim = Math.max(this.furyDim, this.focusDim);
+    if (dim > 0) tint = mix(tint, FURY_DIM_COLOR, dim);
     // Setting a tint dirties the whole backdrop subtree, so only when it changes.
     if (tint !== this.skyTint || bg !== this.skyTintBg) {
       bg.container.tint = tint;
@@ -1864,7 +1892,12 @@ export class BattleRenderer implements ImpactHost {
           const src = world.entities.get(e.id);
           const lx = src ? this.sx(src.pos.x) : sx;
           const ly = src ? this.sy(src.pos.y) - 105 * this.figureScale(src.pos.y) : sy - 60 * u;
-          this.numbers.spawn(lx, ly, e.ability, 0xf0d9a8, "label");
+          // The ability's name is shown the first time each is used in a fight; after that the
+          // ring and sparks say it, and the field stays clear of repeated labels.
+          if (!this.namedAbilities.has(e.ability)) {
+            this.namedAbilities.add(e.ability);
+            this.numbers.spawn(lx, ly, e.ability, 0xf0d9a8, "label");
+          }
           break;
         }
         case "shield": {
@@ -1912,11 +1945,9 @@ export class BattleRenderer implements ImpactHost {
           this.camera.punch(e.boss ? 0.05 : 0.02);
           break;
         }
-        case "kill_streak": {
-          const p = world.player;
-          this.numbers.spawn(this.sx(p.pos.x), this.sy(p.pos.y) - 120 * u, `${e.count} Chain`, 0xdab86c, "label");
+        case "kill_streak":
+          // The chain is counted in the interface, at the left edge: no second copy over the fight.
           break;
-        }
         case "blocked": {
           const t = world.entities.get(e.id);
           if (!t) break;
@@ -1976,7 +2007,7 @@ export class BattleRenderer implements ImpactHost {
         case "freeze":
           // Authored by the simulation (boss kill, Tyrant break): it plays, and uses up the window.
           this.impact.onAuthoredFreeze(e.duration);
-          this.stopLeft = Math.min(0.35, this.stopLeft + e.duration);
+          this.stopLeft = Math.min(AUTHORED_FREEZE_MAX, this.stopLeft + e.duration);
           break;
         default:
           break;
@@ -2409,6 +2440,8 @@ export class BattleRenderer implements ImpactHost {
     // The backdrop sinks a little while the flurry runs, so ink and gold read against it.
     this.furyDim = damp(this.furyDim, world.ultimate.active ? (this.reduced ? FURY_DIM * 0.5 : FURY_DIM) : 0, 10, realDt);
     if (this.furyDim < 0.004) this.furyDim = 0;
+    this.focusDim = damp(this.focusDim, world.perfectFocus * (this.reduced ? FOCUS_DIM * 0.5 : FOCUS_DIM), 18, realDt);
+    if (this.focusDim < 0.004) this.focusDim = 0;
     if (!this.fury.on && !world.ultimate.active && this.furyGhosts.count > 0 && !this.furyGhosts.anyLive) this.furyGhosts.release();
   }
 

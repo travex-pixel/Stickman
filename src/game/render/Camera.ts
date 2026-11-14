@@ -191,7 +191,8 @@ export class Camera {
   private compose(): void {
     const punch = this.punchT < PUNCH_TIME ? this.punchAmount * (1 - easeOutCubic(this.punchT / PUNCH_TIME)) : 0;
     const scale = this.zoom * (1 + punch);
-    const t2 = this.trauma * this.trauma * (this.reduced ? 0.25 : 1);
+    // Reduced motion: no shake at all (the hit still flashes and holds).
+    const t2 = this.reduced ? 0 : this.trauma * this.trauma;
     let ox = this.kickX.x + t2 * 10 * noise1(this.time * 28);
     let oy = this.kickY.x + t2 * 10 * noise1(this.time * 28 + 57.3);
     const rot = ((t2 * 0.6 * Math.PI) / 180) * noise1(this.time * 28 + 113.7);

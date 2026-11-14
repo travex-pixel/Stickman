@@ -24,7 +24,8 @@ export function TopBar() {
   const stage = useHud((s) => s?.stage ?? 1);
   const wave = useHud((s) => s?.wave ?? 0);
   const mode = useHud((s) => s?.mode ?? "campaign");
-  const speedUnlocked = bestStage >= 3;
+  const lessonsDone = useProfile((p) => p.tutorial.finished);
+  const speedUnlocked = bestStage >= 3 || lessonsDone;
   // "Drowned Hollow", not "The Drowned Hollow": the bar has room for the name, not the article.
   return (
     <header className="relative z-20 flex items-center gap-2 min-[360px]:gap-3 h-11 pl-4 pr-1 min-w-0 w-full" data-testid="top-bar">
@@ -68,7 +69,7 @@ export function TopBar() {
         <button
           className={cn("press h-11 w-11 flex items-center justify-center rounded-[10px] t-num-m", speedUnlocked ? (speed === 2 ? "text-t1" : "text-t2") : "text-t3")}
           onClick={() => c.toggleBattleSpeed()}
-          aria-label={speedUnlocked ? `Battle speed ${speed}x` : "Battle speed, unlocks after stage 3"}
+          aria-label={speedUnlocked ? `Battle speed ${speed}x` : "Battle speed, unlocks after the first lessons"}
           data-testid="speed-toggle"
         >
           {speedUnlocked ? `${speed}×` : <Icon name="lock" size={14} />}

@@ -14,7 +14,7 @@ or error tone instead of silence when a press cannot succeed.
 | FIGHT (`boss-fight`) | Start the boss encounter. The only entry to a boss fight | Sheet open, gate open, farming, warrior alive, no pending transition | Not shown | `challengeBoss()` | Boss horn; inside the 2.4s intro, letterbox, dimmed field, camera to the spawn, the boss's own emergence (fissure, water rings, ember column, gold flare) and an impact beat; then its counter tip | New `boss` world on the gate stage | Returns false with an error tone; nothing starts |
 | Keep farming (`boss-later`) | Close the sheet | Always | – | Close | Sheet closes | Farming as before | – |
 | Readiness tips | Go fix a weakness | Tip listed | – | Opens the named panel (sheet stays open) | Panel switch | Upgrades refresh the tips and the forecast | – |
-| Retreat (`mode-leave`, upper left under the boss bar) | Leave a boss fight, hunt or Vault run | During the fight | – | Two taps: the first arms it ("Tap again to retreat", threat red, `data-armed`) for 3s; the second leaves | Label change, then a toast | Farming world; gate stays; no win or loss recorded | A single stray tap does nothing but arm it |
+| Retreat (`mode-leave`, lower left, where the objective sits outside boss fights) | Leave a boss fight, hunt or Vault run | During the fight | – | Two taps: the first arms it ("Tap again to retreat", threat red, `data-armed`) for 3s; the second leaves | Label change, then a toast | Farming world; gate stays; no win or loss recorded | A single stray tap does nothing but arm it |
 | BIND on the victory card (`victory-bind-button`) | Bind the fallen boss's essence | The boss left an essence | Not shown | A quiet button with gold text (Onward is the one gold action). Card steps aside, BIND rolls | Reveal on success, "Refused" and the new chance on failure; the card returns | Collection, pity; the countdown waits while the essence does | – |
 | Onward (`victory-continue`) | Leave the victory card | Victory card | – | Farming at the next stage. With an unbound essence, the first tap shows "The essence stays here if you go. Tap again to leave it." (`victory-leave-warning`) and the second leaves | Card closes; stage banner; the countdown is a thin line along the button's foot | Farming world at `nextStage`; auto after a short countdown when enabled, never while an essence waits | – |
 | Keep farming / Get stronger (defeat card) | Leave the defeat summary | Defeat card | – | Close; or close and open Hero with the hand on an upgrade | Card closes | Farming continues; the boss is never retried automatically | – |
@@ -29,7 +29,7 @@ or error tone instead of silence when a press cannot succeed.
 | Dodge | Dash through danger | Off cooldown; not while Ascendant Fury runs (every disc reads held then) | Cooldown sweep | Dodge | Afterimages; a dodge just before a blow lands is "Perfect" (gold text, slow-motion, energy, guaranteed next crit) | Brief invulnerability | Error tone |
 | Ultimate | Ascendant Fury | Energy full | Charge percentage | Cast | Slowed time; the warrior blinks foe to foe with seven cuts (a sword cut on each foe he lands beside, one number for it); ink afterimages; gold flash on the last, then he blinks back to where he began, free to act at once (it ends early, the same way, if the field is cleared) | Seven strikes, each to every enemy | Locked or charging: toast with the charge and how to fill it |
 | AUTO | Let abilities fire on their own | After using an ability and dodging; on by default when the tutorial ends | Faded | Toggle | ON/OFF label, gold when on | Loadout autoCast: AUTO casts the arts, dodges and the ultimate for him, each exactly as a cast by hand (it lands; an art holds him for its cast time, the ultimate until he returns) | Locked: toast explaining the unlock |
-| Battle speed (`speed-toggle`) | 1x / 2x | After stage 3 | Lock icon, faded | Toggle | Label | Sim steps per frame | Locked: toast |
+| Battle speed (`speed-toggle`) | 1x / 2x | Once the first lessons are done (or stage 3 is cleared) | Lock icon, faded | Toggle | Label | Sim steps per frame | Locked: toast |
 | Tap an enemy | Focus target | An enemy under the finger | – | `focusAt()` | Gold rotating reticle; first time, a toast | Warrior and army (except guards) target it | No enemy under the finger: nothing happens |
 | BIND (`claim-essence`) | Try to bind a shadow | Orb on the field | Not shown | Roll at the shown chance | Success: a staging by rarity (quick 0.5s for a duplicate, common 0.9s, rare 1.6s, epic 2.3s, legendary and boss shadows 3.6s; the first bind ever is legendary), then the reveal; a tap after 0.4s skips to the name. Failure: the pool collapses with a dry crack, "Refused" and the new chance | Collection, pity | First failure explains that BIND is a chance that rises |
 | Command buttons | Army stance | Army deployed | Not shown | `setCommand()` | Pressed state | Summon AI behaviour | – |
@@ -91,3 +91,20 @@ it: from below for targets high on the screen (pointing up), from above for low 
 point down). It never sits on the boss gate or a Claim it is not pointing at. Taps and holds move
 toward the target. Two browser tests check that the fingertip meets its target.
 
+## The one line of news
+
+Everything the game says over the fight goes through one pill under the army row (`event-pill`),
+decided by `src/game/eventPill.ts`. Only one shows at a time.
+
+| Kind | Examples | In ordinary farming | In a boss or mode fight |
+|---|---|---|---|
+| Urgent | Phase two, a first elite and what to do about it, a fall, the answer to a press (locked, not enough shards) | Shows at once, replacing what is up | The same |
+| News | An achievement, a stage cleared, an item equipped, a level | Waits its turn, one after another | Waits until the fight is over |
+| Chatter | A cycle's gold, a common find, a shadow's level | Shows only if the spot is free and nothing waits; otherwise dropped | Dropped |
+
+The same line raised again adds to a count ("x3") instead of showing again. A line lasts about two
+seconds (longer if it is an explanation). While the Ascendant Fury's total is on screen, news
+waits. Several achievements earned at once are one line. The hand that points at a finished
+quest's "Claim" shows only during the first lessons; after them the gold pill is the prompt.
+On screens 700px tall or less, the army row steps aside for the four seconds a boss's counter
+hint is up, and the hint waits out a line of news.

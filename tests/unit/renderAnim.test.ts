@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { damp, easeOutBack, noise1, spring } from "../../src/game/render/anim/ease";
 import { Camera, ZOOM_MAX, ZOOM_MIN } from "../../src/game/render/Camera";
 import { HITSTOP_CAP_SHARE, HITSTOP_TABLE, LOCAL_REDUCED_MAX, LOCAL_SPEED_SCALE, HitStopPolicy } from "../../src/game/render/hitStop";
-import { CHANNELS, Ch, computePose, contactHold, strikeWindow, swingVariant, type PoseInput } from "../../src/game/render/rigs/pose";
+import { ANTIC_REACH, CHANNELS, Ch, RECOVER_HOLD, computePose, contactHold, strikeWindow, swingVariant, type PoseInput } from "../../src/game/render/rigs/pose";
 
 describe("damp", () => {
   it("is frame-rate independent (30, 60 and 120 fps agree within 1%)", () => {
@@ -163,11 +163,14 @@ describe("hit-stop policy", () => {
     let t = 0;
     const at = () => (t += 2); // far apart: no cooldown or cap in play
     expect(p.resolve("normal", at())).toEqual({ local: 0.033, global: 0 });
-    expect(p.resolve("crit", at())).toEqual({ local: 0.08, global: 0.033 });
-    expect(p.resolve("heavy", at())).toEqual({ local: 0.1, global: 0.05 });
+    // A crit holds about two frames, a combo's third swing three, a heavy blow or an ability
+    // about four with a two-frame stop of the world: short, and read through the shudder.
+    expect(p.resolve("crit", at())).toEqual({ local: 0.035, global: 0 });
+    expect(p.resolve("finisher", at())).toEqual({ local: 0.05, global: 0 });
+    expect(p.resolve("heavy", at())).toEqual({ local: 0.06, global: 0.033 });
     expect(p.resolve("kill", at()).global).toBe(0);
     expect(p.resolve("taken", at())).toEqual({ local: 0.05, global: 0 });
-    expect(p.resolve("takenHeavy", at())).toEqual({ local: 0.1, global: 0.033 });
+    expect(p.resolve("takenHeavy", at())).toEqual({ local: 0.08, global: 0.033 });
     expect(p.resolve("army", at())).toEqual({ local: 0, global: 0 });
   });
 
@@ -228,5 +231,42 @@ describe("combo swings and contact timing", () => {
     // Before the strike window the arm is raised (anticipation), not at contact.
     const antic = make("windup", 0.09, 0.13);
     expect(antic[Ch.ArmR0]!).toBeLessThan(contact[Ch.ArmR0]! - 0.5);
+  });
+
+  it("the wind-up reaches its coil early and keeps loading; the recovery holds the follow-through, then settles", () => {
+    const make = (state: PoseInput["state"], t: number, duration: number, variant = 0): Float32Array => {
+      const out = new Float32Array(CHANNELS);
+      computePose(out, { style: "warrior", kit: "combo", state, t, duration, seed: 0.3, clock: 1, speedFrac: 0, variant, death: 0, idle: "" });
+      return out;
+    };
+    const windup = 0.13;
+    const antic = windup - strikeWindow(windup);
+    const guard = make("idle", 0, 1);
+    const contact = make("attack", 0, 0.12);
+    // By 60% of the anticipation the sword arm is at its raised pose; it does not come down again
+    // before the strike, and it loads a little further (away from contact).
+    const reached = make("windup", antic * ANTIC_REACH, windup);
+    const late = make("windup", antic * 0.98, windup);
+    expect(reached[Ch.ArmR0]!).toBeLessThan(contact[Ch.ArmR0]! - 1);
+    expect(late[Ch.ArmR0]!).toBeLessThan(reached[Ch.ArmR0]!);
+    expect(late[Ch.HipsX]!).toBeLessThan(reached[Ch.HipsX]!);
+    // The spine leans back in the coil and forward at contact.
+    expect(reached[Ch.Lean]!).toBeLessThan(0);
+    expect(contact[Ch.Lean]!).toBeGreaterThan(0);
+
+    // Recovery: the follow-through is held for the first part, then eases to guard.
+    const follow = make("attack", 0.12, 0.12);
+    const held = make("recover", 0.12 * RECOVER_HOLD * 0.9, 0.12);
+    const mid = make("recover", 0.12 * 0.7, 0.12);
+    const end = make("recover", 0.12, 0.12);
+    expect(held[Ch.ArmR0]).toBeCloseTo(follow[Ch.ArmR0]!, 4);
+    expect(held[Ch.HipsX]).toBeCloseTo(follow[Ch.HipsX]!, 4);
+    expect(Math.abs(mid[Ch.HipsX]! - guard[Ch.HipsX]!)).toBeLessThan(Math.abs(follow[Ch.HipsX]! - guard[Ch.HipsX]!));
+    for (let i = 0; i < CHANNELS; i++) expect(end[i]).toBeCloseTo(make("recover", 0.12, 0.12, 1)[i]!, 4);
+    expect(end[Ch.HipsX]).toBeCloseTo(make("recover", 5, 0.12)[Ch.HipsX]!, 4);
+
+    // The third swing of the combo holds its contact longer than the first two.
+    expect(contactHold("combo", 0.12, 2)).toBeGreaterThan(contactHold("combo", 0.12, 0) * 1.4);
+    expect(contactHold("combo", 0.12, 1)).toBe(contactHold("combo", 0.12, 0));
   });
 });

@@ -26,6 +26,7 @@ import { isBattlefieldModal } from "@/components/sheets/kinds";
 import { TIER_LABEL } from "@/game/progression/readiness";
 import { useStore } from "@/lib/store";
 import { useSheetRise } from "@/hooks/useSheetLift";
+import { useShortScreen } from "@/hooks/useShortScreen";
 import { MODES } from "@/game/data/modes";
 
 const EMPTY_ORBS: WorldSnapshot["orbs"] = [];
@@ -50,17 +51,24 @@ export function BattleOverlays() {
 }
 
 // ---------------------------------------------------------------------------
-// Top: the boss bar or the mode status, then army command and status, then the toast.
+// Top: the boss bar or the mode status, then army command and status, then the one line of news
+// (always directly under the army row), then the boss's counter line while it shows.
 // ---------------------------------------------------------------------------
 
 function TopCluster() {
+  const hint = useBossCounter();
+  const short = useShortScreen();
+  const newsUp = useUi((u) => u.toasts.length > 0);
   return (
     <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex flex-col gap-3 px-3 pt-3">
       <BossBar />
-      <BossHint />
       <ModeHud />
-      <ArmyRow />
+      {/* On a short screen the field has room for the hint or the army row, not both: the row
+          steps aside for the four seconds the hint is up. */}
+      {!(short && hint) && <ArmyRow />}
       <Toasts />
+      {/* ...and the hint waits out a line of news there, so the two never stack down onto Retreat. */}
+      <BossHint counter={short && newsUp ? null : hint} />
     </div>
   );
 }
@@ -94,10 +102,10 @@ function BossBar() {
 }
 
 /**
- * Under the boss bar: Retreat at the left (far from the ultimate), and the counter hint on a
- * scrimmed band that never sits over the fight, fading after four seconds.
+ * The boss's counter hint on a scrimmed band at the top of the fight, fading after four seconds.
+ * (Retreat lives in the bottom-left corner, where the objective sits outside boss fights.)
  */
-function BossHint() {
+function useBossCounter(): string | null {
   const defId = useHud((s) => s?.boss?.defId ?? null);
   const counter = defId ? ENEMIES[defId]?.counter : undefined;
   const [shownFor, setShownFor] = useState<string | null>(null);
@@ -111,13 +119,15 @@ function BossHint() {
     const t = setTimeout(() => setShownFor(null), 4000);
     return () => clearTimeout(t);
   }, [shownFor]);
-  if (!defId) return null;
+  return defId && shownFor && counter ? counter : null;
+}
+
+function BossHint({ counter }: { counter: string | null }) {
   return (
-    <div className="flex flex-col items-start gap-2 min-w-0">
-      <Retreat />
+    <div className="flex flex-col items-start gap-2 min-w-0 empty:hidden">
       <AnimatePresence>
-        {shownFor && counter && (
-          <motion.p key={shownFor} className="glass max-w-full rounded-[14px] px-3 py-2 t-flavour text-t1" initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.32, ease: EASE_OUT }} data-testid="boss-counter">
+        {counter && (
+          <motion.p key={counter} className="glass max-w-full rounded-[14px] px-3 py-2 t-flavour text-t1" initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.32, ease: EASE_OUT }} data-testid="boss-counter">
             {counter}
           </motion.p>
         )}
@@ -216,7 +226,10 @@ const ROLE_GLYPH: Partial<Record<SummonRole, IconName>> = { vanguard: "shield", 
 
 const TOAST_DOT: Record<string, string> = { info: "bg-t2", gold: "bg-gold", essence: "bg-jade", warn: "bg-crimson", level: "bg-gold" };
 
-/** One line of glass under the top controls; the tone is a 6px dot, not a coloured box. */
+/**
+ * The one line of news, on glass under the top controls; the tone is a 6px dot, not a coloured
+ * box. Only one ever shows (the controller's event pill decides which); a repeat shows as a count.
+ */
 function Toasts() {
   const toasts = useUi((u) => u.toasts);
   return (
@@ -229,10 +242,13 @@ function Toasts() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2, ease: EASE_OUT }}
-            className="glass flex max-w-full items-center gap-2 rounded-full px-4 py-2"
+            className="glass flex max-w-full items-center gap-2 rounded-[16px] px-3.5 py-1.5"
+            data-testid="event-pill"
+            data-count={t.count ?? 1}
           >
             <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", TOAST_DOT[t.tone] ?? "bg-t2")} aria-hidden="true" />
-            <span className="t-label text-t1 truncate">{t.text}</span>
+            <span className="t-label text-t1 line-clamp-2 text-balance">{t.text}</span>
+            {(t.count ?? 1) > 1 && <span className="t-label tnum shrink-0 text-t2">×{t.count}</span>}
           </motion.div>
         ))}
       </AnimatePresence>
@@ -368,8 +384,10 @@ function BottomStack() {
           </AnimatePresence>
           {questDone && <QuestLine beside />}
         </div>
+      ) : fighting ? (
+        <Retreat />
       ) : (
-        !fighting && <QuestLine />
+        <QuestLine />
       )}
     </motion.div>
   );
@@ -504,22 +522,20 @@ function BossGate({ gate, compact = false }: { gate: number; compact?: boolean }
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.32, ease: EASE_OUT }}
-      className="press pointer-events-auto relative flex h-[52px] max-w-full items-center gap-3 rounded-[14px] bg-[#2a1013] pl-2 pr-4 text-t1"
+      className="press pointer-events-auto relative flex h-11 max-w-full items-center gap-2 rounded-full bg-[#2a1013] pl-1.5 pr-4 text-t1"
       onClick={() => c.openBossChallenge()}
       data-guide="boss-challenge"
       data-testid="boss-challenge"
       aria-label={`Boss challenge: ${name}, stage ${gate}${tier ? `, readiness ${TIER_LABEL[tier]}` : ""}`}
     >
       {/* A crimson rim on a dark crimson-black surface, breathing slowly: a threat, not an alert. */}
-      <span className="breathe pointer-events-none absolute inset-0 rounded-[14px] shadow-[inset_0_0_0_1.5px_var(--color-crimson)]" aria-hidden="true" />
-      <span className="relative h-9 w-9 shrink-0 overflow-hidden rounded-full bg-bg-2">
-        <SummonPortrait defId={bossId} size={36} enemy round />
+      <span className="breathe pointer-events-none absolute inset-0 rounded-full shadow-[inset_0_0_0_1.5px_var(--color-crimson)]" aria-hidden="true" />
+      <span className="relative h-8 w-8 shrink-0 overflow-hidden rounded-full bg-bg-2">
+        <SummonPortrait defId={bossId} size={32} enemy round />
       </span>
-      <span className="flex min-w-0 flex-col items-start text-left">
-        <span className="t-caption text-[#e58a92]">Challenge · stage {gate}</span>
-        <span className="truncate font-serif text-[18px] leading-[20px] text-t1">{name}</span>
-      </span>
-      {tier && !compact && <span className="ml-1 shrink-0 t-label text-t2">{TIER_LABEL[tier]}</span>}
+      {/* One line: the boss by name. The stage is in the top bar; the forecast is one word. */}
+      <span className="truncate font-serif text-[17px] leading-[20px] text-t1">{name}</span>
+      {tier && !compact && <span className="shrink-0 t-caption text-[#e58a92]">{TIER_LABEL[tier]}</span>}
     </motion.button>
   );
 }

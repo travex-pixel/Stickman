@@ -123,6 +123,10 @@ export const FURY_FIRST = 0.25;
 export const FURY_GAP = 0.16;
 /** The depth step a blink takes instead when the arena wall would land him where he stands. */
 export const FURY_DEPTH_STEP = 24;
+/** A perfect dodge slows the world to a quarter speed for 0.35s of real time, then eases back over 0.25s. */
+export const PERFECT_SLOW = 0.25;
+export const PERFECT_HOLD = 0.35;
+export const PERFECT_RAMP = 0.25;
 /** Invulnerability left when Ascendant Fury ends (world seconds): the usual short window. */
 export const FURY_AFTER_INVULN = 0.3;
 /**
@@ -419,8 +423,9 @@ export class World {
     if (perfect) {
       this.perfectCrit = true;
       this.gainEnergy(15);
-      this.timeScale = 0.3;
-      this.finisher = { timer: 0.35 };
+      this.timeScale = PERFECT_SLOW;
+      this.finisher = { timer: PERFECT_HOLD };
+      this.perfectRamp = 0;
       this.events.push({ type: "perfect_dodge", pos: { ...p.pos } });
     }
     this.dodgeCooldown = this.abilityCooldown("shadow_dash");
@@ -730,6 +735,13 @@ export class World {
   }
 
   finisher: { timer: number } | null = null;
+  /** Seconds into the return to full speed after a perfect dodge's slowed moment (-1: none running). */
+  private perfectRamp = -1;
+
+  /** How deep in a perfect dodge's slowed moment the fight is (1 held, falling to 0 as time returns); for the renderer's focus. */
+  get perfectFocus(): number {
+    return this.perfectRamp < 0 ? 0 : (1 - this.timeScale) / (1 - PERFECT_SLOW);
+  }
 
   private updateTimers(dt: number, rawDt: number): void {
     if (this.chainTimer > 0) {
@@ -744,7 +756,17 @@ export class World {
     this.dodgeCooldown = Math.max(0, this.dodgeCooldown - rawDt);
     this.cooldowns.shadow_dash = this.dodgeCooldown;
     this.playerMoveLockTimer = Math.max(0, this.playerMoveLockTimer - dt);
-    if (this.timeScale < 1 && !this.ultimate.active && !this.finisher) this.timeScale = Math.min(1, this.timeScale + rawDt * 2.5);
+    if (this.ultimate.active || (this.finisher && this.timeScale !== PERFECT_SLOW)) this.perfectRamp = -1;
+    if (this.timeScale < 1 && !this.ultimate.active && !this.finisher) {
+      if (this.perfectRamp >= 0) {
+        // A perfect dodge lets go of time quickly at first and then gently: a cubic ease-out.
+        this.perfectRamp += rawDt;
+        const k = Math.min(1, this.perfectRamp / PERFECT_RAMP);
+        const inv = 1 - k;
+        this.timeScale = PERFECT_SLOW + (1 - PERFECT_SLOW) * (1 - inv * inv * inv);
+        if (k >= 1) this.perfectRamp = -1;
+      } else this.timeScale = Math.min(1, this.timeScale + rawDt * 2.5);
+    } else if (this.timeScale >= 1) this.perfectRamp = -1;
   }
 
   private updateRunState(rawDt: number): void {

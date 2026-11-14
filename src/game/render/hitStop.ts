@@ -1,20 +1,23 @@
 /**
  * Hit classes and their stops, in seconds. `local` holds only the two bodies involved (the
  * attacker's and the target's drawn pose and position; the simulation runs on); `global` freezes
- * the whole game loop and is reserved for blows that should stop the world. Light hits sit at
- * 2 frames, medium at 4 to 5, heavy at 6.
+ * the whole game loop and is reserved for blows that should stop the world. A light hit or a
+ * crit holds 2 frames, the third swing of a combo 3, a heavy blow or an ability about 4 (with a
+ * 2-frame stop of the world inside it), a phase change 6. Short stops, read through the struck
+ * body's shudder, keep the rhythm at 2x speed and through a seven-strike ultimate.
  */
-export type HitClass = "normal" | "crit" | "heavy" | "kill" | "eliteKill" | "taken" | "takenHeavy" | "army" | "phase";
+export type HitClass = "normal" | "crit" | "finisher" | "heavy" | "kill" | "eliteKill" | "taken" | "takenHeavy" | "army" | "phase";
 export const HITSTOP_TABLE: Record<HitClass, { local: number; global: number }> = {
   normal: { local: 0.033, global: 0 },
-  crit: { local: 0.08, global: 0.033 },
-  heavy: { local: 0.1, global: 0.05 },
+  crit: { local: 0.035, global: 0 },
+  finisher: { local: 0.05, global: 0 },
+  heavy: { local: 0.06, global: 0.033 },
   kill: { local: 0.033, global: 0 },
   eliteKill: { local: 0.033, global: 0.05 },
   taken: { local: 0.05, global: 0 },
-  takenHeavy: { local: 0.1, global: 0.033 },
+  takenHeavy: { local: 0.08, global: 0.033 },
   army: { local: 0, global: 0 },
-  phase: { local: 0, global: 0.06 },
+  phase: { local: 0, global: 0.1 },
 };
 /** At 2x battle speed local stops shorten to 60%. */
 export const LOCAL_SPEED_SCALE = 0.6;
@@ -32,6 +35,14 @@ export const HITSTOP_CAP_SHARE = 0.12;
 export const HITSTOP_WINDOW = 1;
 
 const LEDGER = 64;
+
+/** Authored stops from the simulation (a boss kill, a Tyrant break) play at most this long. */
+export const AUTHORED_FREEZE_MAX = 0.11;
+
+/** The share of a frame of length `dt` that a flash with `left` seconds remaining covers. */
+function flashCover(left: number, dt: number): number {
+  return left <= 0 ? 0 : dt <= 0 ? 1 : Math.min(1, left / dt);
+}
 
 export class HitStopPolicy {
   reduced = false;
@@ -150,8 +161,7 @@ export class FlashState {
   step(dt: number): number {
     // A flash shorter than the frame shows at the share of the frame it covers, so the white a
     // player sees adds up to the same time at 10 fps as at 60.
-    const cover = (left: number) => (left <= 0 ? 0 : dt <= 0 ? 1 : Math.min(1, left / dt));
-    const level = Math.max(cover(this.full), FLASH_TINT_LEVEL * cover(this.tint));
+    const level = Math.max(flashCover(this.full, dt), FLASH_TINT_LEVEL * flashCover(this.tint, dt));
     this.full = Math.max(0, this.full - dt);
     this.tint = Math.max(0, this.tint - dt);
     return level;

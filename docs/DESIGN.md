@@ -281,6 +281,44 @@ a panel that could stick after fast tab switching, and each now has a browser te
 - Spectacle scales with significance: duplicates resolve quickly, first and rare shadows get the
   full rite, rank-ups and boss kills get slow motion and a ceremony.
 
+## How a blow is shaped
+
+A swing is four parts, and each has its own curve (`src/game/render/rigs/pose.ts`). The
+simulation's timings are untouched: the player's basic attack is still 0.13s of wind-up, 0.12s
+of attack and 0.12s of recovery, and damage still lands on the first frame of the attack.
+
+| Part | What the body does | Timing |
+|---|---|---|
+| Anticipation | Weight back, arm up, spine leaning away. The coil is reached in the first 60% of the window and then held, still loading 7% further, so the wind-up is seen before the blade moves. A long wind-up (a brute, a boss) trembles in the hold | The wind-up, less the strike |
+| Strike | From the loaded coil into contact, accelerating (ease-in cubic) | The last 30% of the wind-up, 35 to 140ms |
+| Contact | The pose is held with the hit-stop. The third swing of the combo holds half as long again | 40ms, 60ms on the third swing |
+| Recovery | The follow-through is held for the first 30%, then the body eases back to guard, the weapon last | The recovery |
+
+A combo left alone for 0.9s starts again from its first swing. The third swing is the beat the
+other two lead to: a longer hold, a harder camera kick, a ring and dust.
+
+Hit-stop (`src/game/render/hitStop.ts`) is short and read through the struck body, which
+shudders a few pixels along the blow while it is held:
+
+| Hit | The two bodies hold | The world stops |
+|---|---|---|
+| Light | 33ms | – |
+| Critical | 35ms | – |
+| Third swing of the combo | 50ms | – |
+| Heavy blow or ability | 60ms | 33ms |
+| Boss phase change; a boss's death | – | 100 to 110ms |
+
+A struck body flinches away from whoever struck it, not simply backwards. The camera shakes only
+for heavy blows, blows taken and bosses; an ordinary hit nudges it 3px along the blow, and the
+army's hits never move it.
+With reduced effects (the game's setting, or the device asking for less motion) there is no
+shake, no stop of the world and no shudder.
+
+A perfect dodge slows the world to a quarter speed for 0.35s, then lets go over 0.25s, fast at
+first (an ease-out cubic); the backdrop sinks toward ink for that moment so the fighters stand
+out. The swing is heard as the wind-up starts, a beat before the hit; the army's blows are
+quieter, lower and on their own limiter, so they never take the place of the warrior's.
+
 ## Testing
 
 - `npm run test`: unit tests for every rule, plus a balance harness that simulates whole runs with

@@ -577,5 +577,5 @@ export class BossDeath {
 }
 
 /** Phase change parameters (blueprint 7D): the stop, the backdrop's lasting shift toward the glow. */
-export const PHASE = { stop: 0.35, tint: 0.2 } as const;
+export const PHASE = { stop: 0.1, tint: 0.2 } as const;
 

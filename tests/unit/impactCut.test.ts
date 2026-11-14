@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { ImpactDirector, type ImpactHost, type ImpactState } from "../../src/game/render/ImpactDirector";
-import { FlashState } from "../../src/game/render/hitStop";
+import { FlashState, HITSTOP_TABLE } from "../../src/game/render/hitStop";
 import type { GameEvent } from "../../src/game/engine/events";
 import type { Combatant } from "../../src/game/entities/types";
 
@@ -17,6 +17,8 @@ function view(): ImpactState {
     rig: { meleeKit: "combo" } as unknown as ImpactState["rig"],
     swings: 0,
     swungThisBatch: false,
+    struck: false,
+    restFor: 0,
     lastHitCrit: false,
     lastHitHeavy: false,
     lastHitAbility: false,
@@ -79,7 +81,7 @@ describe("the Ascendant Fury's cut in the impact director", () => {
     director.onHit(hit("soul"));
     expect(views.get(2)!.lastHitAbility).toBe(true);
     expect(holds.every((h) => h.id === 2)).toBe(true);
-    expect(holds.some((h) => h.s >= 0.1 - 1e-9)).toBe(true);
+    expect(holds.some((h) => h.s >= HITSTOP_TABLE.heavy.local - 1e-9)).toBe(true);
   });
 
   it("an ordinary swing still counts and makes its hit a basic blow", () => {
@@ -88,5 +90,24 @@ describe("the Ascendant Fury's cut in the impact director", () => {
     expect(views.get(1)!.swings).toBe(1);
     director.onHit(hit("physical"));
     expect(views.get(2)!.lastHitAbility).toBe(false);
+  });
+
+  it("the third swing of the combo lands heavier than the first two, and marks its target struck", () => {
+    const { director, views, holds } = setup();
+    const longest = () => Math.max(0, ...holds.splice(0).map((h) => h.s));
+    director.onSwing(1);
+    director.onHit(hit("physical"));
+    const first = longest();
+    director.onSwing(1);
+    director.onHit(hit("physical"));
+    const second = longest();
+    director.onSwing(1);
+    director.onHit(hit("physical"));
+    const third = longest();
+    expect(first).toBeCloseTo(HITSTOP_TABLE.normal.local, 6);
+    expect(second).toBeCloseTo(HITSTOP_TABLE.normal.local, 6);
+    expect(third).toBeCloseTo(HITSTOP_TABLE.finisher.local, 6);
+    expect(views.get(2)!.struck).toBe(true);
+    expect(views.get(1)!.struck).toBe(false);
   });
 });
