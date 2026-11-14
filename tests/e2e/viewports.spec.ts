@@ -237,7 +237,9 @@ for (const vp of VIEWPORTS) {
       expect(leave.b - leave.t, `${label}: Retreat is a full touch target`).toBeGreaterThanOrEqual(44);
     };
 
-    // With the counter hint up and a line of news raised at the same moment (the worst case).
+    // With the counter hint up (it arrives as the boss's entrance ends) and a line of news raised
+    // at the same moment: the worst case.
+    await expect(page.getByTestId("boss-counter")).toBeVisible({ timeout: 8000 });
     await page.evaluate(() => (window as unknown as { __ASCEND__: { toast(text: string, tone: string, weight: number): void } }).__ASCEND__.toast("The Warden remembers its oath. Phase two.", "warn", 2));
     await expect(page.getByTestId("event-pill")).toBeVisible();
     // On a short screen the hint steps aside for the news: let its fade (a third of a second) finish.
@@ -245,10 +247,11 @@ for (const vp of VIEWPORTS) {
     await check("hint and news up");
     // The hint on its own, once the news has left (the boss's hint lasts four seconds).
     await expect(page.getByTestId("event-pill")).toHaveCount(0, { timeout: 4000 });
+    await page.waitForTimeout(450);
     if (await page.getByTestId("boss-counter").count()) await check("hint up");
     // And once both have gone.
-    await page.waitForTimeout(2600);
-    await expect(page.getByTestId("boss-counter")).toHaveCount(0);
+    await expect(page.getByTestId("boss-counter")).toHaveCount(0, { timeout: 6000 });
+    await page.waitForTimeout(450);
     await check("settled");
     await ctx.close();
   });

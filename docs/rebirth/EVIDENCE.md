@@ -446,3 +446,61 @@ tests pass, 3 skipped; 51 of 51 browser tests.
 **Not established.** Whether the flurry is more compelling to watch is the owner's judgement and
 a playtest's, not something these instruments measure. The contact sheets show what it does, not
 how it feels. Why farming is faster late is read from the damage shares, not isolated.
+
+### After the calmer battle screen and the weightier blows
+
+**The ask.** The owner sent a screenshot (stage 3, level 19) and asked for more satisfying
+animation and a fighting window less cluttered with pop-ups, with a detailed brief.
+
+**What was already there.** Two read-only audits, by agents that changed nothing, mapped the code
+before any edit. Most of the brief's list existed: a three-swing combo, pooled trails and
+particles, a trauma-and-kick camera, local hit-stop, boss entrances, phase changes and deaths,
+telegraphs, perfect-dodge slow motion. So the work was shaping what existed, not adding systems.
+The audits' measured gaps were these:
+
+| Gap found | Now |
+| --- | --- |
+| The wind-up's coil was about 70% formed when the blade left (eased over the whole 91ms and chased at a slow blend rate) | Reached in the first 60% and held, still loading |
+| Recovery had no shape: a plain decay to guard | The follow-through is held for 30%, then eases back |
+| The struck body was frozen still in a hit-stop, and flinched relative to its own facing | It shudders along the blow, and flinches away from the attacker |
+| The third swing differed only in pose | A longer hold and hit-stop, a harder kick, a ring and dust; the combo resets after 0.9s idle |
+| Hit-stop ran long against the brief's targets (crit 80ms + 33ms of world stop; heavy 100 + 50; boss phase and kill 350) | Crit 35; heavy 60 + 33; boss phase 100, kill 110 |
+| Nothing drew the slowed moment of a perfect dodge except its ring | The backdrop sinks toward ink; time returns on a cubic ease-out |
+| The swing sound fired on the impact tick; the army's hits shared the warrior's limiter | The swing is heard at the wind-up; the army has its own, quieter voice |
+| Reduced effects left a quarter of the shake and the simulation's own stops; the device setting did not reach the renderer | No shake, no world stop; the device setting counts |
+| Toasts: one slot, last one wins, no repeats merged, several double-fires that hid the first | One line of news with priorities, counts and a queue (`src/game/eventPill.ts`) |
+| A hand and a "Claim reward" label pointed at a finished quest for as long as it went unclaimed | Only during the first lessons |
+| The boss challenge plaque was 52px and two lines, over the fighters' feet on short screens | One 44px line |
+| In a boss fight, Retreat and the counter hint pushed the stance row into mid-field | Retreat sits lower left; the hint waits for the entrance to end |
+| A second copy of the chain count, and a shadow's ability name on every use, floated over the fight | The chain is counted once, at the edge; a name shows on first use |
+| 2x speed was a bare padlock until stage 3 (the owner asked whether it could be added, at level 19) | Unlocks with the first lessons |
+
+**Before and after**, same seeded states, three phone sizes, battlefield only
+(`docs/rebirth/feel/compare-320.png`, `compare-375.png`, `compare-430.png`), and one swing frame
+by frame at 60 per second (`docs/rebirth/feel/swing.png`: wind-up w0 to w117, attack a0 to a117,
+recovery r0 to r117). In the swing strip the sword is fully raised by w50 to w67 and held to
+w100; contact is a0 to a17; the low follow-through holds from r0 to about r33.
+
+**Found by the new browser test, and fixed.** A test added for this work checks that in a boss
+fight no control covers another at seven phone sizes, with the hint and a line of news both up.
+It failed at 320x568 on its first run: the two stacked down onto Retreat. On screens 700px tall
+or less the army row now steps aside for the hint, and the hint waits out a line of news.
+
+**Not done, and why.**
+- Staggered attack timing and formation spread for the army: both live in the simulation, and
+  changing them would move the balance that was just re-measured. Left for a pass that re-runs
+  the boss forecasts.
+- Drawing the army at 50 to 65% opacity: at that level the shadows smear into the backdrop in
+  the captures. They already read apart from the warrior (slate bodies, tint-only flashes, no
+  camera movement from their hits) and now sound apart too.
+- Silhouette afterimages on an ordinary dodge: the dash keeps its ink blobs and speed lines and
+  gains a stretched, pitched pose. The silhouette pool that the ultimate uses builds its figures
+  on demand; reusing it for every dodge needs a standing pool first.
+- A per-ability wind-up silhouette: abilities still share one cast pose.
+- Per-event object literals passed to the particle emitter remain; the per-hit arrays in the
+  impact director, a closure per figure per frame in the flash, and a per-frame array shift in
+  the game loop are gone.
+
+**Not established.** Whether the swings feel more satisfying is the owner's judgement on a phone:
+stills and unit tests show the shape and timing changed as intended, not how it feels. The
+audits and this record are by models.

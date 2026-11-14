@@ -105,8 +105,12 @@ function BossBar() {
  * The boss's counter hint on a scrimmed band at the top of the fight, fading after four seconds.
  * (Retreat lives in the bottom-left corner, where the objective sits outside boss fights.)
  */
+/**
+ * The boss's counter line, for four seconds from the end of its entrance (during the entrance the
+ * boss's name is written across the field, and the hint would sit on it).
+ */
 function useBossCounter(): string | null {
-  const defId = useHud((s) => s?.boss?.defId ?? null);
+  const defId = useHud((s) => (s?.boss && s.phase !== "boss_intro" ? s.boss.defId : null));
   const counter = defId ? ENEMIES[defId]?.counter : undefined;
   const [shownFor, setShownFor] = useState<string | null>(null);
   const [lastId, setLastId] = useState<string | null>(null);
