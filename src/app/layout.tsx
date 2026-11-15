@@ -21,13 +21,28 @@ const serif = localFont({
   display: "swap",
 });
 
+/**
+ * The site's public address. Link previews (WhatsApp, Messenger, iMessage, Slack) need absolute
+ * addresses for the page and its image, and a crawler reads them from the first HTML it is sent.
+ * Set NEXT_PUBLIC_SITE_URL for a custom domain; on Vercel the project's production address is used.
+ */
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "https://stickman-seven-tau.vercel.app");
+const TITLE = "ASCEND";
+const DESCRIPTION = "A dark-fantasy action RPG. Claim the essence of your enemies and build an army.";
+/** 1200x630 JPEG, under 100KB: the size and weight WhatsApp and Messenger show as a large preview. */
+const PREVIEW = { url: "/og/ascend.jpg", width: 1200, height: 630, type: "image/jpeg", alt: "ASCEND: a white-cloaked warrior cuts through a line of dark figures on a dusk battlefield." };
+
 export const metadata: Metadata = {
-  title: "ASCEND",
-  description: "A dark-fantasy action RPG. Claim the essence of your enemies and build an army.",
-  applicationName: "ASCEND",
-  appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "ASCEND" },
+  metadataBase: new URL(SITE_URL),
+  title: TITLE,
+  description: DESCRIPTION,
+  applicationName: TITLE,
+  alternates: { canonical: "/" },
+  openGraph: { type: "website", url: "/", siteName: TITLE, title: TITLE, description: DESCRIPTION, locale: "en_US", images: [PREVIEW] },
+  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION, images: [PREVIEW] },
+  appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: TITLE },
   manifest: "/manifest.webmanifest",
-  icons: { icon: "/icon.svg" },
+  icons: { icon: "/icon.svg", apple: "/apple-touch-icon.png" },
 };
 
 export const viewport: Viewport = {
