@@ -37,6 +37,8 @@ interface EntityView extends ImpactState {
   barKey?: number;
   /** Tinted down by a boss entrance (restored when it ends). */
   dimmed?: boolean;
+  /** How far a big ally has thinned out for standing in front of the warrior (0 to 1). */
+  veil: number;
   lastHp: number;
   defId: string;
   kind: string;
@@ -134,6 +136,10 @@ const FOCUS_DIM = 0.38;
 /** The struck body's shudder during a hit-stop, in px at full figure scale, and the hold left below which it dies away. */
 const HOLD_SHUDDER = 2.6;
 const HOLD_SHUDDER_FADE = 0.045;
+/** Allies at least this tall (rig units) thin out when they stand in front of the warrior, within this many world units of him, by this much. */
+const BIG_ALLY_TOP = 118;
+const BIG_ALLY_COVER = 52;
+const BIG_ALLY_VEIL = 0.5;
 /** A combo left alone this long (seconds) starts again from its first swing. */
 const COMBO_RESET = 0.9;
 const FURY_DIM_COLOR = 0x23262c;
@@ -833,6 +839,13 @@ export class BattleRenderer implements ImpactHost {
       // Time-based impact flash: full white, a light tint, or nothing (FlashState decides).
       rig.setWhite(v.flash.step(realDt > 0 ? realDt : this.frameDt));
       if (e.summon?.temporary) rig.root.alpha = Math.min(rig.root.alpha, 0.72);
+      // A big shadow standing in front of the warrior thins out, so he is never lost behind his
+      // own army; it fills back in as soon as it steps clear.
+      if (e.kind === "summon") {
+        const covering = !e.dead && rig.top >= BIG_ALLY_TOP && e.pos.y >= player.pos.y - 4 && Math.abs(e.pos.x - player.pos.x) < BIG_ALLY_COVER;
+        v.veil = damp(v.veil, covering ? 1 : 0, 9, realDt > 0 ? realDt : this.frameDt);
+        if (v.veil > 0.01) rig.root.alpha = Math.min(rig.root.alpha, 1 - BIG_ALLY_VEIL * v.veil);
+      }
       const submerged = hasStatus(e, "submerged");
       if (submerged) {
         // Sunk: only a dark wake and a pale ripple show where it glides.
@@ -946,6 +959,7 @@ export class BattleRenderer implements ImpactHost {
       swungThisBatch: false,
       struck: false,
       restFor: 0,
+      veil: 0,
       lastHitCrit: false,
       lastHitHeavy: false,
       lastHitAbility: false,
