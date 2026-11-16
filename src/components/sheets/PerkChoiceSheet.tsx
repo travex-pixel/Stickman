@@ -28,9 +28,7 @@ export function PerkChoiceSheet({ modal, open }: { modal: Extract<Modal, { kind:
                   <span className="t-button text-t1">{p.name}</span>
                   <span className="t-body text-t2 mt-0.5">{p.description}</span>
                 </span>
-                <span className="t-label text-t2 tnum shrink-0">
-                  {stacks}/{p.maxStacks}
-                </span>
+                <span className="t-label text-t2 tnum shrink-0">{p.repeatable ? (stacks ? `×${stacks}` : "New") : `${stacks}/${p.maxStacks}`}</span>
               </button>
             </MomentItem>
           );

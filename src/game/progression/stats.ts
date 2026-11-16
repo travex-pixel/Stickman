@@ -2,7 +2,7 @@ import type { StatKey, UpgradeableStat, WeaponPath } from "../data/ids";
 import type { CombatStats } from "../entities/types";
 import type { EquipmentItem, Profile } from "./profile";
 import { SKILLS } from "../data/skills";
-import { PERKS } from "../data/perks";
+import { ALL_PERKS } from "../data/perks";
 import { codexBonus } from "../summons/extraction";
 import { TECHNIQUE_OWNED_ATTACK } from "../data/abilities";
 import type { GearEffectId } from "../data/gearEffects";
@@ -226,7 +226,7 @@ export function computeModifiers(profile: Profile): PlayerModifiers {
     }
   }
   for (const [id, stacks] of Object.entries(profile.player.perks)) {
-    const perk = PERKS.find((p) => p.id === id);
+    const perk = ALL_PERKS.find((p) => p.id === id);
     if (!perk || stacks <= 0) continue;
     const e = perk.effect;
     switch (e.kind) {
@@ -336,7 +336,7 @@ export function computePlayerStats(profile: Profile, without: ReadonlySet<PowerS
     }
   if (on("perks"))
     for (const [id, stacks] of Object.entries(profile.player.perks)) {
-      const perk = PERKS.find((p) => p.id === id);
+      const perk = ALL_PERKS.find((p) => p.id === id);
       if (perk?.effect.kind === "stat") addPct(perk.effect.stat, perk.effect.pct * stacks);
     }
   if (on("weaponPath")) for (const [k, v] of Object.entries(weaponPathBonuses(profile.player.weaponPath)) as [StatKey, number][]) addPct(k, v);

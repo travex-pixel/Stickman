@@ -17,7 +17,22 @@ export interface PerkDef {
   maxStacks: number;
   effect: PerkEffect;
   tone: "power" | "soul" | "command";
+  /** No stack limit: offered once the ordinary perks run short, so every level's pick buys something. */
+  repeatable?: boolean;
 }
+
+/**
+ * Each stack of a repeatable perk. Measured with the boss probe on the simulator's saved profiles
+ * (see DESIGN.md, "Perks past the last stack"); a knob for the simulator.
+ */
+export const DEEP_PERK_PCT = Number(process.env.ASCEND_DEEP_PERK ?? 0.03);
+
+/** One per tone, so a short offer keeps the sheet's shape: a blade, a soul and an army perk. */
+export const REPEATABLE_PERKS: PerkDef[] = [
+  { id: "endless_edge", name: "Endless Edge", description: `+${Math.round(DEEP_PERK_PCT * 100)}% attack. Take it as often as you like.`, maxStacks: Infinity, effect: { kind: "stat", stat: "attack", pct: DEEP_PERK_PCT }, tone: "power", repeatable: true },
+  { id: "deep_vigor", name: "Deep Vigor", description: `+${Math.round(DEEP_PERK_PCT * 100)}% max health. Take it as often as you like.`, maxStacks: Infinity, effect: { kind: "stat", stat: "maxHp", pct: DEEP_PERK_PCT }, tone: "soul", repeatable: true },
+  { id: "legions_oath", name: "Legion's Oath", description: `Your army deals +${Math.round(DEEP_PERK_PCT * 200)}% damage. Take it as often as you like.`, maxStacks: Infinity, effect: { kind: "summonDamage", pct: DEEP_PERK_PCT * 2 }, tone: "command", repeatable: true },
+];
 
 export const PERKS: PerkDef[] = [
   { id: "swift_blade", name: "Swift Blade", description: "+15% attack speed.", maxStacks: 4, effect: { kind: "stat", stat: "attackSpeed", pct: 0.15 }, tone: "power" },
@@ -36,8 +51,11 @@ export const PERKS: PerkDef[] = [
   { id: "gilded_oath", name: "Gilded Oath", description: "+15% gold from enemies.", maxStacks: 4, effect: { kind: "goldFind", pct: 0.15 }, tone: "command" },
 ];
 
+/** Every perk, the ordinary ones and the repeatable ones. */
+export const ALL_PERKS: PerkDef[] = [...PERKS, ...REPEATABLE_PERKS];
+
 export function perkDef(id: string): PerkDef {
-  const p = PERKS.find((x) => x.id === id);
+  const p = ALL_PERKS.find((x) => x.id === id);
   if (!p) throw new Error(`Unknown perk ${id}`);
   return p;
 }

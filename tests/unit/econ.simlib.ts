@@ -14,7 +14,7 @@ import { resolveExtraction } from "@/game/summons/extraction";
 import { claimEssence, setDeployed } from "@/game/summons/recruitment";
 import { bondCost, summonPower, grantSummonXp, checkEvolution, evolveSummon, canStarUp, starUp } from "@/game/summons/progression";
 import { canUnlockSkill, unlockSkill } from "@/game/progression/skills";
-import { offerPerks, takePerk } from "@/game/progression/perks";
+import { autoPickPerks } from "@/game/progression/perks";
 import { itemScore, salvageValue } from "@/game/economy/loot";
 import { INVENTORY_CAP } from "@/game/data/equipment";
 import { enemyDef } from "@/game/data/enemies";
@@ -261,14 +261,8 @@ export class Sim {
   spend(): boolean {
     const p = this.p;
     const sig0 = JSON.stringify([p.player.abilityRanks, p.player.statLevels, p.player.perks, p.skills.unlocked, p.equipment.equipped, p.summons.collection.map((s) => [s.stars, s.bond, s.deployed, s.defId])]);
-    while (p.player.pendingPerkChoices > 0) {
-      const offers = offerPerks(p, this.rng);
-      if (!offers.length) {
-        p.player.pendingPerkChoices = 0;
-        break;
-      }
-      takePerk(p, offers[0]!.id);
-    }
+    // As "Choose all for me": every banked pick, balanced across tones (the first offer while picks come one at a time).
+    autoPickPerks(p, this.rng);
     for (const id of SKILL_ORDER) if (canUnlockSkill(p, id).ok) unlockSkill(p, id);
     const arts = [...ABILITY_SLOTS.filter((id) => ABILITIES[id].unlockLevel <= p.player.level).map((id) => slotForm(p, id)), ULTIMATE_ID];
     for (let k = 0; k < 40; k++) {
