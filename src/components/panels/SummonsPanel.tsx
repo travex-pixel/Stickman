@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { HoldButton } from "@/components/ui/HoldButton";
 import { Button } from "@/components/ui/Button";
 import { Stat } from "@/components/ui/Stat";
 import { CurrencyGlyph } from "@/components/ui/Currency";
 import { SummonPortrait } from "@/components/ui/Portrait";
 import { useController, useProfile, useProfileRef, useUi } from "@/hooks/useGame";
-import { bestSynergyMove, armySynergies, synergiesGained, synergyEffect } from "@/lib/synergy";
+import { armySynergies, synergiesGained, synergyEffect } from "@/lib/synergy";
 import { Icon } from "@/components/ui/Icon";
 import { useShake } from "@/hooks/useShake";
 import { useShortScreen } from "@/hooks/useShortScreen";
@@ -21,6 +21,7 @@ import { computeModifiers } from "@/game/progression/stats";
 import { bondCost, BOND_CAP, canStarUp, checkEvolution, starCost, summonStats } from "@/game/summons/progression";
 import { REFINE_SHARDS, spareShards } from "@/game/summons/progression";
 import type { Profile } from "@/game/progression/profile";
+import { armyStrength, bestLineup, currentLineup, swapOptions, type SwapOption } from "@/game/progression/army";
 import { fmt } from "@/lib/format";
 import { cn } from "@/lib/cn";
 
@@ -50,30 +51,107 @@ export default function SummonsPanel() {
   if (collection.length === 0) return <EmptyArmy />;
 
   const owned = ownedSpecies(profile).filter((id) => !summonDef(id).hidden).length;
+  const lineup = currentLineup(profile);
+  const fieldedIds = new Set(lineup.map((x) => x.instanceId));
+  const fielded = collection.filter((x) => fieldedIds.has(x.instanceId));
+  const bench = collection.filter((x) => !fieldedIds.has(x.instanceId));
   return (
-    <div ref={root} className={cn("flex flex-col h-full min-h-0 px-4", short ? "pt-3 pb-2" : "pt-4 pb-3")}>
-      <div className="flex items-baseline justify-between gap-3 shrink-0 t-label">
-        <span className="text-t2 whitespace-nowrap">
-          Deployed{" "}
-          <span className="text-t1 tnum" data-testid="deploy-count">
-            {deployedCount} of {slots}
+    <div ref={root} className={cn("flex flex-col h-full min-h-0 px-4", short ? "pt-2 pb-2" : "pt-3 pb-3")}>
+      <ArmyHeader profile={profile} slots={slots} deployedCount={deployedCount} owned={owned} />
+      <div className={cn("flex gap-3 overflow-x-auto no-scrollbar shrink-0 -mx-4 px-4", short ? "mt-1" : "mt-2")} style={{ touchAction: "pan-x" }} data-testid="army-roster">
+        <RosterGroup label={`Fielded ${fielded.length}/${slots}`} testId="roster-fielded">
+          {fielded.map((s) => (
+            <RosterDisc key={s.instanceId} s={s} selected={selected?.instanceId === s.instanceId} short={short} onSelect={() => c.selectSummon(s.instanceId)} />
+          ))}
+          {fielded.length === 0 && <span className="t-caption text-t3 self-center whitespace-nowrap">No one yet</span>}
+        </RosterGroup>
+        {bench.length > 0 && (
+          <>
+            <span className="w-px shrink-0 self-stretch bg-[var(--line-2)]" aria-hidden="true" />
+            <RosterGroup label={`Bench ${bench.length}`} testId="roster-bench">
+              {bench.map((s) => (
+                <RosterDisc key={s.instanceId} s={s} selected={selected?.instanceId === s.instanceId} short={short} onSelect={() => c.selectSummon(s.instanceId)} />
+              ))}
+            </RosterGroup>
+          </>
+        )}
+      </div>
+      {selected && <ShadowDetail key={selected.instanceId} inst={selected} slots={slots} deployedCount={deployedCount} short={short} />}
+    </div>
+  );
+}
+
+function RosterGroup({ label, testId, children }: { label: string; testId: string; children: React.ReactNode }) {
+  return (
+    <div className="flex shrink-0 flex-col" data-testid={testId}>
+      <span className="t-caption text-t2 tnum whitespace-nowrap">{label}</span>
+      <div className="mt-1 flex gap-3">{children}</div>
+    </div>
+  );
+}
+
+/**
+ * One plain line: how many are fielded, the army's strength, its synergies; a tap opens the detail
+ * (each synergy, the Codex). Deploy best at the right, gold with its gain when it would help.
+ */
+function ArmyHeader({ profile, slots, deployedCount, owned }: { profile: Profile; slots: number; deployedCount: number; owned: number }) {
+  const c = useController();
+  const [open, setOpen] = useState(false);
+  const best = bestLineup(profile);
+  const gain = best.now > 0 ? best.strength / best.now - 1 : best.lineup.length > 0 ? 1 : 0;
+  const better = best.bring.length > 0 && gain >= 0.005;
+  const synergies = armySynergies(profile);
+  return (
+    <div className="shrink-0">
+      <div className="flex items-center justify-between gap-2">
+        <button className="press -ml-1 flex h-11 min-w-0 items-center gap-1 rounded-[10px] px-1 t-label text-t2" onClick={() => setOpen((o) => !o)} aria-expanded={open} data-testid="army-summary">
+          <span className="truncate">
+            Army{" "}
+            <span className="text-t1 tnum" data-testid="deploy-count">
+              {deployedCount} of {slots}
+            </span>
+            <span className="tnum"> · Strength <span className="text-t1">{fmt(armyStrength(profile, currentLineup(profile)))}</span></span>
+            <span className="hidden min-[360px]:inline">
+              {" "}
+              · {synergies.length} {synergies.length === 1 ? "synergy" : "synergies"}
+            </span>
           </span>
-        </span>
-        {/* The Codex in full, in words, on a tap: the line itself has room for one bonus. */}
-        <button className="press -my-3 flex h-11 min-w-0 items-center rounded-[10px] px-1 text-t2" onClick={() => c.toast(codexExplain(profile), "info")} data-testid="codex-summary" aria-label={codexExplain(profile)}>
-          <span className="truncate">{codexSummary(profile)}</span>
+          <Icon name="chevron" size={14} className={cn("shrink-0 text-t3 transition-transform", open ? "-rotate-90" : "rotate-90")} />
         </button>
-        <span className="text-t3 tnum whitespace-nowrap hidden min-[380px]:inline">
-          {owned} of {collectibleSummons().length}
-        </span>
+        <button
+          className={cn("press flex h-11 shrink-0 items-center gap-1.5 rounded-full px-3 t-label", better ? "bg-bg-3 text-gold shadow-[inset_0_0_0_1px_rgba(218,184,108,0.45)]" : "text-t3")}
+          onClick={() => c.deployBest()}
+          data-testid="deploy-best"
+          aria-label={better ? `Deploy best: army +${Math.round(gain * 100)}%` : "Deploy best: your army is already the strongest"}
+        >
+          {better && <span className="h-1.5 w-1.5 rounded-full bg-gold" aria-hidden="true" />}
+          <span className="whitespace-nowrap">Deploy best</span>
+          {better && <span className="tnum">+{Math.max(1, Math.round(gain * 100))}%</span>}
+        </button>
       </div>
-      <SynergyLine />
-      <div className={cn("flex gap-3 overflow-x-auto no-scrollbar shrink-0 -mx-4 px-4", short ? "mt-2" : "mt-3")} style={{ touchAction: "pan-x" }}>
-        {collection.map((s) => (
-          <RosterDisc key={s.instanceId} s={s} selected={selected?.instanceId === s.instanceId} short={short} onSelect={() => c.selectSummon(s.instanceId)} />
-        ))}
-      </div>
-      {selected && <ShadowDetail inst={selected} slots={slots} deployedCount={deployedCount} short={short} />}
+      {open && (
+        <div className="mb-1 flex flex-col gap-0.5" data-testid="army-detail">
+          {synergies.length ? (
+            synergies.map((x) => (
+              <span key={x.id} className="t-label text-t1 flex items-center gap-2 truncate" data-testid="synergy-active">
+                <span className="lozenge" aria-hidden="true" />
+                <span className="truncate">
+                  {x.name}
+                  <span className="text-t2"> · {synergyEffect(x)}</span>
+                </span>
+              </span>
+            ))
+          ) : (
+            <span className="t-label text-t3">No synergies: field roles that work together (Deploy best finds them).</span>
+          )}
+          <button className="press -mx-1 flex min-h-11 items-center rounded-[10px] px-1 text-left t-label text-t2" onClick={() => c.toast(codexExplain(profile), "info")} data-testid="codex-summary">
+            <span className="truncate">
+              {codexSummary(profile) || "Codex: none yet"}
+              <span className="text-t3 tnum"> · {owned} of {collectibleSummons().length} kinds bound</span>
+            </span>
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -118,16 +196,18 @@ function ShadowDetail({ inst, slots, deployedCount, short }: { inst: Instance; s
   // Exactly one gold action: whatever is the real next step for this shadow.
   const next: "deploy" | "evolve" | "star" | "bond" | null = !inst.deployed && canDeploy ? "deploy" : evo.possible ? "evolve" : starReady ? "star" : canBond ? "bond" : null;
   const gold = "!bg-gold !text-gold-ink !shadow-none";
+  // Into a free place: the synergies it would add. Into a full line-up: a swap, the cheapest first.
   const gains = useProfile((p) => {
-    if (inst.deployed) return "";
-    const fielded = p.summons.collection.filter((x) => x.deployed);
-    const roles = fielded.map((x) => summonDef(x.defId).role);
-    const free = fielded.length < computeModifiers(p).deploySlots;
-    // Into a free place, or in place of whichever fielded shadow gains the most.
-    const options = free ? [synergiesGained(roles, def.role, null)] : roles.map((_, i) => synergiesGained(roles, def.role, i));
-    const g = options.reduce((best, o) => (o.length > best.length ? o : best), [] as ReturnType<typeof synergiesGained>);
-    return g.map((x) => x.name).join(", ");
+    if (inst.deployed || !canDeploy) return "";
+    const roles = currentLineup(p).map((x) => summonDef(x.defId).role);
+    return synergiesGained(roles, def.role, null).map((x) => x.name).join(", ");
   });
+  const swapping = !inst.deployed && !canDeploy;
+  const options = swapping ? swapOptions(profile, inst) : [];
+  const [outId, setOutId] = useState<string | null>(null);
+  const [choosing, setChoosing] = useState(false);
+  const swap = options.find((o) => o.out.instanceId === outId) ?? options[0];
+  const nowStrength = swapping ? armyStrength(profile, currentLineup(profile)) : 0;
   const tall = usePanelDetent() === "tall" && !short;
   return (
     <div className={cn("flex flex-col flex-1 min-h-0", short ? "mt-2" : "mt-3")}>
@@ -158,7 +238,8 @@ function ShadowDetail({ inst, slots, deployedCount, short }: { inst: Instance; s
           </div>
         </>
       )}
-      {!short && (
+      {swapping && swap && (choosing ? <SwapChooser options={options} now={nowStrength} selected={swap.out.instanceId} onPick={(id) => (setOutId(id), setChoosing(false))} /> : <SwapLine swap={swap} now={nowStrength} onChange={() => setChoosing(true)} />)}
+      {!short && !swapping && (
         <div className="t-label text-t2 truncate mt-1 shrink-0" title={def.active.description}>
           {!tall && (
             <>
@@ -176,6 +257,11 @@ function ShadowDetail({ inst, slots, deployedCount, short }: { inst: Instance; s
         {inst.deployed ? (
           <Button variant="quiet" className={cn(h, "shrink-0 px-4")} onClick={() => c.deploySummon(inst.instanceId, false)} data-testid="deploy-button">
             Recall
+          </Button>
+        ) : swapping && swap ? (
+          <Button variant="primary" className={cn(h, "shrink-0 px-4 flex-col !gap-0")} onClick={() => c.swapSummon(inst.instanceId, swap.out.instanceId)} data-testid="swap-button" aria-label={`Swap in for ${summonDef(swap.out.defId).name}`}>
+            Swap in
+            <span className="t-caption max-w-[120px] truncate">for {summonDef(swap.out.defId).name}</span>
           </Button>
         ) : (
           <Button variant={next === "deploy" ? "primary" : "quiet"} className={cn(h, "shrink-0 px-5 flex-col !gap-0")} disabled={!canDeploy} onClick={() => c.deploySummon(inst.instanceId, true)} data-guide="deploy-summon" data-testid="deploy-button" aria-label={canDeploy ? `Deploy${gains ? `, gains ${gains}` : ""}` : `Deploy: all ${slots} places are taken`}>
@@ -281,46 +367,39 @@ function codexSummary(profile: Profile): string {
   return parts.length ? `Codex ${parts[0]}${parts.length > 1 ? ` · ${parts.length - 1} more` : ""}` : "";
 }
 
-/**
- * Synergies: the active ones by name with the gold lozenge; when none is active, the single best
- * move as a quiet line that selects the shadow to bring in.
- */
-function SynergyLine() {
-  const c = useController();
-  // A string key: re-renders when the fielded set (and so the synergies) changes.
-  const active = useProfile((p) => armySynergies(p).map((s) => `${s.name}|${synergyEffect(s)}`).join("\n"));
-  const move = useProfile((p) => {
-    const m = bestSynergyMove(p);
-    if (!m) return "";
-    return `${m.bring.instanceId}|${summonDef(m.bring.defId).name}|${m.replace ? summonDef(m.replace.defId).name : ""}|${m.gains.map((g) => g.name).join(", ")}`;
-  });
-  if (active) {
-    return (
-      <div className="mt-2 flex flex-col shrink-0" data-testid="synergy-active">
-        {active.split("\n").map((line) => {
-          const [name, effect] = line.split("|");
-          return (
-            <span key={name} className="t-label text-t1 flex items-center gap-2 truncate">
-              <span className="lozenge" aria-hidden="true" />
-              <span className="truncate">
-                {name}
-                <span className="text-t2"> · {effect}</span>
-              </span>
-            </span>
-          );
-        })}
-      </div>
-    );
-  }
-  if (!move) return null;
-  const [id, bring, replace, gains] = move.split("|");
+function pctChange(change: number, now: number): string {
+  if (now <= 0) return "";
+  const v = Math.round((change / now) * 100);
+  return v === 0 ? "army ±0%" : `army ${v > 0 ? "+" : "−"}${Math.abs(v)}%`;
+}
+
+/** Whom the swap replaces, what it changes, and a way to pick someone else. */
+function SwapLine({ swap, now, onChange }: { swap: SwapOption; now: number; onChange: () => void }) {
+  const words = [...swap.gained.map((g) => `+${g.name}`), ...swap.lost.map((l) => `−${l.name}`)].join(", ");
   return (
-    <button className="press-fill -mx-4 mt-1 flex h-11 shrink-0 items-center gap-2 px-4 text-left" onClick={() => c.selectSummon(id!)} data-testid="synergy-suggestion">
+    <div className="mt-1 flex shrink-0 items-center gap-2" data-testid="swap-line">
       <span className="t-label text-t2 min-w-0 flex-1 truncate">
-        Field <span className="text-t1">{bring}</span>
-        {replace ? ` in place of ${replace}` : ""}: <span className="text-gold">{gains}</span>
+        Replaces <span className="text-t1">{summonDef(swap.out.defId).name}</span>
+        <span className={cn("tnum", swap.change >= 0 ? "text-jade" : "text-threat")}> · {pctChange(swap.change, now)}</span>
+        {words && <span> · {words}</span>}
       </span>
-      <Icon name="chevron" size={16} className="shrink-0 text-t2" />
-    </button>
+      <button className="press -my-2 flex h-11 shrink-0 items-center rounded-[10px] px-2 t-label text-gold" onClick={onChange} data-testid="swap-change">
+        Change
+      </button>
+    </div>
+  );
+}
+
+/** The fielded shadows to choose from, each with what the swap would do to the army. */
+function SwapChooser({ options, now, selected, onPick }: { options: SwapOption[]; now: number; selected: string; onPick: (id: string) => void }) {
+  return (
+    <div className="mt-1 flex shrink-0 gap-2 overflow-x-auto no-scrollbar -mx-4 px-4" style={{ touchAction: "pan-x" }} data-testid="swap-chooser">
+      {options.map((o) => (
+        <button key={o.out.instanceId} className={cn("press flex h-11 shrink-0 items-center gap-2 rounded-full pl-1 pr-3", o.out.instanceId === selected ? "bg-bg-3" : "bg-bg-2")} onClick={() => onPick(o.out.instanceId)} data-testid={`swap-out-${o.out.defId}`} aria-label={`Replace ${summonDef(o.out.defId).name}: ${pctChange(o.change, now)}`}>
+          <SummonPortrait defId={o.out.defId} size={36} round />
+          <span className={cn("t-caption tnum", o.change >= 0 ? "text-jade" : "text-threat")}>{pctChange(o.change, now).replace("army ", "")}</span>
+        </button>
+      ))}
+    </div>
   );
 }

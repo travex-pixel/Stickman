@@ -13,11 +13,12 @@ import { upgradeStat as doUpgradeStat, type UpgradeAttempt } from "./progression
 import { unlockSkill as doUnlockSkill } from "./progression/skills";
 import { anyAbilityRankReady, rankAbility as doRankAbility } from "./progression/abilityRanks";
 import { learnTechniques, setSlotForm } from "./progression/techniques";
-import { offerPerks, takePerk as doTakePerk } from "./progression/perks";
+import { autoPickPerks as doAutoPickPerks, boughtLine, offerPerks, takePerk as doTakePerk } from "./progression/perks";
 import { claimQuest as doClaimQuest, currentQuest, isQuestComplete } from "./progression/quests";
 import { evaluateAchievements, evaluateJournal } from "./progression/achievements";
 import { computeModifiers, MILESTONE_EVERY, MILESTONE_MULT } from "./progression/stats";
 import { equipBestPlan } from "./progression/power";
+import { applyLineup, bestLineup, currentLineup, swapIn } from "./progression/army";
 import { canUpgradeStat } from "./progression/upgrades";
 import { claimEssence as doClaimEssence, setDeployed, type ClaimOutcome } from "./summons/recruitment";
 import { CODEX_STAR_STEP, extractionChance, resolveExtraction, speciesStars } from "./summons/extraction";
@@ -867,20 +868,15 @@ export class GameController {
     // Perks wait for the player: a chip pulses in the HUD instead of a modal freezing the fight.
   }
 
-  /** Many perks waiting (a long absence): take the first offer of each, in one tap. */
+  /** Many perks waiting (a long absence): spend every one, balanced across tones, in one tap. */
   autoPickPerks(): void {
     this.userGesture();
     const p = this.profile;
-    let n = 0;
-    while (p.player.pendingPerkChoices > 0 && n < 200) {
-      const offer = offerPerks(p, this.rng);
-      const pick = offer[0];
-      if (!pick || !doTakePerk(p, pick.id)) break;
-      n += 1;
-    }
+    const bought = doAutoPickPerks(p, this.rng);
+    const n = Object.values(bought).reduce((a, b) => a + b, 0);
     this.closeModal();
     this.refreshLoadout();
-    this.toast(`${n} perk${n === 1 ? "" : "s"} chosen`, "level");
+    this.toast(`${n} perk${n === 1 ? "" : "s"}: ${boughtLine(bought)}`, "level");
     this.sfx("level_up", { volume: 0.6 });
     this.commit();
   }
@@ -1694,6 +1690,42 @@ export class GameController {
     this.sfx(deployed ? "summon_claim" : "ui_tap", { volume: deployed ? 0.7 : 0.5 });
     this.refreshLoadout();
     if (deployed) this.completeTutorialIf("deploy");
+    this.afterProgression();
+    this.commit();
+    return true;
+  }
+
+  /** Deploy best: field the strongest line-up for the slots there are, and say what changed. */
+  deployBest(): number {
+    this.userGesture();
+    const p = this.profile;
+    const best = bestLineup(p);
+    if (!best.bring.length && best.lineup.length === currentLineup(p).length) {
+      this.toast("Your army is already the strongest you can field", "info");
+      return 0;
+    }
+    applyLineup(p, best.lineup);
+    this.sfx("summon_claim", { volume: 0.6 });
+    this.refreshLoadout();
+    this.completeTutorialIf("deploy");
+    this.afterProgression();
+    this.commit();
+    // One short line: the gain, and who came in (two names at most, then a count).
+    const names = (xs: { defId: string }[]) => (xs.length <= 2 ? xs.map((x) => summonDef(x.defId).name).join(" and ") : `${summonDef(xs[0]!.defId).name} and ${xs.length - 1} more`);
+    const gain = best.now > 0 ? best.strength / best.now - 1 : 0;
+    this.toast(`${best.now > 0 ? `Army +${Math.max(0, Math.round(gain * 100))}%: ` : ""}${names(best.bring)} ${best.bench.length ? "swapped in" : "fielded"}`, "gold");
+    return gain;
+  }
+
+  /** One swap: a benched shadow takes a fielded one's place. */
+  swapSummon(incomingId: string, outId: string): boolean {
+    this.userGesture();
+    if (!swapIn(this.profile, incomingId, outId)) {
+      this.sfx("error", { volume: 0.3 });
+      return false;
+    }
+    this.sfx("summon_claim", { volume: 0.7 });
+    this.refreshLoadout();
     this.afterProgression();
     this.commit();
     return true;
