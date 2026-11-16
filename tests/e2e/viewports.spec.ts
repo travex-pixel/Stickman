@@ -205,7 +205,7 @@ for (const vp of VIEWPORTS) {
     await expect(page.getByTestId("boss-bar")).toBeVisible();
     await expect(page.getByTestId("mode-leave")).toBeVisible();
 
-    const check = async (label: string, detail = false) => {
+    const check = async (label: string) => {
       const boxes = await page.evaluate(() => {
         const ids = ["boss-bar", "command-follow", "command-guard", "summon-strip", "boss-counter", "event-pill", "mode-leave", "auto-toggle", "ability-ultimate"];
         const out: { id: string; l: number; t: number; r: number; b: number }[] = [];
