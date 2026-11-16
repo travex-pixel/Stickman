@@ -2153,6 +2153,17 @@ export class BattleRenderer implements ImpactHost {
     }
   }
 
+  /**
+   * The swing (0, 1, 2) entity `id` is winding up, as its rig poses it, for the matching whoosh:
+   * a combo cycles three swings; a heavy kit always throws its heavy blow; others their one move.
+   */
+  comboSwing(id: number): number | undefined {
+    const v = this.views.get(id);
+    if (!v) return undefined;
+    const kit = v.rig.meleeKit;
+    return kit === "combo" ? swingVariant(v.swings, "windup") : kit === "heavy" ? 2 : 0;
+  }
+
   /** Legacy shake strengths (2 to 18) become camera trauma. */
   shake(strength: number): void {
     this.camera.shake(Math.min(0.7, strength / 30));

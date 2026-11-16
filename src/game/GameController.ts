@@ -35,7 +35,7 @@ import { INVENTORY_CAP } from "./data/equipment";
 import { IndexedDbSaveManager } from "@/persistence/SaveManager";
 import { applyOfflineProgress, elapsedAway, OFFLINE_MIN_SECONDS, type OfflineSummary } from "./progression/offline";
 import { AudioManager } from "./audio/AudioManager";
-import type { SfxName } from "./audio/synth";
+import { SoundCues } from "./audio/cues";
 import type { PerkDef } from "./data/perks";
 import { TUTORIAL_STEPS, type TutorialStep, type TutorialStepId } from "./tutorial";
 import type { BattleRenderer } from "./render/BattleRenderer";
@@ -209,6 +209,8 @@ export class GameController {
   /** When the player last pressed something: a line raised in answer to it is never made to wait. */
   private lastGestureAt = -Infinity;
   private wasWindingUp = false;
+  /** The fight's sound rules (combo whooshes, hits, the Fury's figure); pure, see audio/cues.ts. */
+  private readonly cues = new SoundCues();
   private essenceHintShown = false;
   private modalQueue: Modal[] = [];
   private rankBadgeShown = false;
@@ -275,6 +277,7 @@ export class GameController {
     this.profileStore.set({ profile, v: 1 });
     this.audio.init();
     this.audio.setVolumes(profile.settings.music, profile.settings.sfx);
+    this.audio.setReduced(this.reducedEffects());
     this.startRun(profile.progress.currentStage);
     this.uiStore.update((u) => ({ ...u, booted: true, loadNote: note }));
     if (offline) this.presentOffline(offline);
@@ -419,6 +422,7 @@ export class GameController {
     const loadout = buildLoadout(this.profile);
     const started = new Date();
     this.world = new World({ stage, loadout, mode, seed: (Date.now() ^ (stage * 2654435761)) >>> 0, cryptSlot: cryptSlot(), tyrant: mode === "tyrant" ? tyrantForWeek(started) : undefined });
+    this.cues.reset();
     this.run = newTally(mode);
     this.run.startedAt = started;
     if (mode !== "campaign") {
@@ -566,9 +570,12 @@ export class GameController {
     const modal = this.uiStore.get().modal;
     world.holdOrbs = modal !== null && modal.kind !== "boss_intro";
     if (!this.paused) for (let i = 0; i < steps; i++) world.update(dt);
-    // The swing is heard as the blade starts to move (the wind-up), a beat before the hit lands.
-    const swinging = world.player.state === "windup";
-    if (swinging && !this.wasWindingUp) this.sfx("arc_slash", { volume: 0.13, minInterval: 90, rate: 1.3 + Math.random() * 0.35 });
+    // The swing is heard as the blade starts to move (the wind-up), a beat before the hit lands:
+    // each swing of the three-swing combo has its own whoosh, the one the renderer is posing.
+    const pl = world.player;
+    const swinging = pl.state === "windup";
+    this.cues.observe(swinging || pl.state === "attack" || pl.state === "recover", dt);
+    if (swinging && !this.wasWindingUp) this.audio.playCue(this.cues.windup(this.renderer?.comboSwing(pl.id)));
     this.wasWindingUp = swinging;
     this.processEvents(world.drainEvents());
     if (this.pending) {
@@ -630,24 +637,14 @@ export class GameController {
     let kills = 0;
     let cleared: Extract<GameEvent, { type: "stage_cleared" }> | null = null;
     this.renderer?.handleEvents(events);
+    for (const c of this.cues.events(events, this.world?.player.id)) this.audio.playCue(c);
     for (const e of events) {
       switch (e.type) {
-        case "hit":
-          if (e.faction === "enemy" && e.sourceId !== this.world?.player.id) {
-            // The army's blows: quieter, lower, and on their own limiter, so a crowd of shadows is
-            // a murmur under the warrior's hits and never takes their place.
-            this.sfx(e.heavy ? "hit_heavy" : "hit_light", { voice: "army_hit", minInterval: 110, volume: e.crit ? 0.34 : 0.24, rate: 0.72 + Math.random() * 0.2 });
-          } else if (e.faction === "enemy") {
-            this.sfx(e.crit ? "crit" : e.heavy ? "hit_heavy" : "hit_light", { minInterval: e.crit ? 60 : 45, volume: e.crit ? 0.9 : 0.55, rate: 0.9 + Math.random() * 0.25 });
-            // Impact frames (hit-stop) are decided by the renderer's ImpactDirector, one policy for all hits.
-          } else this.sfx("hit_heavy", { minInterval: 120, volume: 0.6, rate: 0.8 });
-          break;
         case "death":
           if (e.kind === "enemy" || e.kind === "boss") {
             kills += 1;
             if (e.elite) this.objectiveEvent("elites", 1);
             p.progress.killsByEnemy[e.defId] = (p.progress.killsByEnemy[e.defId] ?? 0) + 1;
-            this.sfx(e.kind === "boss" ? "boss_death" : "enemy_death", { volume: e.kind === "boss" ? 1 : 0.5, minInterval: 80, rate: 0.9 + Math.random() * 0.2 });
             if (e.kind === "boss") {
               p.progress.bossKills += 1;
               // First clears pay a core at the stage-clear screen; repeat kills have a chance here.
@@ -688,27 +685,16 @@ export class GameController {
               dirty = true;
             }
             // Ascendant Fury's light is the renderer's (one flash on the seventh cut, none with
-            // reduced effects). Its strikes rise in pitch; the seventh lands with a heavy blow.
-            if (e.ability === "ascendant_fury" && e.strike !== undefined) {
-              this.sfx("ultimate", { volume: 1, rate: 1 + 0.045 * (e.strike - 1), minInterval: 60 });
-              if (e.strike >= 7) this.sfx("boss_impact", { volume: 0.8, rate: 0.85, minInterval: 60 });
-            } else this.sfx(castSfx(e.ability), { volume: e.ability === "ascendant_fury" ? 1 : 0.8, minInterval: 150 });
+            // reduced effects); its strikes are notes of a figure (audio/cues.ts).
           }
           break;
         case "dodge":
           if (e.id === this.world?.player.id) {
             this.run.dodges += 1;
-            this.sfx("dodge", { volume: 0.6 });
             this.completeTutorialIf("dodge");
           }
           break;
-        case "attack_swing":
-          // An ordinary swing's whoosh plays as he winds up (see `simulate`), so it leads the
-          // impact; the Fury's cuts have no wind-up and keep theirs here.
-          if (e.kind === "player" && e.cut) this.sfx("arc_slash", { volume: 0.12, minInterval: 90, rate: 1.4 + Math.random() * 0.3 });
-          break;
         case "essence_available":
-          this.sfx("essence_appear", { volume: 0.9 });
           // The BIND pill itself is the call to act: the line explains it once, and for a boss's essence.
           if (e.isBoss) this.toast("The Warden's essence lingers. Claim it.", "essence", 2);
           else if (!this.essenceHintShown) {
@@ -717,21 +703,17 @@ export class GameController {
           }
           break;
         case "command":
-          this.sfx("command", { volume: 0.6 });
           break;
         case "wave_start":
           if (e.wave === 1 && this.world?.stage === 1 && !p.tutorial.finished) this.toast("The Ashen Verge. Hold the line.", "info");
           break;
         case "boss_intro":
           // The renderer's entrance owns the camera and the impact beat (render/cinematics/boss.ts).
-          this.sfx("boss_intro", { volume: 1 });
           break;
         case "boss_phase":
-          this.sfx("void_nova", { volume: 0.9 });
           this.toast(this.world?.mode === "tyrant" ? "The Tyrant rages. Phase two." : "The Warden remembers its oath. Phase two.", "warn", 2);
           break;
         case "tyrant_break":
-          this.sfx("boss_intro", { volume: 0.8, rate: 1.3 + Math.min(0.5, e.count * 0.05) });
           this.renderer?.flash(0xe9c97a, 0.35);
           if (TYRANT_TIERS.includes(e.count)) this.toast(`${e.count} bar${e.count === 1 ? "" : "s"} broken: a reward tier`, "gold", true);
           break;
@@ -748,15 +730,11 @@ export class GameController {
           dirty = true;
           break;
         case "player_defeated":
-          this.sfx("boss_intro", { volume: 0.6, rate: 1.6 });
           if (e.mode === "endless") this.onEndlessOver(e.wave);
           else if (e.mode === "campaign") this.onFarmingDefeat(e.stage);
           else if (e.mode === "boss") this.onBossDefeat(e.stage);
           else if (e.mode === "tyrant") this.onTyrantEnd(true);
           else this.enqueueModal({ kind: "mode_result", mode: e.mode as ModeId, title: "You fell", subtitle: MODES[e.mode as ModeId].name, lines: [{ label: "Kills", value: `${this.run.kills}` }, { label: "Gold kept", value: `${this.run.gold}` }], success: false });
-          break;
-        case "loot":
-          this.sfx("equip", { volume: 0.4 });
           break;
         case "elite_spawn": {
           const d = ELITES[e.affix as keyof typeof ELITES];
@@ -766,7 +744,6 @@ export class GameController {
             this.seenAffixes.add(e.affix);
             this.toast(`Elite: ${name}. ${d.blurb}`, "warn", 2);
           }
-          this.sfx("boss_intro", { volume: 0.35, rate: 1.8, minInterval: 800 });
           break;
         }
         case "shard_gain": {
@@ -780,31 +757,14 @@ export class GameController {
         }
         case "perfect_dodge":
           this.run.perfect += 1;
-          this.sfx("crit", { volume: 0.8, rate: 1.3 });
           if (!this.seenPerfect) {
             this.seenPerfect = true;
             this.toast("Perfect dodge: your next strike is a guaranteed critical.", "level", 2);
           }
           break;
-        case "kill_streak":
-          this.sfx("quest", { volume: 0.5, rate: 0.8 + Math.min(0.8, e.count / 25) });
-          break;
-        case "finisher":
-          this.sfx(e.boss ? "boss_death" : "hit_heavy", { volume: e.boss ? 0.6 : 0.8, rate: 0.7 });
-          break;
-        case "guard_break":
-          this.sfx("hit_heavy", { volume: 0.9, rate: 0.7, minInterval: 120 });
-          break;
-        case "blocked":
-          this.sfx("equip", { volume: 0.25, rate: 1.6, minInterval: 160 });
-          break;
         case "ultimate_ready":
-          this.sfx("quest", { volume: 0.5, rate: 0.8 });
           // With AUTO on he casts it himself: the line is for a player holding the button.
           if (!this.profile.player.autoCast) this.toast("Ascendant Fury is ready", "level", 2);
-          break;
-        case "summon_ability":
-          this.sfx("command", { volume: 0.35, rate: 0.6, minInterval: 300 });
           break;
         case "shake":
           this.renderer?.shake(e.strength);
@@ -820,7 +780,6 @@ export class GameController {
     if (gold > 0) {
       p.player.gold += gold;
       this.run.gold += gold;
-      this.sfx("gold", { volume: 0.35, minInterval: 120, rate: 0.95 + Math.random() * 0.2 });
       dirty = true;
     }
     if (kills > 0) {
@@ -2073,6 +2032,7 @@ export class GameController {
     p.settings = { ...p.settings, ...patch };
     this.audio.setVolumes(p.settings.music, p.settings.sfx);
     this.renderer?.setReducedEffects(this.reducedEffects());
+    this.audio.setReduced(this.reducedEffects());
     this.commit();
   }
 
@@ -2169,7 +2129,7 @@ export class GameController {
     else this.sfx("quest", { volume: 0.4 });
   }
 
-  private sfx(name: SfxName, opts?: { volume?: number; rate?: number; minInterval?: number; voice?: string }): void {
+  private sfx(name: Parameters<AudioManager["play"]>[0], opts?: Parameters<AudioManager["play"]>[1]): void {
     this.audio.play(name, opts);
   }
 
@@ -2294,29 +2254,6 @@ export class GameController {
       this.refreshLoadout();
     }
     this.toast("You know the way. AUTO is on: tap it to take the abilities yourself.", "level");
-  }
-}
-
-function castSfx(ability: AbilityId): SfxName {
-  switch (ability) {
-    case "arc_slash":
-      return "arc_slash";
-    case "thunder_strike":
-      return "thunder";
-    case "soul_burst":
-      return "soul_burst";
-    case "void_nova":
-      return "void_nova";
-    case "ascendant_fury":
-      return "ultimate";
-    case "blade_tempest":
-      return "arc_slash";
-    case "chain_hook":
-      return "command";
-    case "blood_pact":
-      return "soul_burst";
-    default:
-      return "dodge";
   }
 }
 
