@@ -2,7 +2,6 @@
  * Review simulator: plays the NEW campaign flow headlessly (farming world in cycles, boss gates,
  * forecast-driven challenges), mirroring GameController's reward handling.
  */
-import { bestSynergyMove } from "@/game/progression/synergyAdvice";
 import { World, FIXED_DT } from "@/game/engine/World";
 import { buildLoadout } from "@/game/progression/loadout";
 import { createDefaultProfile, type Profile } from "@/game/progression/profile";
@@ -12,9 +11,10 @@ import { isStatUnlocked, statUpgradeCost, computeModifiers, computePlayerStats, 
 import { upgradeStat } from "@/game/progression/upgrades";
 import { resolveExtraction } from "@/game/summons/extraction";
 import { claimEssence, setDeployed } from "@/game/summons/recruitment";
-import { bondCost, summonPower, grantSummonXp, checkEvolution, evolveSummon, canStarUp, starUp } from "@/game/summons/progression";
+import { bondCost, grantSummonXp, checkEvolution, evolveSummon, canStarUp, starUp } from "@/game/summons/progression";
 import { canUnlockSkill, unlockSkill } from "@/game/progression/skills";
 import { autoPickPerks } from "@/game/progression/perks";
+import { applyLineup, bestLineup } from "@/game/progression/army";
 import { itemScore, salvageValue } from "@/game/economy/loot";
 import { INVENTORY_CAP } from "@/game/data/equipment";
 import { enemyDef } from "@/game/data/enemies";
@@ -290,17 +290,8 @@ export class Sim {
         this.c.shadowUps++;
       }
     }
-    const slots = computeModifiers(p).deploySlots;
-    [...p.summons.collection].sort((a, b) => summonPower(b) - summonPower(a)).forEach((s, i) => (s.deployed = i < slots));
-    // Follow the synergy advice the boss sheet gives (at most two swaps a visit).
-    for (let k = 0; k < 2; k++) {
-      const move = bestSynergyMove(p);
-      if (!move) break;
-      if (move.replace) move.replace.deployed = false;
-      move.bring.deployed = true;
-      // Keep the fielded shadows first so the loadout's slot cut keeps them.
-      p.summons.collection.sort((a, b) => Number(b.deployed) - Number(a.deployed));
-    }
+    // As "Deploy best": the strongest line-up for the places there are, synergies counted.
+    applyLineup(p, bestLineup(p).lineup);
     let guard = 0;
     while (guard++ < 500) {
       const dep = p.summons.collection.filter((s) => s.deployed).sort((a, b) => a.bond - b.bond)[0];
