@@ -25,7 +25,7 @@ export interface PerkDef {
  * Each stack of a repeatable perk. Measured with the boss probe on the simulator's saved profiles
  * (see DESIGN.md, "Perks past the last stack"); a knob for the simulator.
  */
-export const DEEP_PERK_PCT = Number(process.env.ASCEND_DEEP_PERK ?? 0.03);
+export const DEEP_PERK_PCT = Number(process.env.ASCEND_DEEP_PERK ?? 0.05);
 
 /** One per tone, so a short offer keeps the sheet's shape: a blade, a soul and an army perk. */
 export const REPEATABLE_PERKS: PerkDef[] = [
