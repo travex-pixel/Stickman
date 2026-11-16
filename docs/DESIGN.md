@@ -86,11 +86,12 @@ Shadows are earned in combat, which ties the collection directly to the fighting
 | Shadow roles: reaper, vanguard, ranger, arcanist, sentinel, caller, sovereign | Working | `src/game/summons/ai.ts` |
 | Shadow progression: XP, bond, shards, evolution, Codex | Working | `src/game/summons/progression.ts` |
 | Stats, gear with build-defining effects, skills, weapon paths, perks | Working | `src/game/progression/` |
+| Power by source, the best next step, equip best, the bag's lend | Working | `src/game/progression/power.ts`, `stats.ts` (`computePlayerStats(profile, without)`, `BAG_LEND`) |
 | Hunter rank E to S via Rank Trials | Working | `src/game/progression/ranks.ts` |
 | Modes: campaign, Gold Vault, Essence Rift, Endless Ascent, Rank Trial | Working | `src/game/data/modes.ts` |
 | Quests, achievements, journal, bestiary | Working | `src/game/progression/quests.ts` |
 | Gift codes (signed, once per save) | Working | `src/game/economy/codes.ts`, `scripts/make-code.mjs` |
-| IndexedDB saves: versioned (v12), validated, backed up, migrated, unload-safe | Working | `src/persistence/` |
+| IndexedDB saves: versioned (v13), validated, backed up, migrated, unload-safe | Working | `src/persistence/` |
 | Capped offline rewards | Working | `src/persistence/OfflineRewards.ts` |
 | Runtime-synthesised audio | Working, untested on devices | `src/game/audio/` |
 
@@ -141,6 +142,66 @@ over an hour of farming per gate through 42 to 48, reached after 3 to 5 hours of
 Ascension is the answer to the late ceiling: in eight simulated hours the same player stalls at
 stage 51 without it and reaches stage 66 ascending whenever stuck for 30 minutes
 (`ASCEND_AFTER=30` in the simulator).
+
+### Power, where it comes from
+
+Tapping Power in Hero opens the Power sheet: the best next step on top, then every source of
+strength with its share of Power and a line of plain numbers, each leading to where it changes.
+`computePlayerStats(profile, without)` can leave any source out (stat levels, warrior level, worn
+gear, the bag, gear sets, skills, perks, weapon path, the army's Codex, techniques, rank, Aether,
+the Aether tree); a source's drop is Power with everything less Power without it. Sources multiply
+each other, so the drops add up to more than Power; they are scaled down together, in proportion,
+so the rows and the bare warrior add up to Power exactly (`powerBreakdown`, tested).
+
+The best next step (`nextStep`) takes free steps first (a perk waiting, a skill point, stronger
+gear in the bag, Aether for Might or Vigor), then a Rank Trial, then the stat level with the most
+Power per gold you can afford (`bestStatBuy`); failing those, the waiting boss, the stat to farm
+gold for, or Ascension when the next useful level is far off.
+
+### Gear and the bag
+
+- Every kept item lends strength: an item in the bag lends `BAG_LEND` (3%) of its stat line, at
+  its level; not its special effect, not its set. The forge folds its three inputs' stat lines
+  (and whatever they had folded in) into the item it makes (`kept`), which lends the same share
+  wherever it is, worn or not; so forging never lowers what the bag lends, stat by stat (tested
+  over 40 seeds). Saves are v13 for it; older items have nothing folded in.
+- Why 3%: measured on the simulator's saved profiles (a full bag is 18 items), 10% would add 9 to
+  13% Power (the "felt" target) but moves the gate-30 forecast by 34 points, gate 36 by 13 and
+  gate 42 by 12. 5% moves gate 30 by 18. 3% adds 3 to 4% Power and keeps every gate within 9
+  points:
+
+| Gate | 3 | 6 | 9 | 12 | 18 | 24 | 30 | 33 | 36 | 39 | 42 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Before (win %) | 38.2 | 100 | 98.6 | 100 | 99.3 | 95.1 | 26.7 | 91.3 | 69.4 | 3.1 | 0 |
+| Bag at 3% | 39.6 | 100 | 98.6 | 100 | 99.3 | 97.9 | 35.4 | 92.7 | 75.3 | 3.1 | 0 |
+| Bag at 10% | 40.3 | 100 | 100 | 100 | 97.9 | 97.9 | 60.8 | 100 | 82.6 | 10.8 | 12.5 |
+
+  (24 forecast fights per saved profile; 6 profiles a gate to 24, 12 from 30.) In the economy
+  simulator (three sets of 24 seeds, 90 minutes, paired by seed) the 3% bag reaches gates 6 to 24
+  within a minute of before, gates 30 to 42 0 to 2 minutes sooner, and the same deepest stage
+  (median 44) and level (69 to 72).
+- Gear shows what each piece is and gives: the Worn view's six cards (name, main stat, effect and
+  set), the Bag view strongest first with an arrow on each piece that would raise Power, and a
+  picked item's Power if worn, its stats against the worn one, its effect in a sentence, its set
+  and progress, and what it lends. Equip best (`equipBestPlan`) only makes swaps that raise Power
+  and never takes off a worn special effect or four-piece set.
+- A finding: attack speed and crit rate have value ceilings (3.2 a second, 85%), which the
+  simulator's players reach by gate 18. Past them, items whose lines are attack speed or crit rate
+  add nothing; the Power change on each item now shows it.
+
+### Stat levels, caps and prices
+
+Each stat's price rises 8.5% with every level of that stat (`statUpgradeCost`), so a stat bought
+often costs far more than one bought rarely: Attack at level 118 costs about 140K, Health at
+level 52 about 589. The gold "Best" mark names the affordable level with the most Power per gold.
+
+Level caps are 400 for Attack and Health, 250 Defence, 300 Crit damage, 150 Crit rate and 120
+Attack speed; Limit Break (Ascension's tree, open from stage 20) adds 40 to Attack, Health and
+Defence per level, up to 25 levels. With the simulator's player, Attack is near 73 at gate 30 and
+100 at gate 42: no level cap is reached before the first ascension. The two value ceilings come
+first (gate 12 to 18) and are final by design; gold then goes to the four open stats. Hero shows
+the road: "Lv 118 of 120" within 10 levels of a cap, and at Max what raises it ("Limit Break ›",
+which opens Ascension) or why it stops.
 
 ### Army synergies
 

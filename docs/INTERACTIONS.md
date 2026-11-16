@@ -38,16 +38,25 @@ or error tone instead of silence when a press cannot succeed.
 
 | Control | Purpose | Available | Unavailable look | Press | Feedback | Result | Failure |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Hold-to-upgrade (stats) | Raise a stat | Unlocked and affordable | Locked rule text; a flat grey cost pill when unaffordable (a raised pill with gold text when affordable) | Hold: repeats, accelerating | Tick sounds, fill, next value preview; a gold lozenge marks the affordable upgrade with the most Power per gold (`best-buy`) | Real stat change in the live world | Stops when gold runs out |
+| Hold-to-upgrade (stats) | Raise a stat | Unlocked and affordable | Locked rule text; a flat grey cost pill when unaffordable (a raised pill with gold text when affordable) | Hold: repeats, accelerating | Tick sounds, fill, next value preview; a gold lozenge and a gold "Best · Lv N" mark the affordable upgrade with the most Power per gold (`best-buy`); within 10 levels of the cap the level reads "Lv 118 of 120" | Real stat change in the live world | Stops when gold runs out |
+| A stat at Max (`upgrade-<stat>`) | Say why it stops and what raises it | At its level cap or its value ceiling | "Max", with "Limit Break ›" (Attack, Health, Defence once Ascension is open), "Cap N", "Top level" or "At its ceiling" under it | Tap | – | Limit Break opens Ascension; the others say in a toast why it stops and where gold does more | – |
+| Power (`power-button`) | See where Power comes from | Always | – | Tap | Sheet | The Power sheet | – |
+| Best next step (`power-next-step`) | Do the most useful thing now | Always | – | Tap | – | Opens what it names: a perk, Skills, Gear (and equips the best), the Aether tree, the Rank Trial, Hero, the boss, Ascension | – |
+| Power sheet rows (`power-row-<source>`) | Say what each source gives, as a share of Power, and lead to it | Always; sources giving nothing are listed apart, with how to get them | – | Tap | – | Opens where that source changes (Hero, Gear, Skills, Army, Rift or the Trial, Ascension, perks) | – |
 | Item upgrade (hold) | Level an item | Below cap and affordable | MAX or red cost | Hold | As above | Item level | Stops |
 | Equip / Unequip | Wear an item | Item selected | – | Equip | Equip sound | Loadout and set bonuses | – |
-| Forge | Fuse three of a rarity | Three unequipped of the rarity, not legendary | Not shown | Fuse | Bright reveal for epic and legendary, toast | New item of the next rarity in this slot; half the levels kept | Error tone |
+| Worn / Bag (`gear-view-worn`, `gear-view-bag`) | Switch the Gear view | Always | – | Tap | Thumb slides | Worn: six cards with each item's name, main stat, effect and set. Bag: every kept item, strongest first, a jade arrow on each that would raise Power, and what the bag lends. Opens on Bag when something there is stronger than what is worn; the choice is kept for the session | – |
+| Equip best (`equip-best`) | Wear the strongest gear | Always | Grey when nothing is stronger | Tap | Gold when it would help, with the gain; toast with what it did | Only swaps that raise Power; never takes off a worn special effect or a four-piece set | Toast: already the strongest |
+| Item detail (`item-detail`) | Read an item | An item picked | – | Tap an item | The panel rises | Its Power if worn (or what it gives worn), its stats against the worn one, its effect, its set and progress, what it lends in the bag (`item-power`, `item-lend`) | – |
+| Forge | Fuse three of a rarity | Three unequipped of the rarity, not legendary | Not shown | Fuse | Bright reveal for epic and legendary, toast | New item of the next rarity in this slot; half the levels kept; the three items' strength is folded into it, so the bag never lends less | Error tone |
 | Salvage | Turn an item into gold | Item selected | – | Salvage | Gold sound | Gold | – |
 | Deploy / Recall | Field a shadow | Free slot | Deploy disabled when full | Toggle | Summon appears or leaves | Army | Error tone |
 | Bond (hold) | Level a shadow's bond | Affordable in essence | Cost in red | Hold | Ticks | Shadow stats | Stops |
 | Star | Raise stars | Enough shards (and cores) | Shard progress | Star up | Flash, toast with the Codex gain | Stars and Codex | Toast with what is missing |
 | Evolve | Evolve a shadow | Requirements met | Requirement text | Evolve | Cinematic sound, toast | New form | Error tone |
-| Skill Learn | Spend points | Points and path order | Disabled with reason | Learn | Seal fill | Passive | – |
+| Skill Learn | Spend points | Points and path order | Disabled with reason; short of points, the detail says when the next point comes (every second level) | Learn | Seal fill | Passive | – |
+| Branch line (`branch-summary`) | Say what a branch is for and what it gives now | Power, Soul, Command | "Nothing learned here yet" | – | – | – | – |
+| Codex line (Army, `codex-summary`) | Explain the Codex | Shadows bound | – | Tap | Toast with every Codex bonus | – | – |
 | Arts rank / form switch | Rank an ability, choose a technique | Gold and level | Reason on the button | Rank or switch | Toast, medal change | Ability power and cooldown, slot form | – |
 | Perk chip | Choose a pending perk | Perks pending | Not shown | Opens the choice | – | Perk | – |
 | Quest pill | Claim or go to the objective | Always | – | Complete: claim. Incomplete: opens the panel the quest needs | Claim sound | Reward | – |
