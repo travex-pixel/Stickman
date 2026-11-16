@@ -19,7 +19,7 @@ import { evaluateAchievements, evaluateJournal } from "./progression/achievement
 import { computeModifiers, MILESTONE_EVERY, MILESTONE_MULT } from "./progression/stats";
 import { canUpgradeStat } from "./progression/upgrades";
 import { claimEssence as doClaimEssence, setDeployed, type ClaimOutcome } from "./summons/recruitment";
-import { CODEX_STAR_STEP, resolveExtraction, speciesStars } from "./summons/extraction";
+import { CODEX_STAR_STEP, extractionChance, resolveExtraction, speciesStars } from "./summons/extraction";
 import { SLOT_LABEL, STAT_LABEL } from "./data/equipment";
 import { bondCost, BOND_CAP, canStarUp, checkEvolution, evolveSummon, grantSummonXp, REFINE_SHARDS, refineShards as doRefineShards, starCost, starUp } from "./summons/progression";
 import { ENEMIES, enemyDef } from "./data/enemies";
@@ -1515,7 +1515,13 @@ export class GameController {
       const firstRefusal = p.summons.totalAttempts <= 6 && !this.explainedBind;
       this.explainedBind = true;
       if (firstRefusal) this.toast("BIND is a chance. Every refusal raises the next one until the oath must be kept.", "info", 2);
-      else this.toast(left > 0 ? `The oath is refused. ${left} attempt${left > 1 ? "s" : ""} left.` : `The oath is refused. +${result.essenceOnFail} essence, next attempt +${Math.round(pity * 12)}%`, "warn", 2);
+      else if (left > 0) this.toast(`The oath is refused. ${left} attempt${left > 1 ? "s" : ""} left.`, "warn", 2);
+      else if (peek.isBoss) {
+        // A boss gives three attempts a kill. The way to more is a rematch, and the chance it has
+        // climbed to is kept: say so, with the number.
+        const next = Math.round(extractionChance(p, peek.summonId, { bonus: computeModifiers(p).extractionBonus }) * 100);
+        this.toast(`The oath is refused. Hunt it again from the Rift tab: its chance is now ${next}%.`, "warn", 2);
+      } else this.toast(`The oath is refused. +${result.essenceOnFail} essence, next attempt +${Math.round(pity * 12)}%`, "warn", 2);
       this.afterProgression();
       this.commit();
       return;

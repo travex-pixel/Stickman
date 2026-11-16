@@ -12,7 +12,7 @@ import { useShortScreen } from "@/hooks/useShortScreen";
 import type { UpgradeableStat } from "@/game/data/ids";
 import { STAT_LABEL } from "@/game/data/equipment";
 import { aetherFor, canAscend, romanAscension, spendableAether } from "@/game/progression/ascension";
-import { bestStatBuy, combatPower, computePlayerStats, isStatUnlocked, MILESTONE_EVERY, MILESTONE_MULT, statUnlockRule, statUpgradeCost, statCap } from "@/game/progression/stats";
+import { bestStatBuy, combatPower, computePlayerStats, isStatUnlocked, MILESTONE_EVERY, MILESTONE_MULT, statAtCeiling, statUnlockRule, statUpgradeCost, statCap } from "@/game/progression/stats";
 import type { Profile } from "@/game/progression/profile";
 import { canAttemptTrial, nextRankStep, rankLetter } from "@/game/progression/ranks";
 import { nextMilestone } from "@/game/progression/milestones";
@@ -100,7 +100,10 @@ function StatCell({ stat, index, profile, value, next, best, onUpgrade, onDenied
   const level = profile.player.statLevels[stat];
   const cap = statCap(profile, stat);
   const cost = statUpgradeCost(stat, level);
-  const capped = level >= cap;
+  // At its level cap, or its value already at the ceiling (3.2 attacks a second, 85% crit): either
+  // way another level adds nothing, so none is offered.
+  const ceiling = statAtCeiling(profile, stat);
+  const capped = level >= cap || ceiling;
   const affordable = profile.player.gold >= cost;
   const unlocked = isStatUnlocked(profile, stat);
   const rule = statUnlockRule(stat);
@@ -119,8 +122,9 @@ function StatCell({ stat, index, profile, value, next, best, onUpgrade, onDenied
   const edges = cn("relative min-w-0 min-h-0 shadow-[inset_0_-1px_0_var(--line)]", index % 2 === 0 && "after:absolute after:right-0 after:top-0 after:bottom-0 after:w-px after:bg-[var(--line)] after:content-['']");
   const label = (
     <>
-      <span className="hidden min-[400px]:inline">{LABEL[stat]}</span>
-      <span className="hidden min-[360px]:inline min-[400px]:hidden">{MID[stat] ?? LABEL[stat]}</span>
+      {/* The full names need about 440px once a cost runs to four figures ("Attack sp…" at 412). */}
+      <span className="hidden min-[440px]:inline">{LABEL[stat]}</span>
+      <span className="hidden min-[360px]:inline min-[440px]:hidden">{MID[stat] ?? LABEL[stat]}</span>
       <span className="min-[360px]:hidden">{NARROW[stat] ?? LABEL[stat]}</span>
     </>
   );
@@ -154,7 +158,7 @@ function StatCell({ stat, index, profile, value, next, best, onUpgrade, onDenied
         className="absolute inset-0 flex items-center justify-between gap-1.5 px-3 min-[400px]:px-4 text-left"
         guide={`upgrade-${stat}`}
         testId={`upgrade-${stat}`}
-        label={capped ? `${STAT_LABEL[stat]} is at its cap` : `Upgrade ${STAT_LABEL[stat]} for ${cost} gold`}
+        label={ceiling ? `${STAT_LABEL[stat]} is at its ceiling: more levels would add nothing` : capped ? `${STAT_LABEL[stat]} is at its cap` : `Upgrade ${STAT_LABEL[stat]} for ${cost} gold`}
       >
         <span ref={tint} className="pointer-events-none absolute inset-0 bg-[var(--tint-gold)] opacity-0" aria-hidden="true" />
         <span className="relative flex flex-col min-w-0">

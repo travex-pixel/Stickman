@@ -92,14 +92,14 @@ export function summonSpec(defId: string): RigSpec {
     case "ranger":
       return { ...base, style: "archer", weapon: "bow", height: 96, hood: true };
     case "arcanist":
-      if (defId === "ember_herald") return { ...base, style: "robed", weapon: "staff", height: 118, hood: true, floating: true, cape: true, aura: 20 };
+      if (defId === "ember_herald") return { ...base, style: "robed", weapon: "staff", height: 112, hood: true, floating: true, cape: true, aura: 20 };
       return { ...base, style: "robed", weapon: "staff", height: 102, hood: true, floating: true };
     case "sovereign":
-      // A boss in your army stands a head taller than the warrior (he is 104), not nearly twice
+      // A boss in your army stands a little taller than the warrior (he is 104), not nearly twice
       // his size: at 162 to 166, two of them in front of him hid the fight. Only the drawing is
       // smaller; a shadow's reach and strength come from its stats, not its height.
-      if (defId === "crownless_king") return { ...base, style: "warden", weapon: "greatsword", height: 134, crown: true, cape: true, aura: 32 };
-      return { ...base, style: "warden", weapon: "greatsword", height: 130, horns: true, cape: true, aura: 32 };
+      if (defId === "crownless_king") return { ...base, style: "warden", weapon: "greatsword", height: 122, crown: true, cape: true, aura: 28 };
+      return { ...base, style: "warden", weapon: "greatsword", height: 118, horns: true, cape: true, aura: 28 };
     case "support":
       return { ...base, style: "warrior", weapon: "banner", height: 104, cape: true };
     case "sentinel":

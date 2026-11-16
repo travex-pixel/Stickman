@@ -305,8 +305,8 @@ export function computePlayerStats(profile: Profile): CombatStats {
   }
 
   s.hpRegen = s.maxHp * 0.006 + lv.maxHp * 0.06;
-  s.attackSpeed = Math.min(3.2, s.attackSpeed);
-  s.critChance = Math.min(0.85, s.critChance);
+  s.attackSpeed = Math.min(STAT_CEILING.attackSpeed, s.attackSpeed);
+  s.critChance = Math.min(STAT_CEILING.critChance, s.critChance);
   s.moveSpeed = Math.min(260, s.moveSpeed);
   return s;
 }
@@ -321,6 +321,21 @@ export function combatPower(stats: CombatStats): number {
 const UPGRADEABLE: readonly UpgradeableStat[] = ["attack", "maxHp", "defense", "attackSpeed", "critChance", "critDamage"];
 
 /**
+ * Two stats have a ceiling on their value, whatever their level: 3.2 attacks a second (a swing
+ * takes time to throw) and an 85% chance to crit. Gear, perks and ranks all count toward it.
+ */
+export const STAT_CEILING = { attackSpeed: 3.2, critChance: 0.85 } as const;
+
+/**
+ * The stat's value is already at its ceiling, so another level would add nothing. Such a level
+ * is not for sale: it used to be, at full price, for "+0.00".
+ */
+export function statAtCeiling(profile: Profile, stat: UpgradeableStat): boolean {
+  if (stat !== "attackSpeed" && stat !== "critChance") return false;
+  return computePlayerStats(profile)[stat] >= STAT_CEILING[stat] - 1e-9;
+}
+
+/**
  * The best buy among the stat upgrades the warrior can afford now: the most Power (the number the
  * Hero panel shows) for each piece of gold. Undefined when nothing is affordable or nothing adds
  * Power (a stat at its own ceiling, such as crit chance at 85%).
@@ -331,7 +346,7 @@ export function bestStatBuy(profile: Profile): UpgradeableStat | undefined {
   let bestRate = 0;
   for (const s of UPGRADEABLE) {
     const level = profile.player.statLevels[s];
-    if (!isStatUnlocked(profile, s) || level >= statCap(profile, s)) continue;
+    if (!isStatUnlocked(profile, s) || level >= statCap(profile, s) || statAtCeiling(profile, s)) continue;
     const cost = statUpgradeCost(s, level);
     if (cost > profile.player.gold) continue;
     const next: Profile = { ...profile, player: { ...profile.player, statLevels: { ...profile.player.statLevels, [s]: level + 1 } } };

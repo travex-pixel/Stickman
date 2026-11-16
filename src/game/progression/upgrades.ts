@@ -1,6 +1,6 @@
 import type { UpgradeableStat } from "../data/ids";
 import type { Profile } from "./profile";
-import { isStatUnlocked, statCap, statUpgradeCost } from "./stats";
+import { statAtCeiling, isStatUnlocked, statCap, statUpgradeCost } from "./stats";
 
 export type UpgradeFailure = "locked" | "capped" | "gold";
 
@@ -13,7 +13,7 @@ export interface UpgradeAttempt {
 export function canUpgradeStat(profile: Profile, stat: UpgradeableStat): UpgradeAttempt {
   if (!isStatUnlocked(profile, stat)) return { ok: false, reason: "locked" };
   const level = profile.player.statLevels[stat];
-  if (level >= statCap(profile, stat)) return { ok: false, reason: "capped" };
+  if (level >= statCap(profile, stat) || statAtCeiling(profile, stat)) return { ok: false, reason: "capped" };
   const cost = statUpgradeCost(stat, level);
   if (profile.player.gold < cost) return { ok: false, reason: "gold", cost };
   return { ok: true, cost };
