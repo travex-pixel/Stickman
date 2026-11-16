@@ -316,8 +316,39 @@ shake, no stop of the world and no shudder.
 
 A perfect dodge slows the world to a quarter speed for 0.35s, then lets go over 0.25s, fast at
 first (an ease-out cubic); the backdrop sinks toward ink for that moment so the fighters stand
-out. The swing is heard as the wind-up starts, a beat before the hit; the army's blows are
-quieter, lower and on their own limiter, so they never take the place of the warrior's.
+out.
+
+## How a blow sounds
+
+Every sound is synthesised in code (`src/game/audio/synth.ts`); the fight's rules live in one
+pure module (`src/game/audio/cues.ts`) and the mix's density budget in another (`mix.ts`).
+
+- **Struck, not swept.** Anything that can play more than about once a second (the swings, hits,
+  crits, the army's blows, kills, blocks, the Fury's strikes) is a transient, a body and a quick
+  exponential decay. It holds its pitch: at most a low thump settling in its first 20ms, and a
+  playback rate within 3%. Tones that ring are struck partials at a fixed pitch. The tests hold
+  every sound in `FREQUENT_SFX` to this, because pitch glides repeated several times a second
+  are what made the old mix sound like sirens.
+- **The combo is a rhythm.** The whoosh plays as the wind-up starts, one per swing of the
+  three-swing combo (filtered noise, no tone): the forehand falls, the backhand rises, the
+  overhead is lower and longer, and its blow lands as the heavy hit. The renderer says which
+  swing it is posing (`comboSwing`); without a renderer the cues count the swings the same way.
+- **Crits and kills are the rewards.** A crit is the hit with a short bright ring on top (B5 and
+  its fifth, gone in a tenth of a second); a kill is a thud with a small E5 ping. Over budget, a
+  crit falls back to its plain hit.
+- **The Fury is a phrase.** Its seven strikes are notes of D natural minor on a struck D4, the
+  seventh a heavy low D over an impact; consecutive casts take the next of three figures, and a
+  Fury cut short still lands its final note.
+- **Density has a budget.** Per category, in real time: swings 3 per 600ms, the warrior's hits 4
+  per 400ms, crit rings 2 per 700ms, kills 3 per 700ms, the army 2 per 500ms. The army also
+  yields for 90ms after any blow of the warrior's and only fills room under 5 impacts per 400ms,
+  so at 2x speed with three shadows the mix thins instead of doubling. Reduced effects tightens
+  every budget.
+- **Levels.** The warrior's whooshes sit about 10dB under his hits, the army's blows under those,
+  and the Fury's final strike and the boss sounds on top. A soft limiter on the master bus is a
+  safety net; a measured late-game mixdown peaks under full scale without it.
+- **The ambience is still.** A low D, its fifth and octave (whole cycles in the 12s loop) and a
+  deep noise wash crossfaded into itself at the seam: nothing beats, pulses or dips.
 
 ## Testing
 
