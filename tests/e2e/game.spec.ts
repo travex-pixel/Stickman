@@ -168,6 +168,17 @@ test.describe("ASCEND vertical slice", () => {
     await expect(page.getByTestId("panel-gear")).toBeVisible();
   });
 
+  test("past the last perk stack the sheet still offers three, and Choose all spends every pick", async ({ page }) => {
+    await waitForGame(page);
+    await game(page, "c => { const p = c.profile; p.tutorial.finished = true; p.player.level = 300; p.player.perks = { swift_blade: 4, cruel_edge: 5, keen_eye: 4, heavy_hand: 5, storm_reach: 3, veil_walker: 3, thick_skin: 5, stone_guard: 4, soul_drinker: 3, rift_tempo: 3, ascendant_hunger: 3, war_cry: 5, shield_wall: 4, gilded_oath: 4 }; p.player.pendingPerkChoices = 244; c['commit'](); for (let i = 0; i < 6; i++) c.closeModal(); }");
+    await page.getByTestId("perk-chip").click();
+    await expect(page.locator("[data-testid=modal-perk_choice] [data-testid^=perk-]:not([data-testid=perk-auto])")).toHaveCount(3);
+    await page.getByTestId("perk-auto").click();
+    expect(await game<number>(page, "c => c.profile.player.pendingPerkChoices")).toBe(0);
+    expect(await game<number>(page, "c => Object.values(c.profile.player.perks).reduce((a, b) => a + b, 0)")).toBe(299);
+    await expect(page.getByTestId("perk-chip")).toHaveCount(0);
+  });
+
   test("skills unlock with points and the summons panel shows collection", async ({ page }) => {
     await waitForGame(page);
     await game(page, "c => { c.profile.player.skillPoints = 3; c['commit'](); }");

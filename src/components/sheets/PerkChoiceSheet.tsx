@@ -15,7 +15,20 @@ export function PerkChoiceSheet({ modal, open }: { modal: Extract<Modal, { kind:
   const profile = useProfileRef();
   const pending = profile.player.pendingPerkChoices;
   return (
-    <Sheet open={open} testId="modal-perk_choice" labelledBy="perk-title" dismissible={false}>
+    <Sheet
+      open={open}
+      testId="modal-perk_choice"
+      labelledBy="perk-title"
+      dismissible={false}
+      // Pinned under the cards, so a long wait is always one tap from spent, at every phone size.
+      footer={
+        pending > 2 ? (
+          <Button variant="plain" block onClick={() => c.autoPickPerks()} data-testid="perk-auto">
+            Choose all {pending} for me
+          </Button>
+        ) : undefined
+      }
+    >
       <SheetHeader id="perk-title" eyebrow={`Level ${profile.player.level}`} tone="gold" title="Choose one" subtitle="Perks are permanent." serif />
       <MomentGroup className="-mx-5 mt-4 shadow-[inset_0_1px_0_var(--line)]">
         {modal.perks.map((p) => {
@@ -34,11 +47,7 @@ export function PerkChoiceSheet({ modal, open }: { modal: Extract<Modal, { kind:
           );
         })}
       </MomentGroup>
-      {pending > 2 && (
-        <Button variant="plain" block className="mt-3" onClick={() => c.autoPickPerks()} data-testid="perk-auto">
-          Choose all {pending} for me
-        </Button>
-      )}
+
     </Sheet>
   );
 }

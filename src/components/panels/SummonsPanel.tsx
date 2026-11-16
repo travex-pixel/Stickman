@@ -15,7 +15,7 @@ import { useCompactFit } from "@/hooks/useCompactFit";
 import { collectibleSummons, ROLE_INFO, summonDef } from "@/game/data/summons";
 import { codexBonus, codexMultiplier, ownedSpecies, speciesStars } from "@/game/summons/extraction";
 import { fmtCodex } from "@/lib/codex";
-import { usePanelDetent } from "@/hooks/usePanelDetent";
+import { usePanelDetent, useRaisePanel } from "@/hooks/usePanelDetent";
 import { STAT_LABEL } from "@/game/data/equipment";
 import { computeModifiers } from "@/game/progression/stats";
 import { bondCost, BOND_CAP, canStarUp, checkEvolution, starCost, summonStats } from "@/game/summons/progression";
@@ -59,7 +59,7 @@ export default function SummonsPanel() {
     <div ref={root} className={cn("flex flex-col h-full min-h-0 px-4", short ? "pt-2 pb-2" : "pt-3 pb-3")}>
       <ArmyHeader profile={profile} slots={slots} deployedCount={deployedCount} owned={owned} />
       <div className={cn("flex gap-3 overflow-x-auto no-scrollbar shrink-0 -mx-4 px-4", short ? "mt-1" : "mt-2")} style={{ touchAction: "pan-x" }} data-testid="army-roster">
-        <RosterGroup label={`Fielded ${fielded.length}/${slots}`} testId="roster-fielded">
+        <RosterGroup label={`Fielded ${fielded.length}/${slots}`} testId="roster-fielded" short={short}>
           {fielded.map((s) => (
             <RosterDisc key={s.instanceId} s={s} selected={selected?.instanceId === s.instanceId} short={short} onSelect={() => c.selectSummon(s.instanceId)} />
           ))}
@@ -68,7 +68,7 @@ export default function SummonsPanel() {
         {bench.length > 0 && (
           <>
             <span className="w-px shrink-0 self-stretch bg-[var(--line-2)]" aria-hidden="true" />
-            <RosterGroup label={`Bench ${bench.length}`} testId="roster-bench">
+            <RosterGroup label={`Bench ${bench.length}`} testId="roster-bench" short={short}>
               {bench.map((s) => (
                 <RosterDisc key={s.instanceId} s={s} selected={selected?.instanceId === s.instanceId} short={short} onSelect={() => c.selectSummon(s.instanceId)} />
               ))}
@@ -81,11 +81,12 @@ export default function SummonsPanel() {
   );
 }
 
-function RosterGroup({ label, testId, children }: { label: string; testId: string; children: React.ReactNode }) {
+/** A labelled run of discs. Compact: the label goes (the divider and order still tell them apart). */
+function RosterGroup({ label, testId, short, children }: { label: string; testId: string; short: boolean; children: React.ReactNode }) {
   return (
-    <div className="flex shrink-0 flex-col" data-testid={testId}>
-      <span className="t-caption text-t2 tnum whitespace-nowrap">{label}</span>
-      <div className="mt-1 flex gap-3">{children}</div>
+    <div className="flex shrink-0 flex-col" data-testid={testId} role="group" aria-label={label}>
+      {!short && <span className="t-caption text-t2 tnum whitespace-nowrap">{label}</span>}
+      <div className={cn("flex gap-3", !short && "mt-1")}>{children}</div>
     </div>
   );
 }
@@ -207,6 +208,8 @@ function ShadowDetail({ inst, slots, deployedCount, short }: { inst: Instance; s
   const [outId, setOutId] = useState<string | null>(null);
   const [choosing, setChoosing] = useState(false);
   const swap = options.find((o) => o.out.instanceId === outId) ?? options[0];
+  // A swap needs its line (whom it replaces, what changes) above the actions: raise the panel for it.
+  useRaisePanel(swapping);
   const nowStrength = swapping ? armyStrength(profile, currentLineup(profile)) : 0;
   const tall = usePanelDetent() === "tall" && !short;
   return (

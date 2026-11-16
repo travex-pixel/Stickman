@@ -348,3 +348,78 @@ for (const vp of VIEWPORTS) {
     await expect(page.getByTestId("item-power")).toBeVisible();
   });
 }
+
+/** A late warrior: every ordinary perk taken, picks banked, and a full army with a bench. */
+for (const vp of VIEWPORTS) {
+  test(`perks past the last stack and a full army fit ${vp.w}x${vp.h}`, async ({ page }) => {
+    await page.setViewportSize({ width: vp.w, height: vp.h });
+    await waitForGame(page);
+    await page.evaluate(() => {
+      type C = { profile: { tutorial: { finished: boolean }; player: Record<string, unknown>; progress: Record<string, unknown>; summons: { collection: unknown[] } }; commit(): void; closeModal(): void };
+      const c = (window as unknown as { __ASCEND__: C }).__ASCEND__;
+      const p = c.profile;
+      p.tutorial.finished = true;
+      p.player.level = 135;
+      p.player.rank = 5;
+      p.player.techniques = ["blade_tempest", "chain_hook", "blood_pact"];
+      p.player.perks = { swift_blade: 4, cruel_edge: 5, keen_eye: 4, heavy_hand: 5, storm_reach: 3, veil_walker: 3, thick_skin: 5, stone_guard: 4, soul_drinker: 3, rift_tempo: 3, ascendant_hunger: 3, war_cry: 5, shield_wall: 4, gilded_oath: 4 };
+      p.player.pendingPerkChoices = 53;
+      const ids = ["husk_blade", "gravewalker", "ember_herald", "tidestalker", "ashborn_bulwark", "veilshot", "ember_acolyte", "bastion", "rift_caller", "banner_bearer"];
+      p.summons.collection = ids.map((defId, i) => ({ instanceId: `${defId}-v`, defId, level: 20 + i, xp: 0, bond: 5 + i, shards: 0, stars: i % 3, deployed: i >= 6, recruitedAt: i }));
+      c.commit();
+    });
+    const close = () => page.evaluate(() => { for (let i = 0; i < 6; i++) (window as unknown as { __ASCEND__: { closeModal(): void } }).__ASCEND__.closeModal(); });
+    await page.waitForTimeout(1200);
+    await close();
+    // The perk sheet is never empty, and its actions are on screen.
+    await page.getByTestId("perk-chip").click();
+    await expect(page.getByTestId("modal-perk_choice")).toBeVisible();
+    await page.waitForFunction(() => {
+      const sheet = document.querySelector("[data-testid=modal-perk_choice] .panel-surface");
+      if (!sheet) return false;
+      const t = getComputedStyle(sheet).transform;
+      return t === "none" || t === "matrix(1, 0, 0, 1, 0, 0)";
+    }, null, { timeout: 15_000 });
+    for (const id of ["perk-endless_edge", "perk-deep_vigor", "perk-legions_oath", "perk-auto"]) {
+      // A card below the fold scrolls into view inside the sheet; Choose all is pinned.
+      if (id !== "perk-auto") await page.getByTestId(id).scrollIntoViewIfNeeded();
+      const box = await page.getByTestId(id).boundingBox();
+      expect(box, id).not.toBeNull();
+      expect(box!.y + box!.height, `${id} bottom`).toBeLessThanOrEqual(vp.h + 0.5);
+      expect(box!.x + box!.width, `${id} right`).toBeLessThanOrEqual(vp.w + 0.5);
+    }
+    await close();
+    // The army: bench selected with every place full, the swap choice, Deploy best.
+    await page.getByTestId("tab-summons").click();
+    await page.waitForTimeout(500);
+    await page.evaluate(() => (window as unknown as { __ASCEND__: { selectSummon(id: string): void } }).__ASCEND__.selectSummon("husk_blade-v"));
+    await page.waitForTimeout(400);
+    const fits = async (label: string) => {
+      const bad = await page.evaluate(() => {
+        const panel = document.querySelector("[data-testid=panel-summons]") as HTMLElement;
+        const pr = panel.getBoundingClientRect();
+        const out: string[] = [];
+        panel.querySelectorAll<HTMLElement>("button").forEach((b) => {
+          const r = b.getBoundingClientRect();
+          if (r.width === 0 || r.height === 0) return;
+          // Rows that scroll sideways (the roster, the swap choice) only need to sit inside the panel's height.
+          const sideways = b.closest("[data-testid=army-roster], [data-testid=swap-chooser]");
+          if (sideways && r.top >= pr.top - 1 && r.bottom <= pr.bottom + 1) return;
+          if (r.bottom > pr.bottom + 1 || r.right > Math.min(pr.right, window.innerWidth) + 1 || r.top < pr.top - 1 || r.left < -1) out.push(b.getAttribute("data-testid") ?? (b.textContent ?? "").slice(0, 20));
+        });
+        return out;
+      });
+      expect(bad, label).toEqual([]);
+    };
+    await expect(page.getByTestId("swap-button")).toBeVisible();
+    await fits("bench selected");
+    await page.getByTestId("swap-change").click();
+    await expect(page.getByTestId("swap-chooser")).toBeVisible();
+    await fits("swap choice");
+    for (const id of ["deploy-best", "army-summary", "swap-button"]) expect((await page.getByTestId(id).boundingBox())!.height, `${id} target`).toBeGreaterThanOrEqual(44);
+    await page.getByTestId("deploy-best").click();
+    await page.waitForTimeout(300);
+    await fits("after deploy best");
+    await expect(page.getByTestId("deploy-count")).toHaveText("4 of 4");
+  });
+}
