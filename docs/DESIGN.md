@@ -344,7 +344,7 @@ pure module (`src/game/audio/cues.ts`) and the mix's density budget in another (
   yields for 90ms after any blow of the warrior's and only fills room under 5 impacts per 400ms,
   so at 2x speed with three shadows the mix thins instead of doubling. Reduced effects tightens
   every budget.
-- **Levels.** The warrior's whooshes sit about 10dB under his hits, the army's blows under those,
+- **Levels.** The warrior's whooshes sit 6 to 10dB under his hits, the army's blows under those,
   and the Fury's final strike and the boss sounds on top. A soft limiter on the master bus is a
   safety net; a measured late-game mixdown peaks under full scale without it.
 - **The ambience is still.** A low D, its fifth and octave (whole cycles in the 12s loop) and a
