@@ -270,6 +270,8 @@ for (const vp of VIEWPORTS) {
       p.player.level = 40;
       p.player.rank = 4;
       p.progress.bestStage = 22;
+      // Already learned, so no technique moment opens over the panel mid-test.
+      p.player.techniques = ["blade_tempest", "chain_hook", "blood_pact"];
       const t: [string, string, string][] = [["warden_cleaver", "weapon", "attack"], ["hollow_visage", "helm", "maxHp"], ["ashplate", "chest", "maxHp"], ["grip_of_the_deep", "gloves", "attackSpeed"], ["greaves_of_the_verge", "boots", "defense"], ["rift_shard", "relic", "critDamage"]];
       for (let k = 0; k < 24; k++) {
         const [templateId, slot, mainStat] = t[k % 6]!;
@@ -322,7 +324,9 @@ for (const vp of VIEWPORTS) {
       const best = await page.getByTestId("equip-best").boundingBox();
       expect(best && best.height >= 44, `${label}: equip best is a full target`).toBe(true);
     };
+    const closeAll = () => page.evaluate(() => { for (let i = 0; i < 6; i++) (window as unknown as { __ASCEND__: { closeModal(): void } }).__ASCEND__.closeModal(); });
     for (const view of ["worn", "bag"]) {
+      await closeAll();
       await page.getByTestId(`gear-view-${view}`).click();
       await page.waitForTimeout(300);
       await check(`${view} base`);
@@ -330,6 +334,7 @@ for (const vp of VIEWPORTS) {
         await page.getByTestId("panel-grabber").click();
         await page.waitForTimeout(700);
         await check(`${view} tall`);
+        await closeAll();
         await page.getByTestId("panel-grabber").click();
         await page.waitForTimeout(700);
       }
