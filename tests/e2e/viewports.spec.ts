@@ -420,6 +420,12 @@ for (const vp of VIEWPORTS) {
     await page.getByTestId("deploy-best").click();
     await page.waitForTimeout(300);
     await fits("after deploy best");
+    // A fielded shadow selected: its actions (Recall, Bond, Star) in reach too.
+    const fieldedId = await page.evaluate(() => { const c = (window as unknown as { __ASCEND__: { profile: { summons: { collection: { instanceId: string; deployed: boolean }[] } }; selectSummon(id: string): void } }).__ASCEND__; const f = c.profile.summons.collection.find((s) => s.deployed)!; c.selectSummon(f.instanceId); return f.instanceId; });
+    expect(fieldedId).toBeTruthy();
+    await page.waitForTimeout(1500);
+    // (Long enough for the panel to settle from the swap's raised height.)
+    await fits("fielded selected");
     await expect(page.getByTestId("deploy-count")).toHaveText("4 of 4");
   });
 }

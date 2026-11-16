@@ -103,7 +103,7 @@ function ArmyHeader({ profile, slots, deployedCount, owned }: { profile: Profile
   const better = best.bring.length > 0 && gain >= 0.005;
   const synergies = armySynergies(profile);
   return (
-    <div className="shrink-0">
+    <div className="relative z-10 shrink-0">
       <div className="flex items-center justify-between gap-2">
         <button className="press -ml-1 flex h-11 min-w-0 items-center gap-1 rounded-[10px] px-1 t-label text-t2" onClick={() => setOpen((o) => !o)} aria-expanded={open} data-testid="army-summary">
           <span className="truncate">
@@ -111,7 +111,11 @@ function ArmyHeader({ profile, slots, deployedCount, owned }: { profile: Profile
             <span className="text-t1 tnum" data-testid="deploy-count">
               {deployedCount} of {slots}
             </span>
-            <span className="tnum"> · Strength <span className="text-t1">{fmt(armyStrength(profile, currentLineup(profile)))}</span></span>
+            <span className="tnum">
+              {" "}
+              · <span className="hidden min-[360px]:inline">Strength </span>
+              <span className="text-t1">{fmt(armyStrength(profile, currentLineup(profile)))}</span>
+            </span>
             <span className="hidden min-[360px]:inline">
               {" "}
               · {synergies.length} {synergies.length === 1 ? "synergy" : "synergies"}
@@ -131,7 +135,8 @@ function ArmyHeader({ profile, slots, deployedCount, owned }: { profile: Profile
         </button>
       </div>
       {open && (
-        <div className="mb-1 flex flex-col gap-0.5" data-testid="army-detail">
+        // Over the roster, not pushing it: the actions below stay where they are at every size.
+        <div className="absolute inset-x-[-16px] top-11 flex flex-col gap-0.5 bg-bg-1 px-4 pb-2 pt-1 shadow-[0_8px_16px_rgba(0,0,0,0.45),inset_0_-1px_0_var(--line)]" data-testid="army-detail">
           {synergies.length ? (
             synergies.map((x) => (
               <span key={x.id} className="t-label text-t1 flex items-center gap-2 truncate" data-testid="synergy-active">
@@ -208,19 +213,24 @@ function ShadowDetail({ inst, slots, deployedCount, short }: { inst: Instance; s
   const [outId, setOutId] = useState<string | null>(null);
   const [choosing, setChoosing] = useState(false);
   const swap = options.find((o) => o.out.instanceId === outId) ?? options[0];
-  // A swap needs its line (whom it replaces, what changes) above the actions: raise the panel for it.
-  useRaisePanel(swapping);
+  // A swap needs its line (whom it replaces, what changes) above the actions, and a short screen
+  // needs the room for the actions at all: raise the panel for either.
+  // (The screen's height, not the measured fit: raising on the fit would re-measure and flip back.)
+  const shortScreen = useShortScreen();
+  useRaisePanel(swapping || shortScreen);
   const nowStrength = swapping ? armyStrength(profile, currentLineup(profile)) : 0;
   const tall = usePanelDetent() === "tall" && !short;
   return (
     <div className={cn("flex flex-col flex-1 min-h-0", short ? "mt-2" : "mt-3")}>
       <div className="flex items-end justify-between gap-3 shrink-0">
         <div className="flex flex-col min-w-0">
-          <span className="t-eyebrow truncate" style={{ color: RARITY_VAR[def.rarity] }}>
+          <span className={cn("t-eyebrow truncate", short && "hidden")} style={{ color: RARITY_VAR[def.rarity] }}>
             {RARITY_WORD[def.rarity]} · {ROLE_INFO[def.role].label}
             {(inst.stars ?? 0) > 0 && <span className="text-gold"> · {"★".repeat(inst.stars ?? 0)}</span>}
           </span>
-          <span className="t-name text-t1 truncate mt-1">{def.name}</span>
+          <span className={cn("t-name text-t1 truncate", !short && "mt-1")} style={short ? { color: RARITY_VAR[def.rarity] } : undefined}>
+            {def.name}
+          </span>
         </div>
         {!tall && (
           <div className="flex gap-4 shrink-0">
