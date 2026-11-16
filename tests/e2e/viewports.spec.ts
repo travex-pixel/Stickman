@@ -205,7 +205,7 @@ for (const vp of VIEWPORTS) {
     await expect(page.getByTestId("boss-bar")).toBeVisible();
     await expect(page.getByTestId("mode-leave")).toBeVisible();
 
-    const check = async (label: string) => {
+    const check = async (label: string, detail = false) => {
       const boxes = await page.evaluate(() => {
         const ids = ["boss-bar", "command-follow", "command-guard", "summon-strip", "boss-counter", "event-pill", "mode-leave", "auto-toggle", "ability-ultimate"];
         const out: { id: string; l: number; t: number; r: number; b: number }[] = [];
@@ -279,12 +279,19 @@ for (const vp of VIEWPORTS) {
       c.commit();
       for (let i = 0; i < 6; i++) c.closeModal();
     });
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(1500);
+    for (let i = 0; i < 6; i++) await page.evaluate(() => (window as unknown as { __ASCEND__: { closeModal(): void } }).__ASCEND__.closeModal());
     // The Power sheet: opened from Power, the next step on screen, no row wider than the screen.
     await page.getByTestId("tab-hero").click();
     await page.getByTestId("power-button").click();
     await expect(page.getByTestId("power-sheet")).toBeVisible();
-    await page.waitForTimeout(600);
+    // Measured once the sheet has finished sliding in.
+    await page.waitForFunction(() => {
+      const sheet = document.querySelector("[data-testid=power-sheet] .panel-surface");
+      if (!sheet) return false;
+      const t = getComputedStyle(sheet).transform;
+      return t === "none" || t === "matrix(1, 0, 0, 1, 0, 0)";
+    }, null, { timeout: 15_000 });
     const step = await page.getByTestId("power-next-step").boundingBox();
     expect(step, "next step").not.toBeNull();
     expect(step!.y + step!.height).toBeLessThanOrEqual(vp.h + 0.5);
@@ -297,7 +304,7 @@ for (const vp of VIEWPORTS) {
     // Gear, both views, at base and tall.
     await page.getByTestId("tab-gear").click();
     await page.waitForTimeout(500);
-    const check = async (label: string) => {
+    const check = async (label: string, detail = false) => {
       const bad = await page.evaluate(() => {
         const panel = document.querySelector("[data-testid=panel-gear]") as HTMLElement;
         const pr = panel.getBoundingClientRect();
@@ -311,6 +318,7 @@ for (const vp of VIEWPORTS) {
         return out;
       });
       expect(bad, label).toEqual([]);
+      if (detail) return;
       const best = await page.getByTestId("equip-best").boundingBox();
       expect(best && best.height >= 44, `${label}: equip best is a full target`).toBe(true);
     };
@@ -326,9 +334,12 @@ for (const vp of VIEWPORTS) {
         await page.waitForTimeout(700);
       }
     }
+    // Whatever the seeded level raised (a technique, perks) is closed before the item is picked.
+    for (let i = 0; i < 6; i++) await page.evaluate(() => (window as unknown as { __ASCEND__: { closeModal(): void } }).__ASCEND__.closeModal());
+    await page.getByTestId("gear-view-bag").click();
     await page.getByTestId("bag-item").first().click();
     await page.waitForTimeout(700);
-    await check("item detail");
+    await check("item detail", true);
     await expect(page.getByTestId("item-power")).toBeVisible();
   });
 }

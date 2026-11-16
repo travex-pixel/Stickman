@@ -258,12 +258,12 @@ function ItemDetail({ item, profile, short, onBack }: { item: EquipmentItem; pro
   const h = short ? "h-11" : "h-[52px]";
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-testid="item-detail">
-      <div className="flex shrink-0 items-center justify-between gap-2">
+      <div className="flex h-11 shrink-0 items-center justify-between gap-2">
         <span className="t-eyebrow truncate" style={{ color: RARITY_VAR[item.rarity] }}>
           {RARITY_WORD[item.rarity]} · {SLOT_LABEL[item.slot]} · Lv {item.level}
           {isEquipped ? " · Worn" : ""}
         </span>
-        <button className="press -my-2 -mr-2 flex h-11 items-center gap-1 rounded-[10px] px-2 t-label text-t2 shrink-0" onClick={onBack} aria-label="Back to your gear">
+        <button className="press -mr-2 flex h-11 items-center gap-1 rounded-[10px] px-2 t-label text-t2 shrink-0" onClick={onBack} aria-label="Back to your gear">
           <Icon name="close" size={14} />
           <span className="hidden min-[360px]:inline">Back</span>
         </button>
