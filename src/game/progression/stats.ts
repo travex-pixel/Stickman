@@ -123,6 +123,39 @@ export function equippedItems(profile: Profile): EquipmentItem[] {
   return out;
 }
 
+/** The items in the bag: owned and not equipped. */
+export function bagItems(profile: Profile): EquipmentItem[] {
+  const on = new Set(Object.values(profile.equipment.equipped));
+  return profile.equipment.inventory.filter((i) => !on.has(i.uid));
+}
+
+/**
+ * Every item kept makes the warrior stronger: an item in the bag lends this share of its stat line
+ * (main stat and substats, at its level; not its special effect, not its set). Strength folded
+ * into an item by the forge (`kept`) lends the same share wherever the item is, worn or not, so
+ * forging three into one never lowers what they lend. Tuned with the boss probe and the economy
+ * simulator (see DESIGN.md, "Gear").
+ */
+export const BAG_LEND = Number(process.env.ASCEND_BAG_LEND ?? 0.1);
+
+/** What the bag lends the warrior: flat stats, added where equipped gear's are. */
+export function lentTotals(profile: Profile): Partial<Record<StatKey, number>> {
+  const out: Partial<Record<StatKey, number>> = {};
+  const add = (k: StatKey, v: number) => (out[k] = (out[k] ?? 0) + v * BAG_LEND);
+  for (const item of bagItems(profile)) for (const [k, v] of Object.entries(itemStatTotals(item)) as [StatKey, number][]) add(k, v);
+  for (const item of profile.equipment.inventory) for (const [k, v] of Object.entries(item.kept ?? {}) as [StatKey, number][]) add(k, v);
+  return out;
+}
+
+/** An item's own lend when it sits in the bag, plus what the forge folded into it. */
+export function itemLend(item: EquipmentItem, inBag: boolean): Partial<Record<StatKey, number>> {
+  const out: Partial<Record<StatKey, number>> = {};
+  const add = (k: StatKey, v: number) => (out[k] = (out[k] ?? 0) + v * BAG_LEND);
+  if (inBag) for (const [k, v] of Object.entries(itemStatTotals(item)) as [StatKey, number][]) add(k, v);
+  for (const [k, v] of Object.entries(item.kept ?? {}) as [StatKey, number][]) add(k, v);
+  return out;
+}
+
 export function itemStatTotals(item: EquipmentItem): Partial<Record<StatKey, number>> {
   const totals: Partial<Record<StatKey, number>> = {};
   const levelMult = 1 + (item.level - 1) * 0.1;
@@ -252,59 +285,78 @@ export function weaponPathBonuses(path: WeaponPath): Partial<Record<StatKey, num
   }
 }
 
-export function computePlayerStats(profile: Profile): CombatStats {
+/**
+ * Where the warrior's strength comes from: each one can be left out of `computePlayerStats`, which
+ * is how the Power sheet measures what each gives (see `powerBreakdown`).
+ */
+export const POWER_SOURCES = ["statLevels", "level", "gear", "bag", "sets", "skills", "perks", "weaponPath", "codex", "techniques", "rank", "aether", "tree"] as const;
+export type PowerSource = (typeof POWER_SOURCES)[number];
+const NONE: ReadonlySet<PowerSource> = new Set();
+
+export function computePlayerStats(profile: Profile, without: ReadonlySet<PowerSource> = NONE): CombatStats {
   const s: CombatStats = { ...BASE_PLAYER_STATS };
+  const on = (src: PowerSource) => !without.has(src);
   const lv = profile.player.statLevels;
-  s.attack += STAT_UPGRADE_STEP.attack * (lv.attack - 1);
-  s.maxHp += STAT_UPGRADE_STEP.maxHp * (lv.maxHp - 1);
-  s.attackSpeed += STAT_UPGRADE_STEP.attackSpeed * (lv.attackSpeed - 1);
-  s.critChance += STAT_UPGRADE_STEP.critChance * (lv.critChance - 1);
-  s.critDamage += STAT_UPGRADE_STEP.critDamage * (lv.critDamage - 1);
-  s.defense += STAT_UPGRADE_STEP.defense * (lv.defense - 1);
-  s.attack *= milestoneMult(lv.attack);
-  s.maxHp *= milestoneMult(lv.maxHp);
+  if (on("statLevels")) {
+    s.attack += STAT_UPGRADE_STEP.attack * (lv.attack - 1);
+    s.maxHp += STAT_UPGRADE_STEP.maxHp * (lv.maxHp - 1);
+    s.attackSpeed += STAT_UPGRADE_STEP.attackSpeed * (lv.attackSpeed - 1);
+    s.critChance += STAT_UPGRADE_STEP.critChance * (lv.critChance - 1);
+    s.critDamage += STAT_UPGRADE_STEP.critDamage * (lv.critDamage - 1);
+    s.defense += STAT_UPGRADE_STEP.defense * (lv.defense - 1);
+    s.attack *= milestoneMult(lv.attack);
+    s.maxHp *= milestoneMult(lv.maxHp);
+  }
   // Aether from past ascensions: permanent, compounding with everything else.
-  const aether = aetherPowerMult(profile);
-  s.attack *= aether * Math.pow(1 + TREE_COMPOUND.might, nodeLevel(profile, "might"));
-  s.maxHp *= aether * Math.pow(1 + TREE_COMPOUND.vigor, nodeLevel(profile, "vigor"));
+  const aether = on("aether") ? aetherPowerMult(profile) : 1;
+  s.attack *= aether * (on("tree") ? Math.pow(1 + TREE_COMPOUND.might, nodeLevel(profile, "might")) : 1);
+  s.maxHp *= aether * (on("tree") ? Math.pow(1 + TREE_COMPOUND.vigor, nodeLevel(profile, "vigor")) : 1);
 
   // Warrior level: steady compounding power.
-  const levelMult = 1 + (profile.player.level - 1) * 0.045;
+  const levelMult = on("level") ? 1 + (profile.player.level - 1) * 0.045 : 1;
   s.attack *= levelMult;
   s.maxHp *= levelMult;
 
-  for (const item of equippedItems(profile)) {
-    const totals = itemStatTotals(item);
-    for (const [k, v] of Object.entries(totals) as [StatKey, number][]) s[k] += v;
-  }
+  if (on("gear"))
+    for (const item of equippedItems(profile)) {
+      const totals = itemStatTotals(item);
+      for (const [k, v] of Object.entries(totals) as [StatKey, number][]) s[k] += v;
+    }
+  if (on("bag")) for (const [k, v] of Object.entries(lentTotals(profile)) as [StatKey, number][]) s[k] += v;
 
   const pct: Partial<Record<StatKey, number>> = {};
   const addPct = (k: StatKey, v: number) => (pct[k] = (pct[k] ?? 0) + v);
-  for (const id of profile.skills.unlocked) {
-    const node = SKILLS.find((x) => x.id === id);
-    if (node?.effect.kind === "stat") addPct(node.effect.stat, node.effect.pct);
-    if (node?.id === "s5") addPct("defense", 0.15);
+  if (on("skills"))
+    for (const id of profile.skills.unlocked) {
+      const node = SKILLS.find((x) => x.id === id);
+      if (node?.effect.kind === "stat") addPct(node.effect.stat, node.effect.pct);
+      if (node?.id === "s5") addPct("defense", 0.15);
+    }
+  if (on("perks"))
+    for (const [id, stacks] of Object.entries(profile.player.perks)) {
+      const perk = PERKS.find((p) => p.id === id);
+      if (perk?.effect.kind === "stat") addPct(perk.effect.stat, perk.effect.pct * stacks);
+    }
+  if (on("weaponPath")) for (const [k, v] of Object.entries(weaponPathBonuses(profile.player.weaponPath)) as [StatKey, number][]) addPct(k, v);
+  if (on("codex")) {
+    const codex = codexBonus(profile);
+    for (const [k, v] of Object.entries(codex) as [StatKey, number][]) if (v) addPct(k, v);
   }
-  for (const [id, stacks] of Object.entries(profile.player.perks)) {
-    const perk = PERKS.find((p) => p.id === id);
-    if (perk?.effect.kind === "stat") addPct(perk.effect.stat, perk.effect.pct * stacks);
-  }
-  for (const [k, v] of Object.entries(weaponPathBonuses(profile.player.weaponPath)) as [StatKey, number][]) addPct(k, v);
-  const codex = codexBonus(profile);
-  for (const [k, v] of Object.entries(codex) as [StatKey, number][]) if (v) addPct(k, v);
-  for (const [id, n] of setCounts(equippedItems(profile).map((i) => i.templateId))) if (n >= 2) addPct(GEAR_SETS[id].two.stat, GEAR_SETS[id].two.pct);
+  if (on("sets")) for (const [id, n] of setCounts(equippedItems(profile).map((i) => i.templateId))) if (n >= 2) addPct(GEAR_SETS[id].two.stat, GEAR_SETS[id].two.pct);
   // Techniques are owned power: every one learned adds attack, equipped or not.
-  if (profile.player.techniques.length) addPct("attack", profile.player.techniques.length * TECHNIQUE_OWNED_ATTACK);
-  const rankMult = 1 + profile.player.rank * RANK_STAT_STEP;
-  addPct("attack", rankMult - 1);
-  addPct("maxHp", rankMult - 1);
+  if (on("techniques") && profile.player.techniques.length) addPct("attack", profile.player.techniques.length * TECHNIQUE_OWNED_ATTACK);
+  if (on("rank")) {
+    const rankMult = 1 + profile.player.rank * RANK_STAT_STEP;
+    addPct("attack", rankMult - 1);
+    addPct("maxHp", rankMult - 1);
+  }
 
   for (const [k, v] of Object.entries(pct) as [StatKey, number][]) {
     if (k === "critChance") s.critChance += v;
     else s[k] *= 1 + v;
   }
 
-  s.hpRegen = s.maxHp * 0.006 + lv.maxHp * 0.06;
+  s.hpRegen = s.maxHp * 0.006 + (on("statLevels") ? lv.maxHp : 1) * 0.06;
   s.attackSpeed = Math.min(STAT_CEILING.attackSpeed, s.attackSpeed);
   s.critChance = Math.min(STAT_CEILING.critChance, s.critChance);
   s.moveSpeed = Math.min(260, s.moveSpeed);

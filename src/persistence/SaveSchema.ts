@@ -1,6 +1,6 @@
 import { createDefaultProfile, PROFILE_VERSION, type Profile } from "@/game/progression/profile";
 import { SUMMONS } from "@/game/data/summons";
-import { EQUIP_SLOTS, type AbilityId } from "@/game/data/ids";
+import { EQUIP_SLOTS, type AbilityId, type StatKey } from "@/game/data/ids";
 import { ABILITIES, TECHNIQUES } from "@/game/data/abilities";
 import { LIMIT_BREAK_MAX, LIMIT_BREAK_STEP, TREE } from "@/game/progression/ascension";
 import { STAT_UPGRADE_CAP } from "@/game/progression/stats";
@@ -9,7 +9,7 @@ import { PLAYER_LEVEL_CAP, SUMMON_LEVEL_CAP } from "@/game/progression/xp";
 /** The largest currency value a save keeps (far beyond anything reachable, well short of Infinity). */
 const BIG_MAX = 1e300;
 import { ABILITY_RANK_MAX } from "@/game/progression/abilityRanks";
-import { EQUIPMENT_TEMPLATES } from "@/game/data/equipment";
+import { EQUIPMENT_TEMPLATES, STAT_LABEL } from "@/game/data/equipment";
 import { SKILLS } from "@/game/data/skills";
 import { GEAR_EFFECTS, type GearEffectId } from "@/game/data/gearEffects";
 
@@ -44,6 +44,13 @@ export function sanitizeProfile(raw: unknown): { profile: Profile; repaired: boo
   const perks: Record<string, number> = {};
   if (isObj(p.perks)) for (const [k, v] of Object.entries(p.perks)) if (isNum(v) && v > 0) perks[k] = Math.floor(v);
 
+  // Strength folded in by the forge (v13): known stats only, finite and not negative.
+  const keptOf = (v: unknown): { kept?: Partial<Record<StatKey, number>> } => {
+    if (!isObj(v)) return {};
+    const out: Partial<Record<StatKey, number>> = {};
+    for (const [k, x] of Object.entries(v)) if (k in STAT_LABEL && isNum(x) && x > 0) out[k as StatKey] = Math.min(1e12, x);
+    return Object.keys(out).length ? { kept: out } : {};
+  };
   const eq = isObj(raw.equipment) ? raw.equipment : {};
   const inventory: Profile["equipment"]["inventory"] = [];
   if (Array.isArray(eq.inventory)) {
@@ -63,6 +70,7 @@ export function sanitizeProfile(raw: unknown): { profile: Profile; repaired: boo
         mainValue: numF(it.mainValue, 1, 0, 1e6),
         ...(isStr(it.effect) && it.effect in GEAR_EFFECTS ? { effect: it.effect as GearEffectId } : {}),
         substats: Array.isArray(it.substats) ? it.substats.filter((s): s is { stat: Profile["equipment"]["inventory"][number]["mainStat"]; value: number } => isObj(s) && isStr(s.stat) && isNum(s.value)).slice(0, 3) : [],
+        ...keptOf(it.kept),
       });
     }
   }

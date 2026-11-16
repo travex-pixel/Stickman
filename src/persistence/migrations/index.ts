@@ -118,6 +118,13 @@ export const MIGRATIONS: Migration[] = [
       return { ...raw, version: 12, tyrant: { week: "", best: 0, claimed: 0, allTimeBest: 0 }, modes: { ...modes, keys: { ...keys, tyrant: 2 } } };
     },
   },
+  {
+    // Items may carry `kept`, the strength the forge folded into them, which the bag lends. Items
+    // forged before it have none: nothing to add, and nothing they had is lost.
+    from: 12,
+    to: 13,
+    migrate: (raw) => ({ ...raw, version: 13 }),
+  },
 ];
 
 export function runMigrations(raw: Record<string, unknown>, targetVersion: number): { raw: Record<string, unknown>; migrated: boolean } {

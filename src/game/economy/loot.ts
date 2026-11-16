@@ -4,6 +4,7 @@ import { RARITY_ORDER } from "../data/ids";
 import { EQUIPMENT_TEMPLATES, RARITY_MULT, RARITY_SUBSTATS, STAT_BASE } from "../data/equipment";
 import type { EquipmentItem, Profile } from "../progression/profile";
 import { GEAR_EFFECT_IDS } from "../data/gearEffects";
+import { itemStatTotals } from "../progression/stats";
 
 let itemCounter = 0;
 export function newItemUid(now = Date.now()): string {
@@ -93,7 +94,8 @@ export function fusionSet(profile: Profile, uid: string): EquipmentItem[] | null
 
 /**
  * Forge three of a rarity into one random item of the next rarity in the chosen item's slot.
- * Half of the levels poured into the inputs carry over, so upgrades are not thrown away.
+ * Half of the levels poured into the inputs carry over, so upgrades are not thrown away, and the
+ * inputs' strength is folded into the new item (`kept`), so what the bag lends never drops.
  */
 export function fuseItems(profile: Profile, uid: string, rng: Rng, stage: number): EquipmentItem | null {
   const set = fusionSet(profile, uid);
@@ -103,8 +105,19 @@ export function fuseItems(profile: Profile, uid: string, rng: Rng, stage: number
   const out = generateItem(rng, Math.max(1, stage), next, head.slot);
   const carried = Math.floor(set.reduce((a, i) => a + (i.level - 1), 0) / 2);
   out.level = Math.min(EQUIPMENT_LEVEL_CAP, 1 + carried);
+  out.kept = foldedStrength(set);
   const gone = new Set(set.map((i) => i.uid));
   profile.equipment.inventory = profile.equipment.inventory.filter((i) => !gone.has(i.uid));
   profile.equipment.inventory.push(out);
+  return out;
+}
+
+/** The stat lines of `items` (at their levels) plus what each already kept: a forge's fold. */
+export function foldedStrength(items: EquipmentItem[]): Partial<Record<StatKey, number>> {
+  const out: Partial<Record<StatKey, number>> = {};
+  for (const it of items) {
+    for (const [k, v] of Object.entries(itemStatTotals(it)) as [StatKey, number][]) out[k] = (out[k] ?? 0) + v;
+    for (const [k, v] of Object.entries(it.kept ?? {}) as [StatKey, number][]) out[k] = (out[k] ?? 0) + v;
+  }
   return out;
 }

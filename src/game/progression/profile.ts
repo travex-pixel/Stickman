@@ -12,6 +12,11 @@ export interface EquipmentItem {
   substats: { stat: StatKey; value: number }[];
   /** Epic and legendary items carry a build-defining effect. */
   effect?: GearEffectId;
+  /**
+   * Strength the forge folded into this item: the stat lines (at their levels) of the items forged
+   * into it, and theirs in turn. It lends `BAG_LEND` of it wherever the item is.
+   */
+  kept?: Partial<Record<StatKey, number>>;
 }
 
 export interface SummonInstance {
@@ -127,7 +132,7 @@ export interface Profile {
   settings: { music: number; sfx: number; reducedEffects: boolean; diagnostics: boolean; battleSpeed: 1 | 2; autoAdvance: boolean; /** Short reveals: every BIND plays its short form (the very first excepted). */ quickReveals: boolean };
 }
 
-export const PROFILE_VERSION = 12;
+export const PROFILE_VERSION = 13;
 
 export function createDefaultProfile(now = Date.now()): Profile {
   return {
