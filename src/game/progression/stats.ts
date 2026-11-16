@@ -7,7 +7,7 @@ import { codexBonus } from "../summons/extraction";
 import { TECHNIQUE_OWNED_ATTACK } from "../data/abilities";
 import type { GearEffectId } from "../data/gearEffects";
 import { GEAR_SETS, setCounts } from "../data/gearSets";
-import { LIMIT_BREAK_MAX, LIMIT_BREAK_STEP, TREE_COMPOUND, aetherGoldMult, aetherPowerMult, nodeLevel } from "./ascension";
+import { ASCEND_MIN_STAGE, LIMIT_BREAK_MAX, LIMIT_BREAK_STEP, TREE_COMPOUND, aetherGoldMult, aetherPowerMult, nodeLevel } from "./ascension";
 
 /** Each Ascendant rank multiplies core stats. Rank is earned in Rank Trials, not bought. */
 export const RANK_STAT_STEP = 0.08;
@@ -133,10 +133,12 @@ export function bagItems(profile: Profile): EquipmentItem[] {
  * Every item kept makes the warrior stronger: an item in the bag lends this share of its stat line
  * (main stat and substats, at its level; not its special effect, not its set). Strength folded
  * into an item by the forge (`kept`) lends the same share wherever the item is, worn or not, so
- * forging three into one never lowers what they lend. Tuned with the boss probe and the economy
- * simulator (see DESIGN.md, "Gear").
+ * forging three into one never lowers what they lend.
+ * Measured on the simulator's saved profiles (a full bag is 18 items): 3% adds 3 to 4% Power and
+ * moves no boss forecast more than 9 points; 10% would add 9 to 13% Power but moves the gate-30
+ * forecast by 34 points (see DESIGN.md, "Gear and the bag").
  */
-export const BAG_LEND = Number(process.env.ASCEND_BAG_LEND ?? 0.1);
+export const BAG_LEND = Number(process.env.ASCEND_BAG_LEND ?? 0.03);
 
 /** What the bag lends the warrior: flat stats, added where equipped gear's are. */
 export function lentTotals(profile: Profile): Partial<Record<StatKey, number>> {
@@ -385,6 +387,50 @@ export const STAT_CEILING = { attackSpeed: 3.2, critChance: 0.85 } as const;
 export function statAtCeiling(profile: Profile, stat: UpgradeableStat): boolean {
   if (stat !== "attackSpeed" && stat !== "critChance") return false;
   return computePlayerStats(profile)[stat] >= STAT_CEILING[stat] - 1e-9;
+}
+
+/** How close a stat is to the end of its levels, and what lies past it, for the Hero panel. */
+export type StatRoad =
+  | { kind: "open" }
+  /** Within NEAR_CAP levels of the cap: "Lv 118 of 120". */
+  | { kind: "near"; level: number; cap: number }
+  /** At the value ceiling (3.2 attacks a second, 85% crit): levels would add nothing. */
+  | { kind: "ceiling" }
+  /** At the level cap; Limit Break (Ascension's tree) raises it: `ready` once Ascension is open. */
+  | { kind: "limit"; cap: number; ready: boolean }
+  /** At the last level there is. */
+  | { kind: "top"; cap: number };
+
+export const NEAR_CAP = 10;
+
+export function statRoad(profile: Profile, stat: UpgradeableStat): StatRoad {
+  const level = profile.player.statLevels[stat];
+  const cap = statCap(profile, stat);
+  if (statAtCeiling(profile, stat)) return { kind: "ceiling" };
+  if (level >= cap) {
+    if (LIMIT_BREAK_STATS.includes(stat) && nodeLevel(profile, "limit") < LIMIT_BREAK_MAX) return { kind: "limit", cap, ready: profile.ascension.count > 0 || profile.progress.bestStage >= ASCEND_MIN_STAGE };
+    return { kind: "top", cap };
+  }
+  if (cap - level <= NEAR_CAP) return { kind: "near", level, cap };
+  return { kind: "open" };
+}
+
+/** The road in words: what the cell says under the price, and the longer line a tap explains. */
+export function statRoadText(road: StatRoad, label: string): { caption: string; explain: string } | null {
+  switch (road.kind) {
+    case "open":
+      return null;
+    case "near":
+      return { caption: `Lv ${road.level} of ${road.cap}`, explain: `${label} stops at level ${road.cap}.` };
+    case "ceiling":
+      return { caption: "At its ceiling", explain: `${label} is as high as it goes: put gold into Attack, Health or Defence.` };
+    case "limit":
+      return road.ready
+        ? { caption: "Limit Break ›", explain: `${label} is at level ${road.cap}. Limit Break, in Ascension's Aether tree, raises the cap by ${LIMIT_BREAK_STEP}.` }
+        : { caption: `Cap ${road.cap}`, explain: `${label} is at level ${road.cap}. Ascension opens at stage ${ASCEND_MIN_STAGE}; its Limit Break raises the cap.` };
+    case "top":
+      return { caption: "Top level", explain: `${label} is at its last level, ${road.cap}.` };
+  }
 }
 
 /**

@@ -43,7 +43,7 @@ describe("the bag lends", () => {
     const bare = computePlayerStats({ ...p, equipment: { ...p.equipment, inventory: p.equipment.inventory.filter((i) => i.uid === "b") } });
     expect(computePlayerStats(p).attack).toBeGreaterThan(bare.attack);
   });
-  it("is a tenth: felt, not a second set of gear", () => {
+  it("is a small share: felt per item, never a second set of gear", () => {
     expect(BAG_LEND).toBeGreaterThan(0);
     expect(BAG_LEND).toBeLessThanOrEqual(0.15);
   });
