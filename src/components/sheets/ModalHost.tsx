@@ -13,6 +13,7 @@ import { ModeResultSheet } from "./ModeResultSheet";
 import { ObjectivesSheet } from "./ObjectivesSheet";
 import { OfflineSheet } from "./OfflineSheet";
 import { PerkChoiceSheet } from "./PerkChoiceSheet";
+import { PowerSheet } from "./PowerSheet";
 import { RankUpMoment } from "./RankUpMoment";
 import { SettingsSheet } from "./SettingsSheet";
 import { SummonReveal } from "./SummonReveal";
@@ -79,6 +80,8 @@ function Route({ modal, open }: { modal: Modal; open: boolean }) {
       return <AscendSheet open={open} />;
     case "tyrant":
       return <TyrantSheet open={open} />;
+    case "power":
+      return <PowerSheet open={open} />;
     case "hunt_pick":
       return <HuntSheet open={open} />;
     case "rank_up":

@@ -17,6 +17,7 @@ import { offerPerks, takePerk as doTakePerk } from "./progression/perks";
 import { claimQuest as doClaimQuest, currentQuest, isQuestComplete } from "./progression/quests";
 import { evaluateAchievements, evaluateJournal } from "./progression/achievements";
 import { computeModifiers, MILESTONE_EVERY, MILESTONE_MULT } from "./progression/stats";
+import { equipBestPlan } from "./progression/power";
 import { canUpgradeStat } from "./progression/upgrades";
 import { claimEssence as doClaimEssence, setDeployed, type ClaimOutcome } from "./summons/recruitment";
 import { CODEX_STAR_STEP, extractionChance, resolveExtraction, speciesStars } from "./summons/extraction";
@@ -91,6 +92,7 @@ export type Modal =
   | { kind: "journal" }
   | { kind: "objectives" }
   | { kind: "ascend" }
+  | { kind: "power" }
   | { kind: "boss_intro"; defId: string }
   | { kind: "technique"; id: AbilityId }
   | { kind: "mode_result"; mode: ModeId; title: string; subtitle: string; lines: { label: string; value: string; tone?: "gold" | "jade" | "violet" }[]; success: boolean; record?: boolean; items?: EquipmentItem[]; tyrant?: { claimed: number; newTiers: number[]; score: number } }
@@ -1960,6 +1962,36 @@ export class GameController {
   openSettings(): void {
     this.userGesture();
     this.uiStore.update((u) => ({ ...u, modal: { kind: "settings" } }));
+  }
+
+  /** Where Power comes from, and the best next step. */
+  openPower(): void {
+    this.userGesture();
+    this.uiStore.update((u) => ({ ...u, modal: { kind: "power" } }));
+  }
+
+  /**
+   * Equip best: wear whatever raises Power, keeping worn special effects and four-piece sets.
+   * Says what it did. Returns the Power gained (0 when nothing was stronger).
+   */
+  equipBest(): number {
+    this.userGesture();
+    const p = this.profile;
+    const plan = equipBestPlan(p);
+    if (!plan.changes.length) {
+      this.toast(plan.kept.length ? "Your gear is the strongest that keeps your special effects" : "You already wear your strongest gear", "info");
+      return 0;
+    }
+    p.equipment.equipped = plan.equipped;
+    this.sfx("equip", { volume: 0.7 });
+    this.uiStore.update((u) => ({ ...u, selectedItem: null }));
+    this.refreshLoadout();
+    this.completeTutorialIf("gear");
+    this.afterProgression();
+    this.commit();
+    const names = plan.changes.map((ch) => itemName(p.equipment.inventory.find((i) => i.uid === ch.to)!));
+    this.toast(`Equipped ${names.length === 1 ? names[0] : `${names.length} items`}: +${fmt(plan.gain)} Power`, "gold");
+    return plan.gain;
   }
 
   openAscension(): void {

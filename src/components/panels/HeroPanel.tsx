@@ -12,7 +12,7 @@ import { useShortScreen } from "@/hooks/useShortScreen";
 import type { UpgradeableStat } from "@/game/data/ids";
 import { STAT_LABEL } from "@/game/data/equipment";
 import { aetherFor, canAscend, romanAscension, spendableAether } from "@/game/progression/ascension";
-import { bestStatBuy, combatPower, computePlayerStats, isStatUnlocked, MILESTONE_EVERY, MILESTONE_MULT, statAtCeiling, statUnlockRule, statUpgradeCost, statCap } from "@/game/progression/stats";
+import { bestStatBuy, combatPower, computePlayerStats, isStatUnlocked, MILESTONE_EVERY, MILESTONE_MULT, statAtCeiling, statRoad, statRoadText, statUnlockRule, statUpgradeCost, statCap } from "@/game/progression/stats";
 import type { Profile } from "@/game/progression/profile";
 import { canAttemptTrial, nextRankStep, rankLetter } from "@/game/progression/ranks";
 import { nextMilestone } from "@/game/progression/milestones";
@@ -44,7 +44,7 @@ export default function HeroPanel() {
   return (
     <div className={cn("flex flex-col h-full min-h-0 px-4", short ? "pt-2" : "pt-4")}>
       <div className={cn("flex items-end justify-between gap-3 shrink-0", short ? "mb-1" : "mb-3")}>
-        <PowerReadout power={power} short={short} />
+        <PowerReadout power={power} short={short} onOpen={() => c.openPower()} />
         <div className="flex items-center gap-2 min-w-0">
           <AscendBadge />
           <RankBadge />
@@ -53,7 +53,7 @@ export default function HeroPanel() {
       {upgraded && <NextGoal />}
       <div className="grid grid-cols-2 grid-rows-3 flex-1 min-h-0 -mx-4 shadow-[inset_0_1px_0_var(--line)]">
         {STATS.map((s, i) => (
-          <StatCell key={s} stat={s} index={i} profile={profile} value={stats[s]} next={previewNext(profile, s)[s]} best={s === bestBuy} onUpgrade={() => c.upgradeStat(s).ok} onDenied={() => c.audio.play("error", { volume: 0.3, minInterval: 200 })} />
+          <StatCell key={s} stat={s} index={i} profile={profile} value={stats[s]} next={previewNext(profile, s)[s]} best={s === bestBuy} onUpgrade={() => c.upgradeStat(s).ok} onDenied={() => c.audio.play("error", { volume: 0.3, minInterval: 200 })} onRoad={(road, text) => (road === "limit-ready" ? c.openAscension() : c.toast(text, "info"))} />
         ))}
       </div>
       {!upgraded && !short && (
@@ -89,6 +89,8 @@ interface CellProps {
   best: boolean;
   onUpgrade: () => boolean;
   onDenied: () => void;
+  /** A tap on a stat at its end: what raises it ("limit-ready" opens Ascension) or why it stops. */
+  onRoad: (road: string, explain: string) => void;
 }
 
 /**
@@ -96,7 +98,7 @@ interface CellProps {
  * level adds, the cost as a gold-tint pill. A 1px gold line along the foot shows the way to the
  * next milestone; reaching it tints the cell once.
  */
-function StatCell({ stat, index, profile, value, next, best, onUpgrade, onDenied }: CellProps) {
+function StatCell({ stat, index, profile, value, next, best, onUpgrade, onDenied, onRoad }: CellProps) {
   const level = profile.player.statLevels[stat];
   const cap = statCap(profile, stat);
   const cost = statUpgradeCost(stat, level);
@@ -145,6 +147,33 @@ function StatCell({ stat, index, profile, value, next, best, onUpgrade, onDenied
     );
   }
   const toNext = (level % MILESTONE_EVERY) / MILESTONE_EVERY;
+  // The road: "Lv 118 of 120" near the cap; at its end, what raises it and where.
+  const road = statRoad(profile, stat);
+  const roadText = statRoadText(road, LABEL[stat]);
+  if (capped) {
+    const ready = road.kind === "limit" && road.ready;
+    return (
+      <div className={edges} data-testid={`stat-card-${stat}`}>
+        <button className="press-fill absolute inset-0 flex items-center justify-between gap-1.5 px-3 min-[400px]:px-4 text-left" onClick={() => onRoad(ready ? "limit-ready" : road.kind, roadText?.explain ?? `${LABEL[stat]} is at its cap.`)} data-guide={`upgrade-${stat}`} data-testid={`upgrade-${stat}`} aria-label={roadText?.explain ?? `${STAT_LABEL[stat]} is at its cap`}>
+          <span className="relative flex flex-col min-w-0">
+            <span className="t-label text-t2 flex items-center gap-1.5 min-w-0">
+              <Icon name={STAT_ICON[stat]} size={13} className="shrink-0 hidden min-[360px]:block" />
+              <span className="truncate">{label}</span>
+            </span>
+            <span data-testid={`stat-value-${stat}`}>
+              <Ticker value={value} format={(v) => fmtStat(stat, v)} className="t-num-serif text-t1" />
+            </span>
+          </span>
+          <span className="relative shrink-0 flex flex-col items-end gap-px min-w-0">
+            <span className="flex items-center h-8 px-2.5 t-num-m text-t3">Max</span>
+            <span className={cn("t-caption tnum pr-2 truncate max-w-[96px]", ready ? "text-gold" : "text-t3")} data-testid={`stat-level-${stat}`}>
+              {roadText?.caption ?? `Lv ${level}`}
+            </span>
+          </span>
+        </button>
+      </div>
+    );
+  }
   const deny = () => {
     shake();
     onDenied();
@@ -194,8 +223,9 @@ function StatCell({ stat, index, profile, value, next, best, onUpgrade, onDenied
             )}
           </span>
           {/* The level sits with the price of the next one, so the label never truncates. */}
-          <span className="t-caption text-t3 tnum pr-2" data-testid={`stat-level-${stat}`}>
-            Lv {level}
+          <span className={cn("t-caption tnum pr-2", best ? "text-gold" : road.kind === "near" ? "text-t2" : "text-t3")} data-testid={`stat-level-${stat}`}>
+            {best && <span className="hidden min-[360px]:inline">Best · </span>}
+            {roadText?.caption ?? `Lv ${level}`}
           </span>
         </span>
         {milestone && !capped && (
@@ -252,7 +282,7 @@ function AscendBadge() {
 }
 
 /** Power: the headline number. Every purchase visibly lands: it counts up and a "+x%" rises beside it. */
-function PowerReadout({ power, short }: { power: number; short: boolean }) {
+function PowerReadout({ power, short, onOpen }: { power: number; short: boolean; onOpen: () => void }) {
   const prev = useRef(power);
   const [gain, setGain] = useState<{ id: number; pct: number } | null>(null);
   useEffect(() => {
@@ -271,8 +301,11 @@ function PowerReadout({ power, short }: { power: number; short: boolean }) {
     return undefined;
   }, [power]);
   return (
-    <div className={cn("flex min-w-0", short ? "items-baseline gap-2" : "flex-col")}>
-      <span className="t-label text-t2">Power</span>
+    <button className={cn("press -ml-2 -my-1 flex min-w-0 min-h-11 rounded-[12px] px-2 py-1 text-left", short ? "items-baseline gap-2" : "flex-col")} onClick={onOpen} data-testid="power-button" aria-label={`Power ${fmt(power)}: see where it comes from`}>
+      <span className="t-label text-t2 flex items-center gap-1">
+        Power
+        <Icon name="chevron" size={12} className="text-t3" />
+      </span>
       <span className={cn("relative flex items-start gap-1.5", !short && "mt-1")}>
         <span data-testid="combat-power">
           <Ticker value={power} className={short ? "t-num-serif text-t1" : "t-num-serif-xl text-t1"} />
@@ -285,7 +318,7 @@ function PowerReadout({ power, short }: { power: number; short: boolean }) {
           )}
         </AnimatePresence>
       </span>
-    </div>
+    </button>
   );
 }
 
