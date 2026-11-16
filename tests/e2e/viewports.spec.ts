@@ -256,3 +256,79 @@ for (const vp of VIEWPORTS) {
     await ctx.close();
   });
 }
+
+/** The Power sheet and a full bag: nothing past the edge, the next step in view, the gear views whole. */
+for (const vp of VIEWPORTS) {
+  test(`power sheet and full gear fit ${vp.w}x${vp.h}`, async ({ page }) => {
+    await page.setViewportSize({ width: vp.w, height: vp.h });
+    await waitForGame(page);
+    await page.evaluate(() => {
+      type It = { uid: string; templateId: string; slot: string; rarity: string; level: number; mainStat: string; mainValue: number; substats: { stat: string; value: number }[]; effect?: string };
+      const c = (window as unknown as { __ASCEND__: { profile: { tutorial: { finished: boolean }; player: Record<string, unknown>; progress: Record<string, unknown>; equipment: { inventory: It[]; equipped: Record<string, string> } }; commit(): void; closeModal(): void } }).__ASCEND__;
+      const p = c.profile;
+      p.tutorial.finished = true;
+      p.player.level = 40;
+      p.player.rank = 4;
+      p.progress.bestStage = 22;
+      const t: [string, string, string][] = [["warden_cleaver", "weapon", "attack"], ["hollow_visage", "helm", "maxHp"], ["ashplate", "chest", "maxHp"], ["grip_of_the_deep", "gloves", "attackSpeed"], ["greaves_of_the_verge", "boots", "defense"], ["rift_shard", "relic", "critDamage"]];
+      for (let k = 0; k < 24; k++) {
+        const [templateId, slot, mainStat] = t[k % 6]!;
+        p.equipment.inventory.push({ uid: `vp${k}`, templateId, slot, rarity: k % 5 === 0 ? "legendary" : "epic", level: 1 + (k % 9), mainStat, mainValue: 10 + k, substats: [{ stat: "critChance", value: 0.01 }, { stat: "defense", value: 2 }], ...(k % 5 === 0 ? { effect: "bulwark" } : {}) });
+        if (k < 6) p.equipment.equipped[slot] = `vp${k}`;
+      }
+      c.commit();
+      for (let i = 0; i < 6; i++) c.closeModal();
+    });
+    await page.waitForTimeout(400);
+    // The Power sheet: opened from Power, the next step on screen, no row wider than the screen.
+    await page.getByTestId("tab-hero").click();
+    await page.getByTestId("power-button").click();
+    await expect(page.getByTestId("power-sheet")).toBeVisible();
+    await page.waitForTimeout(600);
+    const step = await page.getByTestId("power-next-step").boundingBox();
+    expect(step, "next step").not.toBeNull();
+    expect(step!.y + step!.height).toBeLessThanOrEqual(vp.h + 0.5);
+    expect(step!.height).toBeGreaterThanOrEqual(44);
+    const wide = await page.evaluate((w) => [...document.querySelectorAll<HTMLElement>("[data-testid=power-sheet] [data-testid^=power-row-]")].filter((r) => r.getBoundingClientRect().right > w + 0.5 || r.getBoundingClientRect().height < 44).map((r) => r.dataset.testid), vp.w);
+    expect(wide, "rows past the edge or under 44px").toEqual([]);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.evaluate(() => (window as unknown as { __ASCEND__: { closeModal(): void } }).__ASCEND__.closeModal());
+    await page.waitForTimeout(400);
+    // Gear, both views, at base and tall.
+    await page.getByTestId("tab-gear").click();
+    await page.waitForTimeout(500);
+    const check = async (label: string) => {
+      const bad = await page.evaluate(() => {
+        const panel = document.querySelector("[data-testid=panel-gear]") as HTMLElement;
+        const pr = panel.getBoundingClientRect();
+        const out: string[] = [];
+        panel.querySelectorAll<HTMLElement>("button").forEach((b) => {
+          const r = b.getBoundingClientRect();
+          if (r.width === 0 || r.height === 0) return;
+          if (b.closest("[data-scroll]") && r.right <= Math.min(pr.right, window.innerWidth) + 1 && r.left >= -1) return;
+          if (r.bottom > pr.bottom + 1 || r.right > Math.min(pr.right, window.innerWidth) + 1 || r.top < pr.top - 1 || r.left < -1) out.push(b.getAttribute("data-testid") ?? (b.textContent ?? "").slice(0, 20));
+        });
+        return out;
+      });
+      expect(bad, label).toEqual([]);
+      const best = await page.getByTestId("equip-best").boundingBox();
+      expect(best && best.height >= 44, `${label}: equip best is a full target`).toBe(true);
+    };
+    for (const view of ["worn", "bag"]) {
+      await page.getByTestId(`gear-view-${view}`).click();
+      await page.waitForTimeout(300);
+      await check(`${view} base`);
+      if ((await page.getAttribute("[data-testid=panel-gear]", "data-detent")) !== "tall" && (await page.$("[data-testid=panel-grabber]"))) {
+        await page.getByTestId("panel-grabber").click();
+        await page.waitForTimeout(700);
+        await check(`${view} tall`);
+        await page.getByTestId("panel-grabber").click();
+        await page.waitForTimeout(700);
+      }
+    }
+    await page.getByTestId("bag-item").first().click();
+    await page.waitForTimeout(700);
+    await check("item detail");
+    await expect(page.getByTestId("item-power")).toBeVisible();
+  });
+}

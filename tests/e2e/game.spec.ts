@@ -140,6 +140,34 @@ test.describe("ASCEND vertical slice", () => {
     await expect(page.getByTestId("unequip-button")).toBeVisible();
   });
 
+  test("equip best wears only what raises Power, and a picked item shows its Power change", async ({ page }) => {
+    await waitForGame(page);
+    await game(page, "c => { const inv = c.profile.equipment.inventory; inv.push({ uid: 'w1', templateId: 'edge_of_quiet', slot: 'weapon', rarity: 'rare', level: 1, mainStat: 'attack', mainValue: 4, substats: [] }); inv.push({ uid: 'w2', templateId: 'edge_of_quiet', slot: 'weapon', rarity: 'rare', level: 1, mainStat: 'attack', mainValue: 30, substats: [] }); c.profile.equipment.equipped.weapon = 'w1'; c['commit'](); }");
+    const before = await game<number>(page, "c => c.world.player.stats.attack");
+    await page.getByTestId("tab-gear").click();
+    await page.getByTestId("gear-view-bag").click();
+    await page.getByTestId("bag-item").first().click();
+    await expect(page.getByTestId("item-power")).toContainText("Power if worn");
+    await page.evaluate(() => (window as unknown as { __ASCEND__: { selectItem(u: null): void } }).__ASCEND__.selectItem(null));
+    await page.getByTestId("equip-best").click();
+    expect(await game<string>(page, "c => c.profile.equipment.equipped.weapon")).toBe("w2");
+    expect(await game<number>(page, "c => c.world.player.stats.attack")).toBeGreaterThan(before);
+    await page.getByTestId("equip-best").click();
+    expect(await game<string>(page, "c => c.profile.equipment.equipped.weapon")).toBe("w2");
+  });
+
+  test("Power opens where it comes from, and its rows lead to their screens", async ({ page }) => {
+    await waitForGame(page);
+    await game(page, "c => { c.profile.tutorial.finished = true; c.profile.equipment.inventory.push({ uid: 'p1', templateId: 'edge_of_quiet', slot: 'weapon', rarity: 'rare', level: 1, mainStat: 'attack', mainValue: 9, substats: [] }); c.profile.equipment.equipped.weapon = 'p1'; c['commit'](); for (let i = 0; i < 6; i++) c.closeModal(); }");
+    await page.getByTestId("tab-hero").click();
+    await page.getByTestId("power-button").click();
+    await expect(page.getByTestId("power-sheet")).toBeVisible();
+    await expect(page.getByTestId("power-next-step")).toBeVisible();
+    await expect(page.getByTestId("power-row-gear")).toBeVisible();
+    await page.getByTestId("power-row-gear").click();
+    await expect(page.getByTestId("panel-gear")).toBeVisible();
+  });
+
   test("skills unlock with points and the summons panel shows collection", async ({ page }) => {
     await waitForGame(page);
     await game(page, "c => { c.profile.player.skillPoints = 3; c['commit'](); }");
