@@ -3,7 +3,7 @@ import { activeSynergies, synergyTotals, type SynergyDef } from "../data/synergi
 import { summonStats } from "../summons/progression";
 import type { Profile, SummonInstance } from "./profile";
 import { fieldedSummons } from "./loadout";
-import { computeModifiers } from "./stats";
+import { computeModifiers, type PlayerModifiers } from "./stats";
 
 /**
  * Army strength: one number for a line-up, in the terms the Army panel uses. Each fielded shadow's
@@ -12,8 +12,7 @@ import { computeModifiers } from "./stats";
  * been (`summonPower`: attack × speed × 5, health × 0.5, defence × 6), and summed. Synergies count
  * because they change every fielded shadow's stats.
  */
-export function armyStrength(profile: Profile, lineup: readonly SummonInstance[]): number {
-  const mods = computeModifiers(profile);
+export function armyStrength(profile: Profile, lineup: readonly SummonInstance[], mods: PlayerModifiers = computeModifiers(profile)): number {
   const syn = synergyTotals(activeSynergies(lineup.map((s) => summonDef(s.defId).role)));
   const m = { damageMult: mods.summonDamageMult + syn.attack, defenseMult: mods.summonDefenseMult + syn.defense, hpMult: mods.summonHpMult + syn.hp };
   let total = 0;
@@ -56,15 +55,17 @@ export interface BestLineup {
  * in five places is 792). On a tie the current line-up wins, so a press never shuffles for nothing.
  */
 export function bestLineup(profile: Profile): BestLineup {
-  const slots = computeModifiers(profile).deploySlots;
+  // The warrior's bonuses are the same for every line-up: work them out once, not 792 times.
+  const mods = computeModifiers(profile);
+  const slots = mods.deploySlots;
   const all = profile.summons.collection;
-  const cur = currentLineup(profile);
-  const now = armyStrength(profile, cur);
+  const cur = fieldedSummons(profile, slots);
+  const now = armyStrength(profile, cur, mods);
   const k = Math.min(slots, all.length);
   let best = cur.length === k ? cur : [];
   let bestScore = cur.length === k ? now : -1;
   for (const c of combos(all, k)) {
-    const v = armyStrength(profile, c);
+    const v = armyStrength(profile, c, mods);
     if (v > bestScore * (1 + 1e-9) + 1e-9) {
       best = c;
       bestScore = v;
@@ -90,13 +91,14 @@ export interface SwapOption {
  * that costs least (the strongest result) first.
  */
 export function swapOptions(profile: Profile, incoming: SummonInstance): SwapOption[] {
-  const cur = currentLineup(profile);
-  const now = armyStrength(profile, cur);
+  const mods = computeModifiers(profile);
+  const cur = fieldedSummons(profile, mods.deploySlots);
+  const now = armyStrength(profile, cur, mods);
   const had = activeSynergies(cur.map((s) => summonDef(s.defId).role));
   const out: SwapOption[] = [];
   for (const leaving of cur) {
     const next = cur.map((s) => (s === leaving ? incoming : s));
-    const strength = armyStrength(profile, next);
+    const strength = armyStrength(profile, next, mods);
     const after = activeSynergies(next.map((s) => summonDef(s.defId).role));
     out.push({ out: leaving, strength, change: strength - now, gained: after.filter((x) => !had.some((h) => h.id === x.id)), lost: had.filter((h) => !after.some((x) => x.id === h.id)) });
   }
