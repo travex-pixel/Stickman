@@ -8,7 +8,7 @@ import { CurrencyGlyph } from "@/components/ui/Currency";
 import { useController, useProfileRef } from "@/hooks/useGame";
 import { replayClass } from "@/hooks/useShake";
 import { SKILL_BRANCH_INFO, type SkillBranch } from "@/game/data/skills";
-import { canUnlockSkill, skillsInBranch } from "@/game/progression/skills";
+import { BRANCH_PURPOSE, branchSummary, canUnlockSkill, nextSkillPointLevel, nodeEffectText, skillsInBranch } from "@/game/progression/skills";
 import { computeModifiers } from "@/game/progression/stats";
 import { weaponPathDef } from "@/game/progression/weaponPaths";
 import { cn } from "@/lib/cn";
@@ -110,10 +110,26 @@ function SealsView({ branch, short }: { branch: SkillBranch; short: boolean }) {
   // small Learn where it does not (measured: at 360x800 the stacked form pushed Learn off the panel).
   const [detail, tight] = useCompactFit<HTMLDivElement>(`${selected.id}:${owned}`);
   const compact = short || tight;
+  const summary = branchSummary(profile, branch);
+  const short1 = profile.player.skillPoints < selected.cost && !owned;
   const learnLabel = check.ok ? `Learn · ${selected.cost} ${selected.cost === 1 ? "point" : "points"}` : check.reason === "requires" ? "Learn the seal before" : `Needs ${selected.cost} ${selected.cost === 1 ? "point" : "points"}`;
   return (
     <>
-      <div className={cn("relative flex items-center justify-between shrink-0 mb-4", short ? "mt-2" : "mt-4")} style={{ height: hit }}>
+      {/* What the branch is for, and what it gives now, in plain numbers. */}
+      <div className="mt-1 shrink-0 min-w-0" data-testid="branch-summary">
+        {!short && <p className="t-caption text-t2 truncate">{BRANCH_PURPOSE[branch]}</p>}
+        <p className="t-caption truncate">
+          {summary ? (
+            <>
+              <span className="text-t2">Now </span>
+              <span className="text-jade">{summary}</span>
+            </>
+          ) : (
+            <span className="text-t3">{short ? BRANCH_PURPOSE[branch] : "Nothing learned here yet"}</span>
+          )}
+        </p>
+      </div>
+      <div className={cn("relative flex items-center justify-between shrink-0 mb-4", short ? "mt-1.5" : "mt-2.5")} style={{ height: hit }}>
         {nodes.map((n, i) => {
           const has = learned(n.id);
           const isNext = n.id === nextOpen?.id;
@@ -156,10 +172,15 @@ function SealsView({ branch, short }: { branch: SkillBranch; short: boolean }) {
           );
         })}
       </div>
-      <div ref={detail} className={cn("flex flex-1 min-h-0", compact ? "mt-3 items-end gap-3" : "mt-5 flex-col")} data-testid="skill-detail" data-compact={compact || undefined}>
+      <div ref={detail} className={cn("flex flex-1 min-h-0", compact ? "mt-2 items-end gap-3" : "mt-3 flex-col")} data-testid="skill-detail" data-compact={compact || undefined}>
         <div className="flex flex-col min-w-0 flex-1">
-          <span className="t-title text-t1 truncate">{selected.name}</span>
-          <p className={cn("t-body text-t2 mt-1", compact ? "line-clamp-1" : "line-clamp-2")}>{selected.description}</p>
+          <span className="t-title text-t1 truncate">
+            {selected.name} <span className="t-label text-gold">{nodeEffectText(selected)}</span>
+          </span>
+          <p className={cn("t-body text-t2 mt-1", compact ? "line-clamp-1" : "line-clamp-2")}>
+            {selected.description}
+            {short1 && <span className="text-t3"> Points come every second level; the next at level {nextSkillPointLevel(profile.player.level)}.</span>}
+          </p>
         </div>
         <div className={cn("flex items-center gap-2 shrink-0", !compact && "mt-auto pt-3")}>
           {owned ? (
@@ -169,19 +190,21 @@ function SealsView({ branch, short }: { branch: SkillBranch; short: boolean }) {
             </span>
           ) : (
             <Button variant="primary" size={compact ? "sm" : "md"} className={compact ? "" : "flex-1 min-w-0"} disabled={!check.ok} onClick={() => c.unlockSkill(selected.id)} data-testid="skill-unlock">
-              {compact && check.ok ? `Learn · ${selected.cost}` : learnLabel}
+              {compact && check.ok ? `Learn · ${selected.cost}` : compact && check.reason === "points" ? `Needs ${selected.cost}` : learnLabel}
             </Button>
           )}
           {mods.weaponPathUnlocked && (
             <Button
               variant="quiet"
               size={compact ? "sm" : "md"}
-              className="shrink-0 px-4"
+              className={cn("shrink-0", compact ? "px-3" : "px-4")}
               onClick={() => !path && c.openWeaponPath()}
               data-testid="weapon-path-button"
+              aria-label={path ? `Weapon path: ${path.name}` : "Choose a weapon path"}
               leading={!path ? <span className="h-1.5 w-1.5 rounded-full bg-gold" aria-hidden="true" /> : undefined}
             >
-              {path ? path.name : "Weapon path"}
+              {/* Compact: the path is a glyph, so the selected seal's name keeps its room. */}
+              {compact ? <Icon name="sword" size={16} /> : path ? path.name : "Weapon path"}
             </Button>
           )}
         </div>
