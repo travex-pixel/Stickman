@@ -59,9 +59,10 @@ export default function SummonsPanel() {
             {deployedCount} of {slots}
           </span>
         </span>
-        <span className="text-t2 truncate min-w-0" title="Oath Codex: permanent bonuses from every shadow you have bound">
-          {codexSummary(profile)}
-        </span>
+        {/* The Codex in full, in words, on a tap: the line itself has room for one bonus. */}
+        <button className="press -my-3 flex h-11 min-w-0 items-center rounded-[10px] px-1 text-t2" onClick={() => c.toast(codexExplain(profile), "info")} data-testid="codex-summary" aria-label={codexExplain(profile)}>
+          <span className="truncate">{codexSummary(profile)}</span>
+        </button>
         <span className="text-t3 tnum whitespace-nowrap hidden min-[380px]:inline">
           {owned} of {collectibleSummons().length}
         </span>
@@ -258,6 +259,16 @@ function EmptyArmy() {
       </Button>
     </div>
   );
+}
+
+/** Every Codex bonus, and where it comes from. */
+function codexExplain(profile: Profile): string {
+  const b = codexBonus(profile);
+  const parts = (Object.entries(b) as [keyof typeof b, number][])
+    .filter(([, v]) => v > 0)
+    .sort((x, y) => y[1] - x[1])
+    .map(([k, v]) => `+${Math.round(v * 100)}% ${STAT_LABEL[k].replace("Critical ", "Crit ")}`);
+  return parts.length ? `Codex: ${parts.join(", ")}. Every kind of shadow you bind adds to it for good, and stars raise it.` : "Codex: every kind of shadow you bind adds to your stats for good.";
 }
 
 function codexSummary(profile: Profile): string {
