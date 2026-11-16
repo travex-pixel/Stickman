@@ -50,7 +50,11 @@ or error tone instead of silence when a press cannot succeed.
 | Item detail (`item-detail`) | Read an item | An item picked | – | Tap an item | The panel rises | Its Power if worn (or what it gives worn), its stats against the worn one, its effect, its set and progress, what it lends in the bag (`item-power`, `item-lend`) | – |
 | Forge | Fuse three of a rarity | Three unequipped of the rarity, not legendary | Not shown | Fuse | Bright reveal for epic and legendary, toast | New item of the next rarity in this slot; half the levels kept; the three items' strength is folded into it, so the bag never lends less | Error tone |
 | Salvage | Turn an item into gold | Item selected | – | Salvage | Gold sound | Gold | – |
-| Deploy / Recall | Field a shadow | Free slot | Deploy disabled when full | Toggle | Summon appears or leaves | Army | Error tone |
+| Deploy / Recall | Field a shadow | Free slot | With every place full the button becomes Swap in | Toggle | Summon appears or leaves | Army | Error tone |
+| Swap in (`swap-button`) | Bring a benched shadow into a full army in one step | A benched shadow selected, every place full | – | Swap | Summon sound | It takes the place of the shadow named under the button: by default the swap that costs least; the line above says the army's change in percent and the synergies gained (+) and lost (−) | – |
+| Change (`swap-change`) | Pick whom the swap replaces | As Swap in | – | Opens a row of the fielded shadows (`swap-chooser`), each with what the swap would do to the army | – | The pick becomes the swap | – |
+| Deploy best (`deploy-best`) | Field the strongest army | Shadows to field | Grey, no gain, when the army is already the strongest | Tap | Gold with the gain while it would help; toast with the gain and who came in | Every line-up of the collection is scored (army strength, synergies included); the best is fielded | Toast: already the strongest |
+| Army line (`army-summary`) | Say how the army stands | Shadows bound | – | Tap to open or close | – | Places filled, army strength, synergies; open: each synergy and the Codex (`army-detail`) | – |
 | Bond (hold) | Level a shadow's bond | Affordable in essence | Cost in red | Hold | Ticks | Shadow stats | Stops |
 | Star | Raise stars | Enough shards (and cores) | Shard progress | Star up | Flash, toast with the Codex gain | Stars and Codex | Toast with what is missing |
 | Evolve | Evolve a shadow | Requirements met | Requirement text | Evolve | Cinematic sound, toast | New form | Error tone |
@@ -58,7 +62,8 @@ or error tone instead of silence when a press cannot succeed.
 | Branch line (`branch-summary`) | Say what a branch is for and what it gives now | Power, Soul, Command | "Nothing learned here yet" | – | – | – | – |
 | Codex line (Army, `codex-summary`) | Explain the Codex | Shadows bound | – | Tap | Toast with every Codex bonus | – | – |
 | Arts rank / form switch | Rank an ability, choose a technique | Gold and level | Reason on the button | Rank or switch | Toast, medal change | Ability power and cooldown, slot form | – |
-| Perk chip | Choose a pending perk | Perks pending | Not shown | Opens the choice | – | Perk | – |
+| Perk chip | Choose a pending perk | Perks pending (always choosable: past the last ordinary stack the repeatable perks are offered) | Not shown | Opens the choice | – | Perk | – |
+| Choose all (`perk-auto`) | Spend every banked pick | Three or more picks waiting | Not shown | Tap | Toast with what it bought ("Endless Edge ×18, Deep Vigor ×18, Legion's Oath ×17") | Every pick spent, balanced across the three tones | – |
 | Quest pill | Claim or go to the objective | Always | – | Complete: claim. Incomplete: opens the panel the quest needs | Claim sound | Reward | – |
 | Ascend badge (Hero panel) | Open the Ascension sheet | From stage 20, or once ascended | Not shown before stage 20 | Opens the sheet | Shows the Aether on offer | – | – |
 | Hold to ascend (`ascend-confirm`) | Ascend: restart the climb for Aether | Stage 20 reached, farming, warrior standing | Disabled before stage 20 | Hold about a second (a tap does nothing) | Fill bar while held; gold flash and toast on ascending | Campaign, gold and stat levels reset; Aether added; saved at once | Mid-fight or while down: toast, nothing changes |

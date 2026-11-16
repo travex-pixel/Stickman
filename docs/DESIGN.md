@@ -49,7 +49,8 @@ Shadows are earned in combat, which ties the collection directly to the fighting
    Ascendant Fury holds him until he returns, exactly as a cast by hand (see "AUTO casts" below).
 2. Enemies marked with pale light leave a shadow. BIND shows its success chance before the tap.
 3. Spend gold on stats (hold to upgrade), essence on shadow bonds, Rift Cores on evolution.
-4. Level ups offer a choice of three perks. Clearing stages unlocks modes, ranks and regions.
+4. Level ups offer a choice of three perks, always (past the last ordinary stack, repeatable
+   perks fill the offer). Clearing stages unlocks modes, ranks and regions.
 5. Rank Trials turn levels into breakthroughs (E to S), each raising stats, BIND chance and,
    at C and S, the size of the army.
 
@@ -218,6 +219,58 @@ condition (`SEEDS=1,...,8 MAXMIN=200 STOPGATE=48 WALL=45`, `ASCEND_SYNERGY=0` vs
 
 Median deepest stage in the window is 44 either way (on: up to 48). A reward for building a good
 army that is felt mid-game without reshaping the curve.
+
+### Perks past the last stack
+
+The fourteen ordinary perks hold 55 stacks and every level from 2 gives one pick, so from level 57
+the offer was empty: picks banked for ever, the chip kept asking and the sheet opened with no
+cards. Three repeatable perks now fill any offer short of three, one per tone: Endless Edge
+(+5% attack), Deep Vigor (+5% max health) and Legion's Oath (army +10% damage), with no stack
+limit. Choose all spends every banked pick, taking whichever tone it has taken least.
+
+Sized on the simulator's saved profiles, the banked picks spent as Choose all would:
+
+| Gate (levels at reach) | Before (win %, boss health left) | +3% a stack | +5% a stack (chosen) |
+| --- | --- | --- | --- |
+| 36 (33 to 36) | 75.0, 0.029 | 75.0, 0.029 | 75.0, 0.029 |
+| 39 (39 to 42) | 14.2, 0.243 | 14.2, 0.243 | 14.2, 0.243 |
+| 42 (45 to 58) | 21.2, 0.219 | 21.9, 0.218 | 23.3, 0.218 |
+| 45 (59 to 67) | 8.3, 0.307 | 8.3, 0.293 | 8.3, 0.284 |
+| 48 (63 to 101) | 0, 0.428 | 0, 0.373 | 7.3, 0.335 |
+| 51 (100 to 122) | 0, 0.420 | 0, 0.314 | 2.8, 0.235 |
+
+The simulator's player runs dry in the late 50s of level, past gate 42, so the gates to 42 hardly
+move; deeper, a stuck warrior gains ground. 53 picks at once (a long-stalled save) is about +30%
+Power at 5% (+18% at 3%).
+
+In the economy simulator (four hours of one climb, no ascension, three sets of 24 seeds paired by
+seed; both sides press Deploy best) every gate to 42 is reached at the same minute as before, and
+the deepest stage rises from a median of 50 to 56 to 59 at 5% (every seed deeper, +7 stages on
+average; +5 at 3%), with the warrior at the level cap of 150 by the end. That is the point of the
+fix (a stalled warrior keeps gaining), and it is where a smaller step would be felt if the late
+climb now runs too fast.
+
+### Deploy best
+
+Army strength scores a line-up: each fielded shadow's stats as it fights (level, bond, stars, the
+warrior's army bonuses and the line-up's synergies), scored as a shadow's power always has been
+(attack × speed × 5 + health × 0.5 + defence × 6), summed. Deploy best tries every line-up of the
+collection (792 for twelve shadows in five places) and fields the strongest; Swap in brings a
+benched shadow into a full army in one step, the cheapest swap first.
+
+Checked in boss fights on saved profiles (12 a gate, 4 fights each line-up): the army's own
+damage per second with Deploy best's line-up against the simulator's old rule (strongest shadows,
+then up to two synergy swaps) and three random line-ups:
+
+| Gate | Deploy best | Old rule | Random |
+| --- | --- | --- | --- |
+| 36 | 360 | 319 | 148 |
+| 39 | 346 | 294 | 203 |
+| 42 | 536 | 462 | 360 |
+
+The boss forecasts barely depend on the line-up (win rates within noise of each other, 192
+fights a gate), since the warrior deals most of the damage. The simulator's player now presses
+Deploy best (both sides of the comparison below).
 
 ### AUTO casts
 
