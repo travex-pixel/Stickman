@@ -165,3 +165,18 @@ export function apexDoorText(p: Profile, id: ApexSkillId): string | null {
       return `Needs the other three at 10/10: ${door.needs.map((n) => `${APEX_NAME[n.id].split(" ")[0]} ${n.have}`).join(", ")}`;
   }
 }
+
+/**
+ * A skill's row for a screen reader: its ranks, and what buying the next needs. A skill whose door
+ * has shut again (an ascension reset the stat it needs) still fights with the ranks bought, so the
+ * label says both rather than "locked".
+ */
+export function apexAriaLabel(p: Profile, id: ApexSkillId): string {
+  const r = apexRanks(p)[id];
+  const head = `${APEX_NAME[id]}, ${r} of ${APEX_MAX[id]}`;
+  if (r >= APEX_MAX[id]) return `${head}, mastered`;
+  const door = apexDoorText(p, id);
+  if (door) return r > 0 ? `${head}, ${r === 1 ? "1 rank" : `${r} ranks`} active; the next rank ${door.replace(/^Needs /, "needs ")}` : `${head}, locked: ${door}`;
+  const check = canBuyApex(p, id);
+  return check.ok ? `${head}, ${check.cost} points` : head;
+}

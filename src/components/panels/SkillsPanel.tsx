@@ -8,7 +8,7 @@ import { CurrencyGlyph } from "@/components/ui/Currency";
 import { useController, useProfileRef, useUi } from "@/hooks/useGame";
 import { HoldButton } from "@/components/ui/HoldButton";
 import { useShake } from "@/hooks/useShake";
-import { APEX_NAME, anyApexReady, apexDoor, apexDoorText, apexEffectText, apexNextText, apexOpen, apexRanks, apexVisible, canBuyApex, nextApexSkill, statMaxed, APEX_OPEN_STAGE } from "@/game/progression/apex";
+import { APEX_NAME, anyApexReady, apexAriaLabel, apexDoor, apexDoorText, apexEffectText, apexNextText, apexOpen, apexRanks, apexVisible, canBuyApex, nextApexSkill, statMaxed, APEX_OPEN_STAGE } from "@/game/progression/apex";
 import { APEX_MAX, APEX_SKILLS, DOUBLE_CHANCE_PER_RANK, ECHO_POWER, PRISM_CHANCE_PER_RANK, PRISM_MULT, STORM_EVERY, STORM_FORKS, TRIPLE_CHANCE_PER_RANK, type ApexSkillId } from "@/game/data/apex";
 import { SKILLS } from "@/game/data/skills";
 import type { IconName } from "@/components/ui/Icon";
@@ -88,12 +88,18 @@ function Header({ view, setView }: { view: View; setView: (v: View) => void }) {
           {fmt(profile.player.gold)}
         </span>
       ) : (
-        <span className={cn("t-label shrink-0 whitespace-nowrap", spendable ? "text-gold" : points > 0 ? "text-t2" : "text-t3")} aria-label={`${points} skill ${points === 1 ? "point" : "points"}`}>
-          <span className="t-num-m" data-testid="skill-points">
+        <span
+          className={cn("t-label shrink-0 whitespace-nowrap", spendable ? "text-gold" : points > 0 ? "text-t2" : "text-t3", apexShown && "max-[359px]:flex max-[359px]:flex-col max-[359px]:items-end")}
+          aria-label={`${points} skill ${points === 1 ? "point" : "points"}`}
+        >
+          <span className={cn("t-num-m", apexShown && "max-[359px]:leading-[18px]")} data-testid="skill-points">
             {points}
           </span>
           <span className="hidden min-[360px]:inline"> {points === 1 ? "point" : "points"}</span>
-          <span className={cn("min-[360px]:hidden", apexShown && "hidden")}> pt</span>
+          {/* Under 360px five views leave no room beside the number: the unit sits under it, small. */}
+          <span className={cn("min-[360px]:hidden", apexShown && "text-[10px] leading-[12px]")} data-testid="skill-points-unit">
+            {apexShown ? (points === 1 ? "pt" : "pts") : " pt"}
+          </span>
         </span>
       )}
     </div>
@@ -509,7 +515,7 @@ function ApexView({ short }: { short: boolean }) {
                 data-testid={`apex-skill-${id}`}
                 data-rank={r}
                 aria-pressed={isSel}
-                aria-label={`${APEX_NAME[id]}, ${r} of ${APEX_MAX[id]}${done ? ", mastered" : locked ? ", locked" : ch.ok ? `, ${ch.cost} points` : ""}`}
+                aria-label={apexAriaLabel(profile, id)}
               >
                 {isSel && <span className="absolute left-0 inset-y-2 w-[2px] rounded-full bg-gold" aria-hidden="true" />}
                 <Icon name={locked ? "lock" : APEX_ICON[id]} size={17} className={cn("shrink-0", locked ? "text-t3" : r > 0 ? "text-gold" : "text-t1")} />
@@ -540,7 +546,7 @@ function ApexView({ short }: { short: boolean }) {
                   data-testid={`apex-skill-${id}`}
                   data-rank={r}
                   aria-pressed={isSel}
-                  aria-label={`${APEX_NAME[id]}, ${r} of ${APEX_MAX[id]}${locked ? ", locked" : ""}`}
+                  aria-label={apexAriaLabel(profile, id)}
                 >
                   <span className={cn("absolute inset-0 rounded-full", isSel ? "bg-bg-3" : "bg-bg-2", r >= APEX_MAX[id] && "shadow-[inset_0_0_0_1.5px_var(--color-gold)]")} />
                   <Icon name={locked ? "lock" : APEX_ICON[id]} size={locked ? 14 : 18} className={cn("relative", locked ? "text-t3" : r > 0 ? "text-gold" : "text-t1")} />

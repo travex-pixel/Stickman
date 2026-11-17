@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createDefaultProfile, type Profile } from "@/game/progression/profile";
-import { APEX_COSTS, anyApexReady, apexDoor, apexDoorText, apexOpen, apexPointsLeft, apexVisible, buyApexRank, canBuyApex, nextApexSkill } from "@/game/progression/apex";
+import { APEX_COSTS, anyApexReady, apexAriaLabel, apexDoor, apexDoorText, apexOpen, apexPointsLeft, apexVisible, buyApexRank, canBuyApex, nextApexSkill } from "@/game/progression/apex";
 import { APEX_MAX, apexDamageMult } from "@/game/data/apex";
 import { combatPower, computePlayerStats, profilePower } from "@/game/progression/stats";
 import { nextStep, powerBreakdown } from "@/game/progression/power";
@@ -62,6 +62,19 @@ describe("Apex opens at the stage-39 boss, and its doors", () => {
     expect(apexDoor(p, "triple").kind).toBe("open");
     p.player.apex.triple = 4;
     expect(apexDoorText(p, "crown")).toBe("Needs the other three at 10/10: Triple 4, Prismatic 0");
+  });
+  it("a skill whose door shut again after an ascension still says its ranks are active", () => {
+    const p = apexReady();
+    p.player.apex = { double: 6, triple: 0, prism: 4, crown: 0 };
+    expect(apexAriaLabel(p, "double")).toBe(`Double Strike, 6 of 10, ${APEX_COSTS.double[6]} points`);
+    // An ascension: stat levels back to 1, Apex still open from the deepest stage ever.
+    p.ascension.bestEver = 55;
+    p.progress.bestStage = 0;
+    for (const k of Object.keys(p.player.statLevels) as (keyof typeof p.player.statLevels)[]) p.player.statLevels[k] = 1;
+    const label = apexAriaLabel(p, "double");
+    expect(label).toMatch(/^Double Strike, 6 of 10, 6 ranks active; the next rank needs Attack speed at its ceiling/);
+    expect(label).not.toMatch(/locked/);
+    expect(apexAriaLabel(p, "triple")).toMatch(/^Triple Strike, 0 of 10, locked: Needs Double Strike 10\/10/);
   });
   it("buying spends the points, one rank at a time, to the last rank", () => {
     const p = apexReady(1000);

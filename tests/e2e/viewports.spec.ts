@@ -489,6 +489,9 @@ for (const vp of VIEWPORTS) {
       // The top bar holds a four-figure level.
       const lv = await page.getByTestId("top-bar").evaluate((el) => ({ sw: el.scrollWidth, cw: el.clientWidth }));
       expect(lv.sw, `${state}: top bar overflows`).toBeLessThanOrEqual(lv.cw + 1);
+      // The points keep their unit beside five views (under 360px on a small line beneath the count).
+      if (vp.w < 360) await expect(page.getByTestId("skill-points-unit")).toBeVisible();
+      else await expect(page.getByTestId("skill-points").locator("..")).toContainText("point");
       if (state === "locked") await expect(page.getByTestId("apex-next")).toContainText("stage-39 boss");
       if (state === "maxed") await expect(page.getByTestId("apex-status")).toContainText("mastered");
       if (state === "partway") {
