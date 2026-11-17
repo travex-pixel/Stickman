@@ -98,12 +98,9 @@ export class SoundCues {
     const furyBatch = events.some((e) => e.type === "cast" && e.id === playerId && e.ability === "ascendant_fury" && e.strike !== undefined);
     // The swing a basic hit belongs to: the third of the combo lands heavy.
     let swingOfBatch = -1;
+    // Stormcrown's bolt carries its own crack: the hits it lands after it in the batch stay quiet.
+    let afterBolt = false;
     for (const e of events) {
-      // Stormcrown's bolt: the crack and, a beat later, the thunder (one sample).
-      if ((e as { type: string }).type === "storm_bolt") {
-        out.push({ name: "storm_bolt", category: "storm", volume: 0.72, rate: this.jitter(0.015), minInterval: 300, voice: "storm" });
-        continue;
-      }
       switch (e.type) {
         case "attack_swing":
           if (e.kind === "player" && e.id === playerId) {
@@ -118,8 +115,8 @@ export class SoundCues {
           if (e.faction === "enemy" && e.sourceId !== playerId) {
             out.push({ name: "army_hit", category: "army", volume: e.crit ? 0.2 : 0.15, rate: this.jitter(0.03), minInterval: 130 });
           } else if (e.faction === "enemy") {
-            if (furyBatch) break;
-            const apex = e as { echo?: 1 | 2; prismatic?: boolean };
+            if (furyBatch || afterBolt) break;
+            const apex = e;
             if (apex.echo) {
               // An echo blow ticks (the third crackles); over budget it is simply not heard.
               const tick: Cue = { name: apex.echo === 2 ? "echo_tick_3" : "echo_tick", category: "echo", volume: apex.echo === 2 ? 0.26 : 0.22, rate: this.jitter(0.02), minInterval: 70, voice: "echo" };
@@ -131,7 +128,7 @@ export class SoundCues {
             // A crit is the hit with a ring on top; when the ring is over budget the hit still lands.
             const crit: Cue = e.crit ? { name: "crit", category: "crit", volume: 0.62, rate: this.jitter(0.02), minInterval: 220, fallback: hit } : hit;
             // A prismatic blow is the glass chord over the hit; over budget, the crit (then the hit).
-            out.push(apex.prismatic ? { name: "prism", category: "prism", volume: 0.6, rate: this.jitter(0.01), minInterval: 160, fallback: crit } : crit);
+            out.push(apex.prismatic ? { name: "prism", category: "prism", volume: 0.55, rate: this.jitter(0.01), minInterval: 160, fallback: crit } : crit);
           } else out.push({ name: "hit_heavy", category: "event", volume: 0.5, rate: 0.85, minInterval: 140, voice: "hurt" });
           break;
         case "death":
@@ -195,6 +192,11 @@ export class SoundCues {
           break;
         case "ultimate_ready":
           out.push({ name: "quest", category: "event", volume: 0.45, rate: 0.8 });
+          break;
+        case "storm_bolt":
+          // Stormcrown's bolt: the crack and, a beat later, the thunder (one sample).
+          if (e.id === playerId) afterBolt = true;
+          if (e.id === playerId) out.push({ name: "storm_bolt", category: "storm", volume: 0.6, rate: this.jitter(0.015), minInterval: 300, voice: "storm" });
           break;
         case "summon_ability":
           out.push({ name: "command", category: "event", volume: 0.3, rate: 0.6, minInterval: 300 });

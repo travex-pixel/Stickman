@@ -9,9 +9,9 @@ import { spectrum } from "./spectrum";
 const CHARS = "0123456789.KMBT×";
 /** Atlas size of a glyph, and its dark edge (both in atlas px). */
 const ATLAS = 64;
-const EDGE = 7;
+const EDGE = 5.5;
 /** Screen size of the figure (a crit is 44px), and of its echo mark. */
-export const PRISM_SIZE = 54;
+export const PRISM_SIZE = 46;
 const MARK_SCALE = 0.5;
 const MAX_GLYPHS = 10;
 const LIFE = 1.15;
@@ -156,7 +156,7 @@ export class PrismNumbers {
    * side away from the attacker. `mark` ("×2", "×3" or "") rides after the number. Returns a handle
    * for `amend` (the swing's echoes add to it).
    */
-  show(x: number, y: number, halfW: number, dir: number, value: string, mark: string): number {
+  show(x: number, y: number, halfW: number, dir: number, value: string, mark: string, stack?: (px: number, py: number, half: number, line: number) => number): number {
     let f: Fig | null = null;
     let idx = 0;
     for (let i = 0; i < this.pool.length; i++) {
@@ -182,8 +182,10 @@ export class PrismNumbers {
     this.layout(f, value, mark);
     const d = dir >= 0 ? 1 : -1;
     const s = (PRISM_SIZE / ATLAS) / this.zoom;
-    const px = x + d * (halfW + (f.width * s) / 2 + 6 / this.zoom);
-    f.holder.position.set(px, y - 14 / this.zoom);
+    const half = (f.width * s) / 2;
+    const px = x + d * (halfW + half + 6 / this.zoom);
+    const py = y - 14 / this.zoom;
+    f.holder.position.set(px, stack ? stack(px, py, half, ATLAS * s * 0.8) : py);
     f.vx = d * 22;
     f.vy = -40;
     f.holder.visible = true;
@@ -261,7 +263,7 @@ export class PrismNumbers {
     const s = ((PRISM_SIZE / ATLAS) * pop * bump) / this.zoom;
     f.holder.scale.set(s);
     if (this.maxX > this.minX) {
-      const half = (f.width * s) / 2 + 4;
+      const half = (f.width * s) / 2 + 10 / this.zoom;
       f.holder.x = Math.min(this.maxX - half, Math.max(this.minX + half, f.holder.x));
     }
     const k = 1 - f.life / LIFE;
@@ -269,7 +271,7 @@ export class PrismNumbers {
     // The colour runs across the glyphs and drifts with time; a band of light sweeps across once.
     const drift = this.reduced ? 0.12 : 0.55;
     const sweep = this.reduced ? -9 : (f.age - 0.06) / 0.35;
-    const white = f.age < WHITE_TIME || f.bump > 0.05;
+    const white = f.age < WHITE_TIME;
     for (let i = 0; i < f.n; i++) {
       const g = f.glyphs[i]!;
       if (white) {
@@ -282,7 +284,7 @@ export class PrismNumbers {
       g.tint = shine > 0 ? mix(c, 0xffffff, shine * 0.8) : c;
     }
     f.bloom.tint = spectrum(f.hue + f.age * drift + 0.35);
-    f.bloom.alpha = 0.42 * Math.max(0, 1 - f.age / 0.3);
+    f.bloom.alpha = 0.22 * Math.max(0, 1 - f.age / 0.3);
   }
 
   clear(): void {

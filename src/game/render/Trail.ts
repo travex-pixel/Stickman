@@ -222,6 +222,8 @@ export class Trails {
     r.prism = on;
     r.mesh.texture = on ? prismRibbon() : texture();
     r.mesh.tint = on ? 0xffffff : r.color;
+    // Its colours must hold on pale ground too: drawn over, not added as light.
+    r.mesh.blendMode = on ? "normal" : "add";
     if (on) {
       r.alpha = Math.max(r.alpha, 1);
       r.linger = this.linger * 1.6;

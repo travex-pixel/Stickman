@@ -31,7 +31,7 @@ import { BossDeath, BossEntrance, PHASE, type BossHost } from "./cinematics/boss
 import { FuryGhosts } from "./FuryGhosts";
 import { AriseCinematic, FailedBind, REDUCED_FADE, REVEAL_LENGTH, type AriseHost, type RevealStaging } from "./cinematics/arise";
 import { FlashBudget } from "./flashBudget";
-import { ApexDirector, NO_APEX, type ApexHitFields, type ApexHost, type ApexPlayerView, type ApexRanks, type ApexSkill, type EchoStrikeEvent, type StormBoltEvent } from "./apex/ApexDirector";
+import { ApexDirector, type ApexHitFields, type ApexHost, type ApexPlayerView, type ApexSkill } from "./apex/ApexDirector";
 
 interface EntityView extends ImpactState {
   id: number;
@@ -664,7 +664,7 @@ export class BattleRenderer implements ImpactHost {
     this.updateFury(world, entDt, dt);
     if (perf) this.sec(0);
     this.syncEntities(world, alpha, entDt, fxDt, paused ? 0 : dt);
-    this.apex.setRanks(apexRanksOf(world));
+    this.apex.setRanks(world.loadout.apex);
     this.apex.updateForm(paused ? 0 : dt);
     if (perf) this.sec(1);
     if (!paused) this.frameCamera(world, alpha);
@@ -1791,17 +1791,8 @@ export class BattleRenderer implements ImpactHost {
     const world = this.world;
     if (!world) return;
     const u = this.unit();
+    let stormBatch = false;
     for (const e of events) {
-      // The Apex events (echo blows, the Stormcrown bolt).
-      const kind = (e as { type: string }).type;
-      if (kind === "echo_strike") {
-        this.apex.onEcho(e as unknown as EchoStrikeEvent);
-        continue;
-      }
-      if (kind === "storm_bolt") {
-        this.apex.onStorm(e as unknown as StormBoltEvent);
-        continue;
-      }
       switch (e.type) {
         case "attack_swing": {
           this.impact.onSwing(e.id, e.cut === true);
@@ -1837,12 +1828,14 @@ export class BattleRenderer implements ImpactHost {
             const dir = src ? (target.pos.x >= src.pos.x ? 1 : -1) : target.facing === 1 ? -1 : 1;
             const tv = this.views.get(target.id);
             const halfW = (tv ? tv.rig.top * 0.2 : 16) * this.figureScale(target.pos.y);
-            const ax = e as ApexHitFields;
+            const ax: ApexHitFields = e;
             if (e.sourceId === world.player.id && e.faction === "enemy") {
               // The warrior's blows: a swing's echoes fold into its one figure (apex/ApexDirector).
-              if (ax.prismatic) this.apex.onPrism(this.pt.x, this.pt.y, dir, (tv ? tv.rig.top : CHEST / 0.62) * this.figureScale(target.pos.y), !!ax.echo);
+              if (ax.prismatic && !stormBatch) this.apex.onPrism(this.pt.x, this.pt.y, dir, (tv ? tv.rig.top : CHEST / 0.62) * this.figureScale(target.pos.y), !!ax.echo);
               if (!ax.echo) this.apex.noteMainBlow(target.id);
-              this.apex.figure(target.id, e.amount, e.crit, ax, this.pt.x, this.pt.y - 6, halfW, dir, col, e.crit ? "crit" : "normal");
+              // Stormcrown's forks: their figures are the bolt's light, not each a rainbow (the lead's is).
+              const fork = stormBatch && ax.prismatic && !e.heavy;
+              this.apex.figure(target.id, e.amount, e.crit, fork ? NO_PRISM : ax, this.pt.x, this.pt.y - 6, halfW, dir, fork ? 0xd9d0ff : col, e.crit ? "crit" : "normal");
             } else this.numbers.hit(this.pt.x, this.pt.y - 6, halfW, dir, fmtNum(e.amount), col, taken ? "taken" : e.crit ? "crit" : "normal", !taken);
           }
           break;
@@ -2018,6 +2011,14 @@ export class BattleRenderer implements ImpactHost {
           this.camera.punch(e.boss ? 0.05 : 0.02);
           break;
         }
+        case "echo_strike":
+          this.apex.onEcho(e);
+          break;
+        case "storm_bolt":
+          // Its hits follow in this batch: their figures turn prismatic without a burst each.
+          stormBatch = true;
+          this.apex.onStorm(e);
+          break;
         case "kill_streak":
           // The chain is counted in the interface, at the left edge: no second copy over the fight.
           break;
@@ -2831,10 +2832,7 @@ export class BattleRenderer implements ImpactHost {
   };
 }
 
-/** The Apex ranks the world was built with (none for a profile without Apex). */
-function apexRanksOf(world: World): Readonly<ApexRanks> {
-  return (world.loadout as { apex?: ApexRanks }).apex ?? NO_APEX;
-}
+const NO_PRISM: ApexHitFields = {};
 
 function pathColor(path: string): number {
   return path === "stormblade" ? 0xa8c4e6 : path === "infernal" ? 0xe0954f : path === "voidfang" ? 0xd95a66 : 0xf0eadc;

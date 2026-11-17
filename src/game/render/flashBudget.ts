@@ -19,7 +19,7 @@ export const FLASH_ALPHA_MAX = 0.45;
 export const FLASH_ALPHA_MIN = 0.03;
 /** The grey a saturated red is pulled toward, and how far. */
 const RED_SAFE = 0xd8cfc4;
-const RED_PULL = 0.75;
+const RED_PULL = 0.9;
 
 const LEDGER = 16;
 

@@ -6,19 +6,25 @@
 export const SPECTRUM: readonly number[] = [0xff9bb4, 0xffcf7e, 0xd6f29a, 0x8ff0dc, 0x8fc4ff, 0xd3a4ff];
 
 /** Storm blue (Double Strike) and white violet (Triple Strike): the echoes' two colours. */
-export const STORM_BLUE = 0x8fc0ff;
-export const STORM_VIOLET = 0xd8ccff;
+export const STORM_BLUE = 0x6fa8ff;
+export const STORM_VIOLET = 0xb9a2ff;
 /** The Stormcrown bolt's light: a white with violet in it. */
 export const CROWN_LIGHT = 0xeee8ff;
 
+/**
+ * The same six hues, deeper: for thin lines laid on the ivory blade and the pale grounds (the
+ * warrior's form), where the light tones would vanish.
+ */
+export const SPECTRUM_DEEP: readonly number[] = [0xf2557f, 0xf7a23c, 0x9fd84a, 0x2fcfb8, 0x4f93ff, 0xa66cff];
+
 /** The colour `h` of the way round the spectrum (wraps; any real number). */
-export function spectrum(h: number): number {
-  const n = SPECTRUM.length;
+export function spectrum(h: number, ramp: readonly number[] = SPECTRUM): number {
+  const n = ramp.length;
   let f = (h - Math.floor(h)) * n;
   const i = Math.floor(f);
   f -= i;
-  const a = SPECTRUM[i % n]!;
-  const b = SPECTRUM[(i + 1) % n]!;
+  const a = ramp[i % n]!;
+  const b = ramp[(i + 1) % n]!;
   const ar = (a >> 16) & 255, ag = (a >> 8) & 255, ab = a & 255;
   const br = (b >> 16) & 255, bg = (b >> 8) & 255, bb = b & 255;
   return (Math.round(ar + (br - ar) * f) << 16) | (Math.round(ag + (bg - ag) * f) << 8) | Math.round(ab + (bb - ab) * f);

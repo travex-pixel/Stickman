@@ -1,5 +1,7 @@
 import { Container, Graphics } from "pixi.js";
 import type { ActionState } from "../../entities/types";
+import type { GameEvent } from "../../engine/events";
+import type { ApexRanks, ApexSkillId } from "../../data/apex";
 import type { WeaponPath } from "../../data/ids";
 import type { Camera } from "../Camera";
 import type { EmitOptions, ParticleSystem } from "../Particles";
@@ -11,16 +13,10 @@ import { damp, easeOutCubic } from "../anim/ease";
 import { hardCircle, shard, softCircle, spark } from "../textures";
 import { BoltPool } from "./lightning";
 import { PrismNumbers } from "./PrismNumbers";
-import { CROWN_LIGHT, STORM_BLUE, STORM_VIOLET, spectrum, spectrumList } from "./spectrum";
+import { CROWN_LIGHT, SPECTRUM_DEEP, STORM_BLUE, STORM_VIOLET, spectrum, spectrumList } from "./spectrum";
 
-export type ApexSkill = "double" | "triple" | "prism" | "crown";
-
-export interface ApexRanks {
-  double: number;
-  triple: number;
-  prism: number;
-  crown: number;
-}
+export type ApexSkill = ApexSkillId;
+export type { ApexRanks };
 
 export const NO_APEX: Readonly<ApexRanks> = { double: 0, triple: 0, prism: 0, crown: 0 };
 
@@ -30,30 +26,11 @@ interface Point {
 }
 
 /** What the presentation reads off an Apex hit (the `hit` event's own fields). */
-export interface ApexHitFields {
-  echo?: 1 | 2;
-  prismatic?: boolean;
-}
-
+export type ApexHitFields = Pick<Extract<GameEvent, { type: "hit" }>, "echo" | "prismatic">;
 /** An echo blow lands: from the warrior at `pos` to the target at `targetPos`. */
-export interface EchoStrikeEvent {
-  type: "echo_strike";
-  id: number;
-  targetId: number;
-  index: 1 | 2;
-  pos: Point;
-  targetPos: Point;
-  facing: 1 | -1;
-  jumped: boolean;
-}
-
+export type EchoStrikeEvent = Extract<GameEvent, { type: "echo_strike" }>;
 /** Stormcrown's bolt: it struck `targetPos` first, then forked to each of `forks`. */
-export interface StormBoltEvent {
-  type: "storm_bolt";
-  id: number;
-  targetPos: Point;
-  forks: Point[];
-}
+export type StormBoltEvent = Extract<GameEvent, { type: "storm_bolt" }>;
 
 /** The warrior as the renderer last drew him. */
 export interface ApexPlayerView {
@@ -212,9 +189,6 @@ export class ApexDirector {
     private readonly entityLayer: Container,
   ) {
     this.prism = new PrismNumbers(8);
-    this.glow.blendMode = "add";
-    this.formFront.blendMode = "add";
-    this.formBack.blendMode = "add";
     this.fx.addChild(this.under, this.glow);
     entityLayer.addChild(this.formBack, this.formFront);
     for (let i = 0; i < MAX_CUTS; i++) this.cuts.push({ live: false, x: 0, y: 0, r: 0, a0: 0, sweep: 0, color: 0, width: 1, life: 0, total: 1 });
@@ -261,7 +235,7 @@ export class ApexDirector {
         if (prismatic && !rec.prism) {
           this.host.numbers().drop(rec.handle);
           rec.prism = true;
-          rec.handle = this.prism.show(rec.x, rec.y, halfW, dir, fmtNum(rec.sum), mark);
+          rec.handle = this.prism.show(rec.x, rec.y, halfW, dir, fmtNum(rec.sum), mark, this.stacker);
           return;
         }
         const ok = rec.prism ? this.prism.amend(rec.handle, fmtNum(rec.sum), mark) : this.host.numbers().amend(rec.handle, fmtNum(rec.sum), mark, markColor);
@@ -278,8 +252,11 @@ export class ApexDirector {
     rec.y = y;
     const echoColor = echo === 2 ? 0xe8e0ff : echo === 1 ? 0xd6e6ff : color;
     rec.color = echoColor;
-    rec.handle = prismatic ? this.prism.show(x, y, halfW, dir, fmtNum(amount), "") : this.host.numbers().hit(x, y, halfW, dir, fmtNum(amount), crit ? color : echoColor, style, true);
+    rec.handle = prismatic ? this.prism.show(x, y, halfW, dir, fmtNum(amount), "", this.stacker) : this.host.numbers().hit(x, y, halfW, dir, fmtNum(amount), crit ? color : echoColor, style, true);
   }
+
+  /** Prismatic figures stack with the ordinary ones. */
+  private readonly stacker = (px: number, py: number, half: number, line: number): number => this.host.numbers().stack(px, py, half, line);
 
   private find(id: number, now: number): FigureRecord | null {
     for (const r of this.recs) if (r.id === id && now - r.t < MERGE_WINDOW) return r;
@@ -391,7 +368,6 @@ export class ApexDirector {
     }
     if (!g && this.ghosts.length < GHOSTS) {
       const rig = new Rig(playerSpec(pv.path));
-      rig.root.blendMode = "add";
       rig.shadow.visible = false;
       this.entityLayer.addChild(rig.root);
       g = { rig, t: 1, live: false, alpha: 0 };
@@ -403,9 +379,10 @@ export class ApexDirector {
     }
     g.live = true;
     g.t = 0;
-    g.alpha = index === 2 ? 0.5 : 0.42;
+    g.alpha = index === 2 ? 0.6 : 0.55;
     const rig = g.rig;
-    rig.root.tint = color;
+    // A coloured silhouette (not additive light, which washes to white on the pale grounds).
+    rig.root.tint = index === 2 ? 0x9d86f0 : 0x5f95ea;
     rig.root.visible = true;
     // Half a step behind him, in the cut his combo throws next.
     rig.root.position.set(pv.drawX - pv.facing * 5 * pv.scale, pv.drawY);
@@ -472,11 +449,12 @@ export class ApexDirector {
     o.alpha = 1;
     o.gravity = 140;
     o.drag = 0.88;
-    o.additive = true;
+    o.additive = false;
     o.alignToVelocity = true;
     o.spin = 0;
     o.spread = 0;
     h.particles.emit(o);
+    o.additive = true;
     o.count = Math.round(6 * k);
     o.texture = spark();
     set2(o.speed, 520, 760);
@@ -494,10 +472,10 @@ export class ApexDirector {
     o.color = 0xffffff;
     set2(o.speed, 0, 0);
     set2(o.angle, 0, 0);
-    set2(o.life, 0.12, 0.14);
-    set2(o.scale, 2.2 * k, 2.4 * k);
-    o.endScale = 0.6;
-    o.alpha = 0.7;
+    set2(o.life, 0.1, 0.12);
+    set2(o.scale, 1.2 * k, 1.4 * k);
+    o.endScale = 0.5;
+    o.alpha = 0.5;
     h.particles.emit(o);
     // A thin chromatic ring: three colours a hair apart (one white ring with reduced effects).
     const r1 = (echo ? 44 : 70) * u * 1.6;
@@ -546,7 +524,7 @@ export class ApexDirector {
     h.chestAt(e.targetPos.x, e.targetPos.y, this.q);
     const top = h.visibleTop() - 30;
     // The main channel from above the frame to the ground at the target, with a re-strike.
-    this.bolts.spawn(gx + (Math.random() - 0.5) * 70 * u, top, gx, gy, { width: 3 + 2.2 * u, color: CROWN_LIGHT, life: 0.32, branches: true, restrike: !reduced, race: 0.035 });
+    this.bolts.spawn(gx + (Math.random() - 0.5) * 70 * u, top, gx, gy, { width: 4 + 3 * u, color: 0xc4b2ff, life: 0.34, branches: true, restrike: !reduced, race: 0.035 });
     // A thinner second channel beside it, a beat late.
     this.bolts.spawn(gx + (Math.random() - 0.5) * 110 * u, top, gx + (Math.random() - 0.5) * 8 * u, this.q.y, { width: 1.4 + 0.8 * u, color: spectrum(Math.random()), life: 0.2, branches: true, delay: 0.03, race: 0.03 });
     // It forks along the ground to each nearby foe, and climbs each one.
@@ -567,6 +545,24 @@ export class ApexDirector {
     h.ring(gx, gy, 10 * u, 28 * u, 1.0, 0x5d4a8a, 3, 0.42);
     h.star(this.q.x, this.q.y, 1.5, 0xffffff);
     const o = this.emitO;
+    // A pool of light on the ground where it struck, fading with the bolt.
+    o.x = gx;
+    o.y = gy;
+    o.count = 1;
+    o.texture = softCircle();
+    o.color = 0xb9a8ff;
+    o.colors = undefined;
+    set2(o.speed, 0, 0);
+    set2(o.angle, 0, 0);
+    set2(o.life, 0.35, 0.4);
+    set2(o.scale, 3.2 * u * 1.6, 3.4 * u * 1.6);
+    o.endScale = 1.2;
+    o.alpha = 0.55;
+    o.gravity = 0;
+    o.additive = true;
+    o.alignToVelocity = false;
+    o.spread = 0;
+    h.particles.emit(o);
     o.x = gx;
     o.y = gy - 6;
     o.count = 22;
@@ -604,7 +600,7 @@ export class ApexDirector {
     h.darken(0x232338, 0.35);
     if (!reduced) {
       h.flash(CROWN_LIGHT, 0.24, 0.2);
-      h.rimLight(gx, gy - 40 * u, 330 * u, 0.55);
+      h.rimLight(gx, gy - 40 * u, 300 * u, 0.24);
     }
     h.camera.shake(0.32);
     h.camera.punch(0.035);
@@ -837,7 +833,7 @@ export class ApexDirector {
         set2(o.speed, 6, 22);
         set2(o.angle, -Math.PI * 0.8, -Math.PI * 0.2);
         set2(o.life, 0.5, 0.95);
-        set2(o.scale, 0.05 * sc * 2, 0.11 * sc * 2);
+        set2(o.scale, 0.08 * sc * 2, 0.15 * sc * 2);
         o.endScale = 0;
         o.alpha = 0.85;
         o.gravity = -14;
@@ -848,33 +844,38 @@ export class ApexDirector {
         this.host.particles.emit(o);
       }
     }
+    // Double Strike: a faint storm-blue light along the blade's edge.
+    if (r.double > 0) {
+      front.moveTo(hand.x + bx * 0.12, hand.y + by * 0.12).lineTo(tip.x, tip.y);
+      front.stroke({ width: 3.2 * sc, color: STORM_BLUE, alpha: 0.1 + 0.025 * Math.min(10, r.double) * (0.5 + 0.5 * Math.min(1, act)), cap: "round" });
+    }
     // The aura at his feet (Stormcrown): a slow ring of colour, faint at rest.
     if (r.crown > 0) {
-      const rx = 27 * sc;
+      const rx = 28 * sc;
       const ry = rx * 0.3;
       const fx = pv.drawX;
       const fy = pv.drawY + 1;
-      const a = 0.16 + 0.22 * Math.min(1, act);
-      back.ellipse(fx, fy, rx * 1.05, ry * 1.05).fill({ color: 0x9a8cff, alpha: 0.05 + 0.04 * act });
+      const a = 0.4 + 0.35 * Math.min(1, act);
+      back.ellipse(fx, fy, rx * 1.08, ry * 1.08).fill({ color: 0x6d5bd0, alpha: 0.1 + 0.06 * act });
       const seg = 12;
       const spin = reduced ? 0 : t * 0.45;
       for (let i = 0; i < seg; i++) {
         const a0 = spin + (i / seg) * Math.PI * 2;
-        const a1 = a0 + (Math.PI * 2) / seg - 0.12;
+        const a1 = a0 + (Math.PI * 2) / seg - 0.14;
         this.ellipseArc(back, fx, fy, rx, ry, a0, a1, 4);
-        back.stroke({ width: 1.6, color: spectrum(i / seg + t * 0.05), alpha: a, cap: "round" });
+        back.stroke({ width: 2.2, color: spectrum(i / seg + t * 0.05, SPECTRUM_DEEP), alpha: a, cap: "round" });
       }
     }
     // The iridescent edge (Prismatic Edge): a thin line of moving colour along the blade.
     if (r.prism > 0) {
-      const a = Math.min(0.95, (0.28 + 0.045 * r.prism) * (0.55 + 0.45 * Math.min(1, act)));
+      const a = Math.min(0.95, (0.4 + 0.05 * r.prism) * (0.6 + 0.4 * Math.min(1, act)));
       const off = 1.4 * sc;
       const segs = 6;
       for (let i = 0; i < segs; i++) {
         const k0 = 0.1 + (0.9 * i) / segs;
         const k1 = 0.1 + (0.9 * (i + 1)) / segs;
         front.moveTo(hand.x + bx * k0 + nx * off, hand.y + by * k0 + ny * off).lineTo(hand.x + bx * k1 + nx * off, hand.y + by * k1 + ny * off);
-        front.stroke({ width: 1.5 * sc + 0.4, color: spectrum(t * 0.5 - i / segs), alpha: a, cap: "round" });
+        front.stroke({ width: 1.6 * sc + 0.5, color: spectrum(t * 0.5 - i / segs, SPECTRUM_DEEP), alpha: a, cap: "round" });
       }
     }
     // Arcs crawling over blade and arm (Triple Strike), only in a fight.
@@ -924,7 +925,7 @@ export class ApexDirector {
         front.moveTo(px - 1.1, py).lineTo(px, py - hgt).lineTo(px + 1.1, py).closePath().fill({ color: spectrum(t * 0.18 + i * 0.2), alpha: 0.9 });
       }
       // The cape catches the colour, slowly.
-      rig.setCapeTint(mix(0xffffff, spectrum(t * 0.08), 0.5));
+      rig.setCapeTint(mix(0xffffff, spectrum(t * 0.08), 0.35));
     } else rig.setCapeTint(0xffffff);
   }
 

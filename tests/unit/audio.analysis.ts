@@ -266,6 +266,23 @@ export function wavBytes(x: Float32Array, rate = ANALYSIS_RATE): Uint8Array {
   return new Uint8Array(buf);
 }
 
+/**
+ * Loudness of a sound as it plays at `volume`: the RMS of its loudest 50 ms, in dB of full scale.
+ * Short transients and long tails compare on what the ear takes from them, the body of the hit.
+ */
+export function loudnessDb(x: Float32Array, volume = 1, rate = ANALYSIS_RATE): number {
+  const W = Math.max(1, Math.round(rate * 0.05));
+  let sum = 0;
+  let best = 0;
+  for (let i = 0; i < x.length; i++) {
+    sum += (x[i] as number) ** 2;
+    if (i >= W) sum -= (x[i - W] as number) ** 2;
+    best = Math.max(best, sum);
+  }
+  const rms = Math.sqrt(best / W) * volume;
+  return 20 * Math.log10(Math.max(1e-9, rms));
+}
+
 /** Energy-weighted spectral centroid (Hz) over the whole sound: where its weight sits. */
 export function centroid(x: Float32Array, rate = ANALYSIS_RATE): number {
   let num = 0;

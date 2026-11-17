@@ -8,8 +8,7 @@ import { hardCircle, softCircle, spark } from "./textures";
 import { DEATH_COLLAPSE, DEATH_DISSOLVE, DEATH_LAUNCH, DEATH_SINK, type Rig } from "./rigs/Rig";
 import { swingVariant } from "./rigs/pose";
 
-/** A hit, with the Apex fields it may carry (an echo blow, a prismatic blow). */
-type HitEvent = Extract<GameEvent, { type: "hit" }> & { echo?: 1 | 2; prismatic?: boolean };
+type HitEvent = Extract<GameEvent, { type: "hit" }>;
 type DeathEvent = Extract<GameEvent, { type: "death" }>;
 
 /** Render-side state the director keeps on each entity view. */

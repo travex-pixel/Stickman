@@ -6,7 +6,7 @@ import { World, FIXED_DT } from "@/game/engine/World";
 import { buildLoadout } from "@/game/progression/loadout";
 import { createDefaultProfile } from "@/game/progression/profile";
 import type { GameEvent } from "@/game/engine/events";
-import { analyzeSound, centroid, decodeWavUri, glides, mixPlays, modulationPeakRatio, type MixPlay } from "./audio.analysis";
+import { analyzeSound, centroid, decodeWavUri, glides, loudnessDb, mixPlays, modulationPeakRatio, type MixPlay } from "./audio.analysis";
 
 const RATE = 22050;
 const semis = (r: number) => 12 * Math.log2(r);
@@ -97,7 +97,7 @@ describe("the mix budget", () => {
   /** Most voices admitted in any window of `windowMs` from a list of admit times. */
   const densest = (times: number[], windowMs: number) => Math.max(0, ...times.map((t) => times.filter((u) => u >= t && u - t < windowMs).length));
 
-  for (const cat of ["swing", "hit", "crit", "army", "kill"] as SfxCategory[]) {
+  for (const cat of ["swing", "hit", "crit", "army", "kill", "echo", "prism", "storm"] as SfxCategory[]) {
     it(`${cat}: never more voices than its budget in a window, however fast they come`, () => {
       const g = new MixGate();
       const times: number[] = [];
@@ -109,7 +109,7 @@ describe("the mix budget", () => {
   }
 
   it("reduced effects tightens the budgets", () => {
-    for (const cat of ["swing", "hit", "crit", "army", "kill"] as SfxCategory[]) expect(REDUCED_BUDGETS[cat]!.max / REDUCED_BUDGETS[cat]!.windowMs).toBeLessThan(BUDGETS[cat]!.max / BUDGETS[cat]!.windowMs);
+    for (const cat of ["swing", "hit", "crit", "army", "kill", "echo", "prism", "storm"] as SfxCategory[]) expect(REDUCED_BUDGETS[cat]!.max / REDUCED_BUDGETS[cat]!.windowMs).toBeLessThan(BUDGETS[cat]!.max / BUDGETS[cat]!.windowMs);
     const count = (reduced: boolean) => {
       const g = new MixGate();
       g.setReduced(reduced);
@@ -294,5 +294,138 @@ describe("a late-game fight at 2x, as it would play", () => {
     };
     expect(avg((n) => n.startsWith("swing"))).toBeLessThan(avg((n) => n.startsWith("hit")));
     expect(avg((n) => n.startsWith("hit"))).toBeLessThan(avg((n) => n === "fury_final"));
+  }, 30000);
+});
+
+describe("the Apex sounds", () => {
+  const P = 1;
+  const swing = (): GameEvent => ({ type: "attack_swing", id: P, kind: "player", heavy: false, pos: { x: 0, y: 0 }, facing: 1 });
+  const hit = (o: Partial<Extract<GameEvent, { type: "hit" }>> = {}): GameEvent => ({ type: "hit", targetId: 9, sourceId: P, amount: 10, crit: false, pos: { x: 0, y: 0 }, element: "physical", faction: "enemy", targetKind: "enemy", heavy: false, ...o });
+  const bolt: GameEvent = { type: "storm_bolt", id: P, targetPos: { x: 0, y: 0 }, forks: [] };
+  /** Loudness of a cue as it plays (its sample at its cue volume). */
+  const loud = (q: Cue) => loudnessDb(renderSfx(q.name), q.volume);
+
+  it("an echo ticks (the third crackles), never a second hit; a prismatic blow rings glass over the crit", () => {
+    const c = new SoundCues(() => 0.5);
+    expect(c.events([hit({ echo: 1 })], P).map((q) => [q.name, q.category])).toEqual([["echo_tick", "echo"]]);
+    expect(c.events([hit({ echo: 2, element: "lightning" })], P).map((q) => q.name)).toEqual(["echo_tick_3"]);
+    const [p] = c.events([swing(), hit({ crit: true, prismatic: true })], P);
+    expect(p?.name).toBe("prism");
+    // Over budget the glass falls back to the crit's ring, then to the plain hit.
+    expect(p?.fallback?.name).toBe("crit");
+    expect(p?.fallback?.fallback?.category).toBe("hit");
+    const [e] = c.events([hit({ echo: 1, crit: true, prismatic: true })], P);
+    expect(e?.name).toBe("prism");
+    expect(e?.fallback?.name).toBe("echo_tick");
+    expect(c.events([bolt], P).map((q) => q.name)).toEqual(["storm_bolt"]);
+    // The bolt's own hits (after it in the batch) are inside its crack; the blow that called it is not.
+    expect(c.events([swing(), hit({ crit: true }), bolt, hit({ crit: true, prismatic: true, heavy: true, element: "lightning" }), hit({ crit: true, prismatic: true, element: "lightning" })], P).map((q) => q.name)).toEqual(["crit", "storm_bolt"]);
+    // Nobody else's bolt is the warrior's thunder.
+    expect(c.events([{ ...bolt, id: 7 } as GameEvent], P)).toEqual([]);
+  });
+
+  it("loudness in family: ticks under the hits, glass with the crit, thunder with the thunder strike, stingers under the Fury's final", () => {
+    const c = new SoundCues(() => 0.5);
+    const [light] = c.events([swing(), hit()], P);
+    const [crit] = c.events([swing(), hit({ crit: true })], P);
+    const [tick] = c.events([hit({ echo: 1 })], P);
+    const [tick3] = c.events([hit({ echo: 2 })], P);
+    const [prism] = c.events([swing(), hit({ crit: true, prismatic: true })], P);
+    const [storm] = c.events([bolt], P);
+    const thunder: Cue = { name: "thunder", category: "ability", volume: 0.6, rate: 1 };
+    const final: Cue = { name: "fury_final", category: "fury", volume: 0.9, rate: 1 };
+    expect(loud(tick!)).toBeLessThan(loud(light!) - 4);
+    expect(loud(tick3!)).toBeLessThan(loud(light!) - 3);
+    expect(Math.abs(loud(prism!) - loud(crit!))).toBeLessThan(4);
+    expect(Math.abs(loud(storm!) - loud(thunder))).toBeLessThan(4);
+    for (const q of [c.apexRank(false, 1), c.apexRank(false, 10), c.apexRank(true, 10)]) {
+      expect(loud(q)).toBeLessThan(loud(final));
+      expect(loud(q)).toBeGreaterThan(loud(light!) - 8);
+    }
+  });
+
+  it("the rank stinger climbs the scale a step a rank, never a slide", () => {
+    const c = new SoundCues(() => 0.5);
+    const D_MINOR = new Set([0, 2, 3, 5, 7, 8, 10, 12, 14, 15]);
+    let prev = -Infinity;
+    for (let r = 1; r <= 10; r++) {
+      const st = semis(c.apexRank(false, r).rate);
+      expect(D_MINOR.has(Math.round(st))).toBe(true);
+      expect(st).toBeGreaterThan(prev);
+      prev = st;
+    }
+    for (const n of ["apex_rank", "apex_max"] as SfxName[]) expect(glides(renderSfx(n)).filter((g) => Math.max(g.fromHz, g.toHz) >= 150)).toEqual([]);
+  });
+
+  it("ten echo blows a second: the budget keeps the rhythm and drops most", () => {
+    const c = new SoundCues(() => 0.5);
+    const g = new MixGate();
+    let asked = 0;
+    let heard = 0;
+    for (let t = 0; t < 5000; t += 100) {
+      for (const q of c.events([hit({ echo: t % 200 === 0 ? 1 : 2 })], P)) {
+        asked++;
+        if (g.admit({ key: q.voice ?? q.name, category: q.category, minInterval: q.minInterval ?? 40 }, t)) heard++;
+      }
+    }
+    expect(asked).toBe(50);
+    expect(heard).toBeLessThanOrEqual(25);
+    expect(heard).toBeGreaterThanOrEqual(15);
+  });
+});
+
+describe("a late-game fight at 2x with every Apex rank, as it would play", () => {
+  it("has no pitch glide above 150 Hz, does not clip, and the echoes stay under the hits", () => {
+    const p = createDefaultProfile();
+    p.player.level = 70;
+    p.player.rank = 3;
+    p.player.autoCast = true;
+    p.tutorial.finished = true;
+    p.progress.bestStage = 70;
+    p.player.statLevels = { attack: 300, maxHp: 300, attackSpeed: 120, critChance: 130, critDamage: 200, defense: 200 };
+    p.player.apex = { double: 10, triple: 10, prism: 10, crown: 1 };
+    p.summons.collection = ["husk_blade", "gravewalker", "veilshot"].map((defId, i) => ({ instanceId: `s${i}`, defId, level: 60, xp: 0, bond: 20, shards: 0, stars: 3, deployed: true, recruitedAt: 0 }));
+    const lo = buildLoadout(p);
+    lo.stats.attackSpeed = 3.2;
+    lo.stats.critChance = 0.6;
+    const w = new World({ stage: 70, loadout: lo, seed: 7, mode: "boss" });
+    const cues = new SoundCues(() => 0.5);
+    const gate = new MixGate();
+    const plays: MixPlay[] = [];
+    const asked = new Map<string, number>();
+    const play = (q: Cue, t: number): void => {
+      asked.set(q.name, (asked.get(q.name) ?? 0) + 1);
+      if (gate.admit({ key: q.voice ?? q.name, category: q.category, minInterval: q.minInterval ?? 40 }, t * 1000)) plays.push({ t, name: q.name, volume: q.volume * 0.8, rate: q.rate });
+      else if (q.fallback) play(q.fallback, t);
+    };
+    let was = false;
+    const seconds = 8;
+    for (let f = 0; f < seconds / FIXED_DT; f++) {
+      w.update(FIXED_DT);
+      w.update(FIXED_DT);
+      const t = f * FIXED_DT;
+      const st = w.player.state;
+      cues.observe(st === "windup" || st === "attack" || st === "recover", FIXED_DT);
+      if (st === "windup" && !was) play(cues.windup(), t);
+      was = st === "windup";
+      for (const q of cues.events(w.drainEvents(), w.player.id)) play(q, t);
+      w.takeLoot();
+    }
+    const count = (n: string) => plays.filter((x) => x.name === n).length;
+    // The fight really has the Apex blows in it, and most echo ticks are dropped.
+    expect((asked.get("echo_tick") ?? 0) + (asked.get("echo_tick_3") ?? 0)).toBeGreaterThan(20);
+    expect(count("echo_tick") + count("echo_tick_3")).toBeLessThan(0.6 * ((asked.get("echo_tick") ?? 0) + (asked.get("echo_tick_3") ?? 0)));
+    expect(count("storm_bolt")).toBeGreaterThan(0);
+    const cache = new Map<string, Float32Array>();
+    const mix = mixPlays(plays, (n) => cache.get(n) ?? cache.set(n, renderSfx(n as SfxName)).get(n)!, seconds);
+    let peak = 0;
+    for (const v of mix) peak = Math.max(peak, Math.abs(v));
+    expect(peak).toBeLessThan(1);
+    expect(glides(mix).filter((g) => Math.max(g.fromHz, g.toHz) >= 150)).toEqual([]);
+    const avg = (pick: (n: string) => boolean) => {
+      const v = plays.filter((x) => pick(x.name)).map((x) => x.volume);
+      return v.reduce((a, b) => a + b, 0) / Math.max(1, v.length);
+    };
+    expect(avg((n) => n.startsWith("echo"))).toBeLessThan(avg((n) => n.startsWith("hit")));
   }, 30000);
 });

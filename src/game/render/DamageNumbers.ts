@@ -297,16 +297,7 @@ export class DamageNumbers {
     const scale = n.size / this.zoom;
     const half = (n.w * scale) / 2;
     const px = x + d * (halfW + half + 4 / this.zoom);
-    let py = y - (n.h * scale) * 0.2;
-    // Stack: a number landing beside another one just placed there sits a line above it.
-    const line = n.h * scale * 0.82;
-    let k = 0;
-    for (const r of this.recent) {
-      if (this.now - r.t > STACK_WINDOW) continue;
-      if (Math.abs(r.x - px) < half * 2 + 6 && Math.abs(r.y - py) < line * (r.n + 1)) k = Math.max(k, r.n + 1);
-    }
-    py -= k * line;
-    this.remember(px, py, k);
+    const py = this.stack(px, y - n.h * scale * 0.2, half, n.h * scale * 0.82);
     n.dir = d;
     n.avoid = avoid;
     n.vx = d * (style === "crit" ? 34 : 26);
@@ -334,6 +325,21 @@ export class DamageNumbers {
     n.bump = 0.07;
     this.applyScale(n);
     return true;
+  }
+
+  /**
+   * Stack: a figure landing beside another one just placed there sits a line above it. Returns the
+   * figure's y and remembers it (the prismatic figures stack with these through it too).
+   */
+  stack(px: number, py: number, half: number, line: number): number {
+    let k = 0;
+    for (const r of this.recent) {
+      if (this.now - r.t > STACK_WINDOW) continue;
+      if (Math.abs(r.x - px) < half * 2 + 6 && Math.abs(r.y - py) < line * (r.n + 1)) k = Math.max(k, r.n + 1);
+    }
+    const y = py - k * line;
+    this.remember(px, y, k);
+    return y;
   }
 
   /** Take a figure off screen at once (it is being replaced by a prismatic one). */

@@ -45,7 +45,8 @@ function displace(r: () => number, x0: number, y0: number, x1: number, y1: numbe
     }
     next.push(pts[pts.length - 2]!, pts[pts.length - 1]!);
     pts = next;
-    amp *= 0.62;
+    // The segments halve each pass; the jag shrinks more slowly, so the channel stays jagged at every scale.
+    amp *= 0.92;
   }
   return Float32Array.from(pts);
 }
@@ -54,7 +55,7 @@ function buildBank(seed: number): BoltShape[] {
   const r = rng(seed);
   const bank: BoltShape[] = [];
   for (let s = 0; s < SHAPE_COUNT; s++) {
-    const main = displace(r, 0, 0, 1, 0, MAIN_LEVELS, 0.32);
+    const main = displace(r, 0, 0, 1, 0, MAIN_LEVELS, 0.24);
     const branches: Float32Array[] = [];
     const n = main.length / 2;
     for (let b = 0; b < 2; b++) {
@@ -218,7 +219,7 @@ export class BoltPool {
         const a = p === 0 ? level : level * 0.75;
         const u = p === 0 ? upto : 1;
         tracePath(under, pts, b.ax, b.ay, b.bx, b.by, b.spread, b.mirror, u);
-        under.stroke({ width: w * 2.4, color: 0x0b0a12, alpha: 0.32 * a, cap: "round", join: "round" });
+        under.stroke({ width: w * 2.6, color: 0x0b0a12, alpha: 0.42 * a, cap: "round", join: "round" });
         tracePath(glow, pts, b.ax, b.ay, b.bx, b.by, b.spread, b.mirror, u);
         glow.stroke({ width: w * 4.2, color: b.color, alpha: 0.22 * a, cap: "round", join: "round" });
         tracePath(glow, pts, b.ax, b.ay, b.bx, b.by, b.spread, b.mirror, u);
