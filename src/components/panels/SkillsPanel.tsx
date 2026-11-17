@@ -9,7 +9,7 @@ import { useController, useProfileRef, useUi } from "@/hooks/useGame";
 import { HoldButton } from "@/components/ui/HoldButton";
 import { useShake } from "@/hooks/useShake";
 import { APEX_NAME, anyApexReady, apexDoor, apexDoorText, apexEffectText, apexNextText, apexOpen, apexRanks, apexVisible, canBuyApex, nextApexSkill, statMaxed, APEX_OPEN_STAGE } from "@/game/progression/apex";
-import { APEX_MAX, APEX_SKILLS, type ApexSkillId } from "@/game/data/apex";
+import { APEX_MAX, APEX_SKILLS, DOUBLE_CHANCE_PER_RANK, ECHO_POWER, PRISM_CHANCE_PER_RANK, PRISM_MULT, STORM_EVERY, STORM_FORKS, TRIPLE_CHANCE_PER_RANK, type ApexSkillId } from "@/game/data/apex";
 import { SKILLS } from "@/game/data/skills";
 import type { IconName } from "@/components/ui/Icon";
 import { replayClass } from "@/hooks/useShake";
@@ -416,14 +416,15 @@ function ArtsView({ short }: { short: boolean }) {
   );
 }
 
-const APEX_ICON: Record<ApexSkillId, IconName> = { double: "sword", triple: "bolt", prism: "crit", crown: "star" };
+const APEX_ICON: Record<ApexSkillId, IconName> = { double: "sword", triple: "bolt", prism: "sparkle", crown: "star" };
 
 /** What a skill is, before its first rank. */
+const pc = (v: number) => `${Math.round(v * 100)}%`;
 const APEX_ABOUT: Record<ApexSkillId, string> = {
-  double: "Each rank, 10% more of your swings strike again at once, for 60% of a blow. At 10, every swing.",
-  triple: "Each rank, 10% more Double Strikes strike a third time, in lightning. At 10, every one.",
-  prism: "Each rank, 2% more of your critical hits turn prismatic, abilities' too: twice the damage.",
-  crown: "Every twelfth blow calls a prismatic bolt that forks to three foes. Your final form.",
+  double: `Each rank, ${pc(DOUBLE_CHANCE_PER_RANK)} more of your swings strike again at once, for ${pc(ECHO_POWER[1])} of a blow. At 10, every swing.`,
+  triple: `Each rank, ${pc(TRIPLE_CHANCE_PER_RANK)} more Double Strikes strike a third time, in lightning. At 10, every one.`,
+  prism: `Each rank, ${pc(PRISM_CHANCE_PER_RANK)} more of your critical hits turn prismatic, abilities' too: ×${PRISM_MULT} damage.`,
+  crown: `Every ${STORM_EVERY}th blow calls a prismatic bolt that forks to ${STORM_FORKS} foes. Your final form.`,
 };
 
 /** Rank pips: one bar a rank (Stormcrown has one). */

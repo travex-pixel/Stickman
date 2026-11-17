@@ -89,18 +89,26 @@ describe.skipIf(!mode)("Apex instruments", () => {
       const days = Number(process.env.DAYS ?? 5);
       const active = Number(process.env.ACTIVE ?? 240);
       const offline = Number(process.env.OFFLINE_H ?? 8) * 3600;
+      const fresh = process.env.START === "new";
       for (const seed of seeds) {
-        const base = sim(seed, 400);
-        base.o.stopAfterGate = 48;
-        base.run();
-        const g48 = base.gates.find((g) => g.gate === 48);
-        if (!g48) {
-          out.push(`seed ${seed}: never reached gate 48`);
-          continue;
+        let s: Sim;
+        if (fresh) {
+          // The simulator's own player from a new save, on the same days.
+          s = sim(seed, 0);
+          out.push(`=== seed ${seed}: the simulator's player from a new save`);
+        } else {
+          const base = sim(seed, 400);
+          base.o.stopAfterGate = 48;
+          base.run();
+          const g48 = base.gates.find((g) => g.gate === 48);
+          if (!g48) {
+            out.push(`seed ${seed}: never reached gate 48`);
+            continue;
+          }
+          const o = ownerLike(g48.snapshotAtReach);
+          s = sim(seed, 0, o);
+          out.push(`=== seed ${seed}: owner-like from gate 48 (stats ${JSON.stringify(o.player.statLevels)}, aspd ceiling ${statAtCeiling(o, "attackSpeed")}, crit ceiling ${statAtCeiling(o, "critChance")})`);
         }
-        const o = ownerLike(g48.snapshotAtReach);
-        const s = sim(seed, 0, o);
-        out.push(`=== seed ${seed}: owner-like from gate 48 (stats ${JSON.stringify(o.player.statLevels)}, aspd ceiling ${statAtCeiling(o, "attackSpeed")}, crit ceiling ${statAtCeiling(o, "critChance")})`);
         for (let d = 1; d <= days; d++) {
           const t0 = s.min;
           s.o.maxMinutes = t0 + active;
@@ -109,7 +117,7 @@ describe.skipIf(!mode)("Apex instruments", () => {
           const sum = applyOfflineProgress(s.p, offline, seed * 1000 + d);
           if (sum) s.gainXp(Math.round(sum.xp * computeModifiers(s.p).xpMult));
           s.spend();
-          out.push(`day ${d}: after play lv ${lvA}, after offline lv ${s.p.player.level} (+${sum?.xp ?? 0} xp offline at stage ${sum?.endStage}), best ${s.p.progress.bestStage}, pts banked ${s.p.player.skillPoints}, apex ${JSON.stringify(s.p.player.apex)}`);
+          out.push(`day ${d}: after play lv ${lvA} best ${s.p.progress.bestStage}, after offline lv ${s.p.player.level} (+${sum?.xp ?? 0} xp offline at stage ${sum?.endStage}), best ${s.p.progress.bestStage}, pts banked ${s.p.player.skillPoints}, apex ${JSON.stringify(s.p.player.apex)}`);
         }
         // Times in the owner's days: each day is `active` game minutes (2x speed: half that in real time) then the offline credit.
         const when = (m: number) => `day ${Math.floor(m / active) + 1} +${((m % active) / 2).toFixed(0)} real min`;
@@ -121,7 +129,9 @@ describe.skipIf(!mode)("Apex instruments", () => {
         out.push(`  bought: ${s.apexLog.map((x) => `${x.id}${x.rank}@${(x.min / active + 1).toFixed(2)}`).join(" ")}`);
       }
     } else if (mode === "forecast") {
-      const profiles = JSON.parse(readFileSync(process.env.PROFILES!, "utf8")) as { seed: number; gate: number; p: Profile }[];
+      let profiles = JSON.parse(readFileSync(process.env.PROFILES!, "utf8")) as { seed: number; gate: number; p: Profile }[];
+      // OWNERIZE=1: each gate-48 profile as the owner-like warrior (level 150, stage 49), facing gate 51.
+      if (process.env.OWNERIZE === "1") profiles = profiles.filter((x) => x.gate === 48).map((x) => ({ seed: x.seed, gate: 51, p: ownerLike(x.p) }));
       const fights = Number(process.env.FIGHTS ?? 24);
       const arms: Record<string, ApexRanks | null> = { none: null, noise: null, double: { double: 10, triple: 0, prism: 0, crown: 0 }, triple: { double: 10, triple: 10, prism: 0, crown: 0 }, prism: { double: 10, triple: 10, prism: 10, crown: 0 }, full: FULL };
       const only = (process.env.ARMS ?? Object.keys(arms).join(",")).split(",");

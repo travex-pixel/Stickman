@@ -120,6 +120,8 @@ export class Sim {
     this.p = profile ?? createDefaultProfile(0);
     this.p.player.autoCast = true;
     this.rng = new Rng(o.seed);
+    // Noise arm (A/B): one extra draw that changes nothing by design, so its spread is the noise.
+    if (process.env.ASCEND_NOISE === "1") this.rng.next();
   }
 
   get min() {

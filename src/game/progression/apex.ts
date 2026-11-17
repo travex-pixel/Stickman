@@ -1,6 +1,6 @@
 import type { UpgradeableStat } from "../data/ids";
 import type { Profile } from "./profile";
-import { APEX_MAX, APEX_SKILLS, ECHO_POWER, PRISM_MULT, STORM_EVERY, doubleChance, noApex, prismChance, tripleChance, type ApexRanks, type ApexSkillId } from "../data/apex";
+import { APEX_MAX, APEX_SKILLS, ECHO_POWER, PRISM_MULT, STORM_EVERY, STORM_FORKS, doubleChance, noApex, prismChance, tripleChance, type ApexRanks, type ApexSkillId } from "../data/apex";
 import { STAT_CEILING, computePlayerStats, statAtCeiling, statCap } from "./stats";
 
 /**
@@ -127,7 +127,7 @@ export function apexEffectText(id: ApexSkillId, rank: number): string {
     case "prism":
       return `${pct(prismChance(r))} of your critical hits turn prismatic: ×${PRISM_MULT} damage`;
     case "crown":
-      return `Every ${STORM_EVERY}th blow calls a prismatic bolt that forks to three foes; your final form`;
+      return `Every ${STORM_EVERY}th blow calls a prismatic bolt that forks to ${STORM_FORKS} foes; your final form`;
   }
 }
 

@@ -863,10 +863,13 @@ export class GameController {
     const picks = perkPicksBetween(from, p.player.level);
     p.player.skillPoints += points;
     p.player.pendingPerkChoices += picks;
-    this.sfx("level_up", { volume: 0.9 });
-    // One toast: a second would replace this one before it could be read. Past 150 a level pays
-    // a skill point (for Apex) instead of a perk.
-    this.toast(picks > 0 ? `Level ${p.player.level}! ${picks > 1 ? `${picks} perks` : "A perk"} to choose` : `Level ${p.player.level}! +${points} skill point${points === 1 ? "" : "s"}${anyApexReady(p) ? ": an Apex rank is ready" : ""}`, "level");
+    // Past 150 a level pays a skill point (for Apex) instead of a perk; once nothing is left to
+    // buy it is only chatter, so a long-finished warrior is not told of every level.
+    const ready = anyApexReady(p);
+    this.sfx("level_up", { volume: picks > 0 || ready ? 0.9 : 0.45 });
+    // One toast: a second would replace this one before it could be read.
+    if (picks > 0) this.toast(`Level ${p.player.level}! ${picks > 1 ? `${picks} perks` : "A perk"} to choose`, "level");
+    else this.toast(`Level ${p.player.level}! +${points} skill point${points === 1 ? "" : "s"}${ready ? ": an Apex rank is ready" : ""}`, "level", ready ? 1 : true);
     this.renderer?.levelUpBurst();
     if (this.world && !this.world.player.dead) {
       this.world.player.hp = Math.min(this.world.player.stats.maxHp, this.world.player.hp + this.world.player.stats.maxHp * 0.3);

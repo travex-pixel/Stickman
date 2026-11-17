@@ -5,7 +5,7 @@ import { createDefaultProfile } from "@/game/progression/profile";
 import type { GameEvent } from "@/game/engine/events";
 import type { Combatant } from "@/game/entities/types";
 import { addStatus } from "@/game/combat/statuses";
-import { ECHO_DELAY, ECHO_POWER, PRISM_MULT, STORM_EVERY, STORM_FORKS, STORM_FORK_RANGE, type ApexRanks } from "@/game/data/apex";
+import { ECHO_DELAY, ECHO_POWER, PRISM_CHANCE_PER_RANK, PRISM_MULT, STORM_EVERY, STORM_FORKS, STORM_FORK_RANGE, type ApexRanks } from "@/game/data/apex";
 import { fightDigest, lateProfile } from "./apex.digest";
 
 type Hit = Extract<GameEvent, { type: "hit" }>;
@@ -71,7 +71,7 @@ describe("Apex leaves a warrior without it exactly as he was", () => {
 });
 
 describe("Double Strike and Triple Strike", () => {
-  it("at rank 10 every ordinary blow strikes again, ECHO_DELAY later, for about 60% of a blow", () => {
+  it("at rank 10 every ordinary blow strikes again, ECHO_DELAY later, at ECHO_POWER of a blow", () => {
     const w = quietWorld({ double: 10 });
     w.player.stats.critChance = 0;
     const foe = dummy(w);
@@ -208,7 +208,7 @@ describe("Double Strike and Triple Strike", () => {
 });
 
 describe("Prismatic Edge and Stormcrown", () => {
-  it("rank 10 turns about a fifth of crits prismatic, at PRISM_MULT their damage, and never a plain blow", () => {
+  it("rank 10 turns PRISM_CHANCE_PER_RANK x 10 of crits prismatic, at PRISM_MULT their damage, and never a plain blow", () => {
     const w = quietWorld({ prism: 10 });
     w.player.stats.critChance = 0.5;
     const foe = dummy(w);
@@ -216,8 +216,8 @@ describe("Prismatic Edge and Stormcrown", () => {
     const crits = hits.filter((h) => h.crit);
     const prism = crits.filter((h) => h.prismatic);
     expect(hits.filter((h) => !h.crit).some((h) => h.prismatic)).toBe(false);
-    expect(prism.length / crits.length).toBeGreaterThan(0.14);
-    expect(prism.length / crits.length).toBeLessThan(0.26);
+    expect(prism.length / crits.length).toBeGreaterThan(PRISM_CHANCE_PER_RANK * 10 - 0.06);
+    expect(prism.length / crits.length).toBeLessThan(PRISM_CHANCE_PER_RANK * 10 + 0.06);
     const avg = (xs: Hit[]) => xs.reduce((a, h) => a + h.amount, 0) / xs.length;
     const ratio = avg(prism) / avg(crits.filter((h) => !h.prismatic));
     expect(ratio).toBeGreaterThan(PRISM_MULT * 0.9);

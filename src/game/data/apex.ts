@@ -27,18 +27,18 @@ export const DOUBLE_CHANCE_PER_RANK = 0.1;
 /** Triple Strike: each rank, this chance that a Double Strike's echo strikes a third time. */
 export const TRIPLE_CHANCE_PER_RANK = 0.1;
 /** An echo's strength against an ordinary blow: Double Strike's, then Triple Strike's. */
-export const ECHO_POWER: Readonly<Record<1 | 2, number>> = { 1: 0.6, 2: 0.6 };
+export const ECHO_POWER: Readonly<Record<1 | 2, number>> = { 1: 0.8, 2: 0.8 };
 /** World seconds between a blow and its echo (and between the two echoes). */
 export const ECHO_DELAY = 0.08;
 /** Prismatic Edge: each rank, this share of the warrior's critical blows turn prismatic. */
-export const PRISM_CHANCE_PER_RANK = 0.02;
+export const PRISM_CHANCE_PER_RANK = 0.03;
 /** A prismatic blow's damage against the critical blow it was. */
-export const PRISM_MULT = 2;
+export const PRISM_MULT = 2.5;
 /** Stormcrown: every this many blows (ordinary and echoes) calls the bolt. */
 export const STORM_EVERY = 12;
 /** The bolt's strength on its target (a critical, prismatic strike), and on each fork. */
-export const STORM_POWER = 1.5;
-export const STORM_FORK_POWER = 0.75;
+export const STORM_POWER = 2;
+export const STORM_FORK_POWER = 1;
 /** The bolt forks to at most this many other foes, within this distance of its target. */
 export const STORM_FORKS = 3;
 export const STORM_FORK_RANGE = 150;
