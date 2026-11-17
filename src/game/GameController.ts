@@ -923,11 +923,10 @@ export class GameController {
       return false;
     }
     const maxed = rank >= APEX_MAX[id];
-    this.sfx("upgrade", { volume: 0.6, rate: 0.85 + rank * 0.03 });
-    this.sfx("level_up", { volume: maxed ? 0.8 : 0.4, rate: maxed ? 1 : 1.4 });
     this.toast(maxed ? `${APEX_NAME[id]} mastered: ${apexEffectText(id, rank)}` : `${APEX_NAME[id]} ${rank}/${APEX_MAX[id]}: ${apexEffectText(id, rank)}`, "level", 2);
-    // The renderer's moment for it (the warrior's form, a flash), when the renderer offers one.
-    (this.renderer as unknown as { apexRankUp?: (skill: ApexSkillId, rank: number, maxed: boolean) => void } | null)?.apexRankUp?.(id, rank, maxed);
+    // The renderer's moment for it (the warrior's form, a flourish) plays the purchase's one sound;
+    // with no warrior on screen to play it on, the stinger sounds alone.
+    if (!this.renderer?.apexRankUp(id, rank, maxed)) this.apexCue(maxed || rank <= 1 ? "max" : "rank", id, rank);
     this.refreshLoadout();
     this.afterProgression();
     this.commit();

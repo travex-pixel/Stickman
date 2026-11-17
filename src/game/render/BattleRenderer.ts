@@ -2246,11 +2246,12 @@ export class BattleRenderer implements ImpactHost {
 
   /**
    * A rank of an Apex skill was bought from the menu: a short flourish on the warrior (under a
-   * second, never in the way of input); a first rank or a maxed skill is the larger one.
+   * second, never in the way of input); a first rank or a maxed skill is the larger one. False when
+   * there was no warrior to play it on, so nothing sounded.
    */
-  apexRankUp(skill: ApexSkill, rank: number, maxed: boolean): void {
-    if (!this.world || !this.apex) return;
-    this.apex.rankUp(skill, rank, maxed);
+  apexRankUp(skill: ApexSkill, rank: number, maxed: boolean): boolean {
+    if (!this.world || !this.apex) return false;
+    return this.apex.rankUp(skill, rank, maxed);
   }
 
   /** Counters for the captures: flashes granted and refused, the worst second, Apex effects live. */

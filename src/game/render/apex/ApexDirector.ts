@@ -700,17 +700,17 @@ export class ApexDirector {
    * A rank bought from the menu: a short flourish on the warrior (under a second; the fight runs
    * on). A first rank or a maxed skill is the larger moment.
    */
-  rankUp(skill: ApexSkill, rank: number, maxed: boolean): void {
+  rankUp(skill: ApexSkill, rank: number, maxed: boolean): boolean {
     const h = this.host;
     const pv = h.player();
-    if (!pv) return;
+    if (!pv) return false;
     const reduced = h.isReduced();
     const big = maxed || rank <= 1;
     // Held to keep buying, ranks can come several a second: the small moment plays at most every
     // quarter second (its stinger still climbs); a large one always plays.
     if (!big && this.now - this.lastRankUp < 0.25) {
       h.cue("rank", skill, rank);
-      return;
+      return true;
     }
     this.lastRankUp = this.now;
     const color = skill === "double" ? STORM_BLUE : skill === "triple" ? STORM_VIOLET : skill === "prism" ? spectrum(Math.random()) : CROWN_LIGHT;
@@ -756,6 +756,7 @@ export class ApexDirector {
     if (big && (skill === "prism" || skill === "crown")) this.onPrismBurstAt(this.p.x, this.p.y);
     if (big && !reduced) h.flash(skill === "crown" ? CROWN_LIGHT : 0xf0eadc, 0.14, 0.25);
     h.cue(big ? "max" : "rank", skill, rank);
+    return true;
   }
 
   private onPrismBurstAt(x: number, y: number): void {
