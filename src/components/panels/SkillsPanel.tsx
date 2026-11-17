@@ -64,9 +64,9 @@ function Header({ view, setView }: { view: View; setView: (v: View) => void }) {
   // Points read gold only while they can buy something: a bank with nothing to spend on is not news.
   const spendable = points > 0 && (apexReady || SKILLS.some((n) => canUnlockSkill(profile, n.id).ok));
   // Five views and the points fit 320px: from 360px up the segments keep their padding.
-  const seg = apexShown ? "max-[359px]:px-2" : undefined;
+  const seg = apexShown ? "max-[359px]:px-2 min-w-11" : undefined;
   return (
-    <div className={cn("flex items-center justify-between shrink-0", apexShown ? "gap-2 min-[360px]:gap-3" : "gap-3")}>
+    <div className={cn("flex items-center justify-between shrink-0", apexShown ? "gap-1 min-[360px]:gap-3" : "gap-3")}>
       <Segmented value={view} onChange={setView} label="Skill paths">
         {BRANCHES.map((b) => (
           <Segment key={b} id={b} className={seg} data-testid={`branch-${b}`}>

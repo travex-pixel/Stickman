@@ -89,10 +89,11 @@ Shadows are earned in combat, which ties the collection directly to the fighting
 | Stats, gear with build-defining effects, skills, weapon paths, perks | Working | `src/game/progression/` |
 | Power by source, the best next step, equip best, the bag's lend | Working | `src/game/progression/power.ts`, `stats.ts` (`computePlayerStats(profile, without)`, `BAG_LEND`) |
 | Hunter rank E to S via Rank Trials | Working | `src/game/progression/ranks.ts` |
+| Apex: Double Strike, Triple Strike, Prismatic Edge, Stormcrown, bought with skill points past the stage-39 boss | Working | `src/game/data/apex.ts`, `src/game/progression/apex.ts`, `World.playerBasicHit` |
 | Modes: campaign, Gold Vault, Essence Rift, Endless Ascent, Rank Trial | Working | `src/game/data/modes.ts` |
 | Quests, achievements, journal, bestiary | Working | `src/game/progression/quests.ts` |
 | Gift codes (signed, once per save) | Working | `src/game/economy/codes.ts`, `scripts/make-code.mjs` |
-| IndexedDB saves: versioned (v13), validated, backed up, migrated, unload-safe | Working | `src/persistence/` |
+| IndexedDB saves: versioned (v14), validated, backed up, migrated, unload-safe | Working | `src/persistence/` |
 | Capped offline rewards | Working | `src/persistence/OfflineRewards.ts` |
 | Runtime-synthesised audio | Working, untested on devices | `src/game/audio/` |
 
@@ -134,7 +135,9 @@ sensible player would; before, it never bought ranks.
 - Attack and Health multiply x1.6 every 25 levels (milestones).
 - Gate bosses are x4 health and x1.5 attack over their stage, growing slowly (`bossScale`). The
   stage 1 Warden keeps its plain strength: it is the tutorial's lesson.
-- Level cap 150, shadow cap 40. Quest gold is a few stage clears per quest.
+- The warrior's strength stops growing with level at 150; levels go on (to 9999), and each one
+  past 150 pays a skill point for Apex instead of a perk (see "Apex"). Shadow cap 40. Quest gold is
+  a few stage clears per quest.
 - Offline: up to 2 hours on a new save, +30 minutes per boss won, to 8 hours; the warrior fights
   40% of it, sampled from real cycles, and never passes a gate.
 
@@ -150,12 +153,14 @@ Tapping Power in Hero opens the Power sheet: the best next step on top, then eve
 strength with its share of Power and a line of plain numbers, each leading to where it changes.
 `computePlayerStats(profile, without)` can leave any source out (stat levels, warrior level, worn
 gear, the bag, gear sets, skills, perks, weapon path, the army's Codex, techniques, rank, Aether,
-the Aether tree); a source's drop is Power with everything less Power without it. Sources multiply
+the Aether tree, Apex); a source's drop is Power with everything less Power without it. Apex
+counts as the expected damage of a swing with its echoes, prismatic crits and bolt over one
+without (`apexDamageMult`), on the Power number's damage term. Sources multiply
 each other, so the drops add up to more than Power; they are scaled down together, in proportion,
 so the rows and the bare warrior add up to Power exactly (`powerBreakdown`, tested).
 
-The best next step (`nextStep`) takes free steps first (a perk waiting, a skill point, stronger
-gear in the bag, Aether for Might or Vigor), then a Rank Trial, then the stat level with the most
+The best next step (`nextStep`) takes free steps first (a perk waiting, a skill point, an Apex
+rank, stronger gear in the bag, Aether for Might or Vigor), then a Rank Trial, then the stat level with the most
 Power per gold you can afford (`bestStatBuy`); failing those, the waiting boss, the stat to farm
 gold for, or Ascension when the next useful level is far off.
 
@@ -322,6 +327,118 @@ Measured against the previous build, both with the simulator's rank-buying playe
   (cycles 2 to 8% shorter; the gates themselves are as hard as before); gate 42 reached by 21 to
   23 seeds (19 to 20 before); deepest stage 42 to 44 as before; level about 67.5 to 69 against
   64 to 66.5.
+
+### Apex
+
+The owner reached level 150 (the old cap) at stage 49 with 47 skill points and nothing to spend
+them on: every tree learned, every Art mastered, attack speed and crit rate at their ceilings.
+Apex is the fifth view of Skills, and turns those two wasted stats into the doors of the late game.
+
+**When.** It opens once the stage-39 boss has fallen (best stage 40, in this climb or an earlier
+one; `APEX_OPEN_STAGE`). From the moment attack speed first reaches its ceiling a quiet locked view
+shows what is coming. Until a rank is bought nothing in the fight differs: no random draw, no stat,
+no event (a digest of a late farming and boss minute is pinned to the commit before Apex, and the
+economy simulator's first 39 gates are identical line for line, eight seeds).
+
+**The four skills** (`src/game/data/apex.ts`; prices in `progression/apex.ts`):
+
+| Skill | Ranks | Door | Each rank |
+| --- | --- | --- | --- |
+| Double Strike | 10 | Attack speed maxed (at its 3.2 ceiling, or its last level) | +10% chance an ordinary basic blow strikes again 0.08 s later, at 80% of a blow. At 10 every swing strikes twice |
+| Triple Strike | 10 | Double Strike 10/10 | +10% chance a Double Strike's echo strikes a third time 0.08 s after it, as lightning |
+| Prismatic Edge | 10 | Crit rate maxed (85% ceiling, or its last level) | +3% of the warrior's crits (abilities' too) turn prismatic: ×2.5 damage, the rainbow hits |
+| Stormcrown | 1 | The other three at 10/10 | Every 12th blow (ordinary or echo) calls a critical, prismatic bolt (2× a blow) on its target that forks to the 3 foes nearest it (1× each); the warrior's final form |
+
+**Rules of the blows** (`World.basicBlow`, `landEcho`, `stormBolt`):
+
+- Only an ordinary basic blow can echo: never the Ascendant Fury's cut, an ability, or an echo.
+- An echo is scheduled on the world (deterministic). If its target fell or left reach it takes the
+  nearest foe in reach (`jumped`); with none, or if the warrior fell, the fight ended or the Fury
+  began meanwhile, it is lost.
+- An echo is a real blow for on-hit effects (weapon path procs, Bloodthirst and Blood Pact
+  lifesteal, Hunter's Mark, the Thunderclap count), but it never spends a perfect dodge's crit and
+  charges no energy, nor do the crits and procs it sets off, nor the bolt. Kills charge as before,
+  whoever lands them. Without that, three blows a swing would triple the ultimate's charge and AUTO
+  would cast the Fury back to back; measured, AUTO casts it exactly as often with full Apex.
+- Prismatic rolls only on a blow that already crit, the warrior's only, abilities included (the
+  Fury's total can go rainbow). Every draw waits on its rank.
+
+**Skill points.** Levels used to stop at 150, where XP was thrown away. Now they go on; a level
+past 150 adds no strength and no perk (so nothing but Apex changes), and pays one skill point
+(every second level before, as always). The cap is 9999, for the top bar's sake (it holds four
+figures at 320 px); Apex is bought out hundreds of levels before. Once nothing is left to buy,
+a level past 150 is quiet news and the banked points stop reading as a nag (grey count, no dot,
+no readiness tip).
+
+**Prices** (skill points a rank; 365 for all):
+
+| Skill | Ranks 1 to 10 | Total |
+| --- | --- | --- |
+| Double Strike | 4, 5, 6, 7, 8, 9, 10, 11, 12, 13 | 85 |
+| Triple Strike | 8 to 17 | 125 |
+| Prismatic Edge | 5 to 14 | 95 |
+| Stormcrown | 60 | 60 |
+
+No gold price: points alone hit the pacing for both kinds of player.
+
+**Pacing, measured** (`APEX_SIM=owner`, four seeds each). A day is two real hours of AUTO at 2×
+(four game hours) and one eight-hour offline credit (the cap, fought at 40%), the spender buying
+the next open rank, cheapest first. The owner-like warrior is the simulator's player at gate 48
+raised to level 150 with every tree, every Art mastered, 149 perk picks and 47 points.
+
+| | Owner-like (level 150, stage 49, 47 points) | The simulator's player (new save) |
+| --- | --- | --- |
+| Apex opens | at once | day 1, after 37 to 40 real minutes (gate 39 won, level 64) |
+| Double Strike 1 | at once | day 1, +38 min |
+| Double Strike 10 | end of day 1 (105 to 114 real minutes) or with that night's credit | with day 1's night |
+| Prismatic Edge 10 | day 2 (+50 to +85 min) or day 3's start | day 2 (+56 to +80 min) |
+| Triple Strike 10 | day 3 (+0 to +80 min) | day 2 (+117 min) to day 3's start |
+| Stormcrown | start of day 4 (three seeds) or day 4 +65 min | day 3 (+0 to +101 min) |
+
+Points per real hour of play: the owner-like warrior gains 93 to 117 levels (points) in day 1's two
+hours and 46 to 58 overnight; by day 3 about 47 a session and 30 to 35 overnight, as levels cost
+more (60 L^1.85 XP). The simulator's player earns its first 40 or so points every second level
+up to 150 on day 1, then one a level (80 to 96 overnight at stages 60 to 66).
+
+**Power, measured** (boss forecasts, `APEX_SIM=forecast`; 24 fights a profile; a noise arm on other
+seeds):
+
+| Profiles | Boss of stage | No Apex (win, boss left) | Noise arm | Full Apex |
+| --- | --- | --- | --- | --- |
+| Owner-like, facing gate 51 | 51 | 0%, 0.26 | 0%, 0.26 | 100% (97 s) |
+| | 54 | 0%, 0.59 | 0%, 0.59 | 33%, 0.18 |
+| | 57 | 0%, 0.76 | 0%, 0.76 | 0%, 0.51 |
+| | 60 to 66 | 0%, 0.86 to 0.93 | same | 0%, 0.72 to 0.87 |
+| Stalled at gate 60 (10 h climb) | 60 | 0%, 0.31 | 0%, 0.31 | 100% (114 s) |
+| | 63 | 0%, 0.55 | 0%, 0.56 | 50%, 0.28 |
+| | 66 | 0%, 0.67 | 0%, 0.67 | 0%, 0.32 |
+| | 69 to 75 | 0%, 0.85 to 0.95 | same | 0%, 0.70 to 0.90 |
+
+Full Apex roughly doubles boss damage (Prismatic Edge is most of it: on the owner-like profiles
+Double and Triple Strike take gate 51 from 0 to 44%, Prismatic Edge to 100%). It moves the stall
+by one or two gates; the bosses six to nine stages past it still stop it. The first numbers
+(echoes at 60%, 2% at ×2, a 1.5× bolt) raised boss damage about 1.5 times, too little for what
+the owner asked; these were kept.
+
+Long climb (five days as above, best stage at the end of each day, two to four seeds):
+
+| Day | New save, no Apex | Noise arm | With Apex | Owner-like, no Apex | With Apex |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 56, 59 | 59, 59 | 59 to 65 | 56 to 59 | 56 to 62 |
+| 3 | 62, 62 | 65, 65 | 68 | 56 to 59 | 62 to 65 |
+| 5 | 65, 65 | 65, 65 | 68 to 71 | 59 to 62 | 65 to 68 |
+
+(The owner-like arm without Apex ran four days for two of its four seeds; its day-5 cell holds
+their day 4.) Stages move by gates of three, so one seed's step is the noise: the noise arm, the
+same player with one extra random draw, ends day 1 three stages from its twin.
+
+AUTO with full Apex (stalled gate-60 profiles, 120 s of boss and farming each): the Fury every
+3.98 s in boss fights with and without (no earlier recast); energy 25.6 against 24.9 a second;
+swings 0.9 a second (the Fury and the arts hold him most of the time; the ceiling is 3.2); weapon
+and Thunderclap chains 1.19 against 0.79 a second; healing 0.71% of health a second against
+0.15%; lowest health 96%. Damage by kind: plain blows 10%, echoes 13%, prismatic hits 51%, the
+rest 25%. Nothing degenerate, so nothing was capped. At the attack-speed ceiling against three
+dummies (unit test) AUTO casts the Fury 11 times a minute with or without Apex.
 
 ### The weeks-long curve
 

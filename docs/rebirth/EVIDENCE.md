@@ -508,3 +508,32 @@ them the new boss-fight layout test.
 **Not established.** Whether the swings feel more satisfying is the owner's judgement on a phone:
 stills and unit tests show the shape and timing changed as intended, not how it feels. The
 audits and this record are by models.
+
+### Apex: the late game's skills
+
+**The ask.** The owner, at level 150 and stage 49 with 47 skill points and nothing to buy, asked
+for "insane late game stuff": rainbow hits, lightning, Double Strike and Triple Strike, the first
+behind maxed attack speed, the second behind a maxed Double Strike; hard to get, "a few days max".
+
+**Claims and their instruments.** All re-runnable; DESIGN.md, "Apex", has the tables.
+
+| Claim | Instrument | Result | Label |
+| --- | --- | --- | --- |
+| A warrior without Apex fights exactly as before | A digest of every event and the next random draw over a late farming minute and a boss minute, pinned on the commit before Apex (`tests/unit/apex.test.ts`); the economy simulator, eight seeds to gate 39, before against after | Digest `1913:d14198de` on both; all 128 lines of the simulator's gate log identical (gates, minutes, levels, Power, forecasts) | Verified |
+| A save from before loads clean | v13 save through the migration and sanitiser (`apex.test.ts`) | No repair, no ranks, same fight digest | Verified |
+| Owner-like pacing: Double Strike 1 at once, maxed in about a day, everything in about three, never five | `APEX_SIM=owner`, 4 seeds, two real hours at 2x and an eight-hour credit a day | Double Strike 10 at the end of day 1 or with its night; Stormcrown at the start of day 4 (one seed: day 4, +65 min) | Verified in simulation; the owner-like profile is a model (the simulator's player at gate 48 raised to level 150), not the owner's save |
+| The simulator's own player gets there in days | `APEX_SIM=owner START=new`, 4 seeds | Opens at 37 to 40 real minutes of day 1; Stormcrown on day 3 | Verified in simulation |
+| A real spike that still meets walls | Boss forecasts on owner-like and stalled profiles, 24 fights each, with a noise arm (other seeds) | Gate 51 (owner-like) and the stall gate 60: 0% to 100%; 3 stages past: 33 to 50%; 6 to 15 past: 0%. Noise arm within 0.007 of boss health | Verified |
+| AUTO does not degenerate | `APEX_SIM=auto` on stalled profiles; a unit test at the attack-speed ceiling | Fury cadence unchanged (3.98 s; 11 a minute), energy +3%, chains +50%, healing 0.15% to 0.71% of health a second | Verified |
+
+**An error on the way.** The first numbers (echoes at 60% of a blow, 2% of crits a rank at ×2,
+a 1.5× bolt) were measured at about 1.5 times the boss damage, roughly one gate: not what "insane"
+asks. They were raised once (80%, 3% at ×2.5, a 2× bolt) and measured again; the walls six to nine
+stages on still hold. The first long-climb runs (`APEX_SIM=climb`, ten hours at 1x, two seeds) used
+the first numbers and are not in the tables.
+
+**Not established.** How it feels: the rainbow and the lightning are the visuals agent's, and only
+the owner on a phone can say whether a maxed Apex reads as "insane". The owner's own save was not
+available: the owner-like warrior pushes from 49 to 56 to 59 on day 1 even without Apex, so it is
+stronger than a player truly stuck at 49, which makes points come faster than they would for one.
+
