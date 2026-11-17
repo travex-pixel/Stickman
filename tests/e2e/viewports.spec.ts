@@ -242,8 +242,11 @@ for (const vp of VIEWPORTS) {
     await expect(page.getByTestId("boss-counter")).toBeVisible({ timeout: 8000 });
     await page.evaluate(() => (window as unknown as { __ASCEND__: { toast(text: string, tone: string, weight: number): void } }).__ASCEND__.toast("The Warden remembers its oath. Phase two.", "warn", 2));
     await expect(page.getByTestId("event-pill")).toBeVisible();
-    // On a short screen the hint steps aside for the news: let its fade (a third of a second) finish.
-    await page.waitForTimeout(500);
+    // On a short screen the hint steps aside for the news. Its fade is a third of a second, but the
+    // element only leaves on a later frame, and under a software GPU the field can run at a few
+    // frames a second: wait for it to be gone rather than for a fixed time.
+    if (await page.evaluate(() => window.matchMedia("(max-height: 700px)").matches)) await expect(page.getByTestId("boss-counter")).toHaveCount(0);
+    else await page.waitForTimeout(500);
     await check("hint and news up");
     // The hint on its own, once the news has left (the boss's hint lasts four seconds).
     await expect(page.getByTestId("event-pill")).toHaveCount(0, { timeout: 4000 });
