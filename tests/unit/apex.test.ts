@@ -149,11 +149,45 @@ describe("Double Strike and Triple Strike", () => {
     expect(weak.dead).toBe(true);
     expect(first).toBeDefined();
     if (first?.targetId === other.id) expect(first.jumped).toBe(true);
+    // The weak foe's own echo found it dead and took the other foe instead (never the dead one).
+    expect(ev.some((x) => x.e.type === "echo_strike" && x.e.targetId === other.id && x.e.jumped)).toBe(true);
+    expect(hitsOn(ev, weak.id).filter((h) => h.echo).length).toBe(0);
     // Alone, the killed foe's echo finds nobody.
     const v = quietWorld({ double: 10 });
     dummy(v, 230, 78, 1);
     const ev2 = run(v, 1.2);
     expect(ev2.some((x) => x.e.type === "echo_strike")).toBe(false);
+  });
+
+  it("an echo still on its way is lost when the fight ends or the Ascendant Fury begins", () => {
+    // Run to the moment a blow lands, then end the fight (or begin the Fury) before its echo.
+    const afterBlow = (then: (w: World) => void) => {
+      const w = quietWorld({ double: 10, triple: 10 });
+      w.player.stats.critChance = 0;
+      dummy(w);
+      dummy(w, 330, 60);
+      let landed = false;
+      for (let i = 0; i < 600 && !landed; i++) {
+        w.update(FIXED_DT);
+        landed = w.drainEvents().some((e) => e.type === "hit" && e.sourceId === w.player.id && !e.echo);
+      }
+      expect(landed).toBe(true);
+      expect(w.pendingTimers).toBeGreaterThan(0);
+      then(w);
+      return run(w, 0.5).map((x) => x.e);
+    };
+    const control = afterBlow(() => {});
+    expect(control.some((e) => e.type === "echo_strike")).toBe(true);
+    for (const phase of ["victory", "defeat"] as const) {
+      const ev = afterBlow((w) => (w.phase = phase));
+      expect(ev.some((e) => e.type === "echo_strike" || (e.type === "hit" && e.echo)), phase).toBe(false);
+    }
+    const fury = afterBlow((w) => {
+      w.energy = 100;
+      w.player.state = "idle";
+      expect(w.castAbility("ascendant_fury")).toBe(true);
+    });
+    expect(fury.some((e) => e.type === "echo_strike" || (e.type === "hit" && e.echo))).toBe(false);
   });
 
   it("echoes charge nothing, and never spend a perfect dodge's crit", () => {
