@@ -8,6 +8,9 @@ import { buildLoadout } from "./loadout";
 import type { Profile } from "./profile";
 import { computeModifiers, isStatUnlocked, statCap, statUpgradeCost } from "./stats";
 import { anyAbilityRankReady } from "./abilityRanks";
+import { anyApexReady, nextApexSkill, APEX_NAME } from "./apex";
+import { SKILLS } from "../data/skills";
+import { canUnlockSkill } from "./skills";
 import { canStarUp } from "../summons/progression";
 import type { PanelId } from "../data/ids";
 import { MODES } from "../data/modes";
@@ -147,7 +150,12 @@ export function readinessTips(p: Profile, stage: number, now = new Date()): Read
   // Waiting at a gate is the moment the Gold Vault exists for: 45 seconds of sevenfold gold.
   const vaultKeys = p.modes.keyDay === dayKey(now) ? p.modes.keys.vault : (MODES.vault.dailyKeys ?? 3);
   if (p.progress.bestStage >= MODES.vault.unlockAfterStage && vaultKeys > 0) tips.push({ text: `Run the Gold Vault: 45 seconds of sevenfold gold (${vaultKeys} left today).`, panel: "rift" });
-  if (p.player.skillPoints > 0) tips.push({ text: `You have ${p.player.skillPoints} unspent skill point${p.player.skillPoints === 1 ? "" : "s"}.`, panel: "skills" });
+  // Banked points are only news while they can buy something (a skill, or an Apex rank).
+  if (p.player.skillPoints > 0 && SKILLS.some((s) => canUnlockSkill(p, s.id).ok)) tips.push({ text: `You have ${p.player.skillPoints} unspent skill point${p.player.skillPoints === 1 ? "" : "s"}.`, panel: "skills" });
+  else if (anyApexReady(p)) {
+    const id = nextApexSkill(p);
+    tips.push({ text: `Your skill points buy an Apex rank${id ? `: ${APEX_NAME[id]}` : ""}.`, panel: "skills" });
+  }
   const equipped = new Set(Object.values(p.equipment.equipped));
   const spare = p.equipment.inventory.filter((i) => !equipped.has(i.uid));
   const emptyFillable = EQUIP_SLOTS.filter((s) => !p.equipment.equipped[s] && spare.some((i) => i.slot === s));

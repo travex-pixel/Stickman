@@ -1,5 +1,6 @@
 import type { Profile } from "./profile";
 import { SKILLS, skillNode, type SkillNode } from "../data/skills";
+import { POINT_EVERY_LEVEL_FROM } from "../economy/rewards";
 
 export type SkillUnlockFailure = "owned" | "requires" | "points";
 
@@ -69,7 +70,8 @@ export function branchSummary(profile: Profile, branch: "power" | "soul" | "comm
     .join(" · ");
 }
 
-/** The level that brings the next skill point (one every even level). */
+/** The level that brings the next skill point (one every even level to 150, then every level). */
 export function nextSkillPointLevel(level: number): number {
+  if (level >= POINT_EVERY_LEVEL_FROM - 1) return level + 1;
   return level % 2 === 0 ? level + 2 : level + 1;
 }

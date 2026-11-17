@@ -21,7 +21,8 @@ import { enemyDef } from "@/game/data/enemies";
 import { summonDef } from "@/game/data/summons";
 import { Rng } from "@/game/engine/rng";
 import { canAttemptTrial, nextRankStep, promote } from "@/game/progression/ranks";
-import { REPEAT_BOSS_CORE_CHANCE, shadowXpShare, skillPointsBetween } from "@/game/economy/rewards";
+import { REPEAT_BOSS_CORE_CHANCE, perkPicksBetween, shadowXpShare, skillPointsBetween } from "@/game/economy/rewards";
+import { buyApexRank, nextApexSkill } from "@/game/progression/apex";
 import { resolveBossDefeat, resolveBossVictory, resolveCycle, resolveFarmingDefeat, clampFarmStage, surgeLeap } from "@/game/progression/campaign";
 import { forecastBoss } from "@/game/progression/readiness";
 import { learnTechniques, slotForm } from "@/game/progression/techniques";
@@ -34,6 +35,9 @@ import { ascend, buyNode, canAscend, nextNodeCost, spendableAether, type TreeNod
  * costs no more than this share of the gold in hand, cheapest first; the rest goes to stats.
  */
 export const RANK_GOLD_SHARE = 0.25;
+
+/** Economy-simulator knob (A/B): 0 never buys Apex ranks (the points stay banked). */
+export const APEX_BUY = Number(process.env.ASCEND_APEX_BUY ?? 1) !== 0;
 
 const SKILL_ORDER = ["c1", "p1", "s1", "c2", "p2", "s2", "c3", "p3", "c4", "s3", "p4", "s4", "c5", "p5", "s5"];
 
@@ -110,6 +114,8 @@ export class Sim {
   nextTl = 0;
 
   ascensions: { min: number; from: number; total: number }[] = [];
+  /** Every Apex rank bought: when, which, and where the warrior stood. */
+  apexLog: { min: number; id: string; rank: number; level: number; stage: number }[] = [];
   constructor(public o: SimOpts, profile?: Profile) {
     this.p = profile ?? createDefaultProfile(0);
     this.p.player.autoCast = true;
@@ -132,7 +138,7 @@ export class Sim {
     p.player.xp = r.xp;
     if (r.level > before) {
       p.player.skillPoints += skillPointsBetween(before, r.level);
-      p.player.pendingPerkChoices += r.level - before;
+      p.player.pendingPerkChoices += perkPicksBetween(before, r.level);
       if (this.world && !this.world.player.dead) this.world.player.hp = Math.min(this.world.player.stats.maxHp, this.world.player.hp + this.world.player.stats.maxHp * 0.3);
     }
   }
@@ -260,10 +266,17 @@ export class Sim {
   /** Greedy spend: perks, skills, best gear, stars/evolve, deploy, bond, quests, cheapest stats. */
   spend(): boolean {
     const p = this.p;
-    const sig0 = JSON.stringify([p.player.abilityRanks, p.player.statLevels, p.player.perks, p.skills.unlocked, p.equipment.equipped, p.summons.collection.map((s) => [s.stars, s.bond, s.deployed, s.defId])]);
+    const sig0 = JSON.stringify([p.player.abilityRanks, p.player.statLevels, p.player.perks, p.skills.unlocked, p.player.apex, p.equipment.equipped, p.summons.collection.map((s) => [s.stars, s.bond, s.deployed, s.defId])]);
     // As "Choose all for me": every banked pick, balanced across tones (the first offer while picks come one at a time).
     autoPickPerks(p, this.rng);
     for (const id of SKILL_ORDER) if (canUnlockSkill(p, id).ok) unlockSkill(p, id);
+    // Apex, once open: the next rank along the road (the cheapest open one), while points last.
+    if (APEX_BUY)
+      for (let k = 0; k < 100; k++) {
+        const id = nextApexSkill(p);
+        if (!id || buyApexRank(p, id) === null) break;
+        this.apexLog.push({ min: this.min, id, rank: p.player.apex[id], level: p.player.level, stage: p.progress.bestStage });
+      }
     const arts = [...ABILITY_SLOTS.filter((id) => ABILITIES[id].unlockLevel <= p.player.level).map((id) => slotForm(p, id)), ULTIMATE_ID];
     for (let k = 0; k < 40; k++) {
       const ready = arts.filter((id) => canRankAbility(p, id).ok).sort((a, b) => abilityRankCost(a, abilityRank(p, a)) - abilityRankCost(b, abilityRank(p, b)))[0];
@@ -314,7 +327,7 @@ export class Sim {
       this.c.upgrades++;
       this.c.goldSpentStats += r.cost ?? 0;
     }
-    const sig1 = JSON.stringify([p.player.abilityRanks, p.player.statLevels, p.player.perks, p.skills.unlocked, p.equipment.equipped, p.summons.collection.map((s) => [s.stars, s.bond, s.deployed, s.defId])]);
+    const sig1 = JSON.stringify([p.player.abilityRanks, p.player.statLevels, p.player.perks, p.skills.unlocked, p.player.apex, p.equipment.equipped, p.summons.collection.map((s) => [s.stars, s.bond, s.deployed, s.defId])]);
     return sig0 !== sig1;
   }
 
@@ -360,7 +373,7 @@ export class Sim {
 
   forecastSig(): string {
     const p = this.p;
-    return JSON.stringify([p.progress.bossGate, p.player.level, p.player.rank, p.player.statLevels, p.equipment.equipped, p.summons.collection.map((s) => [s.defId, s.level, s.stars, s.bond, s.deployed]), p.skills.unlocked, p.player.perks]);
+    return JSON.stringify([p.progress.bossGate, Math.min(p.player.level, 150), p.player.rank, p.player.statLevels, p.equipment.equipped, p.summons.collection.map((s) => [s.defId, s.level, s.stars, s.bond, s.deployed]), p.skills.unlocked, p.player.perks, p.player.apex]);
   }
 
   run(): void {

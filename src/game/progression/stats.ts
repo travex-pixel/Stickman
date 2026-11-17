@@ -8,6 +8,8 @@ import { TECHNIQUE_OWNED_ATTACK } from "../data/abilities";
 import type { GearEffectId } from "../data/gearEffects";
 import { GEAR_SETS, setCounts } from "../data/gearSets";
 import { ASCEND_MIN_STAGE, LIMIT_BREAK_MAX, LIMIT_BREAK_STEP, TREE_COMPOUND, aetherGoldMult, aetherPowerMult, nodeLevel } from "./ascension";
+import { apexDamageMult, noApex, type ApexRanks } from "../data/apex";
+import { STRENGTH_LEVEL_CAP } from "./xp";
 
 /** Each Ascendant rank multiplies core stats. Rank is earned in Rank Trials, not bought. */
 export const RANK_STAT_STEP = 0.08;
@@ -291,7 +293,7 @@ export function weaponPathBonuses(path: WeaponPath): Partial<Record<StatKey, num
  * Where the warrior's strength comes from: each one can be left out of `computePlayerStats`, which
  * is how the Power sheet measures what each gives (see `powerBreakdown`).
  */
-export const POWER_SOURCES = ["statLevels", "level", "gear", "bag", "sets", "skills", "perks", "weaponPath", "codex", "techniques", "rank", "aether", "tree"] as const;
+export const POWER_SOURCES = ["statLevels", "level", "gear", "bag", "sets", "skills", "perks", "weaponPath", "codex", "techniques", "rank", "aether", "tree", "apex"] as const;
 export type PowerSource = (typeof POWER_SOURCES)[number];
 const NONE: ReadonlySet<PowerSource> = new Set();
 
@@ -314,8 +316,8 @@ export function computePlayerStats(profile: Profile, without: ReadonlySet<PowerS
   s.attack *= aether * (on("tree") ? Math.pow(1 + TREE_COMPOUND.might, nodeLevel(profile, "might")) : 1);
   s.maxHp *= aether * (on("tree") ? Math.pow(1 + TREE_COMPOUND.vigor, nodeLevel(profile, "vigor")) : 1);
 
-  // Warrior level: steady compounding power.
-  const levelMult = on("level") ? 1 + (profile.player.level - 1) * 0.045 : 1;
+  // Warrior level: steady compounding power, to level 150 (levels past it pay skill points for Apex).
+  const levelMult = on("level") ? 1 + (Math.min(profile.player.level, STRENGTH_LEVEL_CAP) - 1) * 0.045 : 1;
   s.attack *= levelMult;
   s.maxHp *= levelMult;
 
@@ -365,11 +367,19 @@ export function computePlayerStats(profile: Profile, without: ReadonlySet<PowerS
   return s;
 }
 
-/** A single number players can compare at a glance. */
-export function combatPower(stats: CombatStats): number {
-  const dps = stats.attack * stats.attackSpeed * (1 + stats.critChance * (stats.critDamage - 1));
+/**
+ * A single number players can compare at a glance. `apex`: the warrior's Apex ranks, whose echoes,
+ * prismatic crits and bolt raise what a swing deals (`apexDamageMult`); none, nothing changes.
+ */
+export function combatPower(stats: CombatStats, apex?: ApexRanks): number {
+  const dps = stats.attack * stats.attackSpeed * (1 + stats.critChance * (stats.critDamage - 1)) * (apex ? apexDamageMult(stats, apex) : 1);
   const ehp = stats.maxHp / Math.max(0.15, 30 / (30 + stats.defense));
   return Math.round(dps * 4 + ehp * 0.6);
+}
+
+/** The warrior's Power (the Hero panel's number), with any source left out; Apex counts unless left out. */
+export function profilePower(profile: Profile, without: ReadonlySet<PowerSource> = NONE): number {
+  return combatPower(computePlayerStats(profile, without), without.has("apex") ? undefined : { ...noApex(), ...profile.player.apex });
 }
 
 const UPGRADEABLE: readonly UpgradeableStat[] = ["attack", "maxHp", "defense", "attackSpeed", "critChance", "critDamage"];
@@ -439,7 +449,7 @@ export function statRoadText(road: StatRoad, label: string): { caption: string; 
  * Power (a stat at its own ceiling, such as crit chance at 85%).
  */
 export function bestStatBuy(profile: Profile): UpgradeableStat | undefined {
-  const now = combatPower(computePlayerStats(profile));
+  const now = profilePower(profile);
   let best: UpgradeableStat | undefined;
   let bestRate = 0;
   for (const s of UPGRADEABLE) {
@@ -448,7 +458,7 @@ export function bestStatBuy(profile: Profile): UpgradeableStat | undefined {
     const cost = statUpgradeCost(s, level);
     if (cost > profile.player.gold) continue;
     const next: Profile = { ...profile, player: { ...profile.player, statLevels: { ...profile.player.statLevels, [s]: level + 1 } } };
-    const rate = (combatPower(computePlayerStats(next)) - now) / cost;
+    const rate = (profilePower(next) - now) / cost;
     if (rate > bestRate) {
       bestRate = rate;
       best = s;

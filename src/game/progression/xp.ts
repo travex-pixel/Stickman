@@ -3,7 +3,13 @@ export function xpForLevel(level: number): number {
   return Math.round(60 * Math.pow(level, 1.85) + 40 * level);
 }
 
-export const PLAYER_LEVEL_CAP = Number(process.env.ASCEND_LEVEL_CAP ?? 150);
+/**
+ * Levels go on past 150, the warrior's full strength: a level past it no longer raises his stats
+ * or offers a perk, it pays a skill point for Apex. The cap only keeps the number on the top bar
+ * to four figures; long before it, Apex is bought out (see DESIGN.md, "Apex").
+ */
+export const STRENGTH_LEVEL_CAP = 150;
+export const PLAYER_LEVEL_CAP = Number(process.env.ASCEND_LEVEL_CAP ?? 9999);
 
 export interface LevelResult {
   level: number;

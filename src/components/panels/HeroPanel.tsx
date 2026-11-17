@@ -12,7 +12,7 @@ import { useShortScreen } from "@/hooks/useShortScreen";
 import type { UpgradeableStat } from "@/game/data/ids";
 import { STAT_LABEL } from "@/game/data/equipment";
 import { aetherFor, canAscend, romanAscension, spendableAether } from "@/game/progression/ascension";
-import { bestStatBuy, combatPower, computePlayerStats, isStatUnlocked, MILESTONE_EVERY, MILESTONE_MULT, statAtCeiling, statRoad, statRoadText, statUnlockRule, statUpgradeCost, statCap } from "@/game/progression/stats";
+import { bestStatBuy, computePlayerStats, isStatUnlocked, profilePower, MILESTONE_EVERY, MILESTONE_MULT, statAtCeiling, statRoad, statRoadText, statUnlockRule, statUpgradeCost, statCap } from "@/game/progression/stats";
 import type { Profile } from "@/game/progression/profile";
 import { canAttemptTrial, nextRankStep, rankLetter } from "@/game/progression/ranks";
 import { nextMilestone } from "@/game/progression/milestones";
@@ -36,7 +36,7 @@ export default function HeroPanel() {
   const profile = useProfileRef();
   const short = useShortScreen();
   const stats = computePlayerStats(profile);
-  const power = combatPower(stats);
+  const power = profilePower(profile);
   // Until the first purchase, a caption teaches the hold.
   const upgraded = STATS.some((s) => profile.player.statLevels[s] > 1);
   // The best buy, marked with the lozenge: the most Power per gold among what is affordable now.

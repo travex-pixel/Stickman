@@ -5,7 +5,13 @@ import { Icon } from "@/components/ui/Icon";
 import { Button } from "@/components/ui/Button";
 import { Segment, Segmented } from "@/components/ui/Segmented";
 import { CurrencyGlyph } from "@/components/ui/Currency";
-import { useController, useProfileRef } from "@/hooks/useGame";
+import { useController, useProfileRef, useUi } from "@/hooks/useGame";
+import { HoldButton } from "@/components/ui/HoldButton";
+import { useShake } from "@/hooks/useShake";
+import { APEX_NAME, anyApexReady, apexDoor, apexDoorText, apexEffectText, apexNextText, apexOpen, apexRanks, apexVisible, canBuyApex, nextApexSkill, statMaxed, APEX_OPEN_STAGE } from "@/game/progression/apex";
+import { APEX_MAX, APEX_SKILLS, type ApexSkillId } from "@/game/data/apex";
+import { SKILLS } from "@/game/data/skills";
+import type { IconName } from "@/components/ui/Icon";
 import { replayClass } from "@/hooks/useShake";
 import { SKILL_BRANCH_INFO, type SkillBranch } from "@/game/data/skills";
 import { BRANCH_PURPOSE, branchSummary, canUnlockSkill, nextSkillPointLevel, nodeEffectText, skillsInBranch } from "@/game/progression/skills";
@@ -24,17 +30,27 @@ import { useCompactFit } from "@/hooks/useCompactFit";
 
 const BRANCHES: SkillBranch[] = ["power", "soul", "command"];
 const NUMERALS = ["I", "II", "III", "IV", "V"];
-type View = SkillBranch | "arts";
+type View = SkillBranch | "arts" | "apex";
 
-/** A branch is a path of five seals; Arts ranks each ability. Tap to read, learn from the detail. */
+/** A branch is a path of five seals; Arts ranks each ability; Apex is the late game's road. Tap to read, act from the detail. */
 export default function SkillsPanel() {
-  const [view, setView] = useState<View>("power");
+  const c = useController();
+  const profile = useProfileRef();
+  const want = useUi((u) => u.skillsView);
+  const [view, setView] = useState<View>(() => (want === "apex" && apexVisible(profile) ? "apex" : "power"));
+  // A request to show Apex (from the Power sheet, the best next step) while the panel is already up.
+  useEffect(() => {
+    if (!want) return;
+    if (want === "apex" && apexVisible(profile)) setView("apex");
+    c.clearSkillsView();
+  }, [want, c, profile]);
   const short = useShortScreen();
-  useRaisePanel(view === "arts");
+  useRaisePanel(view === "arts" || view === "apex");
+  const shown: View = view === "apex" && !apexVisible(profile) ? "power" : view;
   return (
     <div className={cn("flex flex-col h-full min-h-0 px-4", short ? "pt-3 pb-2" : "pt-4 pb-3")}>
-      <Header view={view} setView={setView} />
-      {view === "arts" ? <ArtsView short={short} /> : <SealsView key={view} branch={view} short={short} />}
+      <Header view={shown} setView={setView} />
+      {shown === "arts" ? <ArtsView short={short} /> : shown === "apex" ? <ApexView short={short} /> : <SealsView key={shown} branch={shown} short={short} />}
     </div>
   );
 }
@@ -42,18 +58,29 @@ export default function SkillsPanel() {
 function Header({ view, setView }: { view: View; setView: (v: View) => void }) {
   const profile = useProfileRef();
   const artsReady = anyAbilityRankReady(profile);
+  const apexShown = apexVisible(profile);
+  const apexReady = anyApexReady(profile);
   const points = profile.player.skillPoints;
+  // Points read gold only while they can buy something: a bank with nothing to spend on is not news.
+  const spendable = points > 0 && (apexReady || SKILLS.some((n) => canUnlockSkill(profile, n.id).ok));
+  // Five views and the points fit 320px: from 360px up the segments keep their padding.
+  const seg = apexShown ? "max-[359px]:px-2" : undefined;
   return (
-    <div className="flex items-center justify-between gap-3 shrink-0">
+    <div className={cn("flex items-center justify-between shrink-0", apexShown ? "gap-2 min-[360px]:gap-3" : "gap-3")}>
       <Segmented value={view} onChange={setView} label="Skill paths">
         {BRANCHES.map((b) => (
-          <Segment key={b} id={b} data-testid={`branch-${b}`}>
+          <Segment key={b} id={b} className={seg} data-testid={`branch-${b}`}>
             {SKILL_BRANCH_INFO[b].label}
           </Segment>
         ))}
-        <Segment id="arts" badge={artsReady && view !== "arts"} data-testid="branch-arts">
+        <Segment id="arts" className={seg} badge={artsReady && view !== "arts"} data-testid="branch-arts">
           Arts
         </Segment>
+        {apexShown && (
+          <Segment id="apex" className={seg} badge={apexReady && view !== "apex"} data-testid="apex-tab">
+            Apex
+          </Segment>
+        )}
       </Segmented>
       {view === "arts" ? (
         <span className="flex items-center gap-1.5 t-num-m text-t1 shrink-0">
@@ -61,12 +88,12 @@ function Header({ view, setView }: { view: View; setView: (v: View) => void }) {
           {fmt(profile.player.gold)}
         </span>
       ) : (
-        <span className={cn("t-label shrink-0 whitespace-nowrap", points > 0 ? "text-gold" : "text-t3")}>
+        <span className={cn("t-label shrink-0 whitespace-nowrap", spendable ? "text-gold" : points > 0 ? "text-t2" : "text-t3")} aria-label={`${points} skill ${points === 1 ? "point" : "points"}`}>
           <span className="t-num-m" data-testid="skill-points">
             {points}
           </span>
           <span className="hidden min-[360px]:inline"> {points === 1 ? "point" : "points"}</span>
-          <span className="min-[360px]:hidden"> pt</span>
+          <span className={cn("min-[360px]:hidden", apexShown && "hidden")}> pt</span>
         </span>
       )}
     </div>
@@ -179,7 +206,7 @@ function SealsView({ branch, short }: { branch: SkillBranch; short: boolean }) {
           </span>
           <p className={cn("t-body text-t2 mt-1", compact ? "line-clamp-1" : "line-clamp-2")}>
             {selected.description}
-            {short1 && <span className="text-t3"> Points come every second level; the next at level {nextSkillPointLevel(profile.player.level)}.</span>}
+            {short1 && <span className="text-t3"> Points come every second level, every level past 150; the next at level {nextSkillPointLevel(profile.player.level)}.</span>}
           </p>
         </div>
         <div className={cn("flex items-center gap-2 shrink-0", !compact && "mt-auto pt-3")}>
@@ -383,6 +410,180 @@ function ArtsView({ short }: { short: boolean }) {
               </span>
             )}
           </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const APEX_ICON: Record<ApexSkillId, IconName> = { double: "sword", triple: "bolt", prism: "crit", crown: "star" };
+
+/** What a skill is, before its first rank. */
+const APEX_ABOUT: Record<ApexSkillId, string> = {
+  double: "Each rank, 10% more of your swings strike again at once, for 60% of a blow. At 10, every swing.",
+  triple: "Each rank, 10% more Double Strikes strike a third time, in lightning. At 10, every one.",
+  prism: "Each rank, 2% more of your critical hits turn prismatic, abilities' too: twice the damage.",
+  crown: "Every twelfth blow calls a prismatic bolt that forks to three foes. Your final form.",
+};
+
+/** Rank pips: one bar a rank (Stormcrown has one). */
+function Pips({ id, rank, className }: { id: ApexSkillId; rank: number; className?: string }) {
+  return (
+    <span className={cn("flex gap-[3px] shrink-0", className)} aria-hidden="true">
+      {Array.from({ length: APEX_MAX[id] }, (_, i) => (
+        <span key={i} className={cn("h-[3px] rounded-full", APEX_MAX[id] === 1 ? "w-6" : "w-[7px]", i < rank ? "bg-gold" : "bg-bg-3")} />
+      ))}
+    </span>
+  );
+}
+
+/**
+ * Apex: the four late skills in order, each with its ranks, what the next adds and its price, or
+ * exactly what it waits for. One gold action buys the picked skill's next rank (hold to repeat).
+ */
+function ApexView({ short }: { short: boolean }) {
+  const c = useController();
+  const profile = useProfileRef();
+  const ranks = apexRanks(profile);
+  const open = apexOpen(profile);
+  const points = profile.player.skillPoints;
+  const [picked, setPicked] = useState<ApexSkillId | null>(null);
+  const firstLocked = APEX_SKILLS.find((id) => ranks[id] < APEX_MAX[id]) ?? "crown";
+  const selected = picked ?? nextApexSkill(profile) ?? firstLocked;
+  const rank = ranks[selected];
+  const check = canBuyApex(profile, selected);
+  const maxed = rank >= APEX_MAX[selected];
+  const door = apexDoorText(profile, selected);
+  const next = apexNextText(selected, rank);
+  const [pill, shake] = useShake<HTMLSpanElement>();
+  const tall = usePanelDetent() === "tall";
+  const box = useRef<HTMLDivElement>(null);
+  const [room, setRoom] = useState(0);
+  useLayoutEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setRoom(el.clientHeight));
+    ro.observe(el);
+    setRoom(el.clientHeight);
+    return () => ro.disconnect();
+  }, []);
+  // Rows when they fit with the detail under them (status, four rows, two lines, the action); else a strip.
+  const rows = (tall || !short) && room >= 18 + 4 * 48 + 8 + 40 + 8 + 52;
+  const allMax = APEX_SKILLS.every((id) => ranks[id] >= APEX_MAX[id]);
+  const everyLevel = profile.player.level >= 150;
+  const status = !open
+    ? `Opens when the stage-${APEX_OPEN_STAGE - 1} boss falls. Its skills turn attack speed and crit past their ceilings into power.`
+    : allMax
+      ? "Apex mastered: every swing strikes three times."
+      : ranks.double === 0 && statMaxed(profile, "attackSpeed")
+        ? "Attack speed is at its ceiling: Double Strike is open"
+        : ranks.prism === 0 && statMaxed(profile, "critChance") && ranks.double >= APEX_MAX.double
+          ? "Crit rate is at its ceiling: Prismatic Edge is open"
+          : `Skill points come ${everyLevel ? "with every level" : "every second level, then every level past 150"}.`;
+  const buyLabel = maxed
+    ? "Mastered"
+    : check.ok
+      ? `Rank ${rank + 1} · ${check.cost} ${check.cost === 1 ? "point" : "points"}`
+      : check.reason === "points"
+        ? `Needs ${check.cost} points · ${points}`
+        : "Locked";
+  return (
+    <div ref={box} className="flex flex-col flex-1 min-h-0" data-testid="apex-view">
+      <p className={cn("t-caption shrink-0 mt-1", open ? "text-t2" : "text-t3", rows ? "line-clamp-2" : "truncate")} data-testid="apex-status">
+        {status}
+      </p>
+      {rows ? (
+        <div className="-mx-4 mt-2 shrink-0 shadow-[inset_0_1px_0_var(--line)]">
+          {APEX_SKILLS.map((id) => {
+            const r = ranks[id];
+            const ch = canBuyApex(profile, id);
+            const isSel = id === selected;
+            const locked = apexDoor(profile, id).kind !== "open" && r < APEX_MAX[id];
+            const done = r >= APEX_MAX[id];
+            return (
+              <button
+                key={id}
+                className={cn("press-fill relative flex h-12 w-full items-center gap-3 px-4 text-left shadow-[inset_0_-1px_0_var(--line)]", isSel && "bg-bg-2")}
+                onClick={() => setPicked(id)}
+                data-testid={`apex-skill-${id}`}
+                data-rank={r}
+                aria-pressed={isSel}
+                aria-label={`${APEX_NAME[id]}, ${r} of ${APEX_MAX[id]}${done ? ", mastered" : locked ? ", locked" : ch.ok ? `, ${ch.cost} points` : ""}`}
+              >
+                {isSel && <span className="absolute left-0 inset-y-2 w-[2px] rounded-full bg-gold" aria-hidden="true" />}
+                <Icon name={locked ? "lock" : APEX_ICON[id]} size={17} className={cn("shrink-0", locked ? "text-t3" : r > 0 ? "text-gold" : "text-t1")} />
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className={cn("t-body truncate", locked ? "text-t2" : "text-t1")}>{APEX_NAME[id]}</span>
+                  <Pips id={id} rank={r} className="mt-1" />
+                </span>
+                <span className={cn("t-label tnum shrink-0", done ? "text-jade" : ch.ok ? "text-gold" : "text-t2")}>
+                  {done ? <Icon name="check" size={14} /> : `${r}/${APEX_MAX[id]}`}
+                </span>
+                {!done && !locked && <span className={cn("t-label tnum shrink-0 w-11 text-right", ch.ok ? "text-gold" : "text-t3")}>{ch.cost} pt</span>}
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <div className={cn("flex items-center justify-between shrink-0", short ? "mt-1.5" : "mt-3")}>
+          {APEX_SKILLS.map((id, i) => {
+            const r = ranks[id];
+            const isSel = id === selected;
+            const locked = apexDoor(profile, id).kind !== "open" && r < APEX_MAX[id];
+            const ready = canBuyApex(profile, id).ok;
+            return (
+              <div key={id} className={cn("relative flex items-center", i < APEX_SKILLS.length - 1 && "flex-1")}>
+                <button
+                  className="press relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full"
+                  onClick={() => setPicked(id)}
+                  data-testid={`apex-skill-${id}`}
+                  data-rank={r}
+                  aria-pressed={isSel}
+                  aria-label={`${APEX_NAME[id]}, ${r} of ${APEX_MAX[id]}${locked ? ", locked" : ""}`}
+                >
+                  <span className={cn("absolute inset-0 rounded-full", isSel ? "bg-bg-3" : "bg-bg-2", r >= APEX_MAX[id] && "shadow-[inset_0_0_0_1.5px_var(--color-gold)]")} />
+                  <Icon name={locked ? "lock" : APEX_ICON[id]} size={locked ? 14 : 18} className={cn("relative", locked ? "text-t3" : r > 0 ? "text-gold" : "text-t1")} />
+                  {isSel && <span className="absolute -inset-[5px] rounded-full shadow-[inset_0_0_0_1.5px_var(--color-t2)]" aria-hidden="true" />}
+                  {ready && <span className="absolute right-0 top-0 h-1.5 w-1.5 rounded-full bg-gold" aria-hidden="true" />}
+                </button>
+                {i < APEX_SKILLS.length - 1 && <span className="mx-2 h-px flex-1 bg-[var(--line-2)]" aria-hidden="true" />}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <div className={cn("flex flex-col flex-1 min-h-0", rows ? "mt-2" : short ? "mt-1.5" : "mt-3")} data-testid="apex-detail">
+        <div className={cn("flex items-center justify-between gap-3 shrink-0", rows && "hidden")}>
+          <span className="t-title text-t1 truncate">{APEX_NAME[selected]}</span>
+          <span className="flex items-center gap-2 shrink-0">
+            <Pips id={selected} rank={rank} />
+            <span className="t-label tnum text-t2">
+              {rank}/{APEX_MAX[selected]}
+            </span>
+          </span>
+        </div>
+        <p className={cn("t-label mt-1 shrink-0", rank > 0 ? "text-t1" : "text-t2", short && !rows ? "line-clamp-1" : "line-clamp-2")} data-testid="apex-about">
+          {rows && <span className="text-t1">{APEX_NAME[selected]}. </span>}
+          {rank > 0 ? `Now: ${apexEffectText(selected, rank)}.` : APEX_ABOUT[selected]}
+        </p>
+        <div className={cn("mt-auto flex items-center gap-3 shrink-0", short ? "pt-1.5" : "pt-2")}>
+          <p className={cn("flex-1 min-w-0 t-label line-clamp-2", door && !maxed ? "text-t2" : "text-jade")} data-testid="apex-next">
+            {maxed ? "Mastered" : door ? door : next ? `Next: ${next}` : null}
+          </p>
+          <HoldButton
+            onRepeat={() => c.buyApex(selected)}
+            disabled={!check.ok}
+            onDenied={!maxed && check.reason === "points" ? () => (shake(), c.audio.play("error", { volume: 0.3, minInterval: 200 })) : undefined}
+            feedback="scale"
+            className={cn("ui-btn shrink-0", short ? "h-11 px-4 text-[14px] leading-[18px] font-semibold rounded-[14px]" : "h-[52px] px-5 t-button rounded-[14px]")}
+            variant="primary"
+            testId="apex-buy"
+            label={check.ok ? `Buy ${APEX_NAME[selected]} rank ${rank + 1} for ${check.cost} skill points` : buyLabel}
+          >
+            <span ref={pill} className="flex items-center gap-1.5 tnum">
+              {buyLabel}
+            </span>
+          </HoldButton>
         </div>
       </div>
     </div>

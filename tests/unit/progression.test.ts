@@ -23,7 +23,8 @@ describe("xp and levels", () => {
     expect(r.levelsGained).toBe(3);
   });
   it("caps at level cap", () => {
-    const r = applyXp(PLAYER_LEVEL_CAP - 1, 0, 10_000_000);
+    // Far more than the last level costs (the cap is 9999 since levels pay Apex points past 150).
+    const r = applyXp(PLAYER_LEVEL_CAP - 1, 0, xpForLevel(PLAYER_LEVEL_CAP - 1) * 10);
     expect(r.level).toBe(PLAYER_LEVEL_CAP);
     expect(r.xp).toBeLessThan(xpForLevel(PLAYER_LEVEL_CAP));
   });

@@ -429,3 +429,74 @@ for (const vp of VIEWPORTS) {
     await expect(page.getByTestId("deploy-count")).toHaveText("4 of 4");
   });
 }
+
+/** Apex: the fifth Skills view, locked, part-way and mastered, with the points beside five tabs. */
+for (const vp of VIEWPORTS) {
+  test(`the Apex tab fits ${vp.w}x${vp.h}: locked, part-way and mastered`, async ({ page }) => {
+    await page.setViewportSize({ width: vp.w, height: vp.h });
+    await waitForGame(page);
+    const seed = (state: "locked" | "partway" | "maxed") =>
+      page.evaluate((state) => {
+        type C = { profile: { tutorial: { finished: boolean; completed: string[] }; player: Record<string, unknown>; progress: Record<string, unknown>; skills: { unlocked: string[] } }; commit(): void; closeModal(): void; startRun(s: number): void };
+        const c = (window as unknown as { __ASCEND__: C }).__ASCEND__;
+        const p = c.profile;
+        p.tutorial.finished = true;
+        p.player.techniques = ["blade_tempest", "chain_hook", "blood_pact"];
+        p.player.pendingPerkChoices = 0;
+        p.player.statLevels = { attack: 150, maxHp: 140, attackSpeed: 120, critChance: 150, critDamage: 140, defense: 130 };
+        p.skills.unlocked = ["p1", "p2", "p3", "p4", "p5", "s1", "s2", "s3", "s4", "s5", "c1", "c2", "c3", "c4", "c5"];
+        p.progress.bossGate = 0;
+        if (state === "locked") Object.assign(p.progress, { bestStage: 33, currentStage: 33 });
+        else Object.assign(p.progress, { bestStage: 52, currentStage: 52 });
+        p.player.level = state === "locked" ? 70 : state === "partway" ? 168 : 2150;
+        p.player.skillPoints = state === "partway" ? 30 : 47;
+        p.player.apex = state === "locked" ? { double: 0, triple: 0, prism: 0, crown: 0 } : state === "partway" ? { double: 10, triple: 6, prism: 3, crown: 0 } : { double: 10, triple: 10, prism: 10, crown: 1 };
+        c.commit();
+        c.startRun(p.progress.currentStage as number);
+      }, state);
+    const close = () => page.evaluate(() => { for (let i = 0; i < 6; i++) (window as unknown as { __ASCEND__: { closeModal(): void } }).__ASCEND__.closeModal(); });
+    for (const state of ["locked", "partway", "maxed"] as const) {
+      await seed(state);
+      await page.waitForTimeout(900);
+      await close();
+      await page.getByTestId("tab-skills").click();
+      await page.waitForTimeout(300);
+      await close();
+      await page.getByTestId("apex-tab").click();
+      await page.waitForTimeout(600);
+      await close();
+      const bad = await page.evaluate(() => {
+        const panel = document.querySelector("[data-testid=panel-skills]") as HTMLElement;
+        const pr = panel.getBoundingClientRect();
+        const out: string[] = [];
+        panel.querySelectorAll<HTMLElement>("button, [data-testid=skill-points]").forEach((b) => {
+          const r = b.getBoundingClientRect();
+          if (r.width === 0 || r.height === 0) return;
+          if (r.bottom > pr.bottom + 1 || r.right > Math.min(pr.right, window.innerWidth) + 1 || r.top < pr.top - 1 || r.left < -1) out.push(b.getAttribute("data-testid") ?? (b.textContent ?? "").slice(0, 20));
+        });
+        return out;
+      });
+      expect(bad, `${state}: off the panel`).toEqual([]);
+      for (const id of ["apex-tab", "apex-buy", "apex-skill-double", "apex-skill-triple", "apex-skill-prism", "apex-skill-crown", "branch-power", "branch-arts"]) {
+        const box = await page.getByTestId(id).boundingBox();
+        expect(box, `${state} ${id}`).not.toBeNull();
+        expect(box!.height, `${state} ${id} target`).toBeGreaterThanOrEqual(44);
+        expect(box!.width, `${state} ${id} target`).toBeGreaterThanOrEqual(44);
+      }
+      // The top bar holds a four-figure level.
+      const lv = await page.getByTestId("top-bar").evaluate((el) => ({ sw: el.scrollWidth, cw: el.clientWidth }));
+      expect(lv.sw, `${state}: top bar overflows`).toBeLessThanOrEqual(lv.cw + 1);
+      if (state === "locked") await expect(page.getByTestId("apex-next")).toContainText("stage-39 boss");
+      if (state === "maxed") await expect(page.getByTestId("apex-status")).toContainText("mastered");
+      if (state === "partway") {
+        // The next rank is one tap: Prismatic Edge 4 for 8 points.
+        await page.getByTestId("apex-skill-prism").click();
+        await page.getByTestId("apex-buy").click();
+        await page.waitForTimeout(200);
+        expect(await page.evaluate(() => (window as unknown as { __ASCEND__: { profile: { player: { apex: { prism: number } } } } }).__ASCEND__.profile.player.apex.prism)).toBe(4);
+        await page.getByTestId("apex-skill-crown").click();
+        await expect(page.getByTestId("apex-next")).toContainText("Needs the other three at 10/10");
+      }
+    }
+  });
+}

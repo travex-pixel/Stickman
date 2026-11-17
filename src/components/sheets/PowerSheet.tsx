@@ -16,9 +16,11 @@ import { weaponPathDef } from "@/game/progression/weaponPaths";
 import { canAttemptTrial, rankLetter } from "@/game/progression/ranks";
 import { STAT_LABEL } from "@/game/data/equipment";
 import { fmt } from "@/lib/format";
+import { APEX_NAME, apexOpen, apexRanks, apexVisible } from "@/game/progression/apex";
+import { APEX_SKILLS, doubleChance, tripleChance } from "@/game/data/apex";
 import { cn } from "@/lib/cn";
 
-type Go = "hero" | "gear" | "skills" | "summons" | "rift" | "ascend" | "perks" | "trial" | null;
+type Go = "hero" | "gear" | "skills" | "summons" | "rift" | "ascend" | "perks" | "trial" | "apex" | null;
 
 const SOURCE: Record<PowerSource, { label: string; icon: IconName; go: Go }> = {
   statLevels: { label: "Stat levels", icon: "level", go: "hero" },
@@ -34,6 +36,7 @@ const SOURCE: Record<PowerSource, { label: string; icon: IconName; go: Go }> = {
   rank: { label: "Rank", icon: "star", go: "trial" },
   aether: { label: "Aether", icon: "rift", go: "ascend" },
   tree: { label: "Aether tree", icon: "rift", go: "ascend" },
+  apex: { label: "Apex", icon: "bolt", go: "apex" },
 };
 
 const SHORT: Record<UpgradeableStat, string> = { attack: "Attack", maxHp: "Health", defense: "Defence", attackSpeed: "Attack speed", critChance: "Crit rate", critDamage: "Crit damage" };
@@ -49,7 +52,7 @@ export function sourceDetail(p: Profile, s: PowerSource): string {
       return `${SHORT[top[0]!]} Lv ${lv[top[0]!]}, ${SHORT[top[1]!]} Lv ${lv[top[1]!]} and 4 more${ms > 1 ? `; milestones ×${ms < 10 ? ms.toFixed(2) : fmt(ms)} Attack` : ""}`;
     }
     case "level":
-      return `Level ${p.player.level}: ${pctOf((p.player.level - 1) * 0.045)} Attack and Health`;
+      return `Level ${p.player.level}: ${pctOf((Math.min(p.player.level, 150) - 1) * 0.045)} Attack and Health${p.player.level > 150 ? " (full strength at 150)" : ""}`;
     case "gear": {
       const n = equippedItems(p).length;
       return n ? `${n} of 6 slots worn` : "Nothing worn: equip what bosses drop";
@@ -93,6 +96,13 @@ export function sourceDetail(p: Profile, s: PowerSource): string {
       const v = nodeLevel(p, "vigor");
       return m || v ? `Might ${m}, Vigor ${v}: ${pctOf(Math.pow(1 + TREE_COMPOUND.might, m) - 1)} Attack, ${pctOf(Math.pow(1 + TREE_COMPOUND.vigor, v) - 1)} Health` : "Spend Aether on Might and Vigor";
     }
+    case "apex": {
+      const r = apexRanks(p);
+      const owned = APEX_SKILLS.filter((id) => r[id] > 0);
+      if (!owned.length) return apexOpen(p) ? "Spend skill points in Skills, Apex" : "Opens when the stage-39 boss falls";
+      const blows = 1 + doubleChance(r) + doubleChance(r) * tripleChance(r);
+      return `${owned.map((id) => `${APEX_NAME[id].split(" ")[0]} ${r[id]}`).join(", ")}: a swing strikes ${blows.toFixed(blows % 1 ? 1 : 0)} times`;
+    }
   }
 }
 
@@ -112,11 +122,13 @@ export function PowerSheet({ open }: { open: boolean }) {
   const step = useMemo(() => nextStep(profile, fmt), [profile, profile.player.gold, profile.player.skillPoints, profile.player.pendingPerkChoices, profile.equipment.equipped, profile.equipment.inventory.length]); // eslint-disable-line react-hooks/exhaustive-deps
   const rows = [...b.rows].sort((x, y) => y.power - x.power);
   const live = rows.filter((r) => r.share >= 0.0005);
-  const idle = rows.filter((r) => r.share < 0.0005);
+  // Apex is listed once it shows in Skills (open, or its locked tab): before, it is not news.
+  const idle = rows.filter((r) => r.share < 0.0005 && (r.source !== "apex" || apexVisible(profile)));
   const go = (to: Go) => {
     if (!to) return;
     c.closeModal();
     if (to === "ascend") c.openAscension();
+    else if (to === "apex") c.openApex();
     else if (to === "perks") {
       if (profile.player.pendingPerkChoices > 0) c.openPerkChoice();
     } else if (to === "trial") {
@@ -124,7 +136,7 @@ export function PowerSheet({ open }: { open: boolean }) {
       else c.setPanel("rift");
     } else c.setPanel(to);
   };
-  const stepGo: Record<NextStep["kind"], Go> = { perk: "perks", skill: "skills", gear: "gear", aether: "ascend", trial: "trial", stat: "hero", boss: null, farm: "hero", ascend: "ascend" };
+  const stepGo: Record<NextStep["kind"], Go> = { perk: "perks", skill: "skills", apex: "apex", gear: "gear", aether: "ascend", trial: "trial", stat: "hero", boss: null, farm: "hero", ascend: "ascend" };
   const onStep = () => {
     if (step.kind === "boss") {
       c.closeModal();

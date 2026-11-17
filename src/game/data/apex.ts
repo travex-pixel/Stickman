@@ -52,3 +52,21 @@ export function tripleChance(r: ApexRanks): number {
 export function prismChance(r: ApexRanks): number {
   return Math.min(1, Math.max(0, r.prism) * PRISM_CHANCE_PER_RANK);
 }
+
+/**
+ * Apex in the Power number: the expected damage of a swing with Apex over one without, from the
+ * warrior's crit rate and crit damage (one target; the forks are not counted). 1 without ranks.
+ */
+export function apexDamageMult(stats: { critChance: number; critDamage: number }, r: ApexRanks): number {
+  if (!r.double && !r.triple && !r.prism && !r.crown) return 1;
+  const c = Math.min(1, Math.max(0, stats.critChance));
+  const cd = Math.max(1, stats.critDamage);
+  const plain = 1 + c * (cd - 1);
+  const withPrism = plain + c * prismChance(r) * cd * (PRISM_MULT - 1);
+  const d = doubleChance(r);
+  const t = tripleChance(r);
+  const strikes = 1 + d * ECHO_POWER[1] + d * t * ECHO_POWER[2];
+  const blows = 1 + d + d * t;
+  const storm = r.crown > 0 ? (blows / STORM_EVERY) * STORM_POWER * cd * PRISM_MULT : 0;
+  return (strikes * withPrism + storm) / plain;
+}

@@ -10,7 +10,10 @@ import { createDefaultProfile, type EquipmentItem, type Profile, type SummonInst
 import { buildLoadout } from "./progression/loadout";
 import { applyXp } from "./progression/xp";
 import { upgradeStat as doUpgradeStat, type UpgradeAttempt } from "./progression/upgrades";
-import { unlockSkill as doUnlockSkill } from "./progression/skills";
+import { canUnlockSkill, unlockSkill as doUnlockSkill } from "./progression/skills";
+import { SKILLS } from "./data/skills";
+import { APEX_NAME, anyApexReady, apexDoor, apexEffectText, apexOpen, apexRanks, apexVisible, buyApexRank } from "./progression/apex";
+import { APEX_MAX, APEX_SKILLS, type ApexSkillId } from "./data/apex";
 import { anyAbilityRankReady, rankAbility as doRankAbility } from "./progression/abilityRanks";
 import { learnTechniques, setSlotForm } from "./progression/techniques";
 import { autoPickPerks as doAutoPickPerks, boughtLine, offerPerks, takePerk as doTakePerk } from "./progression/perks";
@@ -27,7 +30,7 @@ import { bondCost, BOND_CAP, canStarUp, checkEvolution, evolveSummon, grantSummo
 import { ENEMIES, enemyDef } from "./data/enemies";
 import { MODES, RIFT_ESSENCE_PER_KILL, cryptSlot, isKeyedMode, type ModeId } from "./data/modes";
 import { RARITY_ORDER } from "./data/ids";
-import { REPEAT_BOSS_CORE_CHANCE, shadowXpShare, skillPointsBetween, stageClearGold, stageClearXp } from "./economy/rewards";
+import { REPEAT_BOSS_CORE_CHANCE, perkPicksBetween, shadowXpShare, skillPointsBetween, stageClearGold, stageClearXp } from "./economy/rewards";
 import { RANK_STEPS, nextRankStep, promote } from "./progression/ranks";
 import { ELITES } from "./data/elites";
 import { GEAR_EFFECTS } from "./data/gearEffects";
@@ -123,6 +126,8 @@ export interface UiState {
   paused: boolean;
   /** A boss gate was just reached at this stage (drives the milestone banner). */
   gateFlash: number;
+  /** A request for the Skills panel to show this view when it opens (Apex, from the Power sheet or a toast). */
+  skillsView: "apex" | null;
 }
 
 export interface ViewTransform {
@@ -167,6 +172,7 @@ export class GameController {
     selectedItem: null,
     paused: false,
     gateFlash: 0,
+    skillsView: null,
   });
   /** Rendered rig portraits by key ("summon:husk_blade"), filled on demand once the renderer is up. */
   readonly portraitStore = new Store<Record<string, string>>({});
@@ -836,6 +842,7 @@ export class GameController {
       this.rankBadgeShown = true;
       this.uiStore.update((u) => ({ ...u, newBadges: { ...u.newBadges, skills: true } }));
     }
+    this.watchApexDoors();
     const newAch = evaluateAchievements(p);
     // Several earned at once are one line, not a queue of them.
     if (newAch.length === 1) this.toast(`Achievement: ${newAch[0]!.replace(/_/g, " ")}`, "level");
@@ -851,11 +858,15 @@ export class GameController {
 
   private onLevelUp(levels: number): void {
     const p = this.profile;
-    p.player.skillPoints += skillPointsBetween(p.player.level - levels, p.player.level);
-    p.player.pendingPerkChoices += levels;
+    const from = p.player.level - levels;
+    const points = skillPointsBetween(from, p.player.level);
+    const picks = perkPicksBetween(from, p.player.level);
+    p.player.skillPoints += points;
+    p.player.pendingPerkChoices += picks;
     this.sfx("level_up", { volume: 0.9 });
-    // One toast: a second would replace this one before it could be read.
-    this.toast(`Level ${p.player.level}! ${levels > 1 ? `${levels} perks` : "A perk"} to choose`, "level");
+    // One toast: a second would replace this one before it could be read. Past 150 a level pays
+    // a skill point (for Apex) instead of a perk.
+    this.toast(picks > 0 ? `Level ${p.player.level}! ${picks > 1 ? `${picks} perks` : "A perk"} to choose` : `Level ${p.player.level}! +${points} skill point${points === 1 ? "" : "s"}${anyApexReady(p) ? ": an Apex rank is ready" : ""}`, "level");
     this.renderer?.levelUpBurst();
     if (this.world && !this.world.player.dead) {
       this.world.player.hp = Math.min(this.world.player.stats.maxHp, this.world.player.hp + this.world.player.stats.maxHp * 0.3);
@@ -863,9 +874,71 @@ export class GameController {
     for (const id of Object.keys(ABILITIES) as AbilityId[]) {
       if (ABILITIES[id].unlockLevel === p.player.level) this.toast(`Level ${p.player.level}! New ability: ${ABILITIES[id].name}`, "level");
     }
-    this.uiStore.update((u) => ({ ...u, newBadges: { ...u.newBadges, skills: true } }));
+    // The Skills dot says something can be bought there now: never just "points are banked".
+    if (this.uiStore.get().panel !== "skills" && (SKILLS.some((s) => canUnlockSkill(p, s.id).ok) || anyApexReady(p))) this.uiStore.update((u) => ({ ...u, newBadges: { ...u.newBadges, skills: true } }));
     this.refreshLoadout();
     // Perks wait for the player: a chip pulses in the HUD instead of a modal freezing the fight.
+  }
+
+  /** Whether Apex was open, and which of its doors, at the last look (null before the first). */
+  private apexDoorsSeen: string | null = null;
+
+  /**
+   * Says when Apex opens (the stage-39 boss falls) and when attack speed or crit rate reaching its
+   * ceiling opens Double Strike or Prismatic Edge. A door a purchase opens needs no line: the
+   * purchase has its own.
+   */
+  private watchApexDoors(): void {
+    const p = this.profile;
+    if (!apexVisible(p)) return;
+    const isOpen = apexOpen(p);
+    const doors = APEX_SKILLS.filter((id) => apexDoor(p, id).kind === "open");
+    const sig = `${isOpen ? "A" : "-"}|${doors.join(",")}`;
+    const before = this.apexDoorsSeen;
+    this.apexDoorsSeen = sig;
+    if (before === null || before === sig || !isOpen) return;
+    const ready = doors.filter((id) => apexRanks(p)[id] < APEX_MAX[id]);
+    let line: string | null = null;
+    if (!before.startsWith("A")) line = ready.length ? `Apex is open: ${APEX_NAME[ready[0]!]} waits in Skills` : "Apex is open in Skills";
+    else {
+      const was = before.slice(2).split(",");
+      if (doors.includes("double") && !was.includes("double")) line = "Attack speed is at its ceiling: Double Strike is open";
+      else if (doors.includes("prism") && !was.includes("prism")) line = "Crit rate is at its ceiling: Prismatic Edge is open";
+    }
+    if (!line) return;
+    this.toast(line, "level", 2);
+    if (this.uiStore.get().panel !== "skills") this.uiStore.update((u) => ({ ...u, newBadges: { ...u.newBadges, skills: true } }));
+  }
+
+  /** Spend skill points on one Apex rank: a moment on the field, and a line saying what it does now. */
+  buyApex(id: ApexSkillId): boolean {
+    this.userGesture();
+    const rank = buyApexRank(this.profile, id);
+    if (rank === null) {
+      this.sfx("error", { volume: 0.3 });
+      return false;
+    }
+    const maxed = rank >= APEX_MAX[id];
+    this.sfx("upgrade", { volume: 0.6, rate: 0.85 + rank * 0.03 });
+    this.sfx("level_up", { volume: maxed ? 0.8 : 0.4, rate: maxed ? 1 : 1.4 });
+    this.toast(maxed ? `${APEX_NAME[id]} mastered: ${apexEffectText(id, rank)}` : `${APEX_NAME[id]} ${rank}/${APEX_MAX[id]}: ${apexEffectText(id, rank)}`, "level", 2);
+    // The renderer's moment for it (the warrior's form, a flash), when the renderer offers one.
+    (this.renderer as unknown as { apexRankUp?: (skill: ApexSkillId, rank: number, maxed: boolean) => void } | null)?.apexRankUp?.(id, rank, maxed);
+    this.refreshLoadout();
+    this.afterProgression();
+    this.commit();
+    return true;
+  }
+
+  /** Opens Skills on its Apex view. */
+  openApex(): void {
+    this.uiStore.update((u) => ({ ...u, skillsView: "apex" }));
+    this.setPanel("skills");
+  }
+
+  /** The Skills panel took its requested view. */
+  clearSkillsView(): void {
+    if (this.uiStore.get().skillsView) this.uiStore.update((u) => ({ ...u, skillsView: null }));
   }
 
   /** Many perks waiting (a long absence): spend every one, balanced across tones, in one tap. */
@@ -978,7 +1051,7 @@ export class GameController {
       return it ? `${it.uid}:${it.level}` : "";
     });
     const army = p.summons.collection.filter((s) => s.deployed).map((s) => `${s.defId}:${s.level}:${s.stars ?? 0}:${s.bond}`);
-    return JSON.stringify([p.progress.bossGate, p.player.level, p.player.rank, p.player.statLevels, eq, army, p.skills.unlocked, p.player.abilityRanks, p.player.artForms, p.player.perks, p.player.weaponPath]);
+    return JSON.stringify([p.progress.bossGate, Math.min(p.player.level, 150), p.player.rank, p.player.statLevels, eq, army, p.skills.unlocked, p.player.abilityRanks, p.player.artForms, p.player.perks, p.player.weaponPath, p.player.apex]);
   }
 
   /**

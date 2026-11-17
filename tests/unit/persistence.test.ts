@@ -3,6 +3,7 @@ import { IndexedDbSaveManager } from "@/persistence/SaveManager";
 import { sanitizeProfile } from "@/persistence/SaveSchema";
 import { runMigrations } from "@/persistence/migrations";
 import { createDefaultProfile, PROFILE_VERSION } from "@/game/progression/profile";
+import { PLAYER_LEVEL_CAP } from "@/game/progression/xp";
 import { claimEssence } from "@/game/summons/recruitment";
 
 describe("save manager (IndexedDB)", () => {
@@ -67,10 +68,10 @@ describe("validation and repair", () => {
   });
   it("clamps absurd values", () => {
     const p = createDefaultProfile();
-    p.player.level = 9999;
+    p.player.level = 99_999;
     p.settings.music = 7;
     const { profile } = sanitizeProfile(p);
-    expect(profile.player.level).toBe(150);
+    expect(profile.player.level).toBe(PLAYER_LEVEL_CAP);
     expect(profile.settings.music).toBe(1);
   });
 });

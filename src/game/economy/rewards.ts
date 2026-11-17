@@ -1,5 +1,6 @@
 import { depthForStage } from "../data/depths";
 import { stageScale } from "../data/regions";
+import { STRENGTH_LEVEL_CAP } from "../progression/xp";
 
 /**
  * Stage-clear and shared rewards. Pure so the game, the balance harness and the progression
@@ -27,9 +28,15 @@ export function shadowXpShare(enemyXp: number, stage: number, deployed: boolean,
   return enemyXp * stageScale(stage).reward * 0.6 * mult * (deployed ? 1 : BENCH_XP_SHARE);
 }
 
-/** Skill points arrive every second level. */
+/** Skill points arrive every second level to 150, then with every level (they buy Apex ranks). */
+export const POINT_EVERY_LEVEL_FROM = STRENGTH_LEVEL_CAP + 1;
 export function skillPointsBetween(fromLevel: number, toLevel: number): number {
   let n = 0;
-  for (let l = fromLevel + 1; l <= toLevel; l++) if (l % 2 === 0) n++;
+  for (let l = fromLevel + 1; l <= toLevel; l++) if (l >= POINT_EVERY_LEVEL_FROM || l % 2 === 0) n++;
   return n;
+}
+
+/** Perk picks arrive with every level to 150 (the warrior's full strength), not past it. */
+export function perkPicksBetween(fromLevel: number, toLevel: number): number {
+  return Math.max(0, Math.min(toLevel, STRENGTH_LEVEL_CAP) - Math.min(fromLevel, STRENGTH_LEVEL_CAP));
 }

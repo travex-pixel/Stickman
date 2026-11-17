@@ -3,14 +3,16 @@ import { EQUIP_SLOTS } from "../data/ids";
 import { SKILLS } from "../data/skills";
 import { GEAR_SETS, setCounts, setOf } from "../data/gearSets";
 import type { EquipmentItem, Profile } from "./profile";
-import { POWER_SOURCES, type PowerSource, bagItems, bestStatBuy, combatPower, computePlayerStats, equippedItems, isStatUnlocked, statAtCeiling, statCap, statUpgradeCost } from "./stats";
+import { POWER_SOURCES, type PowerSource, bagItems, bestStatBuy, equippedItems, isStatUnlocked, profilePower, statAtCeiling, statCap, statUpgradeCost } from "./stats";
 import { canUnlockSkill } from "./skills";
+import { APEX_NAME, apexNextText, apexRanks, canBuyApex, nextApexSkill } from "./apex";
+import { APEX_MAX } from "../data/apex";
 import { canAttemptTrial, nextRankStep, rankLetter } from "./ranks";
 import { TREE, aetherFor, canAscend, nextNodeCost, spendableAether } from "./ascension";
 
 /** The number the Hero panel shows. */
 export function powerOf(profile: Profile, without?: ReadonlySet<PowerSource>): number {
-  return combatPower(computePlayerStats(profile, without));
+  return profilePower(profile, without);
 }
 
 export interface PowerRow {
@@ -120,7 +122,7 @@ export function equipBestPlan(profile: Profile): EquipBestPlan {
   return { equipped: { ...cur.equipment.equipped }, gain: now - start, changes, kept: [...kept] };
 }
 
-export type NextStepKind = "perk" | "skill" | "gear" | "aether" | "trial" | "stat" | "boss" | "farm" | "ascend";
+export type NextStepKind = "perk" | "skill" | "apex" | "gear" | "aether" | "trial" | "stat" | "boss" | "farm" | "ascend";
 
 export interface NextStep {
   kind: NextStepKind;
@@ -150,6 +152,12 @@ export function nextStep(profile: Profile, fmt: (n: number) => string = (n) => S
   if (p.pendingPerkChoices > 0) return { kind: "perk", text: p.pendingPerkChoices > 1 ? `Choose your perks: ${p.pendingPerkChoices} are waiting` : "Choose your perk: one is waiting" };
   const skill = SKILLS.filter((s) => canUnlockSkill(profile, s.id).ok).sort((a, b) => a.tier - b.tier)[0];
   if (skill) return { kind: "skill", text: `Spend a skill point: ${skill.name}, ${skill.description.replace(/\.$/, "")}` };
+  const apex = nextApexSkill(profile);
+  if (apex && canBuyApex(profile, apex).ok) {
+    const rank = apexRanks(profile)[apex];
+    const gain = powerOf({ ...profile, player: { ...profile.player, apex: { ...apexRanks(profile), [apex]: rank + 1 } } }) - powerOf(profile);
+    return { kind: "apex", gain, text: `Spend skill points on ${APEX_NAME[apex]} ${rank + 1}/${APEX_MAX[apex]}: ${(apexNextText(apex, rank) ?? "").replace(/^./, (c) => c.toLowerCase())}, +${fmt(gain)} Power` };
+  }
   const plan = equipBestPlan(profile);
   if (plan.gain >= 1) return { kind: "gear", text: `Equip your best gear: +${fmt(plan.gain)} Power`, gain: plan.gain };
   const node = TREE.find((n) => (n.id === "might" || n.id === "vigor") && (nextNodeCost(profile, n.id) ?? Infinity) <= spendableAether(profile));
