@@ -293,3 +293,36 @@ describe("Apex in the save", () => {
     expect(profile.player.apex).toEqual({ double: 4, triple: 7, prism: 10, crown: 0 });
   });
 });
+
+describe("AUTO with every swing striking three times", () => {
+  it("at the attack-speed ceiling, Apex does not cast the Fury any sooner", () => {
+    const furies = (apex: Partial<ApexRanks>) => {
+      const p = lateProfile();
+      p.player.apex = { double: 0, triple: 0, prism: 0, crown: 0, ...apex };
+      const w = new World({ stage: 1, loadout: buildLoadout(p), seed: 5 });
+      w.phase = "between";
+      w.phaseTimer = 999;
+      w.player.stats.attackSpeed = 3.2;
+      w.player.stats.critChance = 0.85;
+      const boss = dummy(w);
+      boss.kind = "boss";
+      dummy(w, 250, 60);
+      dummy(w, 260, 100);
+      let n = 0;
+      let swings = 0;
+      for (let i = 0; i < 60 / FIXED_DT; i++) {
+        w.update(FIXED_DT);
+        for (const e of w.drainEvents()) {
+          if (e.type === "cast" && e.ability === "ascendant_fury" && (e.strike ?? 1) <= 1) n++;
+          if (e.type === "attack_swing" && e.id === w.player.id && !e.cut) swings++;
+        }
+      }
+      return { n, swings };
+    };
+    const plain = furies({});
+    const full = furies({ double: 10, triple: 10, prism: 10, crown: 1 });
+    expect(plain.n).toBeGreaterThan(3);
+    expect(full.swings).toBeGreaterThan(30);
+    expect(full.n).toBeLessThanOrEqual(plain.n + 1);
+  });
+});
