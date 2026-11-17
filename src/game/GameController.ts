@@ -905,8 +905,9 @@ export class GameController {
     if (!before.startsWith("A")) line = ready.length ? `Apex is open: ${APEX_NAME[ready[0]!]} waits in Skills` : "Apex is open in Skills";
     else {
       const was = before.slice(2).split(",");
-      if (doors.includes("double") && !was.includes("double")) line = "Attack speed is at its ceiling: Double Strike is open";
-      else if (doors.includes("prism") && !was.includes("prism")) line = "Crit rate is at its ceiling: Prismatic Edge is open";
+      // Only for a skill with ranks left to buy (after an ascension the ceiling is reached again).
+      if (ready.includes("double") && !was.includes("double")) line = "Attack speed is at its ceiling: Double Strike is open";
+      else if (ready.includes("prism") && !was.includes("prism")) line = "Crit rate is at its ceiling: Prismatic Edge is open";
     }
     if (!line) return;
     this.toast(line, "level", 2);

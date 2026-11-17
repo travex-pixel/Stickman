@@ -252,7 +252,7 @@ function RankBadge() {
       {ready && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-gold" aria-hidden="true" />}
       <span className="truncate">
         Rank {rankLetter(profile.player.rank)}
-        <span className={ready ? "text-t1" : "text-t2"}>{step ? (ready ? " · Trial ready" : <span className="hidden min-[360px]:inline"> · Lv {step.level}</span>) : " · Apex"}</span>
+        <span className={ready ? "text-t1" : "text-t2"}>{step ? (ready ? " · Trial ready" : <span className="hidden min-[360px]:inline"> · Lv {step.level}</span>) : " · Top rank"}</span>
       </span>
     </button>
   );
