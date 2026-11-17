@@ -54,8 +54,18 @@ export function prismChance(r: ApexRanks): number {
 }
 
 /**
- * Apex in the Power number: the expected damage of a swing with Apex over one without, from the
- * warrior's crit rate and crit damage (one target; the forks are not counted). 1 without ranks.
+ * The share of a late warrior's damage his ordinary basic blows deal, the rest being the arts, the
+ * Ascendant Fury and the army. Measured on AUTO in boss fights past stage 50 (DESIGN.md, "Apex"):
+ * he swings about 0.9 times a second against a 3.2 ceiling, because casting holds him. Echoes and
+ * Stormcrown's bolt ride on those blows, so Power counts them at this weight.
+ */
+export const BASIC_BLOW_SHARE = 0.15;
+
+/**
+ * Apex in the Power number: how much more damage the warrior deals with these ranks, from his crit
+ * rate and crit damage. Prismatic Edge turns any crit prismatic (arts' too), so it counts in full;
+ * the echoes and the bolt multiply only the basic blows' share (BASIC_BLOW_SHARE). Forks are not
+ * counted. 1 without ranks. Full ranks on a late warrior give about x2, as boss fights measure.
  */
 export function apexDamageMult(stats: { critChance: number; critDamage: number }, r: ApexRanks): number {
   if (!r.double && !r.triple && !r.prism && !r.crown) return 1;
@@ -65,8 +75,10 @@ export function apexDamageMult(stats: { critChance: number; critDamage: number }
   const withPrism = plain + c * prismChance(r) * cd * (PRISM_MULT - 1);
   const d = doubleChance(r);
   const t = tripleChance(r);
+  // A basic swing's damage with echoes and the bolt, against the same swing without them.
   const strikes = 1 + d * ECHO_POWER[1] + d * t * ECHO_POWER[2];
   const blows = 1 + d + d * t;
   const storm = r.crown > 0 ? (blows / STORM_EVERY) * STORM_POWER * cd * PRISM_MULT : 0;
-  return (strikes * withPrism + storm) / plain;
+  const swing = strikes + storm / withPrism;
+  return (withPrism / plain) * (1 + BASIC_BLOW_SHARE * (swing - 1));
 }

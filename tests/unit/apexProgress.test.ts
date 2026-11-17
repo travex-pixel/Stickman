@@ -11,6 +11,10 @@ import { nextSkillPointLevel } from "@/game/progression/skills";
 import { sampleCycle } from "@/game/progression/offline";
 import { SKILLS } from "@/game/data/skills";
 import { lateProfile } from "./apex.digest";
+import { World, FIXED_DT } from "@/game/engine/World";
+import { buildLoadout } from "@/game/progression/loadout";
+import { ABILITIES } from "@/game/data/abilities";
+import { ABILITY_RANK_MAX } from "@/game/progression/abilityRanks";
 
 /** A warrior past gate 39 with attack speed and crit at their level caps (so "maxed"), trees done. */
 function apexReady(points = 47): Profile {
@@ -115,12 +119,42 @@ describe("the menus count Apex", () => {
     const without = profilePower(p);
     p.player.apex = { double: 10, triple: 10, prism: 10, crown: 1 };
     const stats = computePlayerStats(p);
-    expect(apexDamageMult(stats, p.player.apex)).toBeGreaterThan(2.5);
-    expect(profilePower(p)).toBeGreaterThan(without * 1.5);
+    expect(apexDamageMult(stats, p.player.apex)).toBeGreaterThan(1.5);
+    expect(profilePower(p)).toBeGreaterThan(without * 1.3);
     const b = powerBreakdown(p);
     const row = b.rows.find((r) => r.source === "apex")!;
     expect(row.share).toBeGreaterThan(0.1);
     expect(b.base + b.rows.reduce((a, r) => a + r.power, 0)).toBeCloseTo(b.total, 3);
+  });
+  it("Power counts Apex as much as it raises real boss damage, not as much as it raises a lone swing", () => {
+    // A late warrior on AUTO against a boss (his health raised so every fight runs its full time):
+    // the arts and the Fury deal most of the damage, so echoes add far less than they do to a
+    // swing. Power must follow the fight (about x2 for full ranks), not the swing (about x5).
+    const p = apexReady();
+    p.skills.unlocked = SKILLS.map((s) => s.id);
+    p.player.statLevels.critDamage = 300;
+    for (const id of Object.keys(ABILITIES) as (keyof typeof ABILITIES)[]) p.player.abilityRanks[id] = ABILITY_RANK_MAX;
+    const bossDamage = (apex: Profile["player"]["apex"]) => {
+      p.player.apex = apex;
+      let total = 0;
+      for (const seed of [1, 2, 3]) {
+        const w = new World({ stage: 60, loadout: buildLoadout(p), seed, mode: "boss" });
+        w.player.stats.maxHp *= 1000;
+        w.player.hp = w.player.stats.maxHp;
+        for (let i = 0; i < 30 / FIXED_DT; i++) {
+          w.update(FIXED_DT);
+          for (const e of w.drainEvents()) if (e.type === "hit" && e.sourceId === w.player.id && e.faction === "enemy") total += e.amount;
+        }
+      }
+      return { total, power: profilePower(p) };
+    };
+    const none = bossDamage({ double: 0, triple: 0, prism: 0, crown: 0 });
+    const full = bossDamage({ double: 10, triple: 10, prism: 10, crown: 1 });
+    const damage = full.total / none.total;
+    const power = full.power / none.power;
+    expect(damage).toBeGreaterThan(1.5);
+    expect(power / damage).toBeGreaterThan(0.65);
+    expect(power / damage).toBeLessThan(1.35);
   });
   it("the best next step names an Apex rank when points can buy one", () => {
     const p = apexReady();
