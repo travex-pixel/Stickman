@@ -94,7 +94,7 @@ interface TelegraphMark {
 }
 
 /** Named parts of a frame, timed under `?perf=1` (see scripts/perf.mjs). */
-const SECTION_NAMES = ["background", "entities", "camera", "groundFx", "fx", "trails", "particles", "overlays"] as const;
+const SECTION_NAMES = ["background", "entities", "camera", "groundFx", "fx", "trails", "particles", "overlays", "apex"] as const;
 /** True when the combatant carries a status of this kind (no closure, no allocation). */
 function hasStatus(e: Combatant, kind: string): boolean {
   const s = e.statuses;
@@ -664,9 +664,10 @@ export class BattleRenderer implements ImpactHost {
     this.updateFury(world, entDt, dt);
     if (perf) this.sec(0);
     this.syncEntities(world, alpha, entDt, fxDt, paused ? 0 : dt);
+    if (perf) this.sec(1);
     this.apex.setRanks(world.loadout.apex);
     this.apex.updateForm(paused ? 0 : dt);
-    if (perf) this.sec(1);
+    if (perf) this.sec(8);
     if (!paused) this.frameCamera(world, alpha);
     this.camera.update(dt);
     const o = this.camera.out;
@@ -685,8 +686,9 @@ export class BattleRenderer implements ImpactHost {
     this.drawGroundFx(world, fxDt);
     if (perf) this.sec(3);
     this.updateFx(fxDt);
-    this.apex.update(fxDt, dt);
     if (perf) this.sec(4);
+    this.apex.update(fxDt, dt);
+    if (perf) this.sec(8);
     this.trails.setSpeed(this.speed());
     this.trails.update(fxDt);
     if (perf) this.sec(5);

@@ -581,6 +581,54 @@ pure module (`src/game/audio/cues.ts`) and the mix's density budget in another (
 - **The ambience is still.** A low D, its fifth and octave (whole cycles in the 12s loop) and a
   deep noise wash crossfaded into itself at the seam: nothing beats, pulses or dips.
 
+## How the Apex skills look and sound
+
+The late game's four skills (`src/game/data/apex.ts`) are dressed in `src/game/render/apex/`.
+At full ranks the warrior lands nearly ten blows a second at 2x, so the rule is restraint in the
+common case and the show in the rare one.
+
+- **Echo blows** (Double and Triple Strike) are one flourish with the swing that threw them: a
+  coloured ghost of the warrior in the next cut of his combo, half a step behind him; a storm-blue
+  rising arc on the target for the second blow, a white-violet lightning cut with two short forks
+  for the third. An echo that jumped to a new body draws a jagged streak from the old one. Echoes
+  stop nothing, move no camera and only tint the struck body (a body hit ten times a second must
+  not strobe); the third shudders it for 16ms.
+- **One figure per swing.** A swing's echoes on the same body fold into its figure, which ticks
+  up and carries a small "×2" or "×3" in the echo's colour. An echo on another body starts its
+  own figure. Prismatic figures stack with the ordinary ones.
+- **Prismatic hits** are the rainbow: a figure cut glyph by glyph from an atlas drawn at mount,
+  each glyph tinted from the spectrum by its place and the time, with a dark edge so it reads on
+  every ground; a fan of spectral shards, a three-colour chromatic ring, the slash split into
+  colour fringes for six frames, and the weapon ribbon iridescent for that swing. Colours are drawn
+  over, not added as light, so they hold on the pale regions.
+- **Lightning** comes from a bank of sixteen forked shapes made once by midpoint displacement
+  (`lightning.ts`): drawing a bolt is a transform of points already made. A bolt races in, holds,
+  dips once and strikes again on another channel, then fades: never a strobe.
+- **Stormcrown's bolt** falls from above the frame to the target's feet beside a thinner coloured
+  channel, crawls along the ground to each fork and climbs each foe, leaves scorch marks and a pool
+  of light, and rings the ground. Its light (a pale flash, the backdrop sinking behind it, nearby
+  bodies catching it) is one flash of the budget; its hits ride inside its own crack in the mix.
+- **The warrior's form** grows with the ranks: a storm-blue light and motes on the blade (Double
+  Strike), arcs crawling over blade and forearm in a combo (Triple Strike), an iridescent strip
+  along the blade's edge (Prismatic Edge), and with Stormcrown a thin prismatic halo with five
+  tines, a slow ring of colour at his feet and a cape that catches colour. The halo, the aura and
+  the blade's lights are drawn once and only moved, turned and faded each frame.
+- **Rank-ups** (`apexRankUp` on the renderer): a ring, motes up his body and a glint at the blade's
+  tip with a two-note stinger a step higher each rank; a first rank or a maxed skill adds rings,
+  shards or a bolt onto the blade and a chord. Under a second; the fight runs on.
+
+**Flashes.** Every full-screen flash in the game asks one budget (`src/game/render/flashBudget.ts`):
+at most three start in any sliding second of real time, alpha at most 0.45, a saturated red is
+pulled to a warm grey, and with reduced effects none at all. With reduced effects there is also no
+shake, no colour fringe (the chromatic ring is one white ring), no re-strike flicker and no
+shudder; the blows read through shape, figures and sound.
+
+**Sound.** An echo is a tiny tick (the third a three-snap crackle), budgeted at two per 450ms so
+the ear keeps the rhythm and most are dropped; a prismatic blow is the hit under a glass chord
+(D6, A6, D7, A7 struck as a quick strum), falling back to the crit and then the hit; the bolt is a
+dry crack with the thunder's low roll a tenth of a second behind it in the same sample. The
+stingers climb D minor. None glides; the tests measure them like the rest.
+
 ## Testing
 
 - `npm run test`: unit tests for every rule, plus a balance harness that simulates whole runs with

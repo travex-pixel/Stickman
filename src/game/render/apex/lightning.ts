@@ -1,4 +1,4 @@
-import type { Graphics } from "pixi.js";
+import { Container, Graphics } from "pixi.js";
 
 /**
  * Forked lightning from a fixed bank of shapes. Each shape is a jagged main channel from (0, 0) to
@@ -100,12 +100,13 @@ export function tracePath(g: Graphics, pts: Float32Array, ax: number, ay: number
   }
 }
 
-/** One live bolt (pooled). */
+/** One live bolt (pooled), with its own geometry, built once when it strikes. */
 export interface Bolt {
   live: boolean;
   shape: number;
-  /** The shape of the re-strike flicker (-1: none). */
+  /** The shape of the re-strike (-1: none); its channel is built when it strikes. */
   restrike: number;
+  restruck: boolean;
   ax: number;
   ay: number;
   bx: number;
@@ -118,8 +119,8 @@ export interface Bolt {
   life: number;
   total: number;
   delay: number;
-  /** Seconds the bolt takes to race from A to B. */
-  race: number;
+  /** A dark under-stroke (keeps it legible on pale ground), then glow, body and white core. */
+  g: Graphics;
 }
 
 export const MAX_BOLTS = 24;
@@ -140,16 +141,37 @@ export function boltLevel(age: number, total: number, restrike: boolean): number
   return 0.95 * (1 - (k - 0.55) / 0.45);
 }
 
+export interface BoltOptions {
+  width: number;
+  color: number;
+  life: number;
+  delay?: number;
+  spread?: number;
+  branches?: boolean;
+  restrike?: boolean;
+}
+
+/**
+ * The live bolts. Each one's channel is traced and stroked once, when it strikes (and once more
+ * for its re-strike); every other frame only its alpha changes, so a sky full of forks costs no
+ * geometry per frame.
+ */
 export class BoltPool {
+  readonly container = new Container();
   readonly bolts: Bolt[] = [];
   live = 0;
 
   constructor() {
-    for (let i = 0; i < MAX_BOLTS; i++) this.bolts.push({ live: false, shape: 0, restrike: -1, ax: 0, ay: 0, bx: 0, by: 0, width: 1, color: 0xffffff, spread: 1, mirror: false, branches: true, life: 0, total: 1, delay: 0, race: 0 });
+    for (let i = 0; i < MAX_BOLTS; i++) {
+      const g = new Graphics();
+      g.visible = false;
+      this.container.addChild(g);
+      this.bolts.push({ live: false, shape: 0, restrike: -1, restruck: false, ax: 0, ay: 0, bx: 0, by: 0, width: 1, color: 0xffffff, spread: 1, mirror: false, branches: true, life: 0, total: 1, delay: 0, g });
+    }
   }
 
   /** A bolt from A to B; the oldest is reused when the pool is full. Shape picks use render-side randomness only. */
-  spawn(ax: number, ay: number, bx: number, by: number, o: { width: number; color: number; life: number; delay?: number; spread?: number; branches?: boolean; restrike?: boolean; race?: number }): Bolt {
+  spawn(ax: number, ay: number, bx: number, by: number, o: BoltOptions): Bolt {
     let b: Bolt | null = null;
     for (const c of this.bolts) {
       if (!c.live) {
@@ -164,6 +186,7 @@ export class BoltPool {
     b.live = true;
     b.shape = Math.floor(Math.random() * SHAPE_COUNT);
     b.restrike = o.restrike ? (b.shape + 1 + Math.floor(Math.random() * (SHAPE_COUNT - 1))) % SHAPE_COUNT : -1;
+    b.restruck = false;
     b.ax = ax;
     b.ay = ay;
     b.bx = bx;
@@ -175,20 +198,50 @@ export class BoltPool {
     b.branches = o.branches ?? true;
     b.life = b.total = o.life;
     b.delay = o.delay ?? 0;
-    b.race = o.race ?? 0.03;
+    this.build(b, b.shape);
+    b.g.visible = false;
+    this.live = Math.max(this.live, 1);
     return b;
   }
 
+  /** Trace and stroke one channel of a bolt into its graphics (once per strike). */
+  private build(b: Bolt, shapeIndex: number): void {
+    const g = b.g;
+    g.clear();
+    const shape = BOLT_SHAPES[shapeIndex]!;
+    const passes = b.branches ? 1 + shape.branches.length : 1;
+    // Thin channels take bevelled joins and plain ends (a fraction of the vertices of round ones).
+    const fine = b.width < 2.4;
+    const join = fine ? "bevel" : "round";
+    const cap = fine ? "butt" : "round";
+    for (let p = 0; p < passes; p++) {
+      const pts = p === 0 ? shape.main : shape.branches[p - 1]!;
+      const w = p === 0 ? b.width : b.width * 0.55;
+      const a = p === 0 ? 1 : 0.75;
+      tracePath(g, pts, b.ax, b.ay, b.bx, b.by, b.spread, b.mirror);
+      g.stroke({ width: w * 2.6, color: 0x0b0a12, alpha: 0.42 * a, cap, join });
+      // The wide halo only on the broad channels.
+      if (!fine) {
+        tracePath(g, pts, b.ax, b.ay, b.bx, b.by, b.spread, b.mirror);
+        g.stroke({ width: w * 4.2, color: b.color, alpha: 0.22 * a, cap, join });
+      }
+      tracePath(g, pts, b.ax, b.ay, b.bx, b.by, b.spread, b.mirror);
+      g.stroke({ width: w * 1.7, color: b.color, alpha: 0.75 * a, cap, join });
+      tracePath(g, pts, b.ax, b.ay, b.bx, b.by, b.spread, b.mirror);
+      g.stroke({ width: Math.max(0.8, w * 0.55), color: 0xffffff, alpha: a, cap, join });
+    }
+  }
+
   clear(): void {
-    for (const b of this.bolts) b.live = false;
+    for (const b of this.bolts) {
+      b.live = false;
+      b.g.visible = false;
+    }
     this.live = 0;
   }
 
-  /**
-   * Advance and draw every live bolt: a dark under-stroke into `under` (keeps it legible on pale
-   * ground), then glow, body and white core into `glow` (additive). Returns how many are live.
-   */
-  draw(under: Graphics, glow: Graphics, dt: number): number {
+  /** Advance every live bolt: only its alpha changes (and its channel once, on the re-strike). Returns how many are live. */
+  update(dt: number): number {
     let live = 0;
     for (const b of this.bolts) {
       if (!b.live) continue;
@@ -200,38 +253,26 @@ export class BoltPool {
       b.life -= dt;
       if (b.life <= 0) {
         b.live = false;
+        b.g.visible = false;
         continue;
       }
       live++;
       const age = b.total - b.life;
-      const level = boltLevel(age, b.total, b.restrike >= 0);
-      if (level <= 0.01) continue;
-      const upto = b.race > 0 ? Math.min(1, age / b.race) : 1;
       // The re-strike lights a different channel to the same point: the bolt seems to jump.
-      const second = b.restrike >= 0 && age / b.total >= 0.38;
-      const shape = BOLT_SHAPES[second ? b.restrike : b.shape]!;
-      const passes = b.branches ? 1 + shape.branches.length : 1;
-      for (let p = 0; p < passes; p++) {
-        // Branches show once the main channel has reached its mark.
-        if (p > 0 && upto < 1) break;
-        const pts = p === 0 ? shape.main : shape.branches[p - 1]!;
-        const w = p === 0 ? b.width : b.width * 0.55;
-        const a = p === 0 ? level : level * 0.75;
-        const u = p === 0 ? upto : 1;
-        tracePath(under, pts, b.ax, b.ay, b.bx, b.by, b.spread, b.mirror, u);
-        under.stroke({ width: w * 2.6, color: 0x0b0a12, alpha: 0.42 * a, cap: "round", join: "round" });
-        // The wide halo only on the broad channels (a thin cut reads without it, at a third less cost).
-        if (w >= 2.4) {
-          tracePath(glow, pts, b.ax, b.ay, b.bx, b.by, b.spread, b.mirror, u);
-          glow.stroke({ width: w * 4.2, color: b.color, alpha: 0.22 * a, cap: "round", join: "round" });
-        }
-        tracePath(glow, pts, b.ax, b.ay, b.bx, b.by, b.spread, b.mirror, u);
-        glow.stroke({ width: w * 1.7, color: b.color, alpha: 0.75 * a, cap: "round", join: "round" });
-        tracePath(glow, pts, b.ax, b.ay, b.bx, b.by, b.spread, b.mirror, u);
-        glow.stroke({ width: Math.max(0.8, w * 0.55), color: 0xffffff, alpha: a, cap: "round", join: "round" });
+      if (b.restrike >= 0 && !b.restruck && age / b.total >= 0.38) {
+        b.restruck = true;
+        this.build(b, b.restrike);
       }
+      const level = boltLevel(age, b.total, b.restrike >= 0);
+      b.g.visible = level > 0.01;
+      b.g.alpha = level;
     }
     this.live = live;
     return live;
+  }
+
+  destroy(): void {
+    this.container.destroy({ children: true });
+    this.bolts.length = 0;
   }
 }

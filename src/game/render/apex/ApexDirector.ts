@@ -6,8 +6,7 @@ import type { WeaponPath } from "../../data/ids";
 import type { Camera } from "../Camera";
 import type { EmitOptions, ParticleSystem } from "../Particles";
 import { fmtNum, type DamageNumbers, type NumberStyle } from "../DamageNumbers";
-import { Rig } from "../rigs/Rig";
-import { playerSpec } from "../rigs/specs";
+import type { Rig } from "../rigs/Rig";
 import { mix } from "../colors";
 import { damp, easeOutCubic } from "../anim/ease";
 import { hardCircle, shard, softCircle, spark } from "../textures";
@@ -87,7 +86,7 @@ export const MERGE_WINDOW = 0.45;
 const MAX_CUTS = 16;
 const MAX_FRINGES = 6;
 const GHOSTS = 3;
-const GHOST_LIFE = 0.14;
+const GHOST_LIFE = 0.13;
 
 interface Cut {
   live: boolean;
@@ -113,11 +112,15 @@ interface Fringe {
   total: number;
 }
 
+/** A ghost blade: a streak where the next cut of his combo would fall, sweeping as it fades. */
 interface Ghost {
-  rig: Rig;
+  body: Sprite;
+  core: Sprite;
   t: number;
   live: boolean;
   alpha: number;
+  rot: number;
+  sweep: number;
 }
 
 /** A swing's one figure: echoes add to it. */
@@ -146,7 +149,7 @@ interface FigureRecord {
 export class ApexDirector {
   /** Lightning and arcs above the fighters: a dark under-stroke, then additive light. */
   readonly fx = new Container();
-  private readonly under = new Graphics();
+  /** Arcs and fringes, redrawn while they live (the bolts keep their own geometry). */
   private readonly glow = new Graphics();
   /** The warrior's form: behind him (the aura at his feet) and over him (blade, arcs, halo). */
   readonly formFront = new Graphics();
@@ -168,7 +171,6 @@ export class ApexDirector {
   private readonly cuts: Cut[] = [];
   private readonly fringes: Fringe[] = [];
   private readonly ghosts: Ghost[] = [];
-  private ghostPath: WeaponPath | null = null;
   private readonly recs: FigureRecord[] = [];
   private readonly lastMain = { x: 0, y: 0, t: -Infinity };
   /** One emit record whose ranges are written in place: nothing is allocated per blow. */
@@ -195,6 +197,7 @@ export class ApexDirector {
   private fxDirty = false;
   private formDirty = false;
   ranks: ApexRanks = { ...NO_APEX };
+  private lastRankUp = -Infinity;
   /** Echo blows folded into a figure already on screen (each one a figure not drawn). */
   merged = 0;
 
@@ -203,7 +206,7 @@ export class ApexDirector {
     private readonly entityLayer: Container,
   ) {
     this.prism = new PrismNumbers(8);
-    this.fx.addChild(this.under, this.glow);
+    this.fx.addChild(this.bolts.container, this.glow);
     entityLayer.addChild(this.formFront);
     this.buildForm();
     entityLayer.addChild(this.aura, this.stormLine, this.edge, this.halo, this.tines);
@@ -248,8 +251,17 @@ export class ApexDirector {
     this.stormLine.texture = spark();
     this.stormLine.anchor.set(0, 0.5);
     this.stormLine.tint = STORM_BLUE;
-    this.stormLine.blendMode = "add";
     for (const d of [this.halo, this.tines, this.aura, this.edge, this.stormLine]) d.visible = false;
+    for (let i = 0; i < GHOSTS; i++) {
+      const body = new Sprite(streak());
+      const core = new Sprite(streak());
+      body.anchor.set(0, 0.5);
+      core.anchor.set(0, 0.5);
+      core.tint = 0xffffff;
+      body.visible = core.visible = false;
+      this.entityLayer.addChild(body, core);
+      this.ghosts.push({ body, core, t: 1, live: false, alpha: 0, rot: 0, sweep: 0 });
+    }
   }
 
   setRanks(r: Readonly<ApexRanks> | undefined): void {
@@ -364,9 +376,9 @@ export class ApexDirector {
     const dir: 1 | -1 = e.targetPos.x >= e.pos.x ? 1 : -1;
     // The blade flickers to a new body: a jagged streak from the last one.
     if (e.jumped && this.now - this.lastMain.t < 0.6) {
-      this.bolts.spawn(this.lastMain.x, this.lastMain.y, cx, cy, { width: 1.3 + 0.9 * u, color, life: 0.12, spread: 0.32, branches: false, race: 0.025 });
+      this.bolts.spawn(this.lastMain.x, this.lastMain.y, cx, cy, { width: 1.3 + 0.9 * u, color, life: 0.12, spread: 0.32, branches: false });
     }
-    // A ghost of the warrior in the next cut of his combo, just behind him: the second blade.
+    // The second blade: a streak where the next cut of his combo would fall.
     this.ghost(color, e.index);
     if (e.index === 1) {
       // Storm blue: a rising arc against the swing's falling one.
@@ -379,12 +391,12 @@ export class ApexDirector {
       const ay = cy - Math.sin(ang) * half;
       const bx = cx + Math.cos(ang) * half;
       const by = cy + Math.sin(ang) * half;
-      this.bolts.spawn(ax, ay, bx, by, { width: 1.5 + 1.1 * u, color, life: 0.15, spread: 0.55, branches: true, race: 0.02 });
+      this.bolts.spawn(ax, ay, bx, by, { width: 1.5 + 1.1 * u, color, life: 0.15, spread: 0.55, branches: true });
       if (!reduced) {
         const fl = 16 * u;
         for (let i = 0; i < 2; i++) {
           const a = ang + (i === 0 ? 1.1 : -1.3) + (Math.random() - 0.5) * 0.4;
-          this.bolts.spawn(cx, cy, cx + Math.cos(a) * fl, cy + Math.sin(a) * fl, { width: 0.9 + 0.5 * u, color, life: 0.09, spread: 0.6, branches: false, delay: 0.012, race: 0.015 });
+          this.bolts.spawn(cx, cy, cx + Math.cos(a) * fl, cy + Math.sin(a) * fl, { width: 0.9 + 0.5 * u, color, life: 0.09, spread: 0.6, branches: false, delay: 0.012 });
         }
       }
       // A hair of shudder on the struck body; nothing else stops.
@@ -414,11 +426,14 @@ export class ApexDirector {
     o.alignToVelocity = false;
   }
 
+  /**
+   * The second blade: a coloured streak from his hand where the next cut of his combo would fall
+   * (the blade's angle mirrored), sweeping on through it as it fades over 0.13s. Two sprites from a
+   * pool of two, built at mount: an echo ten times a second costs no geometry.
+   */
   private ghost(color: number, index: 1 | 2): void {
     const pv = this.host.player();
     if (!pv || pv.dead) return;
-    if (this.ghostPath !== pv.path) this.releaseGhosts();
-    this.ghostPath = pv.path;
     let g: Ghost | undefined;
     for (const c of this.ghosts) {
       if (!c.live) {
@@ -426,36 +441,44 @@ export class ApexDirector {
         break;
       }
     }
-    if (!g && this.ghosts.length < GHOSTS) {
-      const rig = new Rig(playerSpec(pv.path));
-      rig.shadow.visible = false;
-      this.entityLayer.addChild(rig.root);
-      g = { rig, t: 1, live: false, alpha: 0 };
-      this.ghosts.push(g);
-    }
     if (!g) {
       g = this.ghosts[0]!;
       for (const c of this.ghosts) if (c.t > g.t) g = c;
     }
+    pv.rig.handPoint(this.r);
+    pv.rig.weaponPoints(this.s, this.p);
+    const bx = this.s.x - this.r.x;
+    const by = this.s.y - this.r.y;
+    const len = Math.hypot(bx, by) || 1;
+    const ang = Math.atan2(by, bx);
+    // Mirrored across the line he faces along: a falling cut answers a rising one.
+    const face = pv.facing === 1 ? 0 : Math.PI;
+    const rot = 2 * face - ang;
     g.live = true;
     g.t = 0;
-    g.alpha = index === 2 ? 0.6 : 0.55;
-    const rig = g.rig;
-    // A coloured silhouette (not additive light, which washes to white on the pale grounds).
-    rig.root.tint = index === 2 ? 0x9d86f0 : 0x5f95ea;
-    rig.root.visible = true;
-    // Half a step behind him, in the cut his combo throws next.
-    rig.root.position.set(pv.drawX - pv.facing * 5 * pv.scale, pv.drawY);
-    rig.root.scale.set(pv.scale);
-    rig.root.zIndex = pv.zIndex - 0.4;
-    rig.snap();
-    rig.animate("attack", 0.03, 0.12, pv.seed, pv.facing, false, 0, 0, 0, (pv.swings + index) % 3);
-    rig.root.alpha = g.alpha;
+    g.alpha = index === 2 ? 0.95 : 0.85;
+    g.rot = rot;
+    g.sweep = (ang - rot > 0 ? 1 : -1) * 0.7;
+    for (const sp of [g.body, g.core]) {
+      sp.visible = true;
+      sp.position.set(this.r.x, this.r.y);
+      sp.rotation = rot;
+      sp.width = len * 1.25;
+      sp.zIndex = pv.zIndex + 0.25;
+    }
+    g.body.height = 11 * pv.scale;
+    g.core.height = 3.5 * pv.scale;
+    g.body.tint = color;
+    this.fadeGhost(g);
   }
 
-  private releaseGhosts(): void {
-    for (const g of this.ghosts) g.rig.destroy();
-    this.ghosts.length = 0;
+  private fadeGhost(g: Ghost): void {
+    const k = easeOutCubic(g.t);
+    const rot = g.rot + g.sweep * k;
+    g.body.rotation = rot;
+    g.core.rotation = rot;
+    g.body.alpha = g.alpha * (1 - k);
+    g.core.alpha = g.alpha * (1 - k) * (1 - k);
   }
 
   private cut(x: number, y: number, r: number, a0: number, sweep: number, color: number, width: number, life: number): void {
@@ -584,17 +607,17 @@ export class ApexDirector {
     h.chestAt(e.targetPos.x, e.targetPos.y, this.q);
     const top = h.visibleTop() - 30;
     // The main channel from above the frame to the ground at the target, with a re-strike.
-    this.bolts.spawn(gx + (Math.random() - 0.5) * 70 * u, top, gx, gy, { width: 4 + 3 * u, color: 0xc4b2ff, life: 0.34, branches: true, restrike: !reduced, race: 0.035 });
+    this.bolts.spawn(gx + (Math.random() - 0.5) * 70 * u, top, gx, gy, { width: 4 + 3 * u, color: 0xc4b2ff, life: 0.34, branches: true, restrike: !reduced });
     // A thinner second channel beside it, a beat late.
-    this.bolts.spawn(gx + (Math.random() - 0.5) * 110 * u, top, gx + (Math.random() - 0.5) * 8 * u, this.q.y, { width: 1.4 + 0.8 * u, color: spectrum(Math.random()), life: 0.2, branches: true, delay: 0.03, race: 0.03 });
+    this.bolts.spawn(gx + (Math.random() - 0.5) * 110 * u, top, gx + (Math.random() - 0.5) * 8 * u, this.q.y, { width: 1.4 + 0.8 * u, color: spectrum(Math.random()), life: 0.2, branches: true, delay: 0.03 });
     // It forks along the ground to each nearby foe, and climbs each one.
     for (let i = 0; i < e.forks.length; i++) {
       const f = e.forks[i]!;
       h.feetAt(f.x, f.y, this.r);
       h.chestAt(f.x, f.y, this.s);
       const d = 0.035 + i * 0.025;
-      this.bolts.spawn(gx, gy, this.r.x, this.r.y, { width: 1.6 + 1.1 * u, color: spectrum(0.55 + i * 0.17), life: 0.22, spread: 0.45, branches: true, delay: d, race: 0.05 });
-      this.bolts.spawn(this.r.x, this.r.y, this.s.x, this.s.y, { width: 1.2 + 0.8 * u, color: CROWN_LIGHT, life: 0.14, spread: 0.8, branches: false, delay: d + 0.05, race: 0.02 });
+      this.bolts.spawn(gx, gy, this.r.x, this.r.y, { width: 1.6 + 1.1 * u, color: spectrum(0.55 + i * 0.17), life: 0.22, spread: 0.45, branches: true, delay: d });
+      this.bolts.spawn(this.r.x, this.r.y, this.s.x, this.s.y, { width: 1.2 + 0.8 * u, color: CROWN_LIGHT, life: 0.14, spread: 0.8, branches: false, delay: d + 0.05 });
       h.scorch(this.r.x, this.r.y, 16 * u);
       h.ring(this.r.x, this.r.y, 4, 46 * u, 0.4, spectrum(0.55 + i * 0.17), 2, 0.42, d + 0.05);
     }
@@ -682,6 +705,13 @@ export class ApexDirector {
     if (!pv) return;
     const reduced = h.isReduced();
     const big = maxed || rank <= 1;
+    // Held to keep buying, ranks can come several a second: the small moment plays at most every
+    // quarter second (its stinger still climbs); a large one always plays.
+    if (!big && this.now - this.lastRankUp < 0.25) {
+      h.cue("rank", skill, rank);
+      return;
+    }
+    this.lastRankUp = this.now;
     const color = skill === "double" ? STORM_BLUE : skill === "triple" ? STORM_VIOLET : skill === "prism" ? spectrum(Math.random()) : CROWN_LIGHT;
     const x = pv.drawX;
     const y = pv.drawY;
@@ -720,7 +750,7 @@ export class ApexDirector {
     h.star(this.p.x, this.p.y, big ? 1.2 : 0.8, 0xffffff);
     if (big && (skill === "triple" || skill === "crown")) {
       // The storm answers: a bolt from above onto his blade.
-      this.bolts.spawn(this.p.x + (Math.random() - 0.5) * 40, h.visibleTop() - 30, this.p.x, this.p.y, { width: 2.4 + 1.4 * h.unit(), color: skill === "crown" ? CROWN_LIGHT : STORM_VIOLET, life: 0.26, branches: true, restrike: !reduced, delay: 0.05, race: 0.03 });
+      this.bolts.spawn(this.p.x + (Math.random() - 0.5) * 40, h.visibleTop() - 30, this.p.x, this.p.y, { width: 2.4 + 1.4 * h.unit(), color: skill === "crown" ? CROWN_LIGHT : STORM_VIOLET, life: 0.26, branches: true, restrike: !reduced, delay: 0.05 });
     }
     if (big && (skill === "prism" || skill === "crown")) this.onPrismBurstAt(this.p.x, this.p.y);
     if (big && !reduced) h.flash(skill === "crown" ? CROWN_LIGHT : 0xf0eadc, 0.14, 0.25);
@@ -763,26 +793,25 @@ export class ApexDirector {
     for (const g of this.ghosts) {
       if (!g.live) continue;
       g.t = Math.min(1, g.t + realDt / GHOST_LIFE);
-      g.rig.root.alpha = g.alpha * (1 - easeOutCubic(g.t));
+      this.fadeGhost(g);
       if (g.t >= 1) {
         g.live = false;
-        g.rig.root.visible = false;
+        g.body.visible = false;
+        g.core.visible = false;
       }
     }
-    if (!this.anyBoltLive() && !this.anyCut() && !this.anyFringe()) {
+    if (this.bolts.live > 0) this.bolts.update(dt);
+    // Arcs and fringes are redrawn only while one lives.
+    if (!this.anyCut() && !this.anyFringe()) {
       if (this.fxDirty) {
-        this.under.clear();
         this.glow.clear();
         this.fxDirty = false;
       }
       return;
     }
-    const under = this.under;
     const glow = this.glow;
-    under.clear();
     glow.clear();
     this.fxDirty = true;
-    this.bolts.draw(under, glow, dt);
     for (const c of this.cuts) {
       if (!c.live) continue;
       c.life -= dt;
@@ -828,11 +857,6 @@ export class ApexDirector {
 
   private anyFringe(): boolean {
     for (const f of this.fringes) if (f.live) return true;
-    return false;
-  }
-
-  private anyBoltLive(): boolean {
-    for (const b of this.bolts.bolts) if (b.live) return true;
     return false;
   }
 
@@ -1032,14 +1056,14 @@ export class ApexDirector {
     for (const f of this.fringes) f.live = false;
     for (const g of this.ghosts) {
       g.live = false;
-      g.rig.root.visible = false;
+      g.body.visible = false;
+      g.core.visible = false;
     }
     for (const r of this.recs) {
       r.id = -1;
       r.t = -Infinity;
     }
     this.prism.clear();
-    this.under.clear();
     this.glow.clear();
     this.formFront.clear();
     this.fxDirty = false;
@@ -1048,7 +1072,13 @@ export class ApexDirector {
   }
 
   destroy(): void {
-    this.releaseGhosts();
+    for (const g of this.ghosts) {
+      g.body.destroy();
+      g.core.destroy();
+    }
+    this.ghosts.length = 0;
+    streakTexture?.destroy(true);
+    streakTexture = null;
     this.prism.destroy();
     this.fx.destroy({ children: true });
     this.formFront.destroy();
@@ -1059,6 +1089,35 @@ export class ApexDirector {
 }
 
 let stripTexture: Texture | null = null;
+let streakTexture: Texture | null = null;
+
+/** A blade's streak: rising from the hand, brightest two thirds along, gone at the tip; soft across. Made once. */
+function streak(): Texture {
+  if (streakTexture && !streakTexture.destroyed) return streakTexture;
+  if (typeof document === "undefined") return Texture.WHITE;
+  const w = 64;
+  const h = 16;
+  const c = document.createElement("canvas");
+  c.width = w;
+  c.height = h;
+  const ctx = c.getContext("2d");
+  if (!ctx) return Texture.WHITE;
+  const img = ctx.createImageData(w, h);
+  for (let y = 0; y < h; y++) {
+    const v = (y - (h - 1) / 2) / ((h - 1) / 2);
+    const across = Math.exp(-v * v * 3.2);
+    for (let x = 0; x < w; x++) {
+      const u = x / (w - 1);
+      const along = u < 0.68 ? Math.pow(u / 0.68, 1.4) : Math.pow((1 - u) / 0.32, 0.8);
+      const i = (y * w + x) * 4;
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = 255;
+      img.data[i + 3] = Math.round(255 * along * across);
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  streakTexture = Texture.from(c);
+  return streakTexture;
+}
 
 /** A strip of the deep spectrum along its length, soft at both ends (the blade's iridescent edge). Made once. */
 function prismStrip(): Texture {
