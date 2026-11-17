@@ -1,4 +1,4 @@
-import { Container, Graphics } from "pixi.js";
+import { Container, Graphics, Sprite, Texture } from "pixi.js";
 import type { ActionState } from "../../entities/types";
 import type { GameEvent } from "../../engine/events";
 import type { ApexRanks, ApexSkillId } from "../../data/apex";
@@ -149,8 +149,20 @@ export class ApexDirector {
   private readonly under = new Graphics();
   private readonly glow = new Graphics();
   /** The warrior's form: behind him (the aura at his feet) and over him (blade, arcs, halo). */
-  readonly formBack = new Graphics();
   readonly formFront = new Graphics();
+  /**
+   * The form's lasting shapes are drawn once and only moved, turned and faded each frame (no
+   * geometry per frame): the halo and its tines, the aura at his feet, the blade's two lights.
+   * Their colours drift by turning the ring, not by redrawing it.
+   */
+  private readonly halo = new Container();
+  private readonly haloRing = new Graphics();
+  private readonly tines = new Graphics();
+  private readonly aura = new Container();
+  private readonly auraRing = new Graphics();
+  private readonly edge = new Sprite();
+  private readonly stormLine = new Sprite();
+  private formShown = false;
   readonly prism: PrismNumbers;
   private readonly bolts = new BoltPool();
   private readonly cuts: Cut[] = [];
@@ -183,6 +195,8 @@ export class ApexDirector {
   private fxDirty = false;
   private formDirty = false;
   ranks: ApexRanks = { ...NO_APEX };
+  /** Echo blows folded into a figure already on screen (each one a figure not drawn). */
+  merged = 0;
 
   constructor(
     private readonly host: ApexHost,
@@ -190,10 +204,52 @@ export class ApexDirector {
   ) {
     this.prism = new PrismNumbers(8);
     this.fx.addChild(this.under, this.glow);
-    entityLayer.addChild(this.formBack, this.formFront);
+    entityLayer.addChild(this.formFront);
+    this.buildForm();
+    entityLayer.addChild(this.aura, this.stormLine, this.edge, this.halo, this.tines);
     for (let i = 0; i < MAX_CUTS; i++) this.cuts.push({ live: false, x: 0, y: 0, r: 0, a0: 0, sweep: 0, color: 0, width: 1, life: 0, total: 1 });
     for (let i = 0; i < MAX_FRINGES; i++) this.fringes.push({ live: false, x: 0, y: 0, r: 0, a0: 0, a1: 0, life: 0, total: 1 });
     for (let i = 0; i < 8; i++) this.recs.push({ id: -1, t: -Infinity, handle: -1, prism: false, sum: 0, count: 0, crit: false, color: 0, x: 0, y: 0 });
+  }
+
+  /** The form's static shapes, at a unit size (radius 20); placed and scaled per frame. */
+  private buildForm(): void {
+    const R = 20;
+    // Halo: a faint wide glow and sixteen arcs of the spectrum, in a container squashed to an ellipse.
+    const glow = new Graphics();
+    glow.circle(0, 0, R).stroke({ width: 3, color: 0xdcd2ff, alpha: 1 });
+    glow.alpha = 0.18;
+    const seg = 16;
+    for (let i = 0; i < seg; i++) {
+      const a0 = (i / seg) * Math.PI * 2;
+      this.haloRing.arc(0, 0, R, a0, a0 + (Math.PI * 2) / seg + 0.01).stroke({ width: 1.1, color: spectrum(i / seg), alpha: 1 });
+    }
+    this.halo.addChild(glow, this.haloRing);
+    // Five fine tines rising from the ring's back, the middle one tallest (at unit head size).
+    for (let i = 0; i < 5; i++) {
+      const a = Math.PI * (1.12 + 0.19 * i);
+      const px = Math.cos(a) * R;
+      const py = Math.sin(a) * R * 0.3;
+      const hgt = R * (i === 2 ? 0.58 : i === 1 || i === 3 ? 0.42 : 0.3);
+      this.tines.moveTo(px - 0.9, py).lineTo(px, py - hgt).lineTo(px + 0.9, py).closePath().fill({ color: spectrum(0.1 + i * 0.2), alpha: 1 });
+    }
+    // Aura: a soft fill and twelve deep-coloured dashes, squashed onto the ground.
+    const fill = new Graphics();
+    fill.circle(0, 0, R * 1.08).fill({ color: 0x6d5bd0, alpha: 0.35 });
+    const dashes = 12;
+    for (let i = 0; i < dashes; i++) {
+      const a0 = (i / dashes) * Math.PI * 2;
+      this.auraRing.arc(0, 0, R, a0, a0 + (Math.PI * 2) / dashes - 0.14).stroke({ width: 1.4, color: spectrum(i / dashes, SPECTRUM_DEEP), alpha: 1 });
+    }
+    this.aura.addChild(fill, this.auraRing);
+    // The blade's lights: an iridescent strip and a storm-blue glow line, stretched along it.
+    this.edge.texture = prismStrip();
+    this.edge.anchor.set(0, 0.5);
+    this.stormLine.texture = spark();
+    this.stormLine.anchor.set(0, 0.5);
+    this.stormLine.tint = STORM_BLUE;
+    this.stormLine.blendMode = "add";
+    for (const d of [this.halo, this.tines, this.aura, this.edge, this.stormLine]) d.visible = false;
   }
 
   setRanks(r: Readonly<ApexRanks> | undefined): void {
@@ -236,10 +292,14 @@ export class ApexDirector {
           this.host.numbers().drop(rec.handle);
           rec.prism = true;
           rec.handle = this.prism.show(rec.x, rec.y, halfW, dir, fmtNum(rec.sum), mark, this.stacker);
+          this.merged += 1;
           return;
         }
         const ok = rec.prism ? this.prism.amend(rec.handle, fmtNum(rec.sum), mark) : this.host.numbers().amend(rec.handle, fmtNum(rec.sum), mark, markColor);
-        if (ok) return;
+        if (ok) {
+          this.merged += 1;
+          return;
+        }
       }
     }
     // A new figure: the swing's own blow, or an echo that found a body of its own.
@@ -596,10 +656,11 @@ export class ApexDirector {
     o.spread = 30 * u;
     h.particles.emit(o);
     o.spread = 0;
-    // The scene is lit: the backdrop sinks, then the light lifts it; bodies nearby catch it.
-    h.darken(0x232338, 0.35);
-    if (!reduced) {
-      h.flash(CROWN_LIGHT, 0.24, 0.2);
+    // The scene is lit: the light lifts it and the backdrop sinks behind the bolt as it fades; bodies
+    // nearby catch it. All of it is one flash of the budget's three a second: refused (or with
+    // reduced effects) the bolt still reads by its shape, its scorch and its thunder.
+    if (!reduced && h.flash(CROWN_LIGHT, 0.24, 0.2)) {
+      h.darken(0x232338, 0.3);
       h.rimLight(gx, gy - 40 * u, 300 * u, 0.24);
     }
     h.camera.shake(0.32);
@@ -785,19 +846,23 @@ export class ApexDirector {
     const pv = this.host.player();
     const r = this.ranks;
     const front = this.formFront;
-    const back = this.formBack;
     if (!pv || pv.dead || !this.owned) {
       if (this.formDirty) {
         front.clear();
-        back.clear();
         this.formDirty = false;
-        pv?.rig.setCapeTint(0xffffff);
+      }
+      pv?.rig.setCapeTint(0xffffff);
+      if (this.formShown) {
+        for (const d of [this.halo, this.tines, this.aura, this.edge, this.stormLine]) d.visible = false;
+        this.formShown = false;
       }
       return;
     }
-    this.formDirty = true;
-    front.clear();
-    back.clear();
+    this.formShown = true;
+    if (this.formDirty) {
+      front.clear();
+      this.formDirty = false;
+    }
     const reduced = this.host.isReduced();
     const striking = pv.state === "windup" || pv.state === "attack" || pv.state === "recover";
     this.activity = damp(this.activity, striking || this.sinceBlow < 0.8 ? 1 : 0, striking ? 14 : 3, realDt);
@@ -806,7 +871,8 @@ export class ApexDirector {
     const t = this.time;
     const sc = pv.scale;
     front.zIndex = pv.zIndex + 0.3;
-    back.zIndex = pv.zIndex - 0.5;
+    this.halo.zIndex = this.tines.zIndex = this.edge.zIndex = this.stormLine.zIndex = pv.zIndex + 0.3;
+    this.aura.zIndex = pv.zIndex - 0.5;
     const rig = pv.rig;
     const hand = this.p;
     const tip = this.q;
@@ -844,39 +910,37 @@ export class ApexDirector {
         this.host.particles.emit(o);
       }
     }
-    // Double Strike: a faint storm-blue light along the blade's edge.
-    if (r.double > 0) {
-      front.moveTo(hand.x + bx * 0.12, hand.y + by * 0.12).lineTo(tip.x, tip.y);
-      front.stroke({ width: 3.2 * sc, color: STORM_BLUE, alpha: 0.1 + 0.025 * Math.min(10, r.double) * (0.5 + 0.5 * Math.min(1, act)), cap: "round" });
+    const bladeAng = Math.atan2(by, bx);
+    // Double Strike: a faint storm-blue light along the blade.
+    const sl = this.stormLine;
+    sl.visible = r.double > 0;
+    if (sl.visible) {
+      sl.position.set(hand.x + bx * 0.08, hand.y + by * 0.08);
+      sl.rotation = bladeAng;
+      sl.width = blen * 1.02;
+      sl.height = 9 * sc;
+      sl.alpha = 0.25 + 0.04 * Math.min(10, r.double) * (0.5 + 0.5 * Math.min(1, act));
     }
     // The aura at his feet (Stormcrown): a slow ring of colour, faint at rest.
-    if (r.crown > 0) {
+    const au = this.aura;
+    au.visible = r.crown > 0;
+    if (au.visible) {
       const rx = 28 * sc;
-      const ry = rx * 0.3;
-      const fx = pv.drawX;
-      const fy = pv.drawY + 1;
-      const a = 0.4 + 0.35 * Math.min(1, act);
-      back.ellipse(fx, fy, rx * 1.08, ry * 1.08).fill({ color: 0x6d5bd0, alpha: 0.1 + 0.06 * act });
-      const seg = 12;
-      const spin = reduced ? 0 : t * 0.45;
-      for (let i = 0; i < seg; i++) {
-        const a0 = spin + (i / seg) * Math.PI * 2;
-        const a1 = a0 + (Math.PI * 2) / seg - 0.14;
-        this.ellipseArc(back, fx, fy, rx, ry, a0, a1, 4);
-        back.stroke({ width: 2.2, color: spectrum(i / seg + t * 0.05, SPECTRUM_DEEP), alpha: a, cap: "round" });
-      }
+      au.position.set(pv.drawX, pv.drawY + 1);
+      au.scale.set(rx / 20, (rx * 0.3) / 20);
+      this.auraRing.rotation = reduced ? 0 : t * 0.45;
+      au.alpha = 0.4 + 0.35 * Math.min(1, act);
     }
-    // The iridescent edge (Prismatic Edge): a thin line of moving colour along the blade.
-    if (r.prism > 0) {
-      const a = Math.min(0.95, (0.4 + 0.05 * r.prism) * (0.6 + 0.4 * Math.min(1, act)));
+    // The iridescent edge (Prismatic Edge): a thin strip of colour along the blade's edge.
+    const ed = this.edge;
+    ed.visible = r.prism > 0;
+    if (ed.visible) {
       const off = 1.4 * sc;
-      const segs = 6;
-      for (let i = 0; i < segs; i++) {
-        const k0 = 0.1 + (0.9 * i) / segs;
-        const k1 = 0.1 + (0.9 * (i + 1)) / segs;
-        front.moveTo(hand.x + bx * k0 + nx * off, hand.y + by * k0 + ny * off).lineTo(hand.x + bx * k1 + nx * off, hand.y + by * k1 + ny * off);
-        front.stroke({ width: 1.6 * sc + 0.5, color: spectrum(t * 0.5 - i / segs, SPECTRUM_DEEP), alpha: a, cap: "round" });
-      }
+      ed.position.set(hand.x + bx * 0.1 + nx * off, hand.y + by * 0.1 + ny * off);
+      ed.rotation = bladeAng;
+      ed.width = blen * 0.9;
+      ed.height = 1.6 * sc + 0.5;
+      ed.alpha = Math.min(0.95, (0.4 + 0.05 * r.prism) * (0.6 + 0.4 * Math.min(1, act)));
     }
     // Arcs crawling over blade and arm (Triple Strike), only in a fight.
     if (r.triple > 0) {
@@ -889,6 +953,7 @@ export class ApexDirector {
         if (Math.random() < chance) this.makeArcs(rig, hand, bx, by, nx, ny, sc);
       }
       if (this.arcLeft > 0) {
+        this.formDirty = true;
         for (let a = 0; a < this.arcCount; a++) {
           const o = a * 10;
           for (let pass = 0; pass < 2; pass++) {
@@ -900,30 +965,22 @@ export class ApexDirector {
       }
     }
     // The crown (Stormcrown): a thin prismatic halo with five fine tines, over his head.
-    if (r.crown > 0) {
+    const crown = r.crown > 0;
+    this.halo.visible = crown;
+    this.tines.visible = crown;
+    if (crown) {
       const head = rig.crownPoint(this.s);
       const cx = this.s.x;
       const cy = this.s.y - head * 0.15 + Math.sin(t * 1.6) * 0.6;
-      const rx = head * 1.3;
-      const ry = rx * 0.3;
-      const seg = 16;
-      const glowA = 0.14 + 0.12 * Math.min(1, act);
-      front.ellipse(cx, cy, rx, ry).stroke({ width: 3.6, color: 0xdcd2ff, alpha: glowA });
-      for (let i = 0; i < seg; i++) {
-        const a0 = (i / seg) * Math.PI * 2;
-        const a1 = a0 + (Math.PI * 2) / seg;
-        this.ellipseArc(front, cx, cy, rx, ry, a0, a1, 3);
-        // The back of the ring is fainter: it reads as a ring seen from a little above.
-        const backHalf = Math.sin((a0 + a1) / 2) < 0;
-        front.stroke({ width: 1.3, color: spectrum(t * 0.18 + i / seg), alpha: backHalf ? 0.5 : 0.95, cap: "round" });
-      }
-      for (let i = 0; i < 5; i++) {
-        const a = Math.PI * (1.12 + 0.19 * i);
-        const px = cx + Math.cos(a) * rx;
-        const py = cy + Math.sin(a) * ry;
-        const hgt = head * (i === 2 ? 0.75 : i === 1 || i === 3 ? 0.55 : 0.4);
-        front.moveTo(px - 1.1, py).lineTo(px, py - hgt).lineTo(px + 1.1, py).closePath().fill({ color: spectrum(t * 0.18 + i * 0.2), alpha: 0.9 });
-      }
+      const k = (head * 1.3) / 20;
+      this.halo.position.set(cx, cy);
+      this.halo.scale.set(k, k * 0.3);
+      // The colours run round the ring (slower with reduced effects).
+      this.haloRing.rotation = t * (reduced ? 0.2 : 0.9);
+      this.halo.alpha = 0.85 + 0.15 * Math.min(1, act);
+      this.tines.position.set(cx, cy);
+      this.tines.scale.set(k);
+      this.tines.alpha = 0.9;
       // The cape catches the colour, slowly.
       rig.setCapeTint(mix(0xffffff, spectrum(t * 0.08), 0.35));
     } else rig.setCapeTint(0xffffff);
@@ -963,15 +1020,6 @@ export class ApexDirector {
     this.arcLeft = 0.05;
   }
 
-  /** Trace part of an ellipse (no stroke). */
-  private ellipseArc(g: Graphics, cx: number, cy: number, rx: number, ry: number, a0: number, a1: number, steps: number): void {
-    g.moveTo(cx + Math.cos(a0) * rx, cy + Math.sin(a0) * ry);
-    for (let i = 1; i <= steps; i++) {
-      const a = a0 + ((a1 - a0) * i) / steps;
-      g.lineTo(cx + Math.cos(a) * rx, cy + Math.sin(a) * ry);
-    }
-  }
-
   /** Bolts drawn this frame (for the cost check). */
   get liveBolts(): number {
     return this.bolts.live;
@@ -994,7 +1042,6 @@ export class ApexDirector {
     this.under.clear();
     this.glow.clear();
     this.formFront.clear();
-    this.formBack.clear();
     this.fxDirty = false;
     this.formDirty = false;
     this.lastMain.t = -Infinity;
@@ -1005,8 +1052,34 @@ export class ApexDirector {
     this.prism.destroy();
     this.fx.destroy({ children: true });
     this.formFront.destroy();
-    this.formBack.destroy();
+    for (const d of [this.halo, this.tines, this.aura, this.edge, this.stormLine]) d.destroy({ children: true });
+    stripTexture?.destroy(true);
+    stripTexture = null;
   }
+}
+
+let stripTexture: Texture | null = null;
+
+/** A strip of the deep spectrum along its length, soft at both ends (the blade's iridescent edge). Made once. */
+function prismStrip(): Texture {
+  if (stripTexture && !stripTexture.destroyed) return stripTexture;
+  if (typeof document === "undefined") return Texture.WHITE;
+  const w = 64;
+  const h = 4;
+  const c = document.createElement("canvas");
+  c.width = w;
+  c.height = h;
+  const ctx = c.getContext("2d");
+  if (!ctx) return Texture.WHITE;
+  for (let x = 0; x < w; x++) {
+    const u = x / (w - 1);
+    const col = spectrum(u * 1.2, SPECTRUM_DEEP);
+    const a = Math.min(1, u / 0.12, (1 - u) / 0.1);
+    ctx.fillStyle = `rgba(${(col >> 16) & 255},${(col >> 8) & 255},${col & 255},${a.toFixed(3)})`;
+    ctx.fillRect(x, 0, 1, h);
+  }
+  stripTexture = Texture.from(c);
+  return stripTexture;
 }
 
 function set2(a: [number, number], x: number, y: number): void {

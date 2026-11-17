@@ -2252,8 +2252,8 @@ export class BattleRenderer implements ImpactHost {
   }
 
   /** Counters for the captures: flashes granted and refused, the worst second, Apex effects live. */
-  apexStats(): { flashesGranted: number; flashesRefused: number; flashWorstPerSecond: number; prismLive: number; boltsLive: number } {
-    return { flashesGranted: this.flashes.granted, flashesRefused: this.flashes.refused, flashWorstPerSecond: this.flashes.worstPerWindow, prismLive: this.apex?.prism.liveCount ?? 0, boltsLive: this.apex?.liveBolts ?? 0 };
+  apexStats(): { flashesGranted: number; flashesRefused: number; flashWorstPerSecond: number; prismLive: number; boltsLive: number; echoesMerged: number } {
+    return { flashesGranted: this.flashes.granted, flashesRefused: this.flashes.refused, flashWorstPerSecond: this.flashes.worstPerWindow, prismLive: this.apex?.prism.liveCount ?? 0, boltsLive: this.apex?.liveBolts ?? 0, echoesMerged: this.apex?.merged ?? 0 };
   }
 
   levelUpBurst(): void {

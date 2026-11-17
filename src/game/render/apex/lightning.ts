@@ -220,8 +220,11 @@ export class BoltPool {
         const u = p === 0 ? upto : 1;
         tracePath(under, pts, b.ax, b.ay, b.bx, b.by, b.spread, b.mirror, u);
         under.stroke({ width: w * 2.6, color: 0x0b0a12, alpha: 0.42 * a, cap: "round", join: "round" });
-        tracePath(glow, pts, b.ax, b.ay, b.bx, b.by, b.spread, b.mirror, u);
-        glow.stroke({ width: w * 4.2, color: b.color, alpha: 0.22 * a, cap: "round", join: "round" });
+        // The wide halo only on the broad channels (a thin cut reads without it, at a third less cost).
+        if (w >= 2.4) {
+          tracePath(glow, pts, b.ax, b.ay, b.bx, b.by, b.spread, b.mirror, u);
+          glow.stroke({ width: w * 4.2, color: b.color, alpha: 0.22 * a, cap: "round", join: "round" });
+        }
         tracePath(glow, pts, b.ax, b.ay, b.bx, b.by, b.spread, b.mirror, u);
         glow.stroke({ width: w * 1.7, color: b.color, alpha: 0.75 * a, cap: "round", join: "round" });
         tracePath(glow, pts, b.ax, b.ay, b.bx, b.by, b.spread, b.mirror, u);
