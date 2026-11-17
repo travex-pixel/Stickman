@@ -572,7 +572,12 @@ function ApexView({ short }: { short: boolean }) {
             {maxed ? "Mastered" : door ? door : next ? `Next: ${next}` : null}
           </p>
           <HoldButton
-            onRepeat={() => c.buyApex(selected)}
+            onRepeat={() => {
+              // A hold keeps buying the skill it was pressed on: the road's next skill can change
+              // under the finger as prices rise, so the first rank bought pins the choice.
+              if (picked !== selected) setPicked(selected);
+              return c.buyApex(selected);
+            }}
             disabled={!check.ok}
             onDenied={!maxed && check.reason === "points" ? () => (shake(), c.audio.play("error", { volume: 0.3, minInterval: 200 })) : undefined}
             feedback="scale"
