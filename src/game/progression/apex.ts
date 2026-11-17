@@ -146,8 +146,6 @@ export function apexNextText(id: ApexSkillId, rank: number): string | null {
   }
 }
 
-const STAT_NAME = { attackSpeed: "Attack speed", critChance: "Crit rate" } as const;
-
 /** Why a skill cannot be bought yet, with progress ("Needs Double Strike 10/10: you have 6"); null when its door is open. */
 export function apexDoorText(p: Profile, id: ApexSkillId): string | null {
   const door = apexDoor(p, id);
