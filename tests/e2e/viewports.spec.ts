@@ -492,7 +492,7 @@ for (const vp of VIEWPORTS) {
       if (state === "locked") await expect(page.getByTestId("apex-next")).toContainText("stage-39 boss");
       if (state === "maxed") await expect(page.getByTestId("apex-status")).toContainText("mastered");
       if (state === "partway") {
-        // The next rank is one tap: Prismatic Edge 4 for 8 points.
+        // The next rank is one tap: Prismatic Edge 4 (30 points bank more than its price).
         await page.getByTestId("apex-skill-prism").click();
         await page.getByTestId("apex-buy").click();
         await page.waitForTimeout(200);

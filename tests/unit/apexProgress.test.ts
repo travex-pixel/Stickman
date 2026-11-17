@@ -80,6 +80,7 @@ describe("Apex opens at the stage-39 boss, and its doors", () => {
     for (let id = nextApexSkill(p); id && guard < 100; id = nextApexSkill(p), guard++) expect(buyApexRank(p, id)).not.toBeNull();
     expect(p.player.apex).toEqual({ double: APEX_MAX.double, triple: APEX_MAX.triple, prism: APEX_MAX.prism, crown: APEX_MAX.crown });
     expect(10_000 - p.player.skillPoints).toBe(total);
+    expect(total).toBe(245);
     expect(apexPointsLeft(p)).toBe(0);
   });
 });
@@ -134,10 +135,11 @@ describe("the menus count Apex", () => {
     p.skills.unlocked = SKILLS.map((s) => s.id);
     p.player.apex = { double: 10, triple: 10, prism: 10, crown: 1 };
     expect(readinessTips(p, 51).some((t) => t.panel === "skills" && /point|Apex/.test(t.text))).toBe(false);
-    // Stormcrown waiting but out of reach (47 of its 60 points): still nothing to buy.
+    // Stormcrown waiting but out of reach (one point short of its price): still nothing to buy.
     p.player.apex.crown = 0;
+    p.player.skillPoints = APEX_COSTS.crown[0]! - 1;
     expect(readinessTips(p, 51).some((t) => /point|Apex/.test(t.text))).toBe(false);
-    p.player.skillPoints = 60;
+    p.player.skillPoints = APEX_COSTS.crown[0]!;
     expect(readinessTips(p, 51).some((t) => /Apex rank: Stormcrown/.test(t.text))).toBe(true);
   });
   it("the offline estimate fights with Apex: a cycle clears faster", () => {

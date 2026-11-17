@@ -14,15 +14,16 @@ export const APEX_OPEN_STAGE = 40;
 export const APEX_NAME: Readonly<Record<ApexSkillId, string>> = { double: "Double Strike", triple: "Triple Strike", prism: "Prismatic Edge", crown: "Stormcrown" };
 
 /**
- * Skill points for each rank, in order. Sized on the measured pace of points (see DESIGN.md,
- * "Apex"): an owner-like warrior (level 150, stage 49, 47 points banked) buys Double Strike 1 at
- * once and maxes it within about a day, and finishes Stormcrown in about three.
+ * Skill points for each rank, in order (245 for all). Sized for a warrior stuck at a boss gate
+ * (level 150, farming stage 49, 47 points banked), the player Apex was made for: Double Strike 1
+ * at once, maxed with the first night's offline credit, everything by day four. A warrior still
+ * climbing earns points faster and finishes in about two days. See DESIGN.md, "Apex".
  */
 export const APEX_COSTS: Readonly<Record<ApexSkillId, readonly number[]>> = {
-  double: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
-  triple: [8, 9, 10, 11, 12, 13, 14, 15, 16, 17],
-  prism: [5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
-  crown: [60],
+  double: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+  triple: [3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+  prism: [3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+  crown: [30],
 };
 
 export function apexRanks(p: Profile): ApexRanks {
