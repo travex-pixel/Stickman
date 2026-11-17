@@ -8,6 +8,7 @@ import { summonDef } from "../data/summons";
 import { ownedSpecies } from "../summons/extraction";
 import { slotForm } from "./techniques";
 import { activeSynergies, synergyTotals, type SynergyDef } from "../data/synergies";
+import { noApex, type ApexRanks } from "../data/apex";
 
 export interface DeployedSummonLoadout {
   instanceId: string;
@@ -36,6 +37,8 @@ export interface PlayerLoadout {
   abilityRanks: Partial<Record<AbilityId, number>>;
   /** Which ability fills each base slot (the base itself or a learned technique). */
   slots: Partial<Record<AbilityId, AbilityId>>;
+  /** Apex ranks (all zero without Apex: the world then fights exactly as before). */
+  apex: ApexRanks;
 }
 
 /** The deployed shadows that actually take the field (never more than the army's slots). */
@@ -73,6 +76,7 @@ export function buildLoadout(profile: Profile): PlayerLoadout {
     owned: ownedSpecies(profile),
     bestStage: profile.progress.bestStage,
     abilityRanks: { ...profile.player.abilityRanks },
+    apex: { ...noApex(), ...profile.player.apex },
   };
 }
 

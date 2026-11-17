@@ -171,13 +171,13 @@ describe("the next step", () => {
 });
 
 describe("saves", () => {
-  it("v12 saves load at v13 with their items whole", () => {
+  it("v12 saves load at the current version with their items whole", () => {
     const raw = midGame() as unknown as Record<string, unknown>;
     raw.version = 12;
     const { raw: migrated, migrated: did } = runMigrations(raw, PROFILE_VERSION);
     expect(did).toBe(true);
     const { profile } = sanitizeProfile(migrated);
-    expect(profile.version).toBe(13);
+    expect(profile.version).toBe(PROFILE_VERSION);
     expect(profile.equipment.inventory.length).toBe(12);
     expect(profile.equipment.inventory.every((i) => i.kept === undefined)).toBe(true);
   });

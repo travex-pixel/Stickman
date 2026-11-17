@@ -12,6 +12,7 @@ import { ABILITY_RANK_MAX } from "@/game/progression/abilityRanks";
 import { EQUIPMENT_TEMPLATES, STAT_LABEL } from "@/game/data/equipment";
 import { SKILLS } from "@/game/data/skills";
 import { GEAR_EFFECTS, type GearEffectId } from "@/game/data/gearEffects";
+import { APEX_MAX, APEX_SKILLS, noApex, type ApexRanks } from "@/game/data/apex";
 
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 const isStr = (v: unknown): v is string => typeof v === "string";
@@ -140,6 +141,7 @@ export function sanitizeProfile(raw: unknown): { profile: Profile; repaired: boo
       rank: num(p.rank, 0, 0, 5),
       abilityRanks: sanitizeAbilityRanks(p.abilityRanks),
       ...sanitizeTechniques(p.techniques, p.artForms),
+      apex: sanitizeApex(p.apex),
     },
     equipment: { equipped, inventory },
     skills: { unlocked: Array.isArray(sk.unlocked) ? sk.unlocked.filter((id): id is string => isStr(id) && SKILLS.some((n) => n.id === id)) : [] },
@@ -211,6 +213,20 @@ export function sanitizeProfile(raw: unknown): { profile: Profile; repaired: boo
     }
   }
   return { profile, repaired };
+}
+
+/**
+ * Apex ranks (v14): each clamped to its skill's ranks. The doors (attack speed at its ceiling,
+ * Double Strike at 10 and so on) are not enforced on load, so a save never loses a rank.
+ */
+function sanitizeApex(v: unknown): ApexRanks {
+  const out = noApex();
+  if (!isObj(v)) return out;
+  for (const id of APEX_SKILLS) {
+    const r = v[id];
+    if (isNum(r) && r > 0) out[id] = Math.min(APEX_MAX[id], Math.floor(r));
+  }
+  return out;
 }
 
 function sanitizeAbilityRanks(v: unknown): Partial<Record<AbilityId, number>> {

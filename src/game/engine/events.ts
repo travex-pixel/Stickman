@@ -4,7 +4,11 @@ import type { EntityKind, Faction } from "../entities/types";
 
 export type GameEvent =
   | { type: "spawn"; id: number; kind: EntityKind; defId: string; pos: Vec2 }
-  | { type: "hit"; targetId: number; sourceId: number; amount: number; crit: boolean; pos: Vec2; element: Element; faction: Faction; targetKind: EntityKind; heavy: boolean }
+  /**
+   * Apex: `echo` marks the main hit of an echo blow (1 Double Strike's, 2 Triple Strike's);
+   * `prismatic` a critical hit of the warrior's that turned prismatic (Prismatic Edge, Stormcrown).
+   */
+  | { type: "hit"; targetId: number; sourceId: number; amount: number; crit: boolean; pos: Vec2; element: Element; faction: Faction; targetKind: EntityKind; heavy: boolean; echo?: 1 | 2; prismatic?: boolean }
   | { type: "heal"; targetId: number; amount: number; pos: Vec2 }
   | { type: "death"; id: number; kind: EntityKind; defId: string; pos: Vec2; killerId: number; elite?: boolean }
   /** `cut`: the Ascendant Fury's sword cut (not a swing of his combo; its strikes stay an ability's). */
@@ -61,7 +65,15 @@ export type GameEvent =
   | { type: "kill_streak"; count: number }
   | { type: "finisher"; pos: Vec2; boss: boolean }
   | { type: "shard_gain"; summonId: string; amount: number; pos: Vec2 }
-  | { type: "perfect_dodge"; pos: Vec2 };
+  | { type: "perfect_dodge"; pos: Vec2 }
+  /**
+   * Apex: an echo blow lands (sent just before its hit). The warrior `id` at `pos` strikes again,
+   * at `targetPos`; `index` 1 is Double Strike's echo, 2 Triple Strike's. `jumped` when the blow's
+   * own target had fallen or left reach and the echo took the nearest foe in reach instead.
+   */
+  | { type: "echo_strike"; id: number; targetId: number; index: 1 | 2; pos: Vec2; targetPos: Vec2; facing: 1 | -1; jumped: boolean }
+  /** Apex, Stormcrown: the warrior `id`'s bolt struck `targetPos`, then forked to each of `forks` (sent before its hits). */
+  | { type: "storm_bolt"; id: number; targetPos: Vec2; forks: Vec2[] };
 
 /** Whether a `cast` event starts a cast (the ultimate's later strikes repeat its event). */
 export function startsCast(e: Extract<GameEvent, { type: "cast" }>): boolean {

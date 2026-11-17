@@ -25,6 +25,7 @@ import { updateSummonAi } from "../summons/ai";
 import { castPlayerAbility, resolvePlayerAbility, playerDodge } from "../abilities/execute";
 import { STORMBLADE_CHAIN_CHANCE, INFERNAL_BURN_FRACTION, VOIDFANG_EXECUTE_THRESHOLD } from "../progression/weaponPaths";
 import { generateItem, rollRarity } from "../economy/loot";
+import { ECHO_DELAY, ECHO_POWER, PRISM_MULT, STORM_EVERY, STORM_FORKS, STORM_FORK_POWER, STORM_FORK_RANGE, STORM_POWER, doubleChance, prismChance, tripleChance } from "../data/apex";
 import type { EquipmentItem } from "../progression/profile";
 
 export const ARENA = { minX: 44, maxX: 596, minY: 8, maxY: 142, width: 640, depth: 150, homeX: 190, homeY: 78 } as const;
@@ -230,6 +231,12 @@ export class World {
   /** Set by the tutorial director while it teaches dodging. */
   tutorialSlow = false;
   private basicHits = 0;
+  /** Apex: set while an echo or Stormcrown's bolt strikes; nothing it does charges the ultimate. */
+  private apexStrike = false;
+  /** Apex: set while Stormcrown's bolt strikes; its blows are critical and prismatic. */
+  private stormStrike = false;
+  /** Apex, Stormcrown: blows landed (ordinary blows and echoes) since the world began. */
+  private apexBlows = 0;
   /** Kill chain: kills landed within CHAIN_WINDOW of each other. Feeds the HUD and energy. */
   chain = 0;
   private chainTimer = 0;
@@ -1204,15 +1211,31 @@ export class World {
   }
 
   /**
-   * A landed basic blow (or the Ascendant Fury's cut, at `power` times a basic blow): damage and
-   * every on-hit effect. Only an ordinary blow spends the crit a perfect dodge earned.
+   * A landed basic blow (or the Ascendant Fury's cut, at `power` times a basic blow; or an Apex
+   * echo, `echo` 1 or 2): damage and every on-hit effect. Only an ordinary blow spends the crit a
+   * perfect dodge earned, and only an ordinary blow can echo. An echo is a real blow for its
+   * on-hit effects, but nothing it does charges the ultimate.
    */
-  private playerBasicHit(target: Combatant, power = 1, ordinary = true): void {
+  private playerBasicHit(target: Combatant, power = 1, ordinary = true, echo: 0 | 1 | 2 = 0): void {
+    if (echo === 0) {
+      this.basicBlow(target, power, ordinary, 0);
+      return;
+    }
+    const was = this.apexStrike;
+    this.apexStrike = true;
+    try {
+      this.basicBlow(target, power, false, echo);
+    } finally {
+      this.apexStrike = was;
+    }
+  }
+
+  private basicBlow(target: Combatant, power: number, ordinary: boolean, echo: 0 | 1 | 2): void {
     const p = this.player;
     const fx = this.loadout.mods.gearEffects;
     const forceCrit = ordinary && this.perfectCrit;
     if (ordinary) this.perfectCrit = false;
-    const res = this.dealDamage(p, target, (forceCrit ? 1.5 : 1) * power, "physical", forceCrit, 1, forceCrit);
+    const res = this.dealDamage(p, target, (forceCrit ? 1.5 : 1) * power, echo === 2 ? "lightning" : "physical", forceCrit, 1, forceCrit, undefined, echo || undefined);
     if (!res) return;
     this.gainEnergy(6);
     this.basicHits += 1;
@@ -1256,6 +1279,89 @@ export class World {
       target.hp = 0;
       this.kill(target, p.id);
     }
+    // Apex. Every draw waits on its rank: a warrior without Apex draws nothing more than before.
+    const apex = this.loadout.apex;
+    if (ordinary && power === 1 && echo === 0) {
+      // Double Strike: an ordinary blow (never the Fury's cut, never an echo) may strike again.
+      const c = doubleChance(apex);
+      if (c > 0 && (c >= 1 || this.rng.chance(c))) this.queueEcho(target.id, 1);
+    } else if (echo === 1) {
+      // Triple Strike: a Double Strike's echo may strike a third time.
+      const c = tripleChance(apex);
+      if (c > 0 && (c >= 1 || this.rng.chance(c))) this.queueEcho(target.id, 2);
+    }
+    if (apex.crown > 0 && (ordinary || echo > 0)) {
+      this.apexBlows += 1;
+      if (this.apexBlows % STORM_EVERY === 0) this.stormBolt(target);
+    }
+  }
+
+  /** An echo lands ECHO_DELAY world seconds after the blow it follows (scheduled on the world, so deterministic). */
+  private queueEcho(targetId: number, index: 1 | 2): void {
+    this.schedule(ECHO_DELAY, () => this.landEcho(targetId, index));
+  }
+
+  /**
+   * An echo strikes the blow's target if it still stands in reach; otherwise the nearest foe in
+   * reach (`jumped`); with none, it is lost. It is lost too if the warrior has fallen, the fight is
+   * over, or the Ascendant Fury has begun (the flurry is its own).
+   */
+  private landEcho(targetId: number, index: 1 | 2): void {
+    const p = this.player;
+    if (p.dead || this.ultimate.active || this.phase === "victory" || this.phase === "defeat") return;
+    const inReach = (e: Combatant) => !e.dead && e.faction === "enemy" && !isHidden(e) && dist(p.pos, e.pos) <= p.stats.range + e.radius + 26;
+    const first = this.entities.get(targetId);
+    let target: Combatant | null = first && inReach(first) ? first : null;
+    const jumped = target === null;
+    if (!target) {
+      let best = Infinity;
+      for (const e of this.entities.values()) {
+        if (!inReach(e)) continue;
+        const d = dist(p.pos, e.pos);
+        if (d < best) {
+          best = d;
+          target = e;
+        }
+      }
+    }
+    if (!target) return;
+    this.events.push({ type: "echo_strike", id: p.id, targetId: target.id, index, pos: { ...p.pos }, targetPos: { ...target.pos }, facing: target.pos.x >= p.pos.x ? 1 : -1, jumped });
+    this.playerBasicHit(target, ECHO_POWER[index], false, index);
+  }
+
+  /**
+   * Stormcrown: a bolt on the blow's target (or, if it fell, the nearest foe to where it stood),
+   * critical and prismatic, forking to up to STORM_FORKS other foes near it. It charges nothing.
+   */
+  private stormBolt(target: Combatant): void {
+    const p = this.player;
+    let lead: Combatant | null = !target.dead && !isHidden(target) ? target : null;
+    if (!lead) {
+      let best = Infinity;
+      for (const e of this.entities.values()) {
+        if (e.dead || e.faction !== "enemy" || isHidden(e)) continue;
+        const d = dist(target.pos, e.pos);
+        if (d <= STORM_FORK_RANGE && d < best) {
+          best = d;
+          lead = e;
+        }
+      }
+    }
+    if (!lead) return;
+    const forks: Combatant[] = [];
+    const others = [...this.entities.values()].filter((e) => e.id !== lead!.id && !e.dead && e.faction === "enemy" && !isHidden(e) && dist(lead!.pos, e.pos) <= STORM_FORK_RANGE);
+    others.sort((a, b) => dist(lead!.pos, a.pos) - dist(lead!.pos, b.pos) || a.id - b.id);
+    for (const e of others.slice(0, STORM_FORKS)) forks.push(e);
+    this.events.push({ type: "storm_bolt", id: p.id, targetPos: { ...lead.pos }, forks: forks.map((e) => ({ ...e.pos })) });
+    const was = [this.apexStrike, this.stormStrike];
+    this.apexStrike = true;
+    this.stormStrike = true;
+    try {
+      this.dealDamage(p, lead, STORM_POWER, "lightning", true, 1, true);
+      for (const e of forks) this.dealDamage(p, e, STORM_FORK_POWER, "lightning", false, 1, true);
+    } finally {
+      [this.apexStrike, this.stormStrike] = was as [boolean, boolean];
+    }
   }
 
   private summonBasicHit(s: Combatant, target: Combatant): void {
@@ -1279,8 +1385,12 @@ export class World {
     if (s.defId === "tidestalker" && !target.dead) addStatus(target, { kind: "slow", remaining: 1.5, value: 0.2, sourceId: s.id });
   }
 
-  gainEnergy(amount: number): void {
+  gainEnergy(amount: number, kill = false): void {
     if (!this.loadout.ultimateUnlocked) return;
+    // Apex echoes and Stormcrown's bolt charge nothing by striking (their hits, crits and the
+    // on-hit effects they set off): at three blows a swing AUTO would otherwise cast the Fury back
+    // to back. A kill is a kill, whoever lands it, and charges as before.
+    if (this.apexStrike && !kill) return;
     // Ascendant Fury never pays for the next one: nothing charges it while it runs (its cut, its
     // strikes' crits and kills, the army's kills alike). Charging resumes the moment it ends.
     if (this.ultimate.active) return;
@@ -1290,7 +1400,7 @@ export class World {
   }
 
   /** Full damage pipeline with crits, marks, shields, invulnerability and death. Returns null if no damage was dealt. */
-  dealDamage(source: Combatant, target: Combatant, power: number, element: Element, heavy: boolean, bonusMult = 1, forceCrit?: boolean, blockFromX?: number): { amount: number; crit: boolean } | null {
+  dealDamage(source: Combatant, target: Combatant, power: number, element: Element, heavy: boolean, bonusMult = 1, forceCrit?: boolean, blockFromX?: number, echo?: 1 | 2): { amount: number; crit: boolean } | null {
     if (target.dead || source.dead) return null;
     // Invariant: nothing ever damages its own side.
     if (source.faction === target.faction) return null;
@@ -1316,7 +1426,17 @@ export class World {
       { attack: source.stats.attack, power, critChance: source.stats.critChance, critDamage: source.stats.critDamage, targetDefense: target.stats.defense, bonusMultiplier: bonus, forceCrit: forceCrit || undefined },
       this.rng,
     );
-    this.applyRawDamage(target, res.amount, element, source.id, res.crit, heavy);
+    // Apex, Prismatic Edge: a share of the warrior's critical blows (abilities' too) turn
+    // prismatic and hit PRISM_MULT times as hard. Stormcrown's bolt always is. No rank, no draw.
+    let prismatic = false;
+    if (res.crit && source === this.player) {
+      const c = prismChance(this.loadout.apex);
+      if (this.stormStrike || (c > 0 && (c >= 1 || this.rng.chance(c)))) {
+        prismatic = true;
+        res.amount = Math.max(1, Math.round(res.amount * PRISM_MULT));
+      }
+    }
+    this.applyRawDamage(target, res.amount, element, source.id, res.crit, heavy, echo || prismatic ? { ...(echo ? { echo } : {}), ...(prismatic ? { prismatic } : {}) } : undefined);
     if (source.kind === "player" && res.crit) this.gainEnergy(3);
     // The Bastion's Bulwark: whoever strikes it is slowed.
     if (target.defId === "bastion" && target.kind === "summon" && source.faction === "enemy" && !source.dead) addStatus(source, { kind: "slow", remaining: 2, value: 0.25, sourceId: target.id });
@@ -1360,7 +1480,7 @@ export class World {
     return n;
   }
 
-  applyRawDamage(target: Combatant, amount: number, element: Element, sourceId: number, crit: boolean, heavy = false): void {
+  applyRawDamage(target: Combatant, amount: number, element: Element, sourceId: number, crit: boolean, heavy = false, apexTag?: { echo?: 1 | 2; prismatic?: boolean }): void {
     if (target.dead || hasStatus(target, "submerged")) return;
     // The Tyrant's clock starts when it does: no free score during its entrance.
     if (this.mode === "tyrant" && target.kind === "boss" && this.phase !== "boss") return;
@@ -1377,7 +1497,7 @@ export class World {
     if (target.kind === "player") this.cycleHurt += Math.max(0, remaining);
     target.hitFlash = 0.12;
     if (amount >= 1 && sourceId !== -1) {
-      this.events.push({ type: "hit", targetId: target.id, sourceId, amount: Math.round(amount), crit, pos: { x: target.pos.x, y: target.pos.y }, element, faction: target.faction, targetKind: target.kind, heavy });
+      this.events.push({ type: "hit", targetId: target.id, sourceId, amount: Math.round(amount), crit, pos: { x: target.pos.x, y: target.pos.y }, element, faction: target.faction, targetKind: target.kind, heavy, ...apexTag });
     }
     if (target.kind === "player" && heavy && remaining > 0 && target.state !== "dodge" && target.state !== "cast") {
       this.setState(target, "hit", 0.22);
@@ -1414,11 +1534,11 @@ export class World {
     const xp = Math.round(def.xp * scale.reward * eliteMult * minionMult);
     this.events.push({ type: "gold", amount: gold, pos: { ...e.pos } });
     this.events.push({ type: "xp", amount: xp, pos: { ...e.pos } });
-    this.gainEnergy(killerId === this.player.id ? 10 : 4);
+    this.gainEnergy(killerId === this.player.id ? 10 : 4, true);
     if (!e.enemy?.minion || this.chain > 0) {
       this.chain += 1;
       this.chainTimer = CHAIN_WINDOW;
-      if (this.chain >= 5) this.gainEnergy(2);
+      if (this.chain >= 5) this.gainEnergy(2, true);
       if (this.chain === 5 || this.chain === 10 || this.chain === 20 || (this.chain > 20 && this.chain % 10 === 0)) this.events.push({ type: "kill_streak", count: this.chain });
     }
     // Finishing blow: the last enemy of a wave (or the boss) falls in slow motion.

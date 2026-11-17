@@ -1,5 +1,6 @@
 import type { AbilityId, EquipSlot, Rarity, StatKey, SummonCommand, UpgradeableStat, WeaponPath } from "../data/ids";
 import type { GearEffectId } from "../data/gearEffects";
+import { noApex, type ApexRanks } from "../data/apex";
 
 export interface EquipmentItem {
   uid: string;
@@ -71,6 +72,8 @@ export interface Profile {
     techniques: AbilityId[];
     /** Which form each base slot uses; missing = the base ability. */
     artForms: Partial<Record<AbilityId, AbilityId>>;
+    /** Apex ranks bought with skill points (see data/apex.ts). */
+    apex: ApexRanks;
   };
   equipment: {
     equipped: Partial<Record<EquipSlot, string>>;
@@ -132,7 +135,7 @@ export interface Profile {
   settings: { music: number; sfx: number; reducedEffects: boolean; diagnostics: boolean; battleSpeed: 1 | 2; autoAdvance: boolean; /** Short reveals: every BIND plays its short form (the very first excepted). */ quickReveals: boolean; /** Keep the screen awake while the game is on screen. */ keepAwake: boolean };
 }
 
-export const PROFILE_VERSION = 13;
+export const PROFILE_VERSION = 14;
 
 export function createDefaultProfile(now = Date.now()): Profile {
   return {
@@ -155,6 +158,7 @@ export function createDefaultProfile(now = Date.now()): Profile {
       abilityRanks: {},
       techniques: [],
       artForms: {},
+      apex: noApex(),
     },
     equipment: { equipped: {}, inventory: [] },
     skills: { unlocked: [] },

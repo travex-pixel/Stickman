@@ -125,6 +125,15 @@ export const MIGRATIONS: Migration[] = [
     to: 13,
     migrate: (raw) => ({ ...raw, version: 13 }),
   },
+  {
+    // Apex: ranks bought with skill points in the late game. Saves before it have none.
+    from: 13,
+    to: 14,
+    migrate: (raw) => {
+      const player = (raw.player as Record<string, unknown> | undefined) ?? {};
+      return { ...raw, version: 14, player: { ...player, apex: { double: 0, triple: 0, prism: 0, crown: 0 } } };
+    },
+  },
 ];
 
 export function runMigrations(raw: Record<string, unknown>, targetVersion: number): { raw: Record<string, unknown>; migrated: boolean } {
