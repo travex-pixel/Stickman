@@ -87,6 +87,7 @@ or error tone instead of silence when a press cannot succeed.
 | Detail raise | Give a detail room for its actions | A picked item (Gear) or the Arts (Skills) | – | Opens with the detail; closes with it | The panel rises, then returns to the player's own height | Equip, upgrade and rank-up stay in reach at every phone size | Dragging the panel down while raised wins until the detail opens again |
 | Claim beside the gate (quest banner) | Collect a finished quest while a boss waits | Quest complete and a gate open | – | Claim | Claim sound | Reward | – |
 | Short reveals (Settings) | Shorter BIND stagings | Always | – | Toggle | Switch | Every bind plays its short form; the very first bind always plays in full; tap to skip works either way | – |
+| Keep screen on (Settings) | Holds a screen wake lock while the game is on screen | Always (on by default) | – | Toggle | Switch | The phone does not dim or sleep while the game is open; the lock is dropped when the page is hidden and taken again on return. Where the browser has no wake lock, or refuses it (battery saver), nothing changes | – |
 
 ## Playtest recording
 

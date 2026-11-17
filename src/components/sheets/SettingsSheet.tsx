@@ -27,6 +27,7 @@ export function SettingsSheet({ open }: { open: boolean }) {
           <Slider label="Effects" value={s.sfx} onChange={(v) => c.updateSettings({ sfx: v })} />
           <Switch label="Advance automatically" detail="After a boss falls, move on to the next stage." value={s.autoAdvance} onChange={(v) => c.updateSettings({ autoAdvance: v })} />
           <Switch label="Short reveals" detail="Every BIND plays its short form. Your first bind always plays in full; tap to skip works either way." value={s.quickReveals} onChange={(v) => c.updateSettings({ quickReveals: v })} />
+          <Switch label="Keep screen on" detail="The screen stays awake while the game is open." value={s.keepAwake} onChange={(v) => c.updateSettings({ keepAwake: v })} />
           <Switch label="Reduced effects" detail="Less motion, shake and flashing." value={s.reducedEffects} onChange={(v) => c.updateSettings({ reducedEffects: v })} />
           <Switch label="Diagnostics" value={s.diagnostics} onChange={(v) => c.updateSettings({ diagnostics: v })} />
           {s.diagnostics && <DiagLine />}

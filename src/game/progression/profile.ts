@@ -129,7 +129,7 @@ export interface Profile {
     vaultBest: number;
   };
   tutorial: { completed: string[]; finished: boolean };
-  settings: { music: number; sfx: number; reducedEffects: boolean; diagnostics: boolean; battleSpeed: 1 | 2; autoAdvance: boolean; /** Short reveals: every BIND plays its short form (the very first excepted). */ quickReveals: boolean };
+  settings: { music: number; sfx: number; reducedEffects: boolean; diagnostics: boolean; battleSpeed: 1 | 2; autoAdvance: boolean; /** Short reveals: every BIND plays its short form (the very first excepted). */ quickReveals: boolean; /** Keep the screen awake while the game is on screen. */ keepAwake: boolean };
 }
 
 export const PROFILE_VERSION = 13;
@@ -182,6 +182,6 @@ export function createDefaultProfile(now = Date.now()): Profile {
     tyrant: { week: "", best: 0, claimed: 0, allTimeBest: 0 },
     modes: { keyDay: "", keys: { vault: 3, rift: 3, crypt: 3, hunt: 3, tyrant: 2 }, endlessBest: 0, vaultBest: 0 },
     tutorial: { completed: [], finished: false },
-    settings: { music: 0.6, sfx: 0.8, reducedEffects: false, diagnostics: false, battleSpeed: 1, autoAdvance: true, quickReveals: false },
+    settings: { music: 0.6, sfx: 0.8, reducedEffects: false, diagnostics: false, battleSpeed: 1, autoAdvance: true, quickReveals: false, keepAwake: true },
   };
 }

@@ -4,8 +4,9 @@ import { attachPlaytest, playtestRequested } from "@/game/telemetry/PlaytestReco
 import { useEffect, useState } from "react";
 import { MotionConfig, useMotionValue } from "motion/react";
 import { GameController } from "@/game/GameController";
-import { GameContext, useUi } from "@/hooks/useGame";
+import { GameContext, useProfile, useUi } from "@/hooks/useGame";
 import { useReducedEffects } from "@/hooks/useReducedEffects";
+import { useWakeLock } from "@/hooks/useWakeLock";
 import { Battlefield } from "./Battlefield";
 import { TopBar } from "@/components/hud/TopBar";
 import { TabNav } from "@/components/navigation/TabNav";
@@ -73,6 +74,8 @@ export default function GameShell() {
  */
 function Shell({ controller, ready }: { controller: GameController; ready: boolean }) {
   const reduced = useReducedEffects();
+  // A fight left to run is meant to be watched: the phone does not dim while the game is open.
+  useWakeLock(useProfile((p) => p.settings.keepAwake !== false));
   const lift = useMotionValue(0);
   return (
     <SheetLiftContext.Provider value={lift}>
