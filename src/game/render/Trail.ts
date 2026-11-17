@@ -1,4 +1,5 @@
 import { Container, Mesh, MeshGeometry, Texture } from "pixi.js";
+import { spectrum } from "./apex/spectrum";
 
 /** Samples kept per ribbon at most (the blade's last positions). */
 const MAX_SAMPLES = 10;
@@ -25,6 +26,8 @@ export interface Ribbon {
   head: number;
   color: number;
   alpha: number;
+  /** A prismatic blow landed this swing: the ribbon is drawn iridescent until it is released. */
+  prism: boolean;
   /** Seconds left after release; < 0 while the swing is still live. */
   fade: number;
   linger: number;
@@ -35,6 +38,7 @@ export interface Ribbon {
 }
 
 let ribbonTexture: Texture | null = null;
+let prismTexture: Texture | null = null;
 
 /**
  * Along the strip (u: tail 0 to blade 1) the alpha rises from nothing; across it (v: tip edge 0
@@ -67,6 +71,42 @@ function texture(): Texture {
   ctx.putImageData(img, 0, 0);
   ribbonTexture = Texture.from(c);
   return ribbonTexture;
+}
+
+/**
+ * The iridescent ribbon of a prismatic swing: the same alpha as the plain one, its colour running
+ * through the spectrum across the strip, from the blade's edge to its middle, like light split by
+ * a prism. Made once.
+ */
+function prismRibbon(): Texture {
+  if (prismTexture && !prismTexture.destroyed) return prismTexture;
+  const w = 64;
+  const h = 16;
+  const c = document.createElement("canvas");
+  c.width = w;
+  c.height = h;
+  const ctx = c.getContext("2d");
+  if (!ctx) return Texture.WHITE;
+  const img = ctx.createImageData(w, h);
+  for (let y = 0; y < h; y++) {
+    const v = y / (h - 1);
+    const across = v < 0.12 ? 0.85 + 0.15 * (v / 0.12) : 1 - 0.6 * ((v - 0.12) / 0.88);
+    const col = spectrum(0.02 + v * 0.9);
+    for (let x = 0; x < w; x++) {
+      const u = x / (w - 1);
+      const along = Math.pow(u, 1.05);
+      const i = (y * w + x) * 4;
+      // The leading edge burns white; the colour opens out behind it.
+      const white = v < 0.1 ? 1 - v / 0.1 : 0;
+      img.data[i] = Math.round(((col >> 16) & 255) * (1 - white) + 255 * white);
+      img.data[i + 1] = Math.round(((col >> 8) & 255) * (1 - white) + 255 * white);
+      img.data[i + 2] = Math.round((col & 255) * (1 - white) + 255 * white);
+      img.data[i + 3] = Math.round(255 * along * across);
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  prismTexture = Texture.from(c);
+  return prismTexture;
 }
 
 /**
@@ -112,7 +152,7 @@ export class Trails {
       mesh.blendMode = "add";
       mesh.visible = false;
       this.graphics.addChild(under, mesh);
-      this.pool.push({ active: false, ownerId: -1, tip: new Float32Array(MAX_SAMPLES * 2), mid: new Float32Array(MAX_SAMPLES * 2), count: 0, head: 0, color: 0xffffff, alpha: 1, fade: -1, linger: LINGER_1X, mesh, under, geometry });
+      this.pool.push({ active: false, prism: false, ownerId: -1, tip: new Float32Array(MAX_SAMPLES * 2), mid: new Float32Array(MAX_SAMPLES * 2), count: 0, head: 0, color: 0xffffff, alpha: 1, fade: -1, linger: LINGER_1X, mesh, under, geometry });
     }
   }
 
@@ -158,6 +198,7 @@ export class Trails {
     pick.fade = -1;
     pick.linger = this.linger;
     pick.mesh.tint = color;
+    this.setPrism(pick, false);
     return pick;
   }
 
@@ -170,6 +211,21 @@ export class Trails {
     r.mid[i + 1] = midY;
     r.head = (r.head + 1) % MAX_SAMPLES;
     if (r.count < MAX_SAMPLES) r.count++;
+  }
+
+  /**
+   * Draw this ribbon iridescent (a prismatic blow landed), or plain again. It also lingers a little
+   * longer and brighter, so the colour is seen.
+   */
+  setPrism(r: Ribbon, on: boolean): void {
+    if (r.prism === on) return;
+    r.prism = on;
+    r.mesh.texture = on ? prismRibbon() : texture();
+    r.mesh.tint = on ? 0xffffff : r.color;
+    if (on) {
+      r.alpha = Math.max(r.alpha, 1);
+      r.linger = this.linger * 1.6;
+    }
   }
 
   /** The swing ended: the ribbon fades out. */
@@ -264,6 +320,8 @@ export class Trails {
     this.pool.length = 0;
     ribbonTexture?.destroy(true);
     ribbonTexture = null;
+    prismTexture?.destroy(true);
+    prismTexture = null;
   }
 }
 

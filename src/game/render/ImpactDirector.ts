@@ -8,7 +8,8 @@ import { hardCircle, softCircle, spark } from "./textures";
 import { DEATH_COLLAPSE, DEATH_DISSOLVE, DEATH_LAUNCH, DEATH_SINK, type Rig } from "./rigs/Rig";
 import { swingVariant } from "./rigs/pose";
 
-type HitEvent = Extract<GameEvent, { type: "hit" }>;
+/** A hit, with the Apex fields it may carry (an echo blow, a prismatic blow). */
+type HitEvent = Extract<GameEvent, { type: "hit" }> & { echo?: 1 | 2; prismatic?: boolean };
 type DeathEvent = Extract<GameEvent, { type: "death" }>;
 
 /** Render-side state the director keeps on each entity view. */
@@ -158,7 +159,7 @@ export class ImpactDirector {
       // fully white on a warrior crit, heavy or ability hit, the army never whitens anything.
       const tcls: FlashTarget = onWarrior ? "warrior" : target.kind === "boss" || !!target.enemy?.elite ? "boss" : target.faction === "ally" ? "ally" : "foe";
       const lit = this.whiteOnly < 0 || e.targetId === this.whiteOnly;
-      const scls: FlashSource = byWarrior ? (lit ? "warrior" : "other") : byArmy ? "army" : "other";
+      const scls: FlashSource = byWarrior && !e.echo ? (lit ? "warrior" : "other") : byArmy ? "army" : "other";
       tv.flash.hit(tcls, scls, e.crit, e.heavy || ability, this.now);
     }
     h.chest(target, this.p);
@@ -172,6 +173,15 @@ export class ImpactDirector {
       ang += dir * tilt;
     } else if (sv && sv.rig.meleeKit === "heavy") ang += dir * 0.6;
 
+    // An echo blow (Double or Triple Strike) is part of the swing that threw it: no stop, no
+    // camera, no white flash (a body struck ten times a second must not strobe), only a light
+    // reaction and a few sparks in the echo's colour. The third may shudder the body a hair (the
+    // renderer's echo effect holds it 16ms).
+    if (byWarrior && e.echo) {
+      if (tv) tv.lastHitAbility = false;
+      this.react(tv, target, dir, 0.04, 3, 0);
+      return;
+    }
     // The third swing of the warrior's combo, the overhead: the beat the other two lead up to.
     const third = byWarrior && !ability && !!sv && sv.rig.meleeKit === "combo" && swingVariant(sv.swings, "attack") === 2;
     if (byWarrior) {
@@ -189,9 +199,9 @@ export class ImpactDirector {
         // gets a few rings, not one per body).
         if (this.cool("ring-heavy", 0.12)) h.shockRing(x, y, 40, e.crit ? 0xe9c97a : elementColor(e.element));
       } else if (e.crit) {
-        // A crit on the third swing holds as long as that swing does.
-        this.impact(third ? "finisher" : "crit", e.sourceId, e.targetId, "w-crit", 0.09);
-        h.camera.kick(dir * 7 * this.kickScale, 1.5 * this.kickScale);
+        // A crit on the third swing holds as long as that swing does; so does a prismatic blow.
+        this.impact(third || e.prismatic ? "finisher" : "crit", e.sourceId, e.targetId, "w-crit", 0.09);
+        h.camera.kick(dir * (e.prismatic ? 8 : 7) * this.kickScale, 1.5 * this.kickScale);
         h.camera.punch(0.025);
         this.react(tv, target, dir, 0.1, 10, 2);
         this.sparks(x, y, ang, 12, 0xe9c97a, 1.25);

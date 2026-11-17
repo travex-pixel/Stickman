@@ -30,6 +30,8 @@ import { AUTHORED_FREEZE_MAX, FlashState } from "./hitStop";
 import { BossDeath, BossEntrance, PHASE, type BossHost } from "./cinematics/boss";
 import { FuryGhosts } from "./FuryGhosts";
 import { AriseCinematic, FailedBind, REDUCED_FADE, REVEAL_LENGTH, type AriseHost, type RevealStaging } from "./cinematics/arise";
+import { FlashBudget } from "./flashBudget";
+import { ApexDirector, NO_APEX, type ApexHitFields, type ApexHost, type ApexPlayerView, type ApexRanks, type ApexSkill, type EchoStrikeEvent, type StormBoltEvent } from "./apex/ApexDirector";
 
 interface EntityView extends ImpactState {
   id: number;
@@ -39,6 +41,8 @@ interface EntityView extends ImpactState {
   dimmed?: boolean;
   /** How far a big ally has thinned out for standing in front of the warrior (0 to 1). */
   veil: number;
+  /** Light caught from a Stormcrown bolt (0 to 1, dying away): the body reads lit. */
+  lit: number;
   lastHp: number;
   defId: string;
   kind: string;
@@ -226,6 +230,11 @@ export class BattleRenderer implements ImpactHost {
   private fxPool: Fx[] = [];
   readonly camera = new Camera();
   private impact = new ImpactDirector(this);
+  /** Every screen flash asks this first (at most three a second; none with reduced effects). */
+  readonly flashes = new FlashBudget();
+  /** The Apex skills' presentation (echo blows, prismatic hits, Stormcrown, the warrior's form). */
+  apex!: ApexDirector;
+  private readonly apexView: ApexPlayerView = { rig: null as unknown as Rig, drawX: 0, drawY: 0, scale: 1, zIndex: 0, facing: 1, state: "idle", swings: 0, path: "none", seed: 0, dead: false };
   private flashAlpha = 0;
   private flashTime = 0;
   private flashTotal = 0.35;
@@ -339,6 +348,8 @@ export class BattleRenderer implements ImpactHost {
     host.appendChild(app.canvas);
     app.ticker.stop(); // the GameLoop drives rendering
     this.numbers = new DamageNumbers(32);
+    this.apex = new ApexDirector(this.apexHost, this.entityLayer);
+    this.apex.prism.reduced = this.reduced;
     app.stage.addChild(this.root);
     this.root.addChild(this.cameraLayer);
     // A render group: moving the camera is one transform on the GPU side, not a re-walk of every
@@ -351,7 +362,7 @@ export class BattleRenderer implements ImpactHost {
       this.decalLayer.addChild(s);
       this.decalPool.push({ sprite: s, rx: 0, ry: 0, life: 0, total: 1, live: false });
     }
-    this.cameraLayer.addChild(this.decalLayer, this.groundFx, this.entityLayer, this.projectileLayer, this.orbLayer, this.trails.graphics, this.fxGraphics, this.particles.container, this.numbers.container, this.cinematicLayer);
+    this.cameraLayer.addChild(this.decalLayer, this.groundFx, this.entityLayer, this.projectileLayer, this.orbLayer, this.trails.graphics, this.fxGraphics, this.apex.fx, this.particles.container, this.numbers.container, this.apex.prism.container, this.cinematicLayer);
     this.entityLayer.sortableChildren = true;
     this.entityLayer.addChild(this.focusTicks);
     this.focusTicks.zIndex = 9000;
@@ -388,6 +399,7 @@ export class BattleRenderer implements ImpactHost {
     this.particles.destroy();
     this.trails.destroy();
     this.numbers?.destroy();
+    this.apex?.destroy();
     this.background?.destroy();
     this.background = null;
     this.fxPool = [];
@@ -423,6 +435,9 @@ export class BattleRenderer implements ImpactHost {
     this.telegraphMarks.clear();
     this.lastTelegraphs.length = 0;
     this.impact.reset();
+    this.apex?.reset();
+    this.flashes.reset();
+    this.flashTime = 0;
     this.stopLeft = 0;
     this.letterboxT = 0;
     this.skyDarken = 0;
@@ -468,6 +483,9 @@ export class BattleRenderer implements ImpactHost {
     this.particles.countScale = v ? 0.4 : 1;
     this.camera.reduced = v;
     this.impact.setReduced(v);
+    this.flashes.reduced = v;
+    if (this.apex) this.apex.prism.reduced = v;
+    if (v) this.flashTime = 0;
     this.background?.setReduced(v);
   }
 
@@ -646,6 +664,8 @@ export class BattleRenderer implements ImpactHost {
     this.updateFury(world, entDt, dt);
     if (perf) this.sec(0);
     this.syncEntities(world, alpha, entDt, fxDt, paused ? 0 : dt);
+    this.apex.setRanks(apexRanksOf(world));
+    this.apex.updateForm(paused ? 0 : dt);
     if (perf) this.sec(1);
     if (!paused) this.frameCamera(world, alpha);
     this.camera.update(dt);
@@ -665,6 +685,7 @@ export class BattleRenderer implements ImpactHost {
     this.drawGroundFx(world, fxDt);
     if (perf) this.sec(3);
     this.updateFx(fxDt);
+    this.apex.update(fxDt, dt);
     if (perf) this.sec(4);
     this.trails.setSpeed(this.speed());
     this.trails.update(fxDt);
@@ -672,6 +693,8 @@ export class BattleRenderer implements ImpactHost {
     this.particles.update(fxDt);
     this.numbers.setBounds(this.vis.minX, this.vis.maxX);
     this.numbers.setZoom(o.scale);
+    this.apex.prism.setBounds(this.vis.minX, this.vis.maxX);
+    this.apex.prism.setZoom(o.scale);
     if (this.numbers.tallyOn) {
       this.camera.unproject(this.width * TALLY_SCREEN_X, TALLY_SCREEN_Y, this.pt);
       this.numbers.placeTally(this.pt.x, this.pt.y);
@@ -835,8 +858,11 @@ export class BattleRenderer implements ImpactHost {
       } else if (!held) rig.animate(e.state, e.stateTime, e.stateDuration, e.seed, e.facing, moving, speedFrac, e.deathTime, dt, variant);
       if (e.id === player.id) this.playerFacing = e.facing;
       rig.setHitFlash(e.hitFlash);
-      // Time-based impact flash: full white, a light tint, or nothing (FlashState decides).
-      rig.setWhite(v.flash.step(realDt > 0 ? realDt : this.frameDt));
+      // Time-based impact flash: full white, a light tint, or nothing (FlashState decides); a body
+      // lit by a Stormcrown bolt holds a share of white as the light dies away.
+      const white = v.flash.step(realDt > 0 ? realDt : this.frameDt);
+      if (v.lit > 0) v.lit = Math.max(0, v.lit - (realDt > 0 ? realDt : this.frameDt) * 3.2);
+      rig.setWhite(v.lit > 0.02 ? Math.max(white, v.lit) : white);
       if (e.summon?.temporary) rig.root.alpha = Math.min(rig.root.alpha, 0.72);
       // A big shadow standing in front of the warrior thins out, so he is never lost behind his
       // own army; it fills back in as soon as it steps clear.
@@ -960,6 +986,7 @@ export class BattleRenderer implements ImpactHost {
       struck: false,
       restFor: 0,
       veil: 0,
+      lit: 0,
       lastHitCrit: false,
       lastHitHeavy: false,
       lastHitAbility: false,
@@ -1257,6 +1284,22 @@ export class BattleRenderer implements ImpactHost {
       d.life = d.total = 2.4;
       d.sprite.tint = color;
       d.sprite.position.set(x + Math.cos(a) * dist, y + Math.sin(a) * dist * 0.4);
+      d.sprite.visible = true;
+    }
+  }
+
+  /** A Stormcrown scorch: a dark burn on the ground, from the same pooled decals as the ink. */
+  private scorch(x: number, y: number, r: number): void {
+    for (let i = 0; i < 3; i++) {
+      const d = this.decalPool[this.decalNext]!;
+      this.decalNext = (this.decalNext + 1) % MAX_DECALS;
+      const k = i === 0 ? 1 : 0.55;
+      d.live = true;
+      d.rx = r * k;
+      d.ry = r * k * 0.36;
+      d.life = d.total = 2.4;
+      d.sprite.tint = i === 0 ? 0x0c0a12 : 0x2a2140;
+      d.sprite.position.set(x + (i === 0 ? 0 : (Math.random() - 0.5) * r), y + (i === 0 ? 0 : (Math.random() - 0.5) * r * 0.3));
       d.sprite.visible = true;
     }
   }
@@ -1749,6 +1792,16 @@ export class BattleRenderer implements ImpactHost {
     if (!world) return;
     const u = this.unit();
     for (const e of events) {
+      // The Apex events (echo blows, the Stormcrown bolt).
+      const kind = (e as { type: string }).type;
+      if (kind === "echo_strike") {
+        this.apex.onEcho(e as unknown as EchoStrikeEvent);
+        continue;
+      }
+      if (kind === "storm_bolt") {
+        this.apex.onStorm(e as unknown as StormBoltEvent);
+        continue;
+      }
       switch (e.type) {
         case "attack_swing": {
           this.impact.onSwing(e.id, e.cut === true);
@@ -1784,7 +1837,13 @@ export class BattleRenderer implements ImpactHost {
             const dir = src ? (target.pos.x >= src.pos.x ? 1 : -1) : target.facing === 1 ? -1 : 1;
             const tv = this.views.get(target.id);
             const halfW = (tv ? tv.rig.top * 0.2 : 16) * this.figureScale(target.pos.y);
-            this.numbers.hit(this.pt.x, this.pt.y - 6, halfW, dir, fmtNum(e.amount), col, taken ? "taken" : e.crit ? "crit" : "normal", !taken);
+            const ax = e as ApexHitFields;
+            if (e.sourceId === world.player.id && e.faction === "enemy") {
+              // The warrior's blows: a swing's echoes fold into its one figure (apex/ApexDirector).
+              if (ax.prismatic) this.apex.onPrism(this.pt.x, this.pt.y, dir, (tv ? tv.rig.top : CHEST / 0.62) * this.figureScale(target.pos.y), !!ax.echo);
+              if (!ax.echo) this.apex.noteMainBlow(target.id);
+              this.apex.figure(target.id, e.amount, e.crit, ax, this.pt.x, this.pt.y - 6, halfW, dir, col, e.crit ? "crit" : "normal");
+            } else this.numbers.hit(this.pt.x, this.pt.y - 6, halfW, dir, fmtNum(e.amount), col, taken ? "taken" : e.crit ? "crit" : "normal", !taken);
           }
           break;
         }
@@ -2004,9 +2063,7 @@ export class BattleRenderer implements ImpactHost {
             this.impact.onAuthoredFreeze(PHASE.stop);
             this.freeze(PHASE.stop);
           }
-          this.flashRect.tint = 0xffffff;
-          this.flashAlpha = this.reduced ? 0.25 : 0.95;
-          this.flashTime = this.flashTotal = 1 / 60;
+          this.flash(0xffffff, 0.45, 1 / 30);
           this.camera.punch(0.03);
           this.bossTint = PHASE.tint;
           this.bossTintColor = glow;
@@ -2169,11 +2226,33 @@ export class BattleRenderer implements ImpactHost {
     this.camera.shake(Math.min(0.7, strength / 30));
   }
 
-  flash(color: number, alpha: number, duration = 0.35): void {
-    this.flashRect.tint = color;
-    this.flashAlpha = Math.min(0.6, alpha) * (this.reduced ? 0.5 : 1);
+  /**
+   * A screen flash, through the flash budget (src/game/render/flashBudget.ts): at most three in
+   * any second, alpha capped, no saturated red, none at all with reduced effects. Returns whether
+   * it was granted.
+   */
+  flash(color: number, alpha: number, duration = 0.35): boolean {
+    const g = this.flashes.request(this.time, alpha, color);
+    if (!g) return false;
+    this.flashRect.tint = g.color;
+    this.flashAlpha = g.alpha;
     this.flashTime = duration;
     this.flashTotal = duration;
+    return true;
+  }
+
+  /**
+   * A rank of an Apex skill was bought from the menu: a short flourish on the warrior (under a
+   * second, never in the way of input); a first rank or a maxed skill is the larger one.
+   */
+  apexRankUp(skill: ApexSkill, rank: number, maxed: boolean): void {
+    if (!this.world || !this.apex) return;
+    this.apex.rankUp(skill, rank, maxed);
+  }
+
+  /** Counters for the captures: flashes granted and refused, the worst second, Apex effects live. */
+  apexStats(): { flashesGranted: number; flashesRefused: number; flashWorstPerSecond: number; prismLive: number; boltsLive: number } {
+    return { flashesGranted: this.flashes.granted, flashesRefused: this.flashes.refused, flashWorstPerSecond: this.flashes.worstPerWindow, prismLive: this.apex?.prism.liveCount ?? 0, boltsLive: this.apex?.liveBolts ?? 0 };
   }
 
   levelUpBurst(): void {
@@ -2646,6 +2725,77 @@ export class BattleRenderer implements ImpactHost {
     cue: (name) => this.controller.bossCue(name),
   };
 
+  private readonly apexHost: ApexHost = {
+    particles: this.particles,
+    camera: this.camera,
+    numbers: () => this.numbers,
+    isReduced: () => this.reduced,
+    unit: () => this.unit(),
+    chestOf: (id, out) => {
+      const e = this.world?.entities.get(id);
+      if (!e || e.dead) return false;
+      this.chest(e, out);
+      return true;
+    },
+    chestAt: (x, y, out) => {
+      out.x = this.sx(x);
+      out.y = this.sy(y) - CHEST * this.figureScale(y);
+    },
+    feetAt: (x, y, out) => {
+      out.x = this.sx(x);
+      out.y = this.sy(y);
+    },
+    heightOf: (id, y) => {
+      const e = this.world?.entities.get(id);
+      const v = e ? this.views.get(id) : undefined;
+      return (v ? v.rig.top : CHEST / 0.62) * this.figureScale(e ? e.pos.y : y);
+    },
+    visibleTop: () => this.vis.minY,
+    player: () => {
+      const w = this.world;
+      const v = w ? this.views.get(w.player.id) : undefined;
+      if (!w || !v) return null;
+      const p = w.player;
+      const o = this.apexView;
+      o.rig = v.rig;
+      o.drawX = v.drawX + v.slide * this.figureScale(p.pos.y);
+      o.drawY = v.drawY;
+      o.scale = v.rig.root.scale.x;
+      o.zIndex = v.rig.root.zIndex;
+      o.facing = p.facing;
+      o.state = p.state;
+      o.swings = v.swings;
+      o.path = w.loadout.weaponPath;
+      o.seed = p.seed;
+      o.dead = p.dead;
+      return o;
+    },
+    flash: (color, alpha, duration) => this.flash(color, alpha, duration),
+    rimLight: (x, y, radius, level) => {
+      if (this.reduced) return;
+      const r2 = radius * radius;
+      for (const v of this.views.values()) {
+        const dx = v.drawX - x;
+        const dy = (v.drawY - y) * 1.6;
+        if (dx * dx + dy * dy > r2) continue;
+        v.lit = Math.max(v.lit, level * (1 - Math.sqrt(dx * dx + dy * dy) / radius) * 0.6 + level * 0.4);
+      }
+    },
+    scorch: (x, y, r) => this.scorch(x, y, r),
+    ring: (x, y, r0, r1, life, color, width, squash, delay) => this.ringFx(x, y, r0, r1, life, color, width, squash, delay ?? 0),
+    star: (x, y, size, color) => this.starFlash(x, y, size, color),
+    hold: (id, seconds) => {
+      if (!this.reduced) this.hold(id, seconds);
+    },
+    prismTrail: () => {
+      const w = this.world;
+      const v = w ? this.views.get(w.player.id) : undefined;
+      if (v?.trail) this.trails.setPrism(v.trail, true);
+    },
+    darken: (color, amount) => this.darkenSky(color, amount),
+    cue: (kind, skill, rank) => this.controller.apexCue(kind, skill, rank),
+  };
+
   private readonly ariseHost: AriseHost = {
     camera: this.camera,
     particles: this.particles,
@@ -2679,6 +2829,11 @@ export class BattleRenderer implements ImpactHost {
     cue: (name, staging, rarity) => this.controller.ariseCue(name, staging, rarity),
     named: () => this.controller.revealNamed(),
   };
+}
+
+/** The Apex ranks the world was built with (none for a profile without Apex). */
+function apexRanksOf(world: World): Readonly<ApexRanks> {
+  return (world.loadout as { apex?: ApexRanks }).apex ?? NO_APEX;
 }
 
 function pathColor(path: string): number {

@@ -36,6 +36,12 @@ interface Num {
   text: BitmapText;
   label: BitmapText;
   suffix: BitmapText;
+  /** The echo mark ("×2", "×3") after the figure, in its own colour. */
+  mark: BitmapText;
+  /** Bumped on every reuse, so a handle to a recycled slot is refused. */
+  gen: number;
+  /** Seconds left of the small re-pop when an echo adds to the figure. */
+  bump: number;
   life: number;
   total: number;
   age: number;
@@ -131,10 +137,13 @@ export class DamageNumbers {
       const label = new BitmapText({ text: "", style: labelStyle });
       label.anchor.set(0.5);
       label.visible = false;
-      holder.addChild(text, suffix, label);
+      const mark = new BitmapText({ text: "×2", style: numStyle });
+      mark.anchor.set(0, 0.5);
+      mark.visible = false;
+      holder.addChild(text, suffix, mark, label);
       holder.visible = false;
       this.container.addChild(holder);
-      this.pool.push({ holder, text, label, suffix, life: 0, total: 1, age: 0, vx: 0, vy: 0, gravity: 0, active: false, size: 1, style: "normal", w: 0, h: 0, dir: 1, avoid: false });
+      this.pool.push({ holder, text, label, suffix, mark, gen: 0, bump: 0, life: 0, total: 1, age: 0, vx: 0, vy: 0, gravity: 0, active: false, size: 1, style: "normal", w: 0, h: 0, dir: 1, avoid: false });
     }
     this.prewarm(numStyle, labelStyle);
     const serif = serifFamily();
@@ -276,9 +285,9 @@ export class DamageNumbers {
    * `dir` the side away from the attacker (+1 right, -1 left). `avoid` keeps it off the warrior.
    * `life` (real seconds) shortens it, for a quick run of blows like the Ascendant Fury's.
    */
-  hit(x: number, y: number, halfW: number, dir: number, value: string, color: number, style: NumberStyle, avoid = true, life?: number): void {
+  hit(x: number, y: number, halfW: number, dir: number, value: string, color: number, style: NumberStyle, avoid = true, life?: number): number {
     const n = this.take();
-    if (!n) return;
+    if (!n) return -1;
     this.fill(n, value, color, style);
     if (life !== undefined) {
       n.total = life;
@@ -304,7 +313,40 @@ export class DamageNumbers {
     n.vy = style === "crit" ? -58 : style === "taken" ? -40 : -50;
     n.gravity = 30;
     this.place(n, px, py);
+    return n.gen * 64 + this.pool.indexOf(n);
   }
+
+  /**
+   * Add to a figure still on screen (a swing's echo blows fold into its one number): the value
+   * changes, a small "×2" or "×3" rides after it in `markColor`, and it re-pops slightly. Returns
+   * false when the figure has gone or its slot was reused, so the caller shows a new one.
+   */
+  amend(handle: number, value: string, mark: string, markColor: number): boolean {
+    if (handle < 0) return false;
+    const n = this.pool[handle % 64];
+    if (!n || !n.active || n.gen !== Math.floor(handle / 64) || n.style === "label") return false;
+    n.text.text = value;
+    n.mark.text = mark;
+    n.mark.tint = markColor;
+    n.mark.visible = mark.length > 0;
+    this.layout(n);
+    n.life = Math.max(n.life, n.total * 0.7);
+    n.bump = 0.07;
+    this.applyScale(n);
+    return true;
+  }
+
+  /** Take a figure off screen at once (it is being replaced by a prismatic one). */
+  drop(handle: number): void {
+    if (handle < 0) return;
+    const n = this.pool[handle % 64];
+    if (!n || !n.active || n.gen !== Math.floor(handle / 64)) return;
+    n.active = false;
+    n.holder.visible = false;
+  }
+
+  /** Figures started since the counter was last read (for the readability measurement). */
+  spawned = 0;
 
   /** A free-floating figure or word at (x, y), rising (heals, labels, call-outs). */
   spawn(x: number, y: number, value: string, color: number, style: NumberStyle = "normal"): void {
@@ -336,10 +378,15 @@ export class DamageNumbers {
 
   private fill(slot: Num, value: string, color: number, style: NumberStyle): void {
     const isLabel = style === "label";
+    slot.gen = (slot.gen + 1) & 0xffff;
+    slot.bump = 0;
     slot.style = style;
     slot.text.visible = !isLabel;
     slot.label.visible = isLabel;
     slot.suffix.visible = style === "crit" && isFigure(value);
+    slot.mark.visible = false;
+    slot.mark.text = "";
+    if (style !== "label" && style !== "word") this.spawned += 1;
     if (isLabel) {
       slot.label.text = value;
       slot.label.tint = color;
@@ -350,22 +397,39 @@ export class DamageNumbers {
       slot.text.text = value;
       slot.text.tint = color;
       slot.size = SIZE[style] / BASE;
-      slot.w = this.measure(value, false);
       slot.h = this.numH;
-    }
-    if (slot.suffix.visible) {
-      // A small "CRIT" at half size after the number.
-      const sw = this.measure("CRIT", false) * 0.5;
       slot.suffix.tint = color;
-      slot.suffix.scale.set(0.5);
-      slot.text.x = -(sw + 3) / 2;
-      slot.suffix.x = slot.text.x + slot.w / 2 + 3;
-      slot.suffix.y = 4;
-      slot.w += sw + 3;
-    } else slot.text.x = 0;
+      this.layout(slot);
+    }
     slot.total = style === "crit" ? 0.95 : style === "word" ? 1.0 : isLabel ? 1.0 : 0.72;
     slot.life = slot.total;
     slot.age = 0;
+  }
+
+  /** Lay out a figure, its small "CRIT" and its echo mark, centred on the holder. */
+  private layout(slot: Num): void {
+    const w = this.measure(slot.text.text, false);
+    let total = w;
+    const sw = slot.suffix.visible ? this.measure("CRIT", false) * 0.5 : 0;
+    const mw = slot.mark.visible ? this.measure(slot.mark.text, false) * 0.55 : 0;
+    if (sw > 0) total += sw + 3;
+    if (mw > 0) total += mw + 4;
+    const left = -total / 2;
+    slot.text.x = left + w / 2;
+    let x = left + w + 3;
+    if (sw > 0) {
+      // A small "CRIT" at half size after the number.
+      slot.suffix.scale.set(0.5);
+      slot.suffix.x = x;
+      slot.suffix.y = 4;
+      x += sw + 4;
+    }
+    if (mw > 0) {
+      slot.mark.scale.set(0.55);
+      slot.mark.x = sw > 0 ? x : left + w + 4;
+      slot.mark.y = sw > 0 ? 4 : 3;
+    }
+    slot.w = total;
   }
 
   private place(n: Num, x: number, y: number): void {
@@ -392,7 +456,8 @@ export class DamageNumbers {
 
   private applyScale(n: Num): void {
     const pop = n.age < POP_TIME ? POP_FROM - (POP_FROM - 1) * easeOutCubic(n.age / POP_TIME) : 1;
-    n.holder.scale.set((n.size * pop) / this.zoom);
+    const bump = n.bump > 0 ? 1 + 0.16 * (n.bump / 0.07) : 1;
+    n.holder.scale.set((n.size * pop * bump) / this.zoom);
   }
 
   /** Push a number out of the warrior's box along its drift side (or upward when it has none). */
@@ -417,6 +482,7 @@ export class DamageNumbers {
       if (!n.active) continue;
       n.life -= dt;
       n.age += dt;
+      if (n.bump > 0) n.bump = Math.max(0, n.bump - dt);
       if (n.life <= 0) {
         n.active = false;
         n.holder.visible = false;
@@ -453,6 +519,12 @@ export class DamageNumbers {
     this.container.destroy({ children: true });
     this.pool = [];
   }
+}
+
+/** The CSS font family the damage figures use (the numeral face once loaded, else the interface sans). */
+export function numeralFont(): string {
+  const ui = uiFamily();
+  return numeralFamily ? `"${numeralFamily}", ${ui}` : ui;
 }
 
 function isFigure(s: string): boolean {

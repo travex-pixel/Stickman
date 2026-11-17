@@ -937,6 +937,51 @@ export class Rig {
     this.toParent(x, y, out);
   }
 
+  /**
+   * The crown of the head (just above it, where a halo sits), in the rig's parent space. Returns
+   * the head's radius in parent space, so a halo can be sized to it.
+   */
+  crownPoint(out: { x: number; y: number }): number {
+    const p = this.current;
+    const ta = p[Ch.Torso]! + p[Ch.Lean]!;
+    const hx = p[Ch.HipsX]! * this.u;
+    const hy = p[Ch.HipsY]! * this.u - this.legLen;
+    const ny = -this.torsoH - this.headR * 0.75;
+    const ct = Math.cos(ta);
+    const st = Math.sin(ta);
+    let x = hx - ny * st;
+    let y = hy + ny * ct;
+    const ha = ta + p[Ch.Head]!;
+    const up = this.headR * 1.25;
+    x += up * Math.sin(ha);
+    y -= up * Math.cos(ha);
+    this.toParent(x, y, out);
+    return this.headR * this.root.scale.x;
+  }
+
+  /** The weapon arm's elbow, in the rig's parent space (for arcs that crawl up the arm). */
+  elbowPoint(out: { x: number; y: number }): void {
+    const p = this.current;
+    const ta = p[Ch.Torso]! + p[Ch.Lean]!;
+    const hx = p[Ch.HipsX]! * this.u;
+    const hy = p[Ch.HipsY]! * this.u - this.legLen;
+    const shX = this.armX;
+    const shY = -this.torsoH * 0.92;
+    const ct = Math.cos(ta);
+    const st = Math.sin(ta);
+    let x = hx + shX * ct - shY * st;
+    let y = hy + shX * st + shY * ct;
+    const a = ta + p[Ch.ArmR0]!;
+    x += -Math.sin(a) * this.upperArm;
+    y += Math.cos(a) * this.upperArm;
+    this.toParent(x, y, out);
+  }
+
+  /** Tint the cape (the warrior's final form lets it catch colour); white restores it. */
+  setCapeTint(color: number): void {
+    if (this.spec.cape && this.cape.tint !== color) this.cape.tint = color;
+  }
+
   /** The weapon hand (end of the right forearm), in the rig's parent space. */
   handPoint(out: { x: number; y: number }): void {
     const p = this.current;

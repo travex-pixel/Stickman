@@ -39,6 +39,8 @@ export interface EmitOptions {
   target?: { x: number; y: number; strength: number };
   /** Rotate each particle to its velocity (streaks, sparks). */
   alignToVelocity?: boolean;
+  /** Per-particle colours, taken in turn (a spectral fan); `color` is used when absent. */
+  colors?: readonly number[];
 }
 
 /** Pooled sprite particles with a hard cap; cheap and never unbounded. */
@@ -80,7 +82,7 @@ export class ParticleSystem {
       const sp = o.speed[0] + Math.random() * (o.speed[1] - o.speed[0]);
       const spread = o.spread ?? 0;
       p.sprite.texture = o.texture;
-      p.sprite.tint = o.color;
+      p.sprite.tint = o.colors && o.colors.length > 0 ? o.colors[emitted % o.colors.length]! : o.color;
       p.sprite.position.set(o.x + (Math.random() - 0.5) * spread, o.y + (Math.random() - 0.5) * spread);
       p.sprite.blendMode = o.additive === false ? "normal" : "add";
       p.sprite.rotation = Math.random() * Math.PI * 2;
