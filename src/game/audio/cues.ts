@@ -34,6 +34,9 @@ export const semitoneRate = (st: number) => Math.pow(2, st / 12);
 const SWINGS: readonly SfxName[] = ["swing_1", "swing_2", "swing_3"];
 const SWING_VOLUME = [0.16, 0.16, 0.22];
 
+/** The Apex rank-up stinger climbs D natural minor, one step per rank (semitones over D5). */
+export const APEX_RANK_STEPS: readonly number[] = [0, 2, 3, 5, 7, 8, 10, 12, 14, 15];
+
 /** Real seconds of rest after which the combo starts again from its first swing (as the renderer's). */
 export const COMBO_RESET = 0.9;
 
@@ -96,6 +99,11 @@ export class SoundCues {
     // The swing a basic hit belongs to: the third of the combo lands heavy.
     let swingOfBatch = -1;
     for (const e of events) {
+      // Stormcrown's bolt: the crack and, a beat later, the thunder (one sample).
+      if ((e as { type: string }).type === "storm_bolt") {
+        out.push({ name: "storm_bolt", category: "storm", volume: 0.72, rate: this.jitter(0.015), minInterval: 300, voice: "storm" });
+        continue;
+      }
       switch (e.type) {
         case "attack_swing":
           if (e.kind === "player" && e.id === playerId) {
@@ -111,10 +119,19 @@ export class SoundCues {
             out.push({ name: "army_hit", category: "army", volume: e.crit ? 0.2 : 0.15, rate: this.jitter(0.03), minInterval: 130 });
           } else if (e.faction === "enemy") {
             if (furyBatch) break;
+            const apex = e as { echo?: 1 | 2; prismatic?: boolean };
+            if (apex.echo) {
+              // An echo blow ticks (the third crackles); over budget it is simply not heard.
+              const tick: Cue = { name: apex.echo === 2 ? "echo_tick_3" : "echo_tick", category: "echo", volume: apex.echo === 2 ? 0.26 : 0.22, rate: this.jitter(0.02), minInterval: 70, voice: "echo" };
+              out.push(apex.prismatic ? { name: "prism", category: "prism", volume: 0.5, rate: this.jitter(0.01), minInterval: 160, fallback: tick } : tick);
+              break;
+            }
             const heavy = e.heavy || swingOfBatch === 2;
             const hit: Cue = { name: heavy ? "hit_heavy" : "hit_light", category: "hit", volume: heavy ? 0.5 : 0.42, rate: this.jitter(0.03), minInterval: 55, voice: "hit" };
             // A crit is the hit with a ring on top; when the ring is over budget the hit still lands.
-            out.push(e.crit ? { name: "crit", category: "crit", volume: 0.62, rate: this.jitter(0.02), minInterval: 220, fallback: hit } : hit);
+            const crit: Cue = e.crit ? { name: "crit", category: "crit", volume: 0.62, rate: this.jitter(0.02), minInterval: 220, fallback: hit } : hit;
+            // A prismatic blow is the glass chord over the hit; over budget, the crit (then the hit).
+            out.push(apex.prismatic ? { name: "prism", category: "prism", volume: 0.6, rate: this.jitter(0.01), minInterval: 160, fallback: crit } : crit);
           } else out.push({ name: "hit_heavy", category: "event", volume: 0.5, rate: 0.85, minInterval: 140, voice: "hurt" });
           break;
         case "death":
@@ -188,6 +205,13 @@ export class SoundCues {
     }
     if (gold) out.push({ name: "gold", category: "event", volume: 0.3, minInterval: 120, rate: this.jitter(0.03) });
     return out;
+  }
+
+  /** The stinger for a bought Apex rank: a step up the scale per rank; a maxed skill or a first rank is the chord. */
+  apexRank(big: boolean, rank: number): Cue {
+    if (big) return { name: "apex_max", category: "event", volume: 0.75, rate: 1, minInterval: 200, voice: "apex" };
+    const st = APEX_RANK_STEPS[Math.max(0, Math.min(APEX_RANK_STEPS.length - 1, rank - 1))]!;
+    return { name: "apex_rank", category: "event", volume: 0.55, rate: semitoneRate(st), minInterval: 80, voice: "apex" };
   }
 
   /** Strike `n` (1 to 7) of the Fury: a note of this cast's figure, the seventh the heavy low D. */

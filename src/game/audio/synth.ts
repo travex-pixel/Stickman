@@ -45,7 +45,13 @@ export type SfxName =
   | "bind_oath"
   | "bind_pad"
   | "bind_fail"
-  | "boss_impact";
+  | "boss_impact"
+  | "echo_tick"
+  | "echo_tick_3"
+  | "prism"
+  | "storm_bolt"
+  | "apex_rank"
+  | "apex_max";
 
 const SAMPLE_RATE = 22050;
 
@@ -213,9 +219,16 @@ const D4 = 293.66;
 const A5 = 880;
 const B5 = 987.77;
 const E5 = 659.25;
+const D5 = 587.33;
+const A4 = 440;
+const F5 = 698.46;
+const D6 = 1174.66;
+const A6 = 1760;
+const D7 = 2349.32;
+const A7 = 3520;
 
 /** Sounds that can play more than about once a second in a fight: no pitch glides, small rate changes. */
-export const FREQUENT_SFX: readonly SfxName[] = ["swing_1", "swing_2", "swing_3", "hit_light", "hit_heavy", "army_hit", "crit", "enemy_death", "block", "fury_strike"];
+export const FREQUENT_SFX: readonly SfxName[] = ["swing_1", "swing_2", "swing_3", "hit_light", "hit_heavy", "army_hit", "crit", "enemy_death", "block", "fury_strike", "echo_tick", "echo_tick_3", "prism", "storm_bolt"];
 
 const RECIPES: Record<SfxName, Voice[] | Recipe> = {
   // The warrior's three swings: filtered-noise whooshes. The forehand falls, the backhand rises,
@@ -471,6 +484,81 @@ const RECIPES: Record<SfxName, Voice[] | Recipe> = {
     { type: "noise", freqStart: 0, freqEnd: 0, duration: 0.14, gain: 0.32, lp: 0.3, attack: 0.002, decay: 0.85, delay: 0.025 },
     { type: "sine", freqStart: 150, freqEnd: 55, duration: 0.22, gain: 0.32, attack: 0.002, decay: 0.8 },
   ],
+  // Apex. An echo blow (Double Strike): a tight tick with a high glint, felt more than heard. It
+  // can come ten times a second, so it is tiny and the mix drops most of them; the ear keeps the
+  // rhythm.
+  echo_tick: {
+    peak: 0.5,
+    voices: [
+      N({ duration: 0.012, attack: 0.0004, tau: 0.0025, gain: 0.8, filter: { type: "hp", hz: 3500 } }),
+      N({ duration: 0.05, attack: 0.0008, tau: 0.01, gain: 0.45, filter: { type: "bp", hz: 5200, q: 1.4 } }),
+      N({ duration: 0.04, attack: 0.001, tau: 0.008, gain: 0.35, filter: { type: "lp", hz: 1200 } }),
+      ...struck(A6, [[1, 0.12, 0.035], [2.76, 0.04, 0.015]], { delay: 0.002 }),
+    ],
+  },
+  // The third blow (Triple Strike): the tick cracks like a spark, three snaps close together.
+  echo_tick_3: {
+    peak: 0.55,
+    voices: [
+      N({ duration: 0.01, attack: 0.0004, tau: 0.0025, gain: 0.9, filter: { type: "hp", hz: 3000 } }),
+      N({ duration: 0.01, attack: 0.0004, tau: 0.0025, gain: 0.6, delay: 0.011, filter: { type: "hp", hz: 3800 } }),
+      N({ duration: 0.01, attack: 0.0004, tau: 0.003, gain: 0.45, delay: 0.024, filter: { type: "hp", hz: 3200 } }),
+      N({ duration: 0.07, attack: 0.001, tau: 0.02, gain: 0.35, filter: { type: "bp", hz: 6500, q: 2 } }),
+      N({ duration: 0.05, attack: 0.001, tau: 0.01, gain: 0.3, filter: { type: "lp", hz: 900 } }),
+      ...struck(D7, [[1, 0.06, 0.03]], { delay: 0.003 }),
+    ],
+  },
+  // A prismatic blow: the hit's body under a glass chord struck as a quick strum (D6, A6, D7, A7:
+  // open fifths, far enough apart that no two read as one sliding tone), with a fine shimmer.
+  prism: {
+    peak: 0.9,
+    voices: [
+      N({ duration: 0.016, attack: 0.0005, tau: 0.004, gain: 0.6, filter: { type: "hp", hz: 2200 } }),
+      N({ duration: 0.14, attack: 0.001, tau: 0.035, gain: 0.8, filter: { type: "lp", hz: 1000 } }),
+      { type: "sine", freqStart: 150, freqEnd: 95, glide: 0.015, duration: 0.18, attack: 0.001, tau: 0.05, gain: 0.7 },
+      ...struck(D6, [[1, 0.2, 0.28], [2.76, 0.05, 0.1], [5.4, 0.025, 0.04]], { delay: 0.004 }),
+      ...struck(A6, [[1, 0.15, 0.24], [2.76, 0.04, 0.08]], { delay: 0.018 }),
+      ...struck(D7, [[1, 0.1, 0.2], [2.76, 0.025, 0.06]], { delay: 0.032 }),
+      ...struck(A7, [[1, 0.05, 0.15]], { delay: 0.046 }),
+      N({ duration: 0.32, attack: 0.01, tau: 0.1, gain: 0.12, delay: 0.02, filter: { type: "bp", hz: 7000, q: 3 } }),
+    ],
+  },
+  // Stormcrown's bolt: a dry crack at once, and the thunder's low roll a beat behind it.
+  storm_bolt: {
+    peak: 0.95,
+    voices: [
+      N({ duration: 0.05, attack: 0.0004, tau: 0.008, gain: 1, filter: { type: "hp", hz: 1200 } }),
+      N({ duration: 0.12, attack: 0.001, tau: 0.03, gain: 0.6, filter: { type: "bp", hz: 3000, q: 0.9 } }),
+      ...struck(A6, [[1, 0.05, 0.18]], { delay: 0.006 }),
+      N({ duration: 1.3, attack: 0.04, tau: 0.38, gain: 1, delay: 0.11, filter: { type: "lp", hz: 220 } }),
+      N({ duration: 1.2, attack: 0.06, tau: 0.45, gain: 0.8, delay: 0.13, filter: { type: "lp", hz: 90 } }),
+      N({ duration: 0.5, attack: 0.02, tau: 0.14, gain: 0.35, delay: 0.14, filter: { type: "bp", hz: 600, q: 0.7 } }),
+      S(55, { duration: 0.9, attack: 0.03, tau: 0.3, gain: 0.3, delay: 0.11 }),
+    ],
+  },
+  // A rank bought: two struck notes, D5 then A5 (the controller lifts it a step of the scale per rank).
+  apex_rank: {
+    peak: 0.6,
+    voices: [
+      N({ duration: 0.03, attack: 0.001, tau: 0.008, gain: 0.25, filter: { type: "bp", hz: 4000, q: 1 } }),
+      ...struck(D5, [[1, 0.3, 0.25], [2, 0.1, 0.15], [3, 0.05, 0.08]]),
+      ...struck(A6 / 2, [[1, 0.26, 0.3], [2, 0.08, 0.15], [2.76, 0.03, 0.06]], { delay: 0.07 }),
+    ],
+  },
+  // A skill maxed or first unlocked: a struck D minor chord strummed upward over a low thump, and a shimmer.
+  apex_max: {
+    peak: 0.9,
+    voices: [
+      { type: "sine", freqStart: 90, freqEnd: 55, glide: 0.04, duration: 0.6, attack: 0.002, tau: 0.16, gain: 0.8 },
+      N({ duration: 0.5, attack: 0.002, tau: 0.15, gain: 0.5, filter: { type: "lp", hz: 400 } }),
+      ...struck(D4, [[1, 0.25, 0.5], [2, 0.1, 0.3]]),
+      ...struck(A4, [[1, 0.2, 0.45], [2, 0.06, 0.25]], { delay: 0.03 }),
+      ...struck(D5, [[1, 0.18, 0.45], [2, 0.05, 0.25]], { delay: 0.06 }),
+      ...struck(F5, [[1, 0.15, 0.4]], { delay: 0.09 }),
+      ...struck(A6 / 2, [[1, 0.14, 0.4], [2.76, 0.03, 0.1]], { delay: 0.12 }),
+      N({ duration: 0.5, attack: 0.05, tau: 0.18, gain: 0.12, delay: 0.1, filter: { type: "bp", hz: 6000, q: 2.5 } }),
+    ],
+  },
   // A boss lands: a deep thud with a dust tail.
   boss_impact: {
     peak: 0.9,

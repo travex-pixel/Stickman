@@ -1613,6 +1613,12 @@ export class GameController {
     else this.sfx("bind_oath", { volume: 0.7, rate: 0.55 });
   }
 
+  /** The stinger of a bought Apex rank (the renderer cues it with its flourish). */
+  apexCue(kind: "rank" | "max", _skill: string, rank: number): void {
+    void _skill;
+    this.audio.playCue(this.cues.apexRank(kind === "max", rank));
+  }
+
   /** Sound for a beat of the BIND sequence (the renderer cues it on the beat). */
   ariseCue(name: AriseCue, staging: RevealStaging, rarity: string): void {
     switch (name) {
