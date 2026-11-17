@@ -370,37 +370,75 @@ figures at 320 px); Apex is bought out hundreds of levels before. Once nothing i
 a level past 150 is quiet news and the banked points stop reading as a nag (grey count, no dot,
 no readiness tip).
 
-**Prices** (skill points a rank; 365 for all):
+**Prices** (skill points a rank; 245 for all):
 
 | Skill | Ranks 1 to 10 | Total |
 | --- | --- | --- |
-| Double Strike | 4, 5, 6, 7, 8, 9, 10, 11, 12, 13 | 85 |
-| Triple Strike | 8 to 17 | 125 |
-| Prismatic Edge | 5 to 14 | 95 |
-| Stormcrown | 60 | 60 |
+| Double Strike | 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 | 65 |
+| Triple Strike | 3 to 12 | 75 |
+| Prismatic Edge | 3 to 12 | 75 |
+| Stormcrown | 30 | 30 |
 
-No gold price: points alone hit the pacing for both kinds of player.
+No gold price. **The prices are sized for the stuck warrior**, the player Apex was made for: level
+150, every tree learned and every perk picked, 47 points banked, farming stage 49 behind a boss he
+cannot beat. His points come one a level, and a level past 150 costs more XP each time (60 L^1.85)
+while his XP an hour stays flat, so his points a day fall from about 95 to about 25 within a week.
+The first prices (365 in all) took him about eight days to Stormcrown, past the owner's "a few days
+max"; these take four. A warrior who is still climbing earns XP faster with each stage and
+finishes in about two days. `tests/unit/apexPacing.test.ts` holds the stuck warrior inside five days.
 
-**Pacing, measured** (`APEX_SIM=owner`, four seeds each). A day is two real hours of AUTO at 2×
-(four game hours) and one eight-hour offline credit (the cap, fought at 40%), the spender buying
-the next open rank, cheapest first. The owner-like warrior is the simulator's player at gate 48
-raised to level 150 with every tree, every Art mastered, 149 perk picks and 47 points.
+**Pacing, measured** (the economy simulator on the final code, two seeds each). A day is two real
+hours of AUTO at 2x (four game hours) and one eight-hour offline credit (the cap, fought at 40%),
+the spender buying the next open rank, cheapest first. Both warriors start from the simulator's
+player at gate 48 raised to level 150 with every tree, every Art mastered, 149 perk picks, attack
+speed and crit at their ceilings and 47 points (`ownerLike`). Times are real minutes into a day's
+play; "start" means bought with the night's credit before it.
 
-| | Owner-like (level 150, stage 49, 47 points) | The simulator's player (new save) |
+Stuck at a gate (the sizing case: never challenges a boss, never pushes, holds stage 49; its
+gate-51 forecast is 0 of 4. A weaker twin that cannot win even gate 48 earned the same points, since
+farming XP at a held stage is set by the waves, not by damage):
+
+| Milestone | Seed 101 | Seed 102 |
 | --- | --- | --- |
-| Apex opens | at once | day 1, after 37 to 40 real minutes (gate 39 won, level 64) |
-| Double Strike 1 | at once | day 1, +38 min |
-| Double Strike 10 | end of day 1 (105 to 114 real minutes) or with that night's credit | with day 1's night |
-| Prismatic Edge 10 | day 2 (+50 to +85 min) or day 3's start | day 2 (+56 to +80 min) |
-| Triple Strike 10 | day 3 (+0 to +80 min) | day 2 (+117 min) to day 3's start |
-| Stormcrown | start of day 4 (three seeds) or day 4 +65 min | day 3 (+0 to +101 min) |
+| Double Strike 1 | at once | at once |
+| Double Strike 10 | day 2 start | day 2 start |
+| Prismatic Edge 10 | day 3 +49 min | day 3 +38 min |
+| Triple Strike 10 | day 3 +108 min | day 3 +98 min |
+| Stormcrown | day 4 +68 min | day 4 +68 min |
+| Levels gained each day (play + night) | 63+29, 34+19, 25+16, 20+13 | 63+30, 33+21, 25+14, 20+13 |
 
-Points per real hour of play: the owner-like warrior gains 93 to 117 levels (points) in day 1's two
-hours and 46 to 58 overnight; by day 3 about 47 a session and 30 to 35 overnight, as levels cost
-more (60 L^1.85 XP). The simulator's player earns its first 40 or so points every second level
-up to 150 on day 1, then one a level (80 to 96 overnight at stages 60 to 66).
+Still climbing (pushes and challenges bosses when its forecast says 2 of 4; it climbs from 49 to 59
+on day 1 and 65 by day 3):
 
-**Power, measured** (boss forecasts, `APEX_SIM=forecast`; 24 fights a profile; a noise arm on other
+| Milestone | Seed 101 | Seed 102 |
+| --- | --- | --- |
+| Double Strike 1 | at once | at once |
+| Double Strike 10 | day 1 +66 min | day 1 +69 min |
+| Prismatic Edge 10 | day 2 start | day 2 start |
+| Triple Strike 10 | day 2 start | day 2 +12 min |
+| Stormcrown | day 2 +58 min | day 2 +72 min |
+
+Once everything is bought the points keep coming (the climbing warrior banks about 200 by day 4).
+They are left grey and quiet: no dot, no readiness tip, and the level-up line is chatter that never
+shows during a fight.
+
+**Power.** A late warrior on AUTO deals most of his damage with the arts and the Fury: he swings
+about 0.9 times a second against a 3.2 ceiling. Power therefore counts Prismatic Edge (any crit) in
+full and the echoes and the bolt only on the basic blows' share of his damage, `BASIC_BLOW_SHARE`
+(0.15). Counting them on a lone swing, as at first, showed full Apex as x4.8 Power. Measured on two
+owner-like warriors (three boss fights at stage 54 each, AUTO):
+
+| Ranks | Power at first | Power now | Boss damage | Farming damage, stage 49 |
+| --- | --- | --- | --- | --- |
+| Double 10 | x1.72 | x1.11 | x1.12 to 1.15 | x1.01 to 1.02 |
+| + Triple 10 | x2.45 | x1.22 | x1.22 | x1.06 to 1.09 |
+| + Prismatic 10 | x3.50 | x1.72 | x1.80 to 1.82 | x1.22 to 1.25 |
+| + Stormcrown | x4.81 | x1.91 | x2.04 | x1.21 to 1.24 |
+
+(On a stunned dummy with basic blows only, full Apex is x5.3: the old number described that.)
+Farming barely moves because foes already die in a blow or two; kills a minute rise 6 to 9%.
+
+**Boss forecasts, measured** (`APEX_SIM=forecast`; 24 fights a profile; a noise arm on other
 seeds):
 
 | Profiles | Boss of stage | No Apex (win, boss left) | Noise arm | Full Apex |
@@ -420,7 +458,8 @@ by one or two gates; the bosses six to nine stages past it still stop it. The fi
 (echoes at 60%, 2% at ×2, a 1.5× bolt) raised boss damage about 1.5 times, too little for what
 the owner asked; these were kept.
 
-Long climb (five days as above, best stage at the end of each day, two to four seeds):
+Long climb (five days as above, best stage at the end of each day, two to four seeds; measured
+with the first prices, 365 points, so the "with Apex" arms bought their ranks a little later):
 
 | Day | New save, no Apex | Noise arm | With Apex | Owner-like, no Apex | With Apex |
 | --- | --- | --- | --- | --- | --- |
