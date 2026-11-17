@@ -629,6 +629,14 @@ the ear keeps the rhythm and most are dropped; a prismatic blow is the hit under
 dry crack with the thunder's low roll a tenth of a second behind it in the same sample. The
 stingers climb D minor. None glides; the tests measure them like the rest.
 
+**Measured** (stage 49, five shadows, a crowd, AUTO at 2x, 30 s a side, the renderer's own
+counters): damage figures started per second 7.3 without Apex and 7.5 with every rank at 412px
+(9.0 and 8.8 at 320px), with 2.7 to 3.0 echo blows a second folded into a figure already showing;
+the most flashes the budget let start in any second, 3. Frame time with the `?perf=1` instrument
+(simulate plus render JS, 95th percentile, two rounds of 40 s a side, interleaved): within 10% of
+the same scene without Apex at 4x CPU throttling, and as noisy as the machine at 1x; the Apex
+section itself is 0.1ms at the median.
+
 ## Testing
 
 - `npm run test`: unit tests for every rule, plus a balance harness that simulates whole runs with

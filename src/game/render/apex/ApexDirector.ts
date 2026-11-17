@@ -626,9 +626,10 @@ export class ApexDirector {
     h.ring(gx, gy, 6, 120 * u, 0.55, CROWN_LIGHT, 4, 0.42);
     h.ring(gx, gy, 4, 80 * u, 0.42, spectrum(0.66), 2, 0.42, 0.03);
     h.ring(gx, gy, 10 * u, 28 * u, 1.0, 0x5d4a8a, 3, 0.42);
-    h.star(this.q.x, this.q.y, 1.5, 0xffffff);
     const o = this.emitO;
-    // A pool of light on the ground where it struck, fading with the bolt.
+    // A glint and a pool of light on the ground where it struck, fading with the bolt (a local
+    // light, kept small: with reduced effects neither shows, the bolt's shape carries it).
+    if (!reduced) h.star(this.q.x, this.q.y, 1.05, 0xffffff);
     o.x = gx;
     o.y = gy;
     o.count = 1;
@@ -638,14 +639,14 @@ export class ApexDirector {
     set2(o.speed, 0, 0);
     set2(o.angle, 0, 0);
     set2(o.life, 0.35, 0.4);
-    set2(o.scale, 3.2 * u * 1.6, 3.4 * u * 1.6);
-    o.endScale = 1.2;
-    o.alpha = 0.55;
+    set2(o.scale, 2.3 * u * 1.6, 2.5 * u * 1.6);
+    o.endScale = 1.1;
+    o.alpha = 0.35;
     o.gravity = 0;
     o.additive = true;
     o.alignToVelocity = false;
     o.spread = 0;
-    h.particles.emit(o);
+    if (!reduced) h.particles.emit(o);
     o.x = gx;
     o.y = gy - 6;
     o.count = 22;
