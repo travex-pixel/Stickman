@@ -1427,10 +1427,8 @@ export class GameController {
 
   private onModeCleared(mode: ModeId, wave: number, time: number): void {
     const p = this.profile;
-    if (mode === "trial") {
-      this.objectiveEvent("bossWins", 1);
-      this.recordBossTime();
-    } else this.objectiveEvent("modeRuns", 1);
+    if (mode === "trial") this.objectiveEvent("bossWins", 1);
+    else this.objectiveEvent("modeRuns", 1);
     // A Crypt Keeper is boss-grade: it counts for the weekly boss objective too.
     if (mode === "crypt") this.objectiveEvent("bossWins", 1);
     this.sfx("level_up", { volume: 0.9, rate: 0.9 });
@@ -1748,7 +1746,11 @@ export class GameController {
     if (e.sig) this.sigUse(e.sig, 0, 1);
   }
 
-  /** A boss fight won: how long it took, from its entrance's end (Time Fracture's discovery). */
+  /**
+   * A boss fight won (a gate challenge or a Boss Hunt; a Rank Trial is a test, not a boss fight):
+   * how long it took from its entrance's end, for Time Fracture's discovery. A boss that falls
+   * before its entrance is over counts as a tenth of a second.
+   */
   private recordBossTime(): void {
     const w = this.world;
     const s = this.profile.player.signatures;

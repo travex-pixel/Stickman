@@ -274,14 +274,14 @@ export function buySignatureRank(p: Profile, id: SignatureId): number | null {
  * evening with it equipped, Master in about two days, Grandmaster in about a week.
  */
 export const MASTERY_USES: Readonly<Record<SignatureId, readonly [number, number, number]>> = {
-  void_collapse: [150, 1500, 5000],
-  shadow_storm: [150, 1500, 5000],
-  death_parade: [150, 1500, 5000],
-  time_fracture: [100, 1000, 3500],
-  legion_awakening: [100, 1000, 3500],
-  abyssal_devourer: [120, 1200, 4000],
-  kings_judgement: [60, 600, 2000],
-  sovereign_awakening: [20, 200, 700],
+  void_collapse: [160, 4700, 16000],
+  shadow_storm: [80, 3700, 13000],
+  death_parade: [130, 3400, 12000],
+  time_fracture: [80, 1600, 5600],
+  legion_awakening: [150, 3000, 10500],
+  abyssal_devourer: [200, 4000, 14000],
+  kings_judgement: [150, 1600, 5600],
+  sovereign_awakening: [40, 340, 1200],
 };
 
 export function masteryUses(p: Profile, id: SignatureId): number {

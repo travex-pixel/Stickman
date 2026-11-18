@@ -193,9 +193,9 @@ const SIG: Record<SignatureId, SignatureDef> = {
     rarity: "rare",
     description: "Blades of shadow gather and orbit the warrior, then launch one by one into the thickest knot of foes, leaving a Shadow Mark.",
     role: "Many blades, marks",
-    discovery: { kind: "chain", count: 30 },
+    discovery: { kind: "chain", count: 40 },
     hidden: false,
-    hint: "Reach a 30-kill chain.",
+    hint: "Reach a 40-kill chain.",
     evolutions: [
       { id: "thousand_blades", name: "Thousand Blades", line: "Twice the blades, each a little lighter." },
       { id: "black_tempest", name: "Black Tempest", line: "The storm spreads outward, cutting everything it passes." },
@@ -214,9 +214,9 @@ const SIG: Record<SignatureId, SignatureDef> = {
     rarity: "epic",
     description: "The warrior vanishes; shadow clones step out beside his foes, each striking its own way, and he returns for the final cut.",
     role: "Executes the weak",
-    discovery: { kind: "elites", count: 100 },
+    discovery: { kind: "elites", count: 300 },
     hidden: false,
-    hint: "Defeat 100 elites.",
+    hint: "Defeat 300 elites.",
     evolutions: [
       { id: "afterimage", name: "Afterimage", line: "More clones, striking faster." },
       { id: "executioner", name: "Executioner", line: "Clones seek the wounded and cut far deeper below a third of health." },

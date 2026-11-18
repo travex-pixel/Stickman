@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { FIXED_DT, type World } from "@/game/engine/World";
+import { FIXED_DT, World } from "@/game/engine/World";
+import { armyProfile } from "./signatures.digest";
 import { createDefaultProfile, type Profile } from "@/game/progression/profile";
 import { buildLoadout } from "@/game/progression/loadout";
 import { ascend } from "@/game/progression/ascension";
@@ -34,6 +35,7 @@ import {
   unequipSignature,
 } from "@/game/progression/signatures";
 import { SIGNATURES, SIGNATURE_IDS, SIGNATURE_RANK_MAX, type SignatureId } from "@/game/data/signatures";
+import { TECHNIQUES } from "@/game/data/abilities";
 
 function found(p: Profile, ids: SignatureId[]): Profile {
   for (const id of ids) {
@@ -55,8 +57,8 @@ describe("discovery", () => {
     expect(p.progress.bestStage).toBe(0);
     expect(checkDiscoveries(p)).toEqual(["abyssal_devourer"]);
     const s = p.player.signatures.progress;
-    s.bestChain = 30;
-    s.elites = 100;
+    s.bestChain = 40;
+    s.elites = 300;
     s.fastestBoss = 19.5;
     s.bossKills.crownless_king = 10;
     expect(checkDiscoveries(p)).toEqual(["shadow_storm", "death_parade", "time_fracture", "kings_judgement"]);
@@ -240,6 +242,51 @@ describe("Power", () => {
   });
 });
 
+describe("Power follows the fight", () => {
+  it("a full late loadout raises Power about as much as it raises real boss damage", () => {
+    // A late warrior on AUTO against a boss (his health raised so every fight runs its full time).
+    const p = armyProfile();
+    p.player.apex = { double: 10, triple: 10, prism: 10, crown: 1 };
+    const bossDamage = (sig: boolean) => {
+      const q: Profile = JSON.parse(JSON.stringify(p));
+      if (sig) {
+        found(q, ["void_collapse", "death_parade", "abyssal_devourer", "kings_judgement", "shadow_storm", "sovereign_awakening"]);
+        const s = q.player.signatures;
+        s.slots = ["void_collapse", "death_parade", "abyssal_devourer", "kings_judgement"];
+        for (const id of s.discovered) {
+          s.ranks[id] = 10;
+          s.mastery[id] = { casts: MASTERY_USES[id][1], kills: 0 };
+        }
+        s.evolutions = { void_collapse: "event_horizon", death_parade: "executioner", abyssal_devourer: "ancient_devourer", kings_judgement: "absolute_judgement" };
+      }
+      let total = 0;
+      for (const seed of [1, 2, 3]) {
+        const w = new World({ stage: 30, loadout: buildLoadout(q), seed, mode: "boss" });
+        w.player.stats.maxHp *= 1000;
+        w.player.hp = w.player.stats.maxHp;
+        let raised = false;
+        for (let i = 0; i < 40 / FIXED_DT; i++) {
+          w.update(FIXED_DT);
+          if (w.boss && !raised) {
+            w.boss.stats.maxHp *= 1000;
+            w.boss.hp = w.boss.stats.maxHp;
+            raised = true;
+          }
+          for (const e of w.drainEvents()) if (e.type === "hit" && e.targetKind === "boss") total += e.amount;
+        }
+      }
+      return { total, power: profilePower(q) };
+    };
+    const none = bossDamage(false);
+    const full = bossDamage(true);
+    const damage = full.total / none.total;
+    const power = full.power / none.power;
+    expect(damage).toBeGreaterThan(1.5);
+    expect(power / damage).toBeGreaterThan(0.65);
+    expect(power / damage).toBeLessThan(1.35);
+  });
+});
+
 describe("the controller", () => {
   async function controller() {
     const { GameController } = await import("@/game/GameController");
@@ -262,6 +309,8 @@ describe("the controller", () => {
     p.progress.currentStage = 20;
     p.player.level = 60;
     p.player.statLevels = { attack: 100, maxHp: 400, attackSpeed: 30, critChance: 10, critDamage: 10, defense: 250 };
+    // (Techniques already learned: their cards would take turns with the reveals.)
+    p.player.techniques = [...TECHNIQUES];
     c.startRun(20, "campaign");
     return c;
   }
