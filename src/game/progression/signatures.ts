@@ -227,16 +227,19 @@ export function signatureRank(p: Profile, id: SignatureId): number {
 }
 
 /**
- * Skill points for each next rank (2 to 10), by rarity. Rank 1 is free on discovery. The first few
- * ranks of a new skill are within reach at once; every rank of all eight costs SIGNATURE_POINTS_ALL.
- * Sized for the owner (DESIGN.md, "Signature skills": a few hundred points banked, a dozen or so a day).
+ * Skill points for each next rank (2 to 10), by rarity: each rank about twice the last. Rank 1 is
+ * free on discovery and the first three are cheap (21 to 40 points), so a new skill grows at once;
+ * all eight to rank 10 cost SIGNATURE_POINTS_ALL. Sized for the owner, whose levels past 150 pay a
+ * point each: measured on the owner-like warrior (DESIGN.md, "Signature skills"), his points come
+ * at about 2,700 the first day after his ascension, then 1,000 and falling to about 400 a day by
+ * the seventh, so buying everything takes him about three weeks while a new player ranks slowly.
  */
 export const RANK_COSTS: Readonly<Record<SignatureRarity, readonly number[]>> = {
-  common: [2, 3, 4, 6, 8, 10, 12, 14, 16],
-  rare: [2, 3, 4, 6, 8, 10, 12, 14, 16],
-  epic: [3, 4, 5, 7, 9, 11, 13, 15, 18],
-  legendary: [4, 5, 6, 8, 10, 12, 14, 17, 20],
-  mythic: [5, 6, 8, 10, 12, 14, 16, 19, 22],
+  common: [3, 6, 12, 25, 50, 100, 200, 350, 550],
+  rare: [3, 6, 12, 25, 50, 100, 200, 350, 550],
+  epic: [4, 8, 15, 30, 60, 115, 225, 400, 640],
+  legendary: [5, 10, 18, 35, 70, 135, 260, 460, 720],
+  mythic: [6, 12, 22, 42, 85, 160, 300, 530, 850],
 };
 
 /** Skill points for the next rank (null at the last rank). */

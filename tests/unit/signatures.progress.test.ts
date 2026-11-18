@@ -135,7 +135,7 @@ describe("slots, ranks, evolutions and mastery", () => {
     for (let i = 0; i < 20; i++) buySignatureRank(p, "void_collapse");
     expect(signatureRank(p, "void_collapse")).toBe(SIGNATURE_RANK_MAX);
     expect(signatureRankCost("void_collapse", SIGNATURE_RANK_MAX)).toBeNull();
-    expect(SIGNATURE_POINTS_ALL).toBeGreaterThan(700);
+    expect(SIGNATURE_POINTS_ALL).toBe(12732);
     expect(buySignatureRank(p, "shadow_storm")).toBeNull();
   });
 
