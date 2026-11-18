@@ -328,6 +328,9 @@ describe("the controller", () => {
     expect(c.uiStore.get().modal?.kind).toBe("power");
     c.closeModal();
     tick(c, 1.5);
+    // Not at once: the screen must have been calm a moment.
+    expect(c.uiStore.get().modal).toBeNull();
+    tick(c, 2.5);
     expect(c.uiStore.get().modal).toEqual({ kind: "signature_reveal", id: "void_collapse" });
     c.signatureRevealed("void_collapse");
     expect(c.uiStore.get().modal?.kind).not.toBe("signature_reveal");
@@ -337,7 +340,7 @@ describe("the controller", () => {
       expect(c.uiStore.get().modal?.kind).not.toBe("signature_reveal");
       c.closeModal();
     }
-    tick(c, 1.5);
+    tick(c, 4);
     expect(c.uiStore.get().modal).toEqual({ kind: "signature_reveal", id: "abyssal_devourer" });
     c.signatureRevealed("abyssal_devourer");
     tick(c, 2);

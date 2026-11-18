@@ -614,9 +614,10 @@ Offline credits mastery at half the sampled rate, at most two hours of live play
 casts or reveals anything; tier-ups earned offline are listed in its summary
 (`OfflineSummary.signatures`).
 
-**Reveals.** Found skills wait in line and are revealed one at a time, about a second after the
-screen is free: only while farming, never over another card, never during a boss or mode fight,
-never from offline. `signatureRevealed` marks one seen and closes its card; the next follows.
+**Reveals.** Found skills wait in line and are revealed one at a time, once the screen has been
+calm for three seconds (no card up or waiting, no press): only while farming, never over another
+card, never during a boss or mode fight, never from offline. `signatureRevealed` marks one seen and
+closes its card; the next follows after another calm moment.
 
 **Power** counts the equipped skills by their measured share of boss damage (`SIG_BOSS_SHARE`),
 times their rank, evolution and mastery, the crown on top. They have no row of their own in the

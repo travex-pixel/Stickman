@@ -168,6 +168,9 @@ interface ProfileWrap {
  * GameController owns the whole runtime: profile, world, loop, renderer, audio, persistence and UI state.
  * React talks to it through stores and methods; the simulation never imports React.
  */
+/** Seconds of a calm screen (no card, no press) before a signature skill's reveal shows. */
+const REVEAL_CALM = 3;
+
 /** Cards that would interrupt a fight: they wait in the queue until the warrior is farming. */
 const DEFERRED_IN_FIGHT = new Set<Modal["kind"]>(["technique", "perk_choice"]);
 
@@ -613,8 +616,10 @@ export class GameController {
       }
     }
     this.tutorialElapsed += dt;
+    // A reveal waits for a calm screen: no card for REVEAL_CALM seconds and no press for as long.
+    this.screenFree = this.uiStore.get().modal || this.modalQueue.length > 0 ? 0 : this.screenFree + dt;
     this.revealAccum += dt;
-    if (this.revealAccum >= 1) {
+    if (this.revealAccum >= 0.5) {
       this.revealAccum = 0;
       this.maybeRevealSignature();
     }
@@ -1760,6 +1765,8 @@ export class GameController {
   }
 
   private revealAccum = 0;
+  /** Seconds the screen has had no card up or waiting. */
+  private screenFree = 0;
 
   /** New signature skills found: they wait in line for their reveal. */
   private checkSignatureDiscoveries(): void {
@@ -1769,12 +1776,14 @@ export class GameController {
   }
 
   /**
-   * One reveal at a time, only while the warrior is farming with nothing else on screen (never in a
-   * boss or mode fight, never over another card, never from offline progress). The rest wait.
+   * One reveal at a time, only while the warrior is farming and the screen has been calm a moment
+   * (no card up or waiting, no press, for REVEAL_CALM seconds): never in a boss or mode fight, never
+   * over another card, never from offline progress. The rest wait their turn.
    */
   private maybeRevealSignature(): void {
     const w = this.world;
     if (!w || !w.farming || w.player.dead || this.pending || this.uiStore.get().modal || this.modalQueue.length > 0) return;
+    if (this.screenFree < REVEAL_CALM || performance.now() - this.lastGestureAt < REVEAL_CALM * 1000) return;
     const next = pendingReveals(this.profile)[0];
     if (!next) return;
     this.uiStore.update((u) => ({ ...u, modal: { kind: "signature_reveal", id: next } }));
@@ -1794,7 +1803,7 @@ export class GameController {
     if (markRevealed(this.profile, id)) this.commit();
     const m = this.uiStore.get().modal;
     if (m?.kind === "signature_reveal" && m.id === id) this.closeModal();
-    this.revealAccum = 0;
+    this.screenFree = 0;
   }
 
   apexCue(kind: "rank" | "max", _skill: string, rank: number): void {
