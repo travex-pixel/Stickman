@@ -3,10 +3,9 @@ import type { Vec2 } from "../../../engine/math";
 import type { Rig, RigSpec } from "../../rigs/Rig";
 import { easeInCubic, easeOutCubic } from "../../anim/ease";
 import { softCircle } from "../../textures";
-import { SHADOW_BODY } from "../../rigs/specs";
-import { GILT, GILT_HOT } from "../palette";
+import { GILT, GILT_HOT, VIOLET_INK } from "../palette";
 import { Stage, span01, type SigBeatEvent } from "../stage";
-import { holeTex, smokeTex } from "../textures";
+import { glowRingTex, holeTex, smokeTex } from "../textures";
 
 /**
  * LEGION AWAKENING: the field darkens; ink pools open where foes fell and slate soldiers with gold
@@ -18,9 +17,11 @@ import { holeTex, smokeTex } from "../textures";
  *   charge  a gold war-line flares under the rank; the soldiers run at the foes with speed lines and
  *           dust, strike, and sink back into ink.
  *
- * When the simulation raises real soldiers (temporary summons), the director dresses them (pools,
- * eye flare, speed lines) and lets the fight move them; it draws stand-ins only when it is given no
- * bodies (the preview, or a compact cast). Endless Legion raises more, quicker. Veteran Souls raises
+ * When the simulation raises real soldiers (temporary summons), the director dresses them and lets
+ * the fight move them; it draws stand-ins only when it is given no bodies (the preview, or a compact
+ * cast). A soldier is the Legion's for its whole life, never one of the army: its figure is violet ink
+ * with a gilt edge and gold eyes (not the army's slate), its ink pool goes with it with a gilt lip
+ * that closes as its time runs out, and (full staging) wisps of ink rise off it. Endless Legion raises more, quicker. Veteran Souls raises
  * a few big armoured veterans in greatswords who do not sink at the end. Legion Commander gives each
  * soldier the colours of a fielded role (vanguard, ranger, arcanist, blade). Master lights a gold
  * standard-line under the rank; Grandmaster gilds them.
@@ -29,6 +30,8 @@ interface Soldier {
   id: number;
   rig: Rig | null;
   pool: Sprite | null;
+  /** The gilt lip of its pool (closes with the time it has left). */
+  lip: Sprite | null;
   x: number;
   y: number;
   depth: number;
@@ -41,6 +44,10 @@ interface Soldier {
 }
 
 const ROLE_ACCENT = [0xd9a35a, 0x8fe0c4, 0xb59cf0, 0x9fb4d0];
+/** The Legion's ink: a deep violet, apart from the army's slate and the foes' black. */
+const LEGION_INK = 0x33284e;
+const LEGION_INK_GILDED = 0x3e3350;
+const LEGION_GLOW = 0x8f6fd8;
 
 export class LegionStage extends Stage {
   private readonly soldiers: Soldier[] = [];
@@ -49,6 +56,7 @@ export class LegionStage extends Stage {
   private darkD = 1.3;
   private chargeT = -1;
   private lineT = -1;
+  private riseT = 0.4;
 
   constructor(...a: ConstructorParameters<typeof Stage>) {
     super(...a);
@@ -57,17 +65,30 @@ export class LegionStage extends Stage {
   }
 
   private spec(role: number): RigSpec {
-    const eye = this.gilded ? GILT_HOT : 0xfff0c2;
-    const body = this.gilded ? 0x5a5648 : SHADOW_BODY;
-    if (this.evo === "veteran_souls") return { style: "warden", weapon: "greatsword", body, accent: GILT, eye, glow: GILT, height: 118, cape: true, finish: "shadow", horns: true };
+    const eye = GILT_HOT;
+    const body = this.gilded ? LEGION_INK_GILDED : LEGION_INK;
+    const glow = this.gilded ? GILT : LEGION_GLOW;
+    if (this.evo === "veteran_souls") return { style: "warden", weapon: "greatsword", body, accent: GILT, eye, glow, height: 118, cape: true, finish: "shadow", horns: true, rim: 1.4 };
     if (this.evo === "legion_commander") {
       const accent = ROLE_ACCENT[role % 4]!;
-      if (role % 4 === 0) return { style: "bulky", weapon: "mace_shield", body, accent, eye, glow: GILT, height: 112, finish: "shadow", horns: true };
-      if (role % 4 === 1) return { style: "archer", weapon: "bow", body, accent, eye, glow: GILT, height: 96, hood: true, finish: "shadow" };
-      if (role % 4 === 2) return { style: "robed", weapon: "staff", body, accent, eye, glow: GILT, height: 100, hood: true, finish: "shadow" };
-      return { style: "reaper", weapon: "twin", body, accent, eye, glow: GILT, height: 98, cape: true, finish: "shadow" };
+      if (role % 4 === 0) return { style: "bulky", weapon: "mace_shield", body, accent, eye, glow, height: 112, finish: "shadow", horns: true, rim: 1.4 };
+      if (role % 4 === 1) return { style: "archer", weapon: "bow", body, accent, eye, glow, height: 96, hood: true, finish: "shadow", rim: 1.4 };
+      if (role % 4 === 2) return { style: "robed", weapon: "staff", body, accent, eye, glow, height: 100, hood: true, finish: "shadow", rim: 1.4 };
+      return { style: "reaper", weapon: "twin", body, accent, eye, glow, height: 98, cape: true, finish: "shadow", rim: 1.4 };
     }
-    return { style: "reaper", weapon: role % 2 === 0 ? "dagger" : "twin", body, accent: GILT, eye, glow: GILT, height: 94, hood: role % 3 === 0, finish: "shadow" };
+    return { style: "reaper", weapon: role % 2 === 0 ? "dagger" : "twin", body, accent: GILT, eye, glow, height: 94, hood: role % 3 === 0, finish: "shadow", rim: 1.4 };
+  }
+
+  /** The time the soldiers have left, as a share of their life (1 at the rise, 0 at the cast's end). */
+  private lifeLeft(): number {
+    const life = this.cast.length - this.riseT;
+    if (life <= 0) return 1;
+    return Math.max(0, Math.min(1, (this.cast.length - this.t) / life));
+  }
+
+  override involves(id: number): boolean {
+    for (const s of this.soldiers) if (s.id === id) return true;
+    return false;
   }
 
   onBeat(e: SigBeatEvent): void {
@@ -75,8 +96,12 @@ export class LegionStage extends Stage {
       case "darken":
         this.darkT = 0;
         this.darkD = Math.max(0.5, e.duration || 1.3);
+        // The focus: the night falling (anticipation), the rise and the charge.
+        this.focusFor(0.55);
         break;
       case "rise": {
+        this.riseT = this.t;
+        this.focusFor(0.6);
         // One beat names every soldier raised (real temporary summons where foes fell). Without any
         // (a development cast), stand-ins rise in a rank beside the warrior.
         if (e.targetIds.length > 0) e.targetIds.forEach((id, i) => this.rise(e.from, id, i + 1));
@@ -88,6 +113,7 @@ export class LegionStage extends Stage {
       }
       case "charge":
         this.charge(e);
+        this.focusFor(0.5);
         break;
       default:
         break;
@@ -106,6 +132,14 @@ export class LegionStage extends Stage {
       pool.position.set(x, y);
       pool.scale.set(0.01);
     }
+    const lip = this.compact ? null : this.sprite(this.host.layers.ground, glowRingTex(), true);
+    if (lip) {
+      lip.tint = GILT;
+      lip.position.set(x, y);
+      lip.scale.set(0.01);
+    }
+    // A real soldier is drawn in the Legion's own figure from its first frame.
+    if (real) this.svc.dress(id, this.spec(index));
     let rig: Rig | null = null;
     if (!real) {
       rig = this.rig(`legion-${this.evo ?? "base"}-${this.evo === "legion_commander" ? index % 4 : index % 2}-${this.gilded}`, this.spec(index));
@@ -115,7 +149,7 @@ export class LegionStage extends Stage {
         rig.root.zIndex = at.y;
       }
     }
-    this.soldiers.push({ id: real ? id : -1, rig, pool, x, y, depth: real ? this.b.wy : at.y, scale, t: 0, facing: 1, charge: null, chargeT: 0, role: index });
+    this.soldiers.push({ id: real ? id : -1, rig, pool, lip, x, y, depth: real ? this.b.wy : at.y, scale, t: 0, facing: 1, charge: null, chargeT: 0, role: index });
     // A gold spark ring at the pool's lip.
     const sq = Math.min(0.6, Math.max(0.25, pr.dy() / pr.unit()));
     this.kit.ring(x, y, 4, 26 * scale, 0.45, this.pal.ink, this.compact ? -1 : GILT, 2, { squash: sq });
@@ -179,12 +213,40 @@ export class LegionStage extends Stage {
     const sinking = this.ended && this.evo !== "veteran_souls";
     for (const s of this.soldiers) {
       s.t += dt;
-      const poolK = s.t < 0.35 ? easeOutCubic(s.t / 0.35) : sinking ? 1 - span01(this.sinceEnd, 0.2, 0.7) : 1 - 0.4 * span01(s.t, 0.5, 1.4);
+      // The pool opens under it, then goes with it, its gilt lip closing as its time runs out.
+      const left = this.lifeLeft();
+      const open = s.t < 0.35 ? easeOutCubic(s.t / 0.35) : 1;
+      const poolK = open * (sinking ? 1 - span01(this.sinceEnd, 0.2, 0.7) : 0.55 + 0.45 * left);
+      const px = s.rig ? s.rig.root.x : s.x;
+      const py = s.rig ? s.rig.root.y : s.y;
       if (s.pool) {
         const r = 26 * s.scale * poolK;
-        const sq = 0.4;
-        s.pool.scale.set(r / 32, (r * sq) / 32);
+        s.pool.position.set(px, py);
+        s.pool.scale.set(r / 32, (r * 0.4) / 32);
         s.pool.alpha = 0.85;
+      }
+      if (s.lip) {
+        const r = 24 * s.scale * open * (0.35 + 0.65 * left);
+        s.lip.position.set(px, py);
+        s.lip.scale.set(r / 120, (r * 0.4) / 120);
+        s.lip.alpha = (sinking ? 1 - span01(this.sinceEnd, 0, 0.4) : 1) * (0.35 + 0.4 * left);
+      }
+      // Wisps of ink rising off it (full staging), a few a second.
+      if (this.rich && dt > 0 && !sinking && s.t > 0.3 && Math.random() < dt * 2.5) {
+        const o = k.o(px, py - 40 * s.scale, smokeTex(), VIOLET_INK);
+        o.additive = false;
+        o.alpha = 0.4;
+        o.speed[0] = 10;
+        o.speed[1] = 30;
+        o.angle[0] = -Math.PI * 0.65;
+        o.angle[1] = -Math.PI * 0.35;
+        o.life[0] = 0.5;
+        o.life[1] = 0.8;
+        o.scale[0] = 0.15;
+        o.scale[1] = 0.28;
+        o.endScale = 0.6;
+        o.spread = 14 * s.scale;
+        k.emit(1);
       }
       if (s.id >= 0) {
         // A real soldier: the fight moves it; speed lines while it runs.
@@ -278,6 +340,7 @@ export class LegionStage extends Stage {
   }
 
   override dispose(): void {
+    for (const s of this.soldiers) if (s.id >= 0) this.svc.undress(s.id);
     this.soldiers.length = 0;
     super.dispose();
   }
