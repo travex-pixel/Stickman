@@ -941,11 +941,11 @@ white-hot cores and gilt; Apex's spectrum stays Apex's.
 |---|---|---|---|---|
 | Void Collapse | a point of black tears open above the group's heads; a violet-ink lens, a white-violet photon ring, an ink pool on the ground | accretion rings spin up (the far half behind the core, the near half in front); gravitational rings contract over the ground; light smears inward; debris spirals in; the caught lean and stretch toward it | the core collapses to a point, a beat of nothing, a white-violet star and the flash; bodies snap back | a circular shockwave runs out over the ground kicking dust; Void Marks over the struck |
 | Abyssal Devourer | a jagged rift tears where the dragon's path enters the frame; the field dims, the camera leans in | a serpent of ink scales pours out and flies the simulation's own curve; every segment follows the head's path (a serpentine wave in it, a ripple down it); fins, whiskers, crimson eyes, smoke | the jaw opens as a foe nears and snaps on each bite: crimson crescents, ink spray | a second rift swallows it tail last |
-| Death Parade | he breaks into ink and slate motes (an ivory afterimage left); the field dims; a crimson tick over each foe he will visit | slate-and-gold clones blink in beside their foes (afterimages, speed lines), each striking its own way: rising cut, overhead, dash through, cross, falling stab, reversed cut | he reappears, a glint runs his blade, one long crimson cut through every foe visited; a stop, the flash, speed lines | the clones break into ink |
+| Death Parade | he breaks into ink and slate motes (an ivory afterimage left); the field dims; a crimson tick over each foe he will visit; the camera takes in every foe in the Parade's reach | clones of him blink in beside their foes (a chain of crimson-black afterimages, warm speed lines), each striking its own way: rising cut, overhead, dash through, cross, falling stab, reversed cut. A clone is his own figure (his blade, his cape) in ink, darker than the slate army, cut out by a solid crimson rim and a crimson light behind it, with gold eyes; its cuts are crimson with a gilt-hot edge, never a white burst; while he is gone the camera leans toward the clone striking, and his Apex lights go with him | he reappears, a glint runs his blade, one long crimson cut through every foe visited; a stop, the flash, speed lines | the clones break into ink |
 | King's Judgement | the field falls to ink and the mix dips (the hush); a spectral gilt hand opens above the target finger by finger | a gold sigil draws itself on the ground (gold, never the foes' crimson) and pulses faster; the hand closes and points; an ink meteor with molten gold fissures falls with smoke and embers | the biggest blow in the game: a white-gold star, the flash, a stop, one shake, three rings, rock and gold thrown up | a smoking crater; the sigil breaks; the hand dissolves into gold dust |
-| Legion Awakening | the field sinks to night | an ink pool opens under each soldier the simulation raises (a gold spark ring at its lip) as it claws up out of it | a gold war-cry ring; the rank charges with speed lines and dust | they sink back into ink |
+| Legion Awakening | the field sinks to night | an ink pool opens under each soldier the simulation raises (a gold spark ring at its lip) as it claws up out of it. A soldier is the Legion's for its whole life: drawn in violet ink with a gilt edge and gold eyes (never the army's slate), its pool goes with it with a gilt lip that closes as its time runs out, and wisps of ink rise off it | a gold war-cry ring; the rank charges with speed lines and dust | they sink back into ink |
 | Time Fracture | a pale silver clock stands over the field, hands running backwards, electric-blue cracks spreading | the hands stop dead; colour drains from the backdrop; the frozen go pale glass and hold mid-motion; motes hang; a tick each half second, the cracks grow | the clock shatters into glass; a ripple in and out | every held blow lands at once: a blue-white star and a ring of cracks on each body |
-| Shadow Storm | violet-ink blades with white edges cut themselves out of the air and orbit him on a tilted ring, passing behind and in front of him | one by one they leave the orbit and fly an arc to their foe, an ink wake behind each | a short violet cut with a white edge; a Shadow Mark | — |
+| Shadow Storm | violet-ink blades with white edges cut themselves out of the air (a white slit each) and orbit him on a tilted ring that shows (an ink band under a violet-white line), each with a light trail; the far ones pass behind him, the near ones over every body, so the army never hides them | one by one they leave the orbit and fly an arc to their foe, larger in flight, an ink wake and a white-hot line behind each | a short violet cut with a white edge; a Shadow Mark | — |
 | Sovereign Awakening | the field darkens; his army kneels | a column of violet ink rises round him, gold gathers, the crown draws itself spike by spike; the camera leans in | it settles on his brow: a ring, the flash | the reign: a slow violet ring at his feet, a small gilt crown floating over his head, a violet cape; at its end the crown breaks into gold dust |
 
 **Evolutions** each change what is seen, not only the numbers: Event Horizon locks a bright horizon
@@ -988,6 +988,28 @@ the hero; the warrior's own hit sparks, telegraphs and the boss's wind-up rims a
 signature's ground layer (it sits under the fighters). A signature's many hits only react on the body
 (a flinch, the white, a few sparks): no camera, no stop. The big moment of each cast asks the camera
 and the flash budget once. No constant shaking: a shake is a single one-off at a landing.
+
+**Focus.** At a skill's key beats the rest of the fight steps back for a moment, so the skill is what
+the eye finds in a late fight's crowd of figures and shadows. Damage figures from other sources (the
+warrior's, the army's, Apex's prismatic ones) lose 60% of their opacity, the essence orbs 45% (they
+pop where foes fall and read as white bursts under the Parade), and the army not in the cast is washed
+42% of the way toward a dark slate; the skill's own figures, blows the warrior takes, heals and
+words are never quieted, and the warrior, the foes (their telegraphs, wind-ups and threat colours), the
+Legion's soldiers and boss entrances are never touched. It eases in over about 70 ms and out over about
+100 ms. The key beats: a cinematic's anticipation and impact (the dragon's rift, 0.45 s, and a landing,
+0.35 s; the hush and the hand, 0.45 s, and the meteor's impact, 0.4 s; the rise held to the charge,
+0.65 s; the crown drawing itself, 0.6 s, without dimming the kneeling army) and the Parade from the
+vanish to just after the finisher (about 0.95 s of the fight's time at five clones). No cast holds it
+longer than 2 s whatever it asks, and once it lets go another cast's waits 1.2 s, so casts that follow
+one another never chain it into a long dim stretch (a cast's own next beat does not wait: a judgement's
+impact follows its hush). The setup skills (the singularity, the storm, the clock) never ask: they cast
+often, and a focus on each would dim the fight. A compact cast asks for nothing; the performance tier
+quiets the figures but leaves the army undimmed; reduced effects make it gentler (60%) and slower to
+come and go. It is not a flash: nothing full-screen changes (the backdrop sinks only through the skills'
+own darkening, as before), and every flash still asks the flash budget. Measured in the owner's late
+fight (stage 90, his army fielded, every Apex rank, Parade, Legion, Storm and Judgement equipped with the
+crown, AUTO at 2x, 90 s): the focus was on in 14% of frames, at a mean strength of 0.08 (the figures
+5% fainter on average), never longer than 1.1 s at a stretch, 16 times.
 
 **Figures.** A signature hit's figure is in its skill's colour; one cast's repeated hits on a body (a
 dragon's two bites, a storm's blades) fold into one figure with a small "×n".
@@ -1044,7 +1066,12 @@ render JS at the 95th percentile was 12.8 ms with signatures against 16.6 ms wit
 45.6 ms against 49.2 ms at 4x CPU throttling: within the noise, and the signature scene kills faster,
 so it often had fewer bodies on the field. The signature section itself costs 0.3 to 3.2 ms at its
 95th percentile. A first build that redrew its rings and accretion discs every frame measured 1.28x
-and 1.36x; drawing them once and only moving them (sprites, cached shapes) is what brought it down.
+and 1.36x; drawing them once and only moving them (sprites, cached shapes) is what brought it down. After the readability pass (the clones' rim, the Legion's dress,
+the storm's ring and trails, the focus), the same instrument at balanced quality and 4x throttling,
+Parade, Legion, Storm and Judgement with the crown, four interleaved rounds of 25 s against the build
+before it: simulate plus render JS at 15.8 ms (50th percentile) and 47.3 ms (95th) before, 16.6 and 47.9
+ms after, within the rounds' own spread (12 to 20 ms at the 50th); the signature section's 95th
+percentile went from 2.0 to 3.2 ms.
 
 ## Testing
 
