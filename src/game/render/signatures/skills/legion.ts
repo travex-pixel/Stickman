@@ -96,12 +96,11 @@ export class LegionStage extends Stage {
       case "darken":
         this.darkT = 0;
         this.darkD = Math.max(0.5, e.duration || 1.3);
-        // The focus: the night falling (anticipation), the rise and the charge.
-        this.focusFor(0.55);
         break;
       case "rise": {
         this.riseT = this.t;
-        this.focusFor(0.6);
+        // The focus: the rise, held to the charge.
+        this.focusFor(0.65);
         // One beat names every soldier raised (real temporary summons where foes fell). Without any
         // (a development cast), stand-ins rise in a rank beside the warrior.
         if (e.targetIds.length > 0) e.targetIds.forEach((id, i) => this.rise(e.from, id, i + 1));
@@ -113,7 +112,6 @@ export class LegionStage extends Stage {
       }
       case "charge":
         this.charge(e);
-        this.focusFor(0.5);
         break;
       default:
         break;

@@ -81,12 +81,11 @@ export class SovereignStage extends Stage {
         this.startCrown(e.duration || 1);
         // The focus: the crown drawing itself (the army kneels as part of it, so it is not dimmed).
         this.focusArmy = false;
-        this.focusFor(Math.min(0.9, e.duration || 1));
+        this.focusFor(Math.min(0.6, e.duration || 1));
         break;
       case "aura":
         this.auraT = 0;
         this.auraD = Math.max(1, e.duration || 10);
-        this.focusFor(0.35);
         this.cinematic = false;
         if (!this.crown) {
           this.crown = new Graphics(crownContext());

@@ -495,23 +495,12 @@ describe("the focus at a signature skill's key beats", () => {
     dir.destroy();
   });
 
-  it("applies only on key beats: the singularity and the clock never ask, the storm only while it gathers, a cinematic for each beat under a second", () => {
-    for (const sig of ["void_collapse", "time_fracture"] as SignatureId[]) {
+  it("applies only on key beats: the setup skills never ask, a cinematic asks for each beat under a second", () => {
+    for (const sig of ["void_collapse", "time_fracture", "shadow_storm"] as SignatureId[]) {
       const { host } = fakeHost();
       const dir = new SignatureDirector(host, true);
       const tr = focusTrace(dir, script(sig, null, 1, 610), 5);
       expect(Math.max(...tr.map((f) => Math.max(f.numbers, f.army)))).toBe(0);
-      dir.destroy();
-    }
-    {
-      const { host } = fakeHost();
-      const dir = new SignatureDirector(host, true);
-      const tr = focusTrace(dir, script("shadow_storm", null, 1, 615), 5);
-      const on = tr.filter((f) => f.numbers > 0.02).length / 30;
-      expect(Math.max(...tr.map((f) => f.numbers))).toBeLessThanOrEqual(0.7 + 1e-9);
-      // The gathering and the first blades, plus the fade (counted while above 0.02).
-      expect(on).toBeGreaterThan(0.3);
-      expect(on).toBeLessThan(1.8);
       dir.destroy();
     }
     for (const sig of ["abyssal_devourer", "kings_judgement", "legion_awakening", "sovereign_awakening"] as SignatureId[]) {
@@ -521,11 +510,45 @@ describe("the focus at a signature skill's key beats", () => {
       const tr = focusTrace(dir, script(sig, null, 1, 620), len);
       const on = tr.filter((f) => f.numbers > 0.02).length / 30;
       expect(on).toBeGreaterThan(0.2);
-      // A few beats at most: far less than the cast's length.
-      expect(on).toBeLessThan(2.2);
+      // A few beats at most (and their fades): far less than the cast's length.
+      expect(on).toBeLessThan(1.8);
       expect(tr[tr.length - 1]!.numbers).toBe(0);
       dir.destroy();
     }
+  });
+
+  it("rests after it lets go: a second cast's beat right after waits, the same cast's next beat does not", () => {
+    const { host } = fakeHost();
+    const dir = new SignatureDirector(host, true);
+    const d = new SigDriver((ev) => dir.handle(ev));
+    const a = script("death_parade", null, 1, 680);
+    d.play(a);
+    const fin = beatAt(a, "finisher");
+    let t = 0;
+    const step = () => {
+      d.update(1 / 30);
+      dir.update(1 / 30, 1 / 30);
+      t += 1 / 30;
+    };
+    while (t < fin + 0.8) step();
+    expect(dir.focusNumbers).toBe(0);
+    // A second Parade at once: it plays, but the focus waits out the rest.
+    d.play(script("death_parade", null, 1, 681));
+    let most = 0;
+    for (let i = 0; i < 9; i++) {
+      step();
+      most = Math.max(most, dir.focusNumbers);
+    }
+    expect(most).toBe(0);
+    dir.destroy();
+    // King's Judgement: the impact comes long after the hush lets go, and still takes the focus.
+    const j = fakeHost();
+    const jd = new SignatureDirector(j.host, true);
+    const s = script("kings_judgement", null, 1, 690);
+    const impact = beatAt(s, "impact");
+    const tr = focusTrace(jd, s, impact + 1);
+    expect(tr.find((f) => f.t > impact + 0.1 && f.t < impact + 0.3)!.numbers).toBeGreaterThan(0.5);
+    jd.destroy();
   });
 
   it("the crown quiets the figures but never dims the kneeling army", () => {

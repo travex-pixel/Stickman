@@ -28,7 +28,7 @@ import { bladeTex, smokeTex, starTex } from "../textures";
  * and makes the execution a guillotine from above. Phantom King crowns the clones in gilt and their
  * cuts throw violet sparks (their strikes can start combinations). Hunter's Parade marks the hunted
  * with a crimson reticle and thickens their cuts; Blade Parade looses shadow blades from each strike.
- * Master adds a crimson ink trail to every blink; Grandmaster gilds the clones' edge and eyes.
+ * Master adds a crimson ink trail to every blink; Grandmaster gilds the clones' light and eyes.
  */
 interface Clone {
   rig: Rig;
@@ -368,7 +368,7 @@ export class ParadeStage extends Stage {
     this.hideTarget = 0;
     // The focus holds through the cut and a breath after it, then lets go.
     this.endFocus();
-    this.focusFor(0.42);
+    this.focusFor(0.25);
     const pid = this.host.playerId();
     // He reappears: a puff of ink where he lands, a glint along his blade.
     if (this.body(pid)) {

@@ -52,8 +52,6 @@ const ORBIT_SIZE = 1.45;
 const FLIGHT_SIZE = 1.6;
 /** The light along a blade's path: a pale violet, nearly white. */
 const BLADE_TRAIL = 0xc9b8ff;
-/** Shadow Storm casts often (a setup skill): its focus is lighter than a cinematic's. */
-const STORM_FOCUS = 0.7;
 
 export class StormStage extends Stage {
   override focus(out: { x: number; y: number; top: number }): boolean {
@@ -86,13 +84,9 @@ export class StormStage extends Stage {
     switch (e.beat) {
       case "gather":
         this.gather(e.index > 1 ? e.index : this.evo === "thousand_blades" ? 12 : 6, e.duration || 0.8);
-        // The focus while the ring gathers round him (the figures of his own blows pop right over
-        // it), held a breath into the volley; a lighter one than a cinematic's.
-        this.focusFor(this.gatherD + 0.1, STORM_FOCUS);
         break;
       case "blade":
         this.launch(e);
-        if (this.launched <= 3) this.focusFor(0.12, STORM_FOCUS);
         break;
       case "tempest":
         this.startTempest(e);
@@ -228,7 +222,7 @@ export class StormStage extends Stage {
         const a = this.orbitPos(b, this.p);
         const front = Math.sin(a) > 0;
         if (k > 0) orbiting += 1;
-        if (!b.cut && this.gatherT >= b.appear && (!this.compact || b.slot === 0)) {
+        if (!b.cut && this.gatherT >= b.appear && !this.compact && (this.blades.length <= 8 || b.ring === 0)) {
           // A slit of white light where it cuts itself out of the air.
           b.cut = true;
           const r = 12 * this.scale;
@@ -287,19 +281,19 @@ export class StormStage extends Stage {
         }
         const tr = b.trail;
         if (tr) {
-          // In flight the trail stretches out behind it.
+          // In flight the trail stretches out behind it, white-hot (the edge's light along its path),
+          // so the volley reads as blades and not as a coloured shot.
           tr.position.set(x, y);
           tr.rotation = rot;
           tr.scale.set((70 * this.scale) / 64, 0.5 * sc);
-          tr.alpha = 0.75;
+          tr.tint = light;
+          tr.alpha = 0.8;
           tr.zIndex = 7999;
         }
         if (dt > 0) {
           // An ink wake behind it, and (full staging) a violet light along it.
           this.kit.streak(x - Math.cos(rot) * 26 * this.u, y - Math.sin(rot) * 26 * this.u, x, y, 34 * this.u, 2.2, this.pal.ink, 0.16, { alpha: 0.75, add: false });
           if (this.profile.secondary) this.kit.streak(x - Math.cos(rot) * 18 * this.u, y - Math.sin(rot) * 18 * this.u, x, y, 22 * this.u, 1, this.pal.glow, 0.12, { alpha: 0.7 });
-          // A white-hot line along its path (the edge's light), so the volley reads as blades.
-          this.kit.streak(x - Math.cos(rot) * 22 * this.u, y - Math.sin(rot) * 22 * this.u, x, y, 26 * this.u, 0.8, light, 0.1, { alpha: 0.55 });
           if (this.master) this.kit.streak(x - Math.cos(rot) * 18 * this.u, y - Math.sin(rot) * 18 * this.u + 3, x, y + 3, 18 * this.u, 0.6, light, 0.1, { alpha: 0.6 });
         }
         if (k >= 1) {

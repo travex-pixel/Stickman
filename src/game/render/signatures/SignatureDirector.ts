@@ -43,14 +43,20 @@ export const HARD_STAGE_CAP = 10;
  * the army not in the cast washes FOCUS_ARMY of the way toward FOCUS_ARMY_COLOR, so the skill is
  * what the eye finds. Never the warrior, the foes (their telegraphs and threat colours), the
  * figures of blows he takes, heals or words. It eases in at FOCUS_IN and out at FOCUS_OUT (per real
- * second), and no cast holds it longer than FOCUS_MAX_HOLD real seconds, whatever it asks.
+ * second), no cast holds it longer than FOCUS_MAX_HOLD real seconds, whatever it asks, and once it
+ * has let go a new one waits FOCUS_REST.
  */
 export const FOCUS_NUMBERS = 0.6;
 export const FOCUS_ARMY = 0.42;
 export const FOCUS_ARMY_COLOR = 0x30333d;
 export const FOCUS_IN = 14;
-export const FOCUS_OUT = 7;
+export const FOCUS_OUT = 10;
 export const FOCUS_MAX_HOLD = 2;
+/**
+ * After the focus lets go, a new one waits this long (real seconds): casts that follow one another
+ * do not chain it into a long dim stretch, and the fight has its own light between key beats.
+ */
+export const FOCUS_REST = 1.2;
 /** Reduced effects: a gentler focus that comes and goes more slowly (no sudden change of light). */
 const FOCUS_REDUCED = 0.6;
 const FOCUS_REDUCED_IN = 6;
@@ -182,6 +188,10 @@ export class SignatureDirector {
   focusArmy = 0;
   /** Real seconds with any focus on, and real seconds counted (how much of play is focused). */
   readonly focusClock = { on: 0, total: 0, longest: 0, run: 0 };
+  /** Real seconds since the focus let go (a new one waits FOCUS_REST), and whether one is held now. */
+  private focusRest = FOCUS_REST;
+  private focusOn = false;
+  private focusOwner: Stage | null = null;
 
   constructor(
     readonly host: SigHost,
@@ -503,13 +513,29 @@ export class SignatureDirector {
   private updateFocus(real: number): void {
     let wantN = 0;
     let wantA = 0;
+    // After the focus lets go, another cast's waits out the rest; the same cast's next beat does
+    // not (a judgement's impact follows its hush).
+    if (!this.focusOn) this.focusRest += real;
+    const resting = !this.focusOn && this.focusRest < FOCUS_REST;
+    let owner: Stage | null = null;
     for (const s of this.stages) {
       const k = s.focusNow();
       if (k <= 0) continue;
+      if (resting && s !== this.focusOwner) continue;
       s.focusHeld += real;
       if (s.focusHeld > FOCUS_MAX_HOLD) continue;
-      if (k > wantN) wantN = k;
+      if (k > wantN) {
+        wantN = k;
+        owner = s;
+      }
       if (s.focusArmy && k > wantA) wantA = k;
+    }
+    if (wantN > 0) {
+      this.focusOn = true;
+      if (owner) this.focusOwner = owner;
+    } else if (this.focusOn) {
+      this.focusOn = false;
+      this.focusRest = 0;
     }
     const p = this.profile;
     const amp = p.reduced ? FOCUS_REDUCED : 1;
@@ -535,6 +561,7 @@ export class SignatureDirector {
   }
 
   private drop(s: Stage): void {
+    if (this.focusOwner === s) this.focusOwner = null;
     s.dispose();
     const i = this.stages.indexOf(s);
     if (i >= 0) this.stages.splice(i, 1);
@@ -693,6 +720,9 @@ export class SignatureDirector {
     this.focusNumbers = 0;
     this.focusArmy = 0;
     this.focusClock.run = 0;
+    this.focusRest = FOCUS_REST;
+    this.focusOn = false;
+    this.focusOwner = null;
     this.kit.reset();
     this.painted = false;
   }
