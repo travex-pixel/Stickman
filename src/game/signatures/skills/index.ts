@@ -3,23 +3,22 @@ import type { SkillImpl } from "./common";
 import { voidCollapse } from "./voidCollapse";
 import { devourer } from "./devourer";
 import { parade } from "./parade";
+import { judgement } from "./judgement";
+import { legion } from "./legion";
+import { fracture } from "./fracture";
+import { storm } from "./storm";
+import { sovereign } from "./sovereign";
 
 export type { Plan, SkillImpl } from "./common";
-
-/** Not cast by the simulation yet (it never plans a cast): the remaining five land next. */
-const idle: SkillImpl = {
-  plan: () => null,
-  begin: () => ({ windup: 0, length: 0 }),
-};
 
 /** Each skill's targeting and timeline. */
 export const SKILL_IMPLS: Readonly<Record<SignatureId, SkillImpl>> = {
   void_collapse: voidCollapse,
   abyssal_devourer: devourer,
   death_parade: parade,
-  kings_judgement: idle,
-  legion_awakening: idle,
-  time_fracture: idle,
-  shadow_storm: idle,
-  sovereign_awakening: idle,
+  kings_judgement: judgement,
+  legion_awakening: legion,
+  time_fracture: fracture,
+  shadow_storm: storm,
+  sovereign_awakening: sovereign,
 };

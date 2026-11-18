@@ -392,6 +392,8 @@ export class SignatureRuntime {
       boss: plan.boss,
       enhanced: c.enhanced,
     });
+    // Crowned Ultimate: an ultimate cast in the Sovereign's aura takes its crowned form.
+    if (c.enhanced && (entry.id === "kings_judgement" || entry.id === "abyssal_devourer")) this.synergy("crowned_ultimate", c.id, c.center, plan.targets.map((t) => t.id));
     this.casts.push(c);
     this.runCast(c, 0);
     return c;

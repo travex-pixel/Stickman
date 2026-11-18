@@ -571,5 +571,5 @@ export const SYNERGY_LOCKOUT: Readonly<Record<SynergyId, number>> = {
   legion_meteor: 10,
   frozen_singularity: 8,
   blade_parade: 6,
-  crowned_ultimate: 4,
+  crowned_ultimate: 1,
 };

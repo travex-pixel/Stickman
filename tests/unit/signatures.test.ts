@@ -441,7 +441,11 @@ describe("signature skills and the rest of the fight", () => {
     let after = 0;
     for (let i = 0; i < 40 / FIXED_DT; i++) {
       w.update(FIXED_DT);
-      for (const e of w.drainEvents()) if (e.type === "sig_cast") (w.phase === "boss_intro" ? during++ : after++);
+      for (const e of w.drainEvents()) {
+        if (e.type !== "sig_cast") continue;
+        if (w.phase === "boss_intro") during++;
+        else after++;
+      }
     }
     expect(during).toBe(0);
     expect(after).toBeGreaterThan(0);
