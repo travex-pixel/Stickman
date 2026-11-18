@@ -1,7 +1,6 @@
-import { SIGNATURES } from "@/game/data/signatures";
 import { describe, expect, it } from "vitest";
 import { createDefaultProfile } from "@/game/progression/profile";
-import { emptySignatureState, type SignatureId } from "@/game/data/signatures";
+import { SIGNATURES, emptySignatureState, type SignatureId } from "@/game/data/signatures";
 import { signatureNews } from "@/components/signatures/news";
 import { activationText, secs } from "@/components/signatures/shared";
 
