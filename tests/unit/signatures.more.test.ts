@@ -422,3 +422,38 @@ describe("combinations", () => {
     expect(first).toEqual([true, false]);
   });
 });
+
+describe("every mode still works with a full loadout", () => {
+  const full = (): PlayerLoadout => {
+    const l = buildLoadout(armyProfile());
+    l.signatures = {
+      equipped: [entry("time_fracture", { rank: 10, evolution: "stop_the_world", mastery: 2 }), entry("legion_awakening", { rank: 10, evolution: "endless_legion", mastery: 2 }), entry("void_collapse", { rank: 10, evolution: "event_horizon", mastery: 2 }), entry("death_parade", { rank: 10, evolution: "afterimage", mastery: 2 })],
+      crown: entry("sovereign_awakening", { rank: 10, mastery: 2 }),
+    };
+    return l;
+  };
+  const go = (mode: "boss" | "vault" | "endless" | "tyrant" | "rift" | "campaign", seconds: number) => {
+    const w = new World({ stage: 24, loadout: full(), seed: 13, mode, tyrant: mode === "tyrant" ? { bossId: "crownless_king", twist: "frenzy" } : undefined });
+    const ev = run(w, seconds);
+    return { w, ev, casts: ev.filter((x) => x.e.type === "sig_cast").length };
+  };
+  it("the Vault still ends on its timer, Endless still brings its waves, essence still waits to be bound", () => {
+    const v = go("vault", 60);
+    expect(v.w.phase).toBe("victory");
+    expect(v.w.modeTime).toBeLessThanOrEqual(46);
+    expect(v.casts).toBeGreaterThan(3);
+    const e = go("endless", 90);
+    expect(e.w.wave).toBeGreaterThanOrEqual(3);
+    const r = go("rift", 60);
+    expect(r.ev.some((x) => x.e.type === "essence_available")).toBe(true);
+    expect(r.w.snapshot().summons.every((s) => !s.instanceId.startsWith("legion_"))).toBe(true);
+  });
+  it("a boss still reaches its second phase and falls; the Tyrant still breaks", () => {
+    const b = go("boss", 120);
+    expect(b.ev.some((x) => x.e.type === "boss_phase")).toBe(true);
+    expect(b.w.phase).toBe("victory");
+    const t = go("tyrant", 70);
+    expect(t.ev.some((x) => x.e.type === "tyrant_break")).toBe(true);
+    expect(t.w.phase).toBe("victory");
+  });
+});

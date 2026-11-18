@@ -64,7 +64,7 @@ export function chooseCast(rt: SignatureRuntime): { entry: SignatureLoadoutEntry
   return best ? { entry: best.entry, plan: best.plan } : null;
 }
 
-function weigh(rt: SignatureRuntime, entry: SignatureLoadoutEntry, plan: Plan, entries: SignatureLoadoutEntry[]): number {
+function weigh(rt: SignatureRuntime, entry: SignatureLoadoutEntry, plan: Plan, entries: readonly SignatureLoadoutEntry[]): number {
   const cls = SIGNATURE_CLASS[entry.id];
   let s = plan.score;
   const marked = plan.targets.filter((e) => rt.marked(e)).length;

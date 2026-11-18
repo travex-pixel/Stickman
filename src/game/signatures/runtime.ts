@@ -124,10 +124,10 @@ export class SignatureRuntime {
     return this.world.loadout.signatures ?? { equipped: [], crown: null };
   }
 
-  /** Equipped skills in slot order, the crown last. */
-  entries(): SignatureLoadoutEntry[] {
-    const l = this.loadout;
-    return l.crown ? [...l.equipped, l.crown] : [...l.equipped];
+  /** Equipped skills in slot order, the crown last (rebuilt only when the loadout changes). */
+  private list: SignatureLoadoutEntry[] = [];
+  entries(): readonly SignatureLoadoutEntry[] {
+    return this.list;
   }
 
   entry(id: SignatureId): SignatureLoadoutEntry | null {
@@ -136,7 +136,9 @@ export class SignatureRuntime {
 
   /** The loadout changed: a skill not seen before in this world starts on its opening cooldown. */
   setLoadout(): void {
-    for (const s of this.loadout.known ?? []) this.known.add(s);
+    const l = this.loadout;
+    this.list = l.crown ? [...l.equipped, l.crown] : [...l.equipped];
+    for (const s of l.known ?? []) this.known.add(s);
     let i = 0;
     for (const e of this.entries()) {
       if (!this.seen.has(e.id)) {
