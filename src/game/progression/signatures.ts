@@ -10,6 +10,7 @@ import {
   SIGNATURE_IDS,
   SIGNATURE_RANK_MAX,
   SIGNATURE_SLOTS,
+  SHADOW_MARK,
   SOVEREIGN,
   STORM,
   SYNERGIES,
@@ -402,7 +403,7 @@ export function signatureEffectText(id: SignatureId, rank: number, evo: Evolutio
       base = `${cd}: foes within ${def.radius} stop for ${FRACTURE.freezeFor} s (bosses slow), ${pct(FRACTURE.store)} of the damage they take is released again with a ${pw(def.power)} impact`;
       break;
     case "shadow_storm":
-      base = `${cd}: ${STORM.blades} blades of ${pw(def.power)}, each leaving a Shadow Mark (+12% from all your blows)`;
+      base = `${cd}: ${STORM.blades} blades of ${pw(def.power)}, each leaving a Shadow Mark (+${pct(SHADOW_MARK.bonus)} from all your blows)`;
       break;
     case "sovereign_awakening":
       base = `${cd}: for ${SOVEREIGN.auraFor} s your other signature skills recover ${pct(SOVEREIGN.cooldownRate)} faster, your shadows strike ${pct(SOVEREIGN.summonBonus)} harder, and an ultimate is crowned`;
