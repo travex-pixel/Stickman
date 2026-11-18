@@ -88,10 +88,11 @@ export class VoidStage extends Stage {
     const fs = pr.fs(this.center.y);
     this.gx = pr.sx(this.center.x);
     this.gy = pr.sy(this.center.y);
-    this.cx = this.gx;
-    // Above the heads of the group it gathers, so the bodies (and the hero among them) stay in view.
-    this.cy = this.gy - 128 * fs;
     this.coreR = 19 * fs * this.grow;
+    // Above the heads of the group it gathers, so the bodies (and the hero among them) stay in view,
+    // and wholly on screen (its lens reaches about three core radii).
+    this.cx = this.inView(this.gx, this.coreR * 3);
+    this.cy = Math.max(this.gy - 128 * fs, pr.top() + this.coreR * 3);
     this.squash = Math.min(0.6, Math.max(0.25, pr.dy() / pr.unit()));
   }
 

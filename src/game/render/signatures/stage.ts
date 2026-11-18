@@ -133,6 +133,18 @@ export abstract class Stage {
     return false;
   }
 
+  /**
+   * A shape drawn above the field (a singularity, a clock, a hand) at `x` (base px), kept `margin`
+   * inside the edges of what is on screen now: on a narrow portrait screen the knot it hangs over may
+   * stand at, or past, the edge, and a half-drawn sigil reads as a glitch.
+   */
+  protected inView(x: number, margin: number): number {
+    const pr = this.host.proj;
+    const lo = pr.left() + margin;
+    const hi = pr.right() - margin;
+    return hi > lo ? Math.max(lo, Math.min(hi, x)) : x;
+  }
+
   /** The default focus: the cast's centre on the ground and `lift` world-scaled px above it. */
   protected centreFocus(out: { x: number; y: number; top: number }, lift: number): boolean {
     const pr = this.host.proj;

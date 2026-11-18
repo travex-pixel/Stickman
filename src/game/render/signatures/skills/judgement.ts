@@ -219,7 +219,7 @@ export class JudgementStage extends Stage {
     this.hand = box;
     const s = this.host.proj.fs(this.cast.center.y) * (this.evo === "absolute_judgement" ? 1.5 : 1.25) * (this.gilded ? 1.08 : 1);
     box.scale.set(s);
-    this.handX = this.gx;
+    this.handX = this.inView(this.gx, 60 * s);
     this.handY = Math.max(this.host.proj.top() + 60 * s, this.gy - 175 * this.host.proj.fs(this.cast.center.y));
     box.position.set(this.handX, this.handY);
     const palm = new Graphics(palmCtx());

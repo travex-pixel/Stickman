@@ -59,7 +59,7 @@ export class TimeStage extends Stage {
     this.gy = pr.sy(c.y);
     const fs = pr.fs(c.y);
     this.R = 46 * fs * (this.evo === "stop_the_world" ? 1.3 : 1) * (this.compact ? 0.8 : 1);
-    this.cx = this.gx;
+    this.cx = this.inView(this.gx, this.R + 8);
     this.cy = Math.max(pr.top() + this.R + 16, this.gy - 120 * fs);
     this.r = this.cast.radius * pr.unit();
     this.squash = Math.min(0.6, Math.max(0.25, pr.dy() / pr.unit()));

@@ -226,6 +226,32 @@ function play(dir: SignatureDirector, s: Timed[], seconds = 16): void {
 }
 
 describe("the signature director", () => {
+  it("a singularity, a clock or a hand over a knot at the screen's edge is drawn wholly on screen", () => {
+    const edge: SigActor[] = [
+      { id: 2, pos: { x: 585, y: 60 }, kind: "enemy", hp: 1 },
+      { id: 3, pos: { x: 592, y: 80 }, kind: "enemy", hp: 1 },
+      { id: 4, pos: { x: 596, y: 70 }, kind: "enemy", hp: 1 },
+    ];
+    for (const sig of ["void_collapse", "time_fracture", "kings_judgement"] as const) {
+      const { host, layers } = fakeHost();
+      // What is on screen ends at x 520 (a portrait screen's right edge; the knot stands past it).
+      host.proj.right = () => 520;
+      const dir = new SignatureDirector(host, true);
+      const d = new SigDriver((ev) => dir.handle(ev));
+      d.play(buildScript({ castId: 12, sig, evo: null, mastery: 1, caster: CASTER, foes: edge, hits: false }));
+      let widest = -Infinity;
+      for (let t = 0; t < 1.5; t += 1 / 30) {
+        d.update(1 / 30);
+        dir.update(1 / 30, 1 / 30);
+        // The skill's own shapes above the field are containers it places in the fx layer.
+        for (const ch of layers.fx.children) if (ch.children.length > 0 && ch.visible) widest = Math.max(widest, ch.position.x);
+      }
+      expect(widest, sig).toBeGreaterThan(300);
+      expect(widest, sig).toBeLessThanOrEqual(520 - 30);
+      dir.destroy();
+    }
+  });
+
   it("frames the full height of what a far cast draws: Time Fracture's clock and King's Judgement's hand", () => {
     const far: SigActor[] = [
       { id: 2, pos: { x: 560, y: 60 }, kind: "enemy", hp: 1 },
