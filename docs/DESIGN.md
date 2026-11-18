@@ -508,6 +508,248 @@ What made the difference, found with the simulator:
 - Gold and Aether pass 2^53 around hour 18: saves keep them as plain doubles (up to 1e300), and
   numbers format with suffixes to Dc (1e33), then scientific notation.
 
+### Signature skills
+
+The owner's late game: eight anime-scale skills the warrior casts himself (`data/signatures.ts`
+holds the catalogue and every number; the casts live in `src/game/signatures/`, the rules of
+finding, ranking and mastering them in `progression/signatures.ts`). They are the idle layer: they
+cast whether AUTO is on or off. Without one in a slot (and the crown not found) the World creates
+no signature runtime at all: no draw, no event, no stat. That is pinned: five modes at stage 30 for
+a late warrior and for one with an army that calls shades, every event, loot drop, snapshot and the
+RNG's next draw, match the contract commit (`tests/unit/signatures.test.ts`); and a wider harness
+(four warriors, nine modes, three seeds, offline and the boss forecast: 132 digests) matched to the
+bit on the final code.
+
+**How a cast runs.** A cast is a timeline in world seconds (so the Fury's slow motion slows it
+too): `sig_cast` (where it will land, its windup and length), then each beat at the moment it
+happens (`sig_beat`, before the hits it causes), the blows through `World.dealDamage` (the
+warrior's attack times the skill's power and rank, crits, Prismatic Edge, defence, guards and
+shields; every hit tagged `hit.sig`), statuses on and off (`sig_status`), and `sig_end`
+(`interrupted` when the fight ended or the warrior fell). Nothing waits on a renderer. Their blows
+charge no energy; their kills charge as any kill. A skill holds the warrior only for its cast time
+(Death Parade's vanish and the Sovereign's crown are inside theirs). Bosses are never pulled,
+trapped or frozen: Time Fracture only slows a boss's movement, and its wind-ups and telegraphs keep
+their time to the step (tested against a twin fight). The boss rule is untouched: nothing here
+starts a fight.
+
+**The selection AI** (`signatures/ai.ts`). Nothing begins during the Ascendant Fury, a boss's
+entrance, the end of a fight, the warrior's own cast, dodge or stagger, or an empty field; a global
+lockout of 1.25 s (raw) separates any two casts and a cinematic skill comes at most once every 6 s.
+With the Fury charged and AUTO about to cast it, nothing that would hold the warrior begins. Setup
+skills (Void Collapse, Shadow Storm, Time Fracture) want unmarked foes; exploiters (Abyssal
+Devourer, Death Parade) hold up to 2.5 s for a setup about to be ready when nothing is marked;
+King's Judgement wants a boss or a crowd and never falls on a lone, nearly dead foe; in a boss
+fight the boss-effective skills weigh more. It draws nothing (ties go to the earlier slot) and reads
+only the world.
+
+**The skills as built** (rank 1; `power` is times the warrior's attack per blow; cooldowns in
+seconds; ranks multiply the damage by 1 + 0.12 a rank, x2.08 at 10):
+
+| Skill | Cooldown, hold | What it does | Evolutions (Master: the second step) |
+| --- | --- | --- | --- |
+| Void Collapse (Rare) | 14 s, 0.2 s | A singularity over the densest group; non-boss, non-armoured foes within 120 drawn in for 0.9 s (they do not act); implodes for 9 on all within 120, its ring 45% of that out to 204; all struck carry a Void Mark (+25% from signature skills, 6 s) | Event Horizon: stronger, 25% wider pull; the drawn are `trapped` 1 s (1.6 s) and the implosion waits 0.35 s for them. Supernova: three blasts leap to the nearest foes (Master: each leaps once more). Consumption: each kill stores a stack (cap 10; Master 16, and each kill takes 0.5 s off its cooldown, up to 4 s): next collapse +7% damage and +3% radius a stack |
+| Shadow Storm (Rare) | 10 s, none | Six blades orbit 0.8 s, then launch 0.12 s apart at the densest group within 260 (0.16 s flight), 0.55 each, each leaving a Shadow Mark (+10% from every ally blow, 5 s) | Thousand Blades: twelve blades at 55%, 0.07 s apart. Black Tempest: a ring spreads to 260 over 0.6 s cutting each foe once (Master: twice). Hunter's Instinct: the weakest first, finishing foes left under 15% (Master: a killing blade flies on) |
+| Death Parade (Epic) | 18 s, 0.75 s | The warrior vanishes (untargetable, unharmed); four clones 0.12 s apart strike the most wounded first (1.8 each, never the same foe twice while another is unstruck); then he reappears beside the boss or the weakest for a 3.4 finisher; a non-boss foe under 15% is executed | Afterimage: six clones (Master: eight), faster. Executioner: seeks the wounded, +80% below a third (Master +120%, executes under 20%). Phantom King: every strike leaves a Shadow Mark and sets off Hunter's and Blade Parade itself (Master: two blades a strike) |
+| Time Fracture (Epic) | 22 s, 0.2 s | A clock over the densest group (a boss if there is one); 0.3 s later everything within 200 stops for 2 s: ordinary foes `frozen` (no move, act or wind-up), a boss `slowed` (45% slower movement). All the damage allies deal them meanwhile is kept and released on resume as a `delayed` impact with a blow of 3 | Stop the World: 3 s (Master 3.6 s), keeping 80%. Fractured Future: each release echoes once at half (Master: twice). Temporal Execution: double release on foes under another skill's status (Master: executes ordinary foes it leaves under 20%) |
+| Legion Awakening (Legendary, cinematic) | 28 s, 0.25 s | The field darkens; five soldiers rise where foes fell in the last 6 s (else in a rank by the warrior) and charge (a blow of 4 each on arrival), then fight for 6 s. Their attack is 60% of the fielded army's average, never under 60% of the warrior's, times the rank; they strike with his crits. Temporary shades in all but name: no XP, essence or save, never in the army or its snapshot, not counted by the Caller's Chorus, at most 12 at once | Endless Legion: eight (Master: eleven). Veteran Souls: three, 2.4x health, 1.7x attack, 8 s (Master 10 s). Legion Commander: a Vanguard or Sentinel fielded makes them 1.6x sturdier, a Reaper or Ranger 1.3x sharper, a Caller adds two, a Support lends its banner, an Arcanist makes their charge leave a Shadow Mark (Master: +2 s) |
+| Abyssal Devourer (Legendary, cinematic) | 26 s, 0.25 s | A portal at the field's edge on the warrior's side (0.45 s), then the head sweeps to the far edge in 1.25 s along `devourerCurve(from, centre, to)`, biting every foe it passes (reach 44) for 6, at most twice a foe, +40% on the marked or trapped; each kill lets it coil 0.1 s longer at the exit (cap 0.4 s) | World Eater: reach 62 and the whole depth of the field (Master: three bites a foe). Soul Feeder: each kill charges the next bite +50% (cap 3; Master 5), carried to the next cast. Ancient Devourer: it turns and dives from above onto the boss or the thickest knot (5 within 80; Master: twice) |
+| King's Judgement (Legendary, cinematic) | 32 s, 0.35 s | Hush, a hand (0.25 s), a sigil (0.55 s), a meteor falling 0.6 s (from 0.95 s), the impact at 1.55 s: 9 within 150, double on a boss. It follows the boss through the windup. Holds rather than fall on fewer than three foes with little health between them | Fallen Star: three stars of 2 follow 0.22 s apart (Master: five). Absolute Judgement: seeks the boss, x3.2 on it in a 70% circle (Master: a second judgement at half, 0.9 s later). World Breaker: 45% wider, and a second shockwave of 1.2 out to twice the radius 0.4 s later (Master: it traps foes 0.6 s) |
+| Sovereign Awakening (Mythic, cinematic, the crown) | 75 s, 0.8 s | The army kneels (held 0.6 s), a crown forms (unharmed through the hold), then a 10 s aura (+0.5 s a rank; Master 12 s): other signature cooldowns run 60% faster, summons strike 25% harder, combinations' own effects 30% stronger, and an ultimate cast in it is crowned. Needs another skill equipped and a boss or four foes | (No evolutions: it grows by rank and mastery) |
+
+**Combinations** (`signatures/synergies.ts`; each sends `sig_synergy` before its hits, at most once
+per lockout, `first` on the save's first sight; depth one: their own blows set off nothing):
+
+| Combination | Needs | What happens in the fight |
+| --- | --- | --- |
+| Gravity Feast | Void Collapse + Abyssal Devourer | With a singularity under 3 s old (or two foes trapped or Void Marked) the pass's curve bends through it; as the head crosses it the dragon bites every trapped or Void Marked foe within 150 at once (x1.6, outside the bite count) |
+| Hunter's Parade | Death Parade + a marked foe | Clones go to the marked first (Void, Shadow or the Hunter's Mark) and cut them 35% harder |
+| Blade Parade | Shadow Storm + Death Parade | Every clone strike looses a blade (two crowned) at the foe nearest it (0.4 at the Storm's rank), leaving a Shadow Mark |
+| Legion Meteor | Legion Awakening + King's Judgement | Soldiers standing when the meteor lands hurl themselves in one after another, each an impact of 1.5 within 60; they are spent |
+| Frozen Singularity | Time Fracture + Void Collapse | On resume the frozen are drawn together at once and a Void Collapse implosion at 60% fires there (Void Marks included), its cooldown notwithstanding |
+| Crowned Ultimate | Sovereign Awakening | An ultimate in the aura is crowned: the Ascendant Fury throws nine strikes, King's Judgement falls 25% wider with one more star, Abyssal Devourer dives once more |
+
+**Statuses** (on `Combatant.statuses`, announced on and off): `void_mark`, `shadow_mark`, `trapped`
+(held, no action), `frozen` (no movement, action or wind-up; it does not age), `slowed` (a boss's
+movement only). The Hunter's Mark (`mark`) counts as marked. `vanished` holds the warrior out of
+reach in Death Parade.
+
+**Finding them** (`checkDiscoveries`; best-ever stage counts across ascensions; the save's new
+counters, elites, best chain, fastest boss win and kills of each boss, start at zero on the update;
+elites fought offline count):
+
+| Skill | Rule (numbers retuned by measurement) |
+| --- | --- |
+| Void Collapse | The stage-20 boss falls |
+| Shadow Storm | A 40-kill chain (30 came at stage 10 on a new save) |
+| Death Parade | 300 elites defeated (100 came at stage 20) |
+| Time Fracture (hidden) | A gate challenge or Boss Hunt won within 20 s of the boss's entrance ending (a Rank Trial is not a boss fight: its Warden fell in 7 s at stage 4); a boss felled during its entrance counts |
+| Legion Awakening | 12 species sworn: every species there is |
+| Abyssal Devourer | The stage-60 boss falls |
+| King's Judgement (hidden) | The Crownless King defeated 10 times, gates and hunts alike |
+| Sovereign Awakening | The stage-90 boss falls with three skills at Master |
+
+**Slots, ranks, mastery.** Three slots; a fourth once five skills are found (or the best stage
+reaches 100). Equip and evolutions change freely while farming, never inside a boss or mode fight;
+ranks can be bought any time. The crown is always on once found. Ranks 2 to 10 cost skill points,
+each about twice the last (Rare 3, 6, 12, 25, 50, 100, 200, 350, 550 = 1,296; Epic 1,497; Legendary
+1,713; Mythic 2,007; all eight 12,732): the first three of a new skill are cheap, and the whole is
+sized to the owner's flood of points (below), about three weeks of them. Mastery is one number a
+skill, its uses (casts plus the foes it killed), against thresholds sized per skill from its
+measured uses a minute (Adept within an evening, Master in about two days of play, Grandmaster in
+about a week); Adept opens the evolution choice, Master awakens its second step, Grandmaster is the
+gilded look and a title:
+
+| Skill | Adept | Master | Grandmaster |
+| --- | --- | --- | --- |
+| Void Collapse | 160 | 4,700 | 16,000 |
+| Shadow Storm | 80 | 3,700 | 13,000 |
+| Death Parade | 130 | 3,400 | 12,000 |
+| Time Fracture | 80 | 1,600 | 5,600 |
+| Legion Awakening | 150 | 3,000 | 10,500 |
+| Abyssal Devourer | 200 | 4,000 | 14,000 |
+| King's Judgement | 150 | 1,600 | 5,600 |
+| Sovereign Awakening | 40 | 340 | 1,200 |
+
+Offline credits mastery at half the sampled rate, at most two hours of live play's worth, and never
+casts or reveals anything; tier-ups earned offline are listed in its summary
+(`OfflineSummary.signatures`).
+
+**Reveals.** Found skills wait in line and are revealed one at a time, about a second after the
+screen is free: only while farming, never over another card, never during a boss or mode fight,
+never from offline. `signatureRevealed` marks one seen and closes its card; the next follows.
+
+**Power** counts the equipped skills by their measured share of boss damage (`SIG_BOSS_SHARE`),
+times their rank, evolution and mastery, the crown on top. They have no row of their own in the
+Power sheet (its sources are the menus'); until one is added they are spread over the others.
+
+**Balance, measured** (the economy simulator's warriors: its player from a new save at gates 21
+and 60, and at the end of a 1,000-minute climb, level 561, every Art at V, all Apex ranks,
+stuck at gate 72: the closest the simulator gets to the owner's late fights). Boss damage is the
+damage dealt to the gate's boss over the fight proper with its health raised so the fight runs its
+full time, AUTO on, three seeds of 90 s (singles) or four of 120 s (full loadouts):
+
+| Equipped | New player, gate 21 | New player, gate 60 | Level 561, gate 72 |
+| --- | --- | --- | --- |
+| Void Collapse, rank 1 | x1.12 | x1.12 | x1.05 |
+| Shadow Storm, rank 1 | x1.16 | x1.15 | x1.13 |
+| Death Parade, rank 1 | x1.18 | x1.11 | x1.00 |
+| Time Fracture, rank 1 | x1.09 | x1.16 | x1.12 |
+| Legion Awakening, rank 1 | x1.23 | x1.04 | x1.05 |
+| Abyssal Devourer, rank 1 | x1.18 | x1.09 | x1.05 |
+| King's Judgement, rank 1 | x1.14 | x1.09 | x1.07 |
+| Void, Parade, Devourer, Judgement + crown, rank 1 | x1.92 | x1.46 | x1.29 |
+| The same, rank 10, evolved, Master | (x3.9) | x2.47 | x2.07 |
+| Fracture, Legion, Storm, Parade + crown, rank 10, evolved, Master | (x3.5) | (x2.1) | x2.03 |
+
+A skill alone at rank 1 adds 9 to 23% to a new player's boss damage where it is found, and 0 to
+16% to a late warrior's: his arts are at rank V and the Fury every four seconds carries most of his
+damage; Death Parade's hold costs about what its blows add for him until it is ranked. A full late
+loadout doubles a late warrior's boss damage (x2.03 to x2.07; the target was x1.8 to 2.3). The
+bracketed cells are loadouts no new player can have there.
+
+**Gates gained.** The boss forecast's own fights (four seeds a gate, two wins to pass) on the same
+warriors, with and without:
+
+| Warrior | Equipped | Without | With | Gained |
+| --- | --- | --- | --- | --- |
+| New player at gate 21 (two seeds) | Void Collapse 1 | passes 21, fails 24 (35% left) | passes 21, fails 24 (27% left) | 0 |
+| New player at gate 39 (two seeds) | Void, Legion, Parade 1 | fails 39 (28 to 35% left) | fails 39 (11 to 29% left) | 0 |
+| New player at gate 60 (two seeds) | Abyssal Devourer 1 | fails 60 (28 to 31%) | fails 60 (23 to 26%) | 0 |
+| New player at gate 60 (two seeds) | Void, Legion, Parade, Devourer 1 | fails 60 | passes 60, fails 63 | 1 |
+| Level 561, stuck at 72 | four + crown, rank 1 | fails 69 (5% left) and 72 | passes 69, fails 72 (35% left) | 1 |
+| Level 561, stuck at 72 | four + crown, rank 10, evolved, Master | fails 69 and 72 | passes 69 and 72, fails 75 (34% left) | 2 |
+
+Over a whole climb the simulator's player who equips what it finds (as a player tapping Equip on
+each reveal would) reaches the gates sooner but stalls at the same wall: seed 101, gate 60 at 124
+minutes (175 without), 66 at 179 (241), 69 at 217 (416), 72 at 542 (784), then stuck at 72 like
+its twin; seed 102, 60 at 163 (156), 69 at 300 (250), 72 at 562 (never in 1,000 minutes). At any
+moment it is at most one or two gates ahead.
+
+**The Fury and AUTO's rhythm** (four seeds of 120 s; level 561 and gate 60, full late loadouts):
+
+| | Boss fights | Farming (stage 71 / 59) |
+| --- | --- | --- |
+| Fury casts a minute, without / with | 15.0 / 13.6 (x0.91), 15.0 / 14.0 (x0.93); gate 60: 14.75 / 13.25 (x0.90) | 10.75 / 8.88 (x0.83), 10.75 / 9.13 (x0.85); gate 60: 9.38 / 8.00 (x0.85) |
+| Signature casts a minute | Void 5.0, Parade 3.75, Devourer 2.1, Judgement 2.0, Sovereign 1.0; Storm 6.4, Fracture 3.25, Legion 2.5 | Parade 2.9, Void 2.75, Devourer 1.4, Judgement 0.9, Sovereign 0.5; Storm 4.75, Fracture 2.1, Legion 1.5 |
+| Gap between casts | at least 1.25 s (the lockout), median 2.65 to 3.8 s | at least 1.25 s, median 3.5 to 4.5 s |
+| Two casts beginning at once | never | never |
+| Casts while another is still running | (cinematics excepted, by design) | 21 to 66% |
+
+In boss fights the Fury comes 7 to 10% less often, the price of the holds (with every hold set to
+zero, measured, it came exactly as often: 15.0 a minute); no hold begins while AUTO is about to cast
+a charged Fury. In farming it comes 15 to 17% less often although kills a minute are the same (63
+to 65): the warrior's own blows and arts find fewer foes standing, so his energy income falls 15%
+(1,104 to 938 a minute), and AUTO keeps a charged Fury for three foes at once, which a field the
+skills keep thin offers less often (charged and waiting 33% of the time without, 39% with). Their
+blows charge nothing and their kills charge as any kill, as asked; nothing degenerate was found, so
+nothing was capped. The simulation's step costs 10.7 µs without signature skills and 20.1 µs with
+four (Endless Legion's eleven soldiers included) on this machine, headless.
+
+**Pacing, measured** (the simulator's player with a `SigSim` on top: it finds skills by the rules,
+taps Equip on each reveal into the first empty slot, takes the first open evolution, and spends
+skill points on Apex first, then on the cheapest signature rank of what it has equipped).
+
+*The owner* (two seeds): the simulator's warrior at the end of its 1,000-minute climb (level 561,
+every Art at V, all Apex ranks, 202 to 213 points banked), raised to level 570 with a best-ever
+stage of 84, then ascended (Aether spent as the simulator does) and climbing again from stage 1. A
+day is four hours of AUTO (two real hours at 2x) then an eight-hour offline credit; times are minutes
+of play since the update.
+
+| | Seed 101 | Seed 102 |
+| --- | --- | --- |
+| Found on the first load (revealed one at a time) | Void Collapse, Legion Awakening, Abyssal Devourer | the same |
+| Shadow Storm (40-kill chain) | 2 min (stage 15) | 5 min (stage 40) |
+| Time Fracture (gate 87 won in 6.6 s) | 13 min | 13 min |
+| Fourth slot (five found) | 13 min | 13 min |
+| Death Parade (300 elites) | 31 min | 35 min |
+| Sovereign Awakening (stage 90 and three Masters) | day 3, 530 min | day 3, 581 min |
+| King's Judgement (the Crownless King ten times) | not in 7 days (6 kills: gates only, no Boss Hunts) | not in 7 days (8) |
+| Adept (Void, Storm, Devourer, Legion) | 37, 29, 48, 56 min | 31, 27, 52, 63 min |
+| Master | Devourer 359 (day 2), Void 434 (day 2), Storm 530 (day 3), Legion 886 min (day 4) | 355, 466, 581, 795 min |
+| Grandmaster | Devourer 1136, Void 1169 min (day 5); Sovereign 1646 (day 7) | Devourer 1059 (day 5); Void at 15,954 of 16,000 uses on day 7 |
+| Ranks | Void, Legion, Devourer to 5 at once (banked points), Storm 5 at 16 min; Void 10 on day 5, Storm 10 on day 7 | the same at once; Void 10 day 5, Storm day 6, Legion day 7 |
+| Points spent in the week (of 12,732 for everything) | 5,735 | 6,455 |
+| Best stage at the end of each day | 113, 116, 116, 116, 119, 119, 119 | 116, 119, 119, 119, 122, 122, 122 |
+
+His points come from levels past 150: about 2,700 the first day (the re-climb pays enormous XP:
+level 570 to 2,900), about 1,000 the second, falling to about 400 a day by the seventh. Mastery
+offline adds 250 to 1,900 uses a skill a night. Without signature skills (seed 101) the same week
+ended at 119 too (113 the first day); the forecast on his own day-3 and day-7 profiles, with his
+skills as equipped and with the slots emptied, says one gate (114 and 117 pass with them, fail
+without); his boss damage as equipped is x1.78 (day 3) and x1.80 (day 7), the Fury x0.94.
+
+*A new player* (1,000 minutes of play from a new save, no offline; seed 101 on the final code, seed
+102 before the last price change, which only touches ranks):
+
+| | Seed 101 | Seed 102 |
+| --- | --- | --- |
+| Void Collapse (stage-20 boss) | 27 min (stage 21) | 26 min (21) |
+| Legion Awakening (all 12 species) | 27 min (21) | 46 min (33) |
+| Shadow Storm (40-kill chain) | 46 min (36) | 16 min (12: an early burst) |
+| Death Parade (300 elites) | 57 min (41) | 59 min (40) |
+| King's Judgement / Abyssal Devourer | 218 min (60) / 218 (61) | 238 (60) / 239 (61) |
+| Fourth slot | 218 min | 238 min |
+| Time Fracture | not found: its fastest gate win was 38 s (it never hunts) | not found (37.8 s) |
+| Sovereign Awakening | not reached (the climb stalls at 69 to 72) | not reached |
+| Adept, 25 to 60 min after equipping | Void 51, Legion 59, Storm 61, Parade 244 (equipped at 218) | Storm 28, Void 47, Legion 79, Parade 261 |
+| Master | 608 to 731 min | 616 to 733 min |
+| Rank 5 | 603 to 988 min (points are scarce before level 150) | (cheaper prices: 203 to 323 min) |
+
+**What the renderer and the menus can rely on beyond the contract** (added, nothing renamed):
+`death.sig` (the skill whose blow or soldier killed it; on a Legion soldier's own end, that it was
+one); `SignatureLoadout.known`; `OfflineSummary.signatures`; the statuses above on `StatusKind`;
+`World.sig` (the runtime: `casts`, each with its live `head` for the Devourer), `World.sigStrike`,
+`World.bossEngagedAt`, `World.furyStrikeCount` (nine when crowned: `fury_step` indices run to 9);
+`signatures/geometry.ts` (`devourerCurve(pass.from, sig_cast.center, pass.to)` is the dragon's path,
+`orbitPoint` the Storm's orbit). Beats sent under another skill's cast: Death Parade's `blade` (Blade
+Parade), King's Judgement's `charge` (Legion Meteor: from the soldier to the impact), Time Fracture's
+`pull` and `implode` (Frozen Singularity), Abyssal Devourer's `impact` (each dive's landing).
+`targetIds` of `rise` and `charge` (Legion) are the soldiers, of `kneel` the army; the crowned Fury's
+`sig_synergy` has `castId` 0. The progression module adds `checkDiscoveries`, `discoveryMet`,
+`markRevealed`, `equipSignature`, `unequipSignature`, `firstEmptySlot`, `buySignatureRank`,
+`addMastery`, `masteryUses`, `masteryTierFor`, `chooseEvolution`, `recordSynergy` and
+`signatureDamageMult`; `combatPower` takes the signature multiplier as a third argument.
+
 ## Studio review, round 3 (the always-on loop)
 
 Three independent reviewers (combat, summoning and creative; mobile UX, hostile player and
