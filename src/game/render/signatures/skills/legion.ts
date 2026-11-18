@@ -134,6 +134,8 @@ export class LegionStage extends Stage {
   }
 
   private charge(e: SigBeatEvent): void {
+    // After the charge the soldiers are only fighters: the cast stops counting as a cinematic.
+    this.cinematic = false;
     this.chargeT = 0;
     this.lineT = 0;
     // The charge runs at the group (`to`); stand-ins spread round it, real soldiers are the fight's.
