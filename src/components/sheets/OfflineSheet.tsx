@@ -3,6 +3,7 @@
 import { Button } from "@/components/ui/Button";
 import { MomentGroup, MomentItem } from "@/components/ui/Moment";
 import { Row } from "@/components/ui/Row";
+import { MASTERY_NAME, SIGNATURES } from "@/game/data/signatures";
 import { Sheet } from "@/components/ui/Sheet";
 import { Stat } from "@/components/ui/Stat";
 import { Icon } from "@/components/ui/Icon";
@@ -72,6 +73,21 @@ export function OfflineSheet({ modal, open }: { modal: Extract<Modal, { kind: "o
                 <LootRow key={it.uid} item={it} />
               ))}
             </div>
+          )}
+          {r.signatures && r.signatures.length > 0 && (
+            <MomentItem>
+              <p className="t-label text-t2 mt-3" data-testid="offline-signatures">
+                {r.signatures.map((s, i) => (
+                  <span key={s.id}>
+                    {i > 0 && " · "}
+                    <span className={s.tier ? "text-gold" : undefined}>
+                      {SIGNATURES[s.id].name} +{fmt(s.uses)}
+                      {s.tier ? `, now ${MASTERY_NAME[s.tier]}` : ""}
+                    </span>
+                  </span>
+                ))}
+              </p>
+            </MomentItem>
           )}
           {r.fellBack && (
             <MomentItem>

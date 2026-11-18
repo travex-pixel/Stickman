@@ -820,7 +820,7 @@ export class GameController {
         case "sig_synergy":
           if (recordSynergy(p, e.synergy)) {
             const def = SYNERGIES.find((d) => d.id === e.synergy);
-            if (def) this.toast(`Combination discovered: ${def.name}`, "level", 2);
+            if (def) this.toast(`Combination discovered: ${def.name}`, "synergy", 2);
             dirty = true;
           }
           break;
@@ -983,6 +983,12 @@ export class GameController {
   /** Opens Skills on its Apex view. */
   openApex(): void {
     this.uiStore.update((u) => ({ ...u, skillsView: "apex" }));
+    this.setPanel("skills");
+  }
+
+  /** Open Skills on the signature skills' view (from the Power sheet). */
+  openSignatures(): void {
+    this.uiStore.update((u) => ({ ...u, skillsView: "signatures" }));
     this.setPanel("skills");
   }
 

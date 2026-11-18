@@ -1,3 +1,4 @@
+import { SIGNATURES } from "@/game/data/signatures";
 import { describe, expect, it } from "vitest";
 import { createDefaultProfile } from "@/game/progression/profile";
 import { emptySignatureState, type SignatureId } from "@/game/data/signatures";
@@ -37,7 +38,7 @@ describe("the plain words of a skill's timing", () => {
   it("names its cooldown and whether it holds the warrior, from the catalogue", () => {
     expect(activationText("shadow_storm")).toContain("every 10 s");
     expect(activationText("shadow_storm")).toContain("never stops the warrior");
-    expect(activationText("void_collapse")).toContain("holds the warrior 0.35 s");
+    expect(activationText("void_collapse")).toContain(`holds the warrior ${secs(SIGNATURES.void_collapse.castTime)}`);
     expect(activationText("abyssal_devourer")).toContain("cinematic");
   });
 

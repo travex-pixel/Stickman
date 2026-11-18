@@ -17,10 +17,12 @@ import { canAttemptTrial, rankLetter } from "@/game/progression/ranks";
 import { STAT_LABEL } from "@/game/data/equipment";
 import { fmt } from "@/lib/format";
 import { APEX_NAME, apexOpen, apexRanks, apexVisible } from "@/game/progression/apex";
+import { equippedSignatures, isDiscovered, signatureRank, signatureState, signaturesVisible } from "@/game/progression/signatures";
+import { SIGNATURES, type SignatureId } from "@/game/data/signatures";
 import { APEX_SKILLS, doubleChance, tripleChance } from "@/game/data/apex";
 import { cn } from "@/lib/cn";
 
-type Go = "hero" | "gear" | "skills" | "summons" | "rift" | "ascend" | "perks" | "trial" | "apex" | null;
+type Go = "hero" | "gear" | "skills" | "summons" | "rift" | "ascend" | "perks" | "trial" | "apex" | "signatures" | null;
 
 const SOURCE: Record<PowerSource, { label: string; icon: IconName; go: Go }> = {
   statLevels: { label: "Stat levels", icon: "level", go: "hero" },
@@ -37,6 +39,7 @@ const SOURCE: Record<PowerSource, { label: string; icon: IconName; go: Go }> = {
   aether: { label: "Aether", icon: "rift", go: "ascend" },
   tree: { label: "Aether tree", icon: "rift", go: "ascend" },
   apex: { label: "Apex", icon: "bolt", go: "apex" },
+  signatures: { label: "Signature skills", icon: "sigil", go: "signatures" },
 };
 
 const SHORT: Record<UpgradeableStat, string> = { attack: "Attack", maxHp: "Health", defense: "Defence", attackSpeed: "Attack speed", critChance: "Crit rate", critDamage: "Crit damage" };
@@ -103,6 +106,11 @@ export function sourceDetail(p: Profile, s: PowerSource): string {
       const blows = 1 + doubleChance(r) + doubleChance(r) * tripleChance(r);
       return `${owned.map((id) => `${APEX_NAME[id].split(" ")[0]} ${r[id]}`).join(", ")}: a swing strikes ${blows.toFixed(blows % 1 ? 1 : 0)} times`;
     }
+    case "signatures": {
+      const on = equippedSignatures(p).filter((x): x is SignatureId => x !== null);
+      if (!on.length) return signatureState(p).discovered.length ? "Equip a found skill in Skills, Signatures" : "Found by deeds in battle, from the stage-20 boss";
+      return `${on.map((id) => `${SIGNATURES[id].name} ${signatureRank(p, id)}`).join(", ")}${isDiscovered(p, "sovereign_awakening") ? ", crowned" : ""}`;
+    }
   }
 }
 
@@ -123,12 +131,13 @@ export function PowerSheet({ open }: { open: boolean }) {
   const rows = [...b.rows].sort((x, y) => y.power - x.power);
   const live = rows.filter((r) => r.share >= 0.0005);
   // Apex is listed once it shows in Skills (open, or its locked tab): before, it is not news.
-  const idle = rows.filter((r) => r.share < 0.0005 && (r.source !== "apex" || apexVisible(profile)));
+  const idle = rows.filter((r) => r.share < 0.0005 && (r.source !== "apex" || apexVisible(profile)) && (r.source !== "signatures" || signaturesVisible(profile)));
   const go = (to: Go) => {
     if (!to) return;
     c.closeModal();
     if (to === "ascend") c.openAscension();
     else if (to === "apex") c.openApex();
+    else if (to === "signatures") c.openSignatures();
     else if (to === "perks") {
       if (profile.player.pendingPerkChoices > 0) c.openPerkChoice();
     } else if (to === "trial") {

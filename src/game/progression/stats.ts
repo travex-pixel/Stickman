@@ -302,7 +302,7 @@ export function weaponPathBonuses(path: WeaponPath): Partial<Record<StatKey, num
  * Where the warrior's strength comes from: each one can be left out of `computePlayerStats`, which
  * is how the Power sheet measures what each gives (see `powerBreakdown`).
  */
-export const POWER_SOURCES = ["statLevels", "level", "gear", "bag", "sets", "skills", "perks", "weaponPath", "codex", "techniques", "rank", "aether", "tree", "apex"] as const;
+export const POWER_SOURCES = ["statLevels", "level", "gear", "bag", "sets", "skills", "perks", "weaponPath", "codex", "techniques", "rank", "aether", "tree", "apex", "signatures"] as const;
 export type PowerSource = (typeof POWER_SOURCES)[number];
 const NONE: ReadonlySet<PowerSource> = new Set();
 
@@ -388,11 +388,12 @@ export function combatPower(stats: CombatStats, apex?: ApexRanks, signatures = 1
 
 /**
  * The warrior's Power (the Hero panel's number), with any source left out; Apex counts unless left
- * out. Signature skills in their slots count by what they add to boss damage (signatureDamageMult);
+ * out. Signature skills in their slots count by what they add to boss damage (signatureDamageMult),
+ * as their own row of the breakdown ("signatures");
  * they have no row of their own in the breakdown, and leave only with every source (the base).
  */
 export function profilePower(profile: Profile, without: ReadonlySet<PowerSource> = NONE): number {
-  const sig = without.size >= POWER_SOURCES.length ? 1 : signatureDamageMult(profile);
+  const sig = without.has("signatures") ? 1 : signatureDamageMult(profile);
   return combatPower(computePlayerStats(profile, without), without.has("apex") ? undefined : { ...noApex(), ...profile.player.apex }, sig);
 }
 
