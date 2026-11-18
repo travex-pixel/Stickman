@@ -45,6 +45,8 @@ const ROLE_ACCENT = [0xd9a35a, 0x8fe0c4, 0xb59cf0, 0x9fb4d0];
 export class LegionStage extends Stage {
   private readonly soldiers: Soldier[] = [];
   private darkT = -1;
+  /** The night holds for the darken beat's time (the soldiers fight on after it, in daylight). */
+  private darkD = 1.3;
   private chargeT = -1;
   private lineT = -1;
 
@@ -72,6 +74,7 @@ export class LegionStage extends Stage {
     switch (e.beat) {
       case "darken":
         this.darkT = 0;
+        this.darkD = Math.max(0.5, e.duration || 1.3);
         break;
       case "rise": {
         // One beat names every soldier raised (real temporary summons where foes fell). Without any
@@ -167,7 +170,8 @@ export class LegionStage extends Stage {
 
   update(dt: number, real: number): void {
     const k = this.kit;
-    if (this.darkT >= 0 && !this.ended) this.host.darken(0x0b0a12, this.compact ? 0.3 : 0.5);
+    if (this.darkT >= 0) this.darkT += dt;
+    if (this.darkT >= 0 && this.darkT < this.darkD && !this.ended) this.host.darken(0x0b0a12, this.compact ? 0.3 : 0.5);
     if (this.chargeT >= 0) this.chargeT += dt;
     if (this.lineT >= 0) this.lineT += dt;
     const sinking = this.ended && this.evo !== "veteran_souls";
