@@ -51,7 +51,30 @@ export type SfxName =
   | "prism"
   | "storm_bolt"
   | "apex_rank"
-  | "apex_max";
+  | "apex_max"
+  // Signature skills: one voice per moment that matters, the frequent ones (a clone's cut, a blade,
+  // a bite, a signature hit) struck at a fixed pitch like the rest of the fight.
+  | "sig_void_form"
+  | "sig_void_implode"
+  | "sig_portal"
+  | "sig_roar"
+  | "sig_bite"
+  | "sig_vanish"
+  | "sig_clone"
+  | "sig_finisher"
+  | "sig_hush"
+  | "sig_meteor"
+  | "sig_judgement"
+  | "sig_legion"
+  | "sig_charge"
+  | "sig_clock"
+  | "sig_freeze"
+  | "sig_shatter"
+  | "sig_blades"
+  | "sig_blade"
+  | "sig_crown"
+  | "sig_synergy"
+  | "sig_hit";
 
 const SAMPLE_RATE = 22050;
 
@@ -228,7 +251,7 @@ const D7 = 2349.32;
 const A7 = 3520;
 
 /** Sounds that can play more than about once a second in a fight: no pitch glides, small rate changes. */
-export const FREQUENT_SFX: readonly SfxName[] = ["swing_1", "swing_2", "swing_3", "hit_light", "hit_heavy", "army_hit", "crit", "enemy_death", "block", "fury_strike", "echo_tick", "echo_tick_3", "prism", "storm_bolt"];
+export const FREQUENT_SFX: readonly SfxName[] = ["swing_1", "swing_2", "swing_3", "hit_light", "hit_heavy", "army_hit", "crit", "enemy_death", "block", "fury_strike", "echo_tick", "echo_tick_3", "prism", "storm_bolt", "sig_bite", "sig_clone", "sig_blade", "sig_hit"];
 
 const RECIPES: Record<SfxName, Voice[] | Recipe> = {
   // The warrior's three swings: filtered-noise whooshes. The forehand falls, the backhand rises,
@@ -557,6 +580,215 @@ const RECIPES: Record<SfxName, Voice[] | Recipe> = {
       ...struck(F5, [[1, 0.15, 0.4]], { delay: 0.09 }),
       ...struck(A6 / 2, [[1, 0.14, 0.4], [2.76, 0.03, 0.1]], { delay: 0.12 }),
       N({ duration: 0.5, attack: 0.05, tau: 0.18, gain: 0.12, delay: 0.1, filter: { type: "bp", hz: 6000, q: 2.5 } }),
+    ],
+  },
+  // ---------------------------------------------------------------- signature skills
+  // Void Collapse forms: air drawn in (noise rising through a low-pass), a sub swell under it.
+  sig_void_form: {
+    peak: 0.7,
+    voices: [
+      N({ duration: 0.9, attack: 0.6, tau: 0.25, gain: 0.9, filter: { type: "lp", hz: 220, hzEnd: 1400, q: 1.2 } }),
+      N({ duration: 0.8, attack: 0.55, tau: 0.2, gain: 0.25, filter: { type: "bp", hz: 2600, hzEnd: 4200, q: 3 } }),
+      S(D2, { duration: 1.0, attack: 0.7, tau: 0.3, gain: 0.6 }),
+      S(D2 * 1.5, { duration: 1.0, attack: 0.7, tau: 0.3, gain: 0.18 }),
+    ],
+  },
+  // It implodes: a sucked-in hiss cut dead, a hard crack, a sub drop and a rolling tail.
+  sig_void_implode: {
+    peak: 0.95,
+    voices: [
+      N({ duration: 0.012, attack: 0.0005, tau: 0.003, gain: 1, filter: { type: "hp", hz: 1800 } }),
+      { type: "sine", freqStart: 110, freqEnd: 34, glide: 0.08, duration: 0.9, attack: 0.002, tau: 0.25, gain: 1 },
+      N({ duration: 0.9, attack: 0.004, tau: 0.25, gain: 0.8, filter: { type: "lp", hz: 260 } }),
+      N({ duration: 0.25, attack: 0.002, tau: 0.06, gain: 0.45, filter: { type: "bp", hz: 1400, q: 0.8 } }),
+      ...struck(D5, [[1, 0.08, 0.25], [2.76, 0.03, 0.1]], { delay: 0.01 }),
+    ],
+  },
+  // The portal tears: ragged band-passed noise in bursts over a low drone.
+  sig_portal: {
+    peak: 0.8,
+    voices: [
+      ...[0, 0.06, 0.13, 0.19, 0.27, 0.34].map((d, i) => N({ duration: 0.09, attack: 0.004, tau: 0.03, gain: 0.7 - i * 0.06, delay: d, filter: { type: "bp", hz: 900 + i * 260, q: 1.6 } })),
+      S(D2, { duration: 0.8, attack: 0.15, tau: 0.3, gain: 0.5 }),
+      N({ duration: 0.8, attack: 0.2, tau: 0.25, gain: 0.4, filter: { type: "lp", hz: 300 } }),
+    ],
+  },
+  // The dragon: a growl (two detuned saws beating), a throat of band-passed noise opening and closing.
+  sig_roar: {
+    peak: 0.85,
+    voices: [
+      { type: "saw", freqStart: 74, freqEnd: 62, duration: 1.3, attack: 0.12, decay: 0.55, gain: 0.32, filter: { type: "lp", hz: 900, hzEnd: 400, q: 2 } },
+      { type: "saw", freqStart: 79, freqEnd: 66, duration: 1.3, attack: 0.14, decay: 0.55, gain: 0.3, filter: { type: "lp", hz: 900, hzEnd: 400, q: 2 } },
+      N({ duration: 1.25, attack: 0.1, decay: 0.6, gain: 0.7, filter: { type: "bp", hz: 520, hzEnd: 300, q: 2.4 } }),
+      N({ duration: 1.1, attack: 0.08, decay: 0.6, gain: 0.35, filter: { type: "bp", hz: 1200, hzEnd: 700, q: 3 } }),
+      S(D2 / 2 * 1.0, { duration: 1.2, attack: 0.1, tau: 0.5, gain: 0.4 }),
+    ],
+  },
+  // A bite: jaws snapping (three dry snaps) on a low thump. Fixed pitch.
+  sig_bite: {
+    peak: 0.6,
+    voices: [
+      N({ duration: 0.012, attack: 0.0004, tau: 0.003, gain: 1, filter: { type: "hp", hz: 2400 } }),
+      N({ duration: 0.012, attack: 0.0004, tau: 0.003, gain: 0.7, delay: 0.018, filter: { type: "hp", hz: 2000 } }),
+      N({ duration: 0.05, attack: 0.001, tau: 0.012, gain: 0.6, delay: 0.03, filter: { type: "bp", hz: 900, q: 1 } }),
+      { type: "sine", freqStart: 120, freqEnd: 80, glide: 0.012, duration: 0.14, attack: 0.001, tau: 0.04, gain: 0.7 },
+    ],
+  },
+  // Death Parade: he vanishes (a snap of air, a breath drawn away).
+  sig_vanish: {
+    peak: 0.6,
+    voices: [
+      N({ duration: 0.014, attack: 0.0004, tau: 0.004, gain: 0.9, filter: { type: "hp", hz: 3000 } }),
+      N({ duration: 0.35, attack: 0.01, tau: 0.08, gain: 0.7, filter: { type: "bp", hz: 2600, hzEnd: 900, q: 1.1 } }),
+      N({ duration: 0.3, attack: 0.02, tau: 0.08, gain: 0.3, filter: { type: "lp", hz: 500 } }),
+    ],
+  },
+  // A clone's cut: a thin metallic slice with a struck ring at a fixed pitch.
+  sig_clone: {
+    peak: 0.55,
+    voices: [
+      N({ duration: 0.08, attack: 0.002, tau: 0.02, gain: 0.9, filter: { type: "bp", hz: 5200, q: 1.4 } }),
+      N({ duration: 0.04, attack: 0.001, tau: 0.01, gain: 0.5, filter: { type: "lp", hz: 900 } }),
+      ...struck(A5, [[1, 0.1, 0.08], [2.76, 0.04, 0.03]], { delay: 0.004 }),
+    ],
+  },
+  // The finisher: a long heavy cut through the air, a ring (A5 over D6), a low thump.
+  sig_finisher: {
+    peak: 0.95,
+    voices: [
+      N({ duration: 0.3, attack: 0.03, tau: 0.08, gain: 0.9, filter: { type: "bp", hz: 3000, hzEnd: 1200, q: 1 } }),
+      N({ duration: 0.02, attack: 0.0005, tau: 0.004, gain: 1, delay: 0.12, filter: { type: "hp", hz: 2500 } }),
+      { type: "sine", freqStart: 140, freqEnd: 60, glide: 0.03, duration: 0.5, attack: 0.002, tau: 0.14, gain: 0.9, delay: 0.12 },
+      ...struck(A5, [[1, 0.18, 0.35], [2.76, 0.05, 0.12]], { delay: 0.13 }),
+      ...struck(D6, [[1, 0.12, 0.3]], { delay: 0.14 }),
+    ],
+  },
+  // King's Judgement: the hush, a low bell struck far away.
+  sig_hush: {
+    peak: 0.6,
+    voices: [
+      ...struck(D2 * 2, [[1, 0.5, 0.9], [2, 0.2, 0.6], [3.01, 0.12, 0.4], [4.2, 0.05, 0.25]]),
+      N({ duration: 0.9, attack: 0.2, tau: 0.3, gain: 0.12, filter: { type: "bp", hz: 1800, q: 2 } }),
+    ],
+  },
+  // The meteor falls: a whistle dropping through the air over a gathering rumble (it plays once a cast).
+  sig_meteor: {
+    peak: 0.8,
+    voices: [
+      { type: "sine", freqStart: 1500, freqEnd: 320, duration: 0.6, attack: 0.05, decay: 0.2, gain: 0.22 },
+      N({ duration: 0.6, attack: 0.4, decay: 0.15, gain: 0.8, filter: { type: "lp", hz: 180, hzEnd: 420 } }),
+      N({ duration: 0.6, attack: 0.3, decay: 0.2, gain: 0.3, filter: { type: "bp", hz: 2000, hzEnd: 700, q: 1.5 } }),
+    ],
+  },
+  // The impact: the biggest sound of the fight. A crack, a sub drop, a struck D minor chord deep in it, a long roll.
+  sig_judgement: {
+    peak: 0.98,
+    voices: [
+      N({ duration: 0.04, attack: 0.0004, tau: 0.008, gain: 1, filter: { type: "hp", hz: 1200 } }),
+      { type: "sine", freqStart: 90, freqEnd: 30, glide: 0.1, duration: 1.6, attack: 0.002, tau: 0.45, gain: 1 },
+      N({ duration: 1.8, attack: 0.01, tau: 0.5, gain: 1, filter: { type: "lp", hz: 200 } }),
+      N({ duration: 0.6, attack: 0.005, tau: 0.15, gain: 0.5, filter: { type: "bp", hz: 900, q: 0.8 } }),
+      ...struck(D2 * 2, [[1, 0.25, 0.8], [2, 0.1, 0.5]], { delay: 0.01 }),
+      ...struck(D2 * 3, [[1, 0.15, 0.7]], { delay: 0.02 }),
+      ...struck(D4, [[1, 0.08, 0.6]], { delay: 0.03 }),
+    ],
+  },
+  // Legion Awakening: the earth opens (a low roll), and a rising chord of low voices.
+  sig_legion: {
+    peak: 0.85,
+    voices: [
+      ...drone(1.6, D2, D2 * 1.06),
+      { type: "triangle", freqStart: A3 / 2, freqEnd: A3 / 2, duration: 1.6, attack: 0.7, decay: 0.4, gain: 0.12 },
+      N({ duration: 1.4, attack: 0.3, tau: 0.5, gain: 0.5, filter: { type: "lp", hz: 160 } }),
+    ],
+  },
+  // The charge: three war-drum strokes and the rush of feet.
+  sig_charge: {
+    peak: 0.9,
+    voices: [
+      ...[0, 0.16, 0.32].map((d) => ({ type: "sine" as const, freqStart: 110, freqEnd: 58, glide: 0.04, duration: 0.35, attack: 0.002, tau: 0.1, gain: 0.8, delay: d })),
+      ...[0, 0.16, 0.32].map((d) => N({ duration: 0.12, attack: 0.002, tau: 0.03, gain: 0.4, delay: d, filter: { type: "lp", hz: 700 } })),
+      N({ duration: 0.8, attack: 0.25, tau: 0.25, gain: 0.45, delay: 0.3, filter: { type: "bp", hz: 600, q: 0.7 } }),
+    ],
+  },
+  // Time Fracture: the clock (a tick and a tock, struck bell partials at fixed pitches).
+  sig_clock: {
+    peak: 0.6,
+    voices: [
+      N({ duration: 0.01, attack: 0.0004, tau: 0.002, gain: 0.9, filter: { type: "hp", hz: 4000 } }),
+      ...struck(A6, [[1, 0.2, 0.25], [2.76, 0.06, 0.1]], { delay: 0.002 }),
+      N({ duration: 0.01, attack: 0.0004, tau: 0.002, gain: 0.8, delay: 0.24, filter: { type: "hp", hz: 3000 } }),
+      ...struck(E5, [[1, 0.2, 0.3], [2.76, 0.06, 0.12]], { delay: 0.242 }),
+    ],
+  },
+  // Time stops: glass held ringing (high struck partials, long), a fine shimmer.
+  sig_freeze: {
+    peak: 0.7,
+    voices: [
+      ...struck(D7, [[1, 0.14, 0.9], [1.5, 0.08, 0.7]]),
+      ...struck(A6, [[1, 0.12, 1.0]], { delay: 0.02 }),
+      N({ duration: 1.2, attack: 0.1, tau: 0.4, gain: 0.15, filter: { type: "bp", hz: 7500, q: 4 } }),
+      S(D2, { duration: 0.6, attack: 0.01, tau: 0.2, gain: 0.35 }),
+    ],
+  },
+  // Time resumes: glass shattering (many tiny cracks), a ripple of low air.
+  sig_shatter: {
+    peak: 0.9,
+    voices: [
+      ...[0, 0.012, 0.025, 0.04, 0.05, 0.07, 0.09, 0.12, 0.15].map((d, i) => N({ duration: 0.03, attack: 0.0005, tau: 0.008, gain: 0.8 - i * 0.05, delay: d, filter: { type: "hp", hz: 3000 + (i % 3) * 1500 } })),
+      ...struck(D7, [[1, 0.1, 0.3], [2.76, 0.03, 0.1]], { delay: 0.01 }),
+      ...struck(B5 * 2, [[1, 0.06, 0.25]], { delay: 0.05 }),
+      { type: "sine", freqStart: 100, freqEnd: 50, glide: 0.06, duration: 0.6, attack: 0.002, tau: 0.18, gain: 0.7 },
+      N({ duration: 0.6, attack: 0.01, tau: 0.18, gain: 0.4, filter: { type: "lp", hz: 400 } }),
+    ],
+  },
+  // Shadow Storm gathers: blades whirring up (band-passed noise in quick flutters).
+  sig_blades: {
+    peak: 0.6,
+    voices: [
+      ...[0, 0.07, 0.13, 0.19, 0.24, 0.29, 0.34, 0.39, 0.44, 0.49, 0.54, 0.6].map((d, i) => N({ duration: 0.06, attack: 0.01, tau: 0.015, gain: 0.3 + i * 0.04, delay: d, filter: { type: "bp", hz: 2400 + i * 120, q: 2.2 } })),
+      N({ duration: 0.8, attack: 0.4, tau: 0.2, gain: 0.25, filter: { type: "lp", hz: 500 } }),
+    ],
+  },
+  // A blade loosed: a quick zip and a tick on landing. Fixed pitch.
+  sig_blade: {
+    peak: 0.5,
+    voices: [
+      N({ duration: 0.09, attack: 0.02, tau: 0.02, gain: 0.9, filter: { type: "bp", hz: 3800, q: 1.8 } }),
+      N({ duration: 0.012, attack: 0.0005, tau: 0.003, gain: 0.6, delay: 0.08, filter: { type: "hp", hz: 3000 } }),
+    ],
+  },
+  // Sovereign Awakening: the crown. A D minor chord of soft voices swelling, a bell on top.
+  sig_crown: {
+    peak: 0.85,
+    voices: [
+      { type: "triangle", freqStart: D4 / 2, freqEnd: D4 / 2, duration: 1.8, attack: 0.5, decay: 0.45, gain: 0.25 },
+      { type: "triangle", freqStart: F5 / 2, freqEnd: F5 / 2, duration: 1.8, attack: 0.6, decay: 0.45, gain: 0.2 },
+      { type: "triangle", freqStart: A4, freqEnd: A4, duration: 1.8, attack: 0.7, decay: 0.45, gain: 0.16 },
+      { type: "saw", freqStart: D2, freqEnd: D2, duration: 1.8, attack: 0.5, decay: 0.45, gain: 0.05, filter: { type: "lp", hz: 400 } },
+      ...struck(D5, [[1, 0.2, 0.7], [2, 0.08, 0.4], [3, 0.04, 0.2]], { delay: 0.9 }),
+      ...struck(A5, [[1, 0.14, 0.6]], { delay: 0.95 }),
+    ],
+  },
+  // A combination: two struck chords close together (D5 and A5, then F5 and D6), a shimmer.
+  sig_synergy: {
+    peak: 0.8,
+    voices: [
+      ...struck(D5, [[1, 0.22, 0.35], [2, 0.06, 0.2]]),
+      ...struck(A5, [[1, 0.18, 0.35]], { delay: 0.01 }),
+      ...struck(F5, [[1, 0.2, 0.45], [2, 0.05, 0.2]], { delay: 0.12 }),
+      ...struck(D6, [[1, 0.16, 0.45]], { delay: 0.13 }),
+      N({ duration: 0.5, attack: 0.05, tau: 0.15, gain: 0.12, delay: 0.1, filter: { type: "bp", hz: 6500, q: 3 } }),
+    ],
+  },
+  // A signature hit: a soft thud with a glassy tick, quiet under the moment that caused it.
+  sig_hit: {
+    peak: 0.5,
+    voices: [
+      N({ duration: 0.012, attack: 0.0005, tau: 0.003, gain: 0.7, filter: { type: "hp", hz: 3000 } }),
+      N({ duration: 0.08, attack: 0.001, tau: 0.02, gain: 0.7, filter: { type: "lp", hz: 800 } }),
+      { type: "sine", freqStart: 130, freqEnd: 90, glide: 0.012, duration: 0.12, attack: 0.001, tau: 0.035, gain: 0.6 },
+      ...struck(D6, [[1, 0.05, 0.05]], { delay: 0.002 }),
     ],
   },
   // A boss lands: a deep thud with a dust tail.

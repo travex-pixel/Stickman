@@ -1,5 +1,6 @@
 import type { GameEvent } from "../engine/events";
 import type { AbilityId } from "../data/ids";
+import type { SignatureBeat, SynergyId } from "../data/signatures";
 import type { SfxName } from "./synth";
 import type { SfxCategory } from "./mix";
 
@@ -102,6 +103,14 @@ export class SoundCues {
     let afterBolt = false;
     for (const e of events) {
       switch (e.type) {
+        case "sig_beat": {
+          const c = sigBeatCue(e.beat);
+          if (c) out.push(c);
+          break;
+        }
+        case "sig_synergy":
+          out.push(sigSynergyCue(e.synergy));
+          break;
         case "attack_swing":
           if (e.kind === "player" && e.id === playerId) {
             if (e.cut) out.push({ name: "swing_2", category: "swing", volume: 0.1, rate: this.jitter(0.03), minInterval: 110, voice: "swing" });
@@ -112,6 +121,12 @@ export class SoundCues {
           }
           break;
         case "hit":
+          if (e.sig && e.faction === "enemy") {
+            // A signature skill's blows sit under its moments: a quiet tick, budgeted, never the
+            // warrior's hit on top (a dragon's pass would otherwise be a wall of impacts).
+            out.push({ name: "sig_hit", category: "sig_hit", volume: e.heavy ? 0.32 : 0.24, rate: this.jitter(0.02), minInterval: 60, voice: "sig_hit" });
+            break;
+          }
           if (e.faction === "enemy" && e.sourceId !== playerId) {
             out.push({ name: "army_hit", category: "army", volume: e.crit ? 0.2 : 0.15, rate: this.jitter(0.03), minInterval: 130 });
           } else if (e.faction === "enemy") {
@@ -223,4 +238,47 @@ export class SoundCues {
     const fig = FURY_FIGURES[this.figure] as readonly number[];
     return { name: "fury_strike", category: "fury", volume: 0.42 + 0.03 * n, rate: semitoneRate(fig[n - 1] ?? 0), minInterval: 60 };
   }
+}
+
+/** A signature beat's sound (null: the moment rides on another's). */
+const SIG_BEAT: Partial<Record<SignatureBeat, Cue>> = {
+  form: { name: "sig_void_form", category: "sig", volume: 0.6, rate: 1, minInterval: 300 },
+  implode: { name: "sig_void_implode", category: "sig", volume: 0.85, rate: 1, minInterval: 200 },
+  horizon_trap: { name: "sig_freeze", category: "sig", volume: 0.35, rate: 0.75, minInterval: 400, voice: "horizon" },
+  supernova_burst: { name: "sig_hit", category: "sig_hit", volume: 0.45, rate: 1.25, minInterval: 60, voice: "nova" },
+  portal: { name: "sig_portal", category: "sig", volume: 0.7, rate: 1, minInterval: 300 },
+  pass: { name: "sig_roar", category: "sig", volume: 0.8, rate: 1, minInterval: 400 },
+  second_pass: { name: "sig_roar", category: "sig", volume: 0.8, rate: 0.88, minInterval: 400 },
+  feed: { name: "sig_bite", category: "sig_hit", volume: 0.4, rate: 0.85, minInterval: 80, voice: "feed" },
+  vanish: { name: "sig_vanish", category: "sig", volume: 0.6, rate: 1, minInterval: 200 },
+  clone: { name: "sig_clone", category: "sig_hit", volume: 0.42, rate: 1, minInterval: 60, voice: "clone" },
+  execute: { name: "sig_finisher", category: "sig", volume: 0.45, rate: 1.3, minInterval: 150, voice: "execute" },
+  finisher: { name: "sig_finisher", category: "sig", volume: 0.9, rate: 1, minInterval: 200 },
+  hush: { name: "sig_hush", category: "sig", volume: 0.7, rate: 1, minInterval: 400 },
+  meteor: { name: "sig_meteor", category: "sig", volume: 0.7, rate: 1, minInterval: 300 },
+  impact: { name: "sig_judgement", category: "sig", volume: 1, rate: 1, minInterval: 300 },
+  fallen_star: { name: "sig_void_implode", category: "sig", volume: 0.4, rate: 1.5, minInterval: 120, voice: "star" },
+  second_shockwave: { name: "boss_impact", category: "sig", volume: 0.7, rate: 0.85, minInterval: 300 },
+  darken: { name: "sig_legion", category: "sig", volume: 0.75, rate: 1, minInterval: 400 },
+  charge: { name: "sig_charge", category: "sig", volume: 0.8, rate: 1, minInterval: 300 },
+  clock: { name: "sig_clock", category: "sig", volume: 0.6, rate: 1, minInterval: 300 },
+  freeze: { name: "sig_freeze", category: "sig", volume: 0.65, rate: 1, minInterval: 300 },
+  resume: { name: "sig_shatter", category: "sig", volume: 0.85, rate: 1, minInterval: 300 },
+  delayed: { name: "sig_hit", category: "sig_hit", volume: 0.42, rate: 1.12, minInterval: 50, voice: "delayed" },
+  gather: { name: "sig_blades", category: "sig", volume: 0.55, rate: 1, minInterval: 300 },
+  blade: { name: "sig_blade", category: "sig_hit", volume: 0.36, rate: 1, minInterval: 45, voice: "blade" },
+  tempest: { name: "sig_blades", category: "sig", volume: 0.6, rate: 0.8, minInterval: 300, voice: "tempest" },
+  crown: { name: "sig_crown", category: "sig", volume: 0.85, rate: 1, minInterval: 400 },
+  sovereign_end: { name: "apex_rank", category: "sig", volume: 0.35, rate: semitoneRate(-5), minInterval: 400, voice: "sov_end" },
+};
+
+export function sigBeatCue(beat: SignatureBeat): Cue | null {
+  return SIG_BEAT[beat] ?? null;
+}
+
+/** A combination: its stinger, a step of D minor apart per combination so each has its own colour. */
+const SYNERGY_STEP: Record<SynergyId, number> = { gravity_feast: 0, hunters_parade: 3, legion_meteor: -2, frozen_singularity: 5, blade_parade: 2, crowned_ultimate: 7 };
+
+export function sigSynergyCue(s: SynergyId): Cue {
+  return { name: "sig_synergy", category: "event", volume: 0.6, rate: semitoneRate(SYNERGY_STEP[s]), minInterval: 200, voice: "synergy" };
 }

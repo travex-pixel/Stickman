@@ -32,6 +32,15 @@ import { FuryGhosts } from "./FuryGhosts";
 import { AriseCinematic, FailedBind, REDUCED_FADE, REVEAL_LENGTH, type AriseHost, type RevealStaging } from "./cinematics/arise";
 import { FlashBudget } from "./flashBudget";
 import { ApexDirector, type ApexHitFields, type ApexHost, type ApexPlayerView, type ApexSkill } from "./apex/ApexDirector";
+import { SignatureDirector, clearSignatureShapes } from "./signatures/SignatureDirector";
+import type { SigBody, SigHost } from "./signatures/host";
+import { Sandbox, type PreviewOptions, type RevealTiming } from "./signatures/Sandbox";
+import { SigDriver, buildScript, type SigActor } from "./signatures/driver";
+import { destroySigTextures } from "./signatures/textures";
+import { clearJudgementCache } from "./signatures/skills/judgement";
+import { clearSovereignCache } from "./signatures/skills/sovereign";
+import type { EvolutionId, MasteryTier, SignatureId, SynergyId, VisualQuality } from "../data/signatures";
+import { DEATH_KNEEL } from "./rigs/Rig";
 
 interface EntityView extends ImpactState {
   id: number;
@@ -94,7 +103,7 @@ interface TelegraphMark {
 }
 
 /** Named parts of a frame, timed under `?perf=1` (see scripts/perf.mjs). */
-const SECTION_NAMES = ["background", "entities", "camera", "groundFx", "fx", "trails", "particles", "overlays", "apex"] as const;
+const SECTION_NAMES = ["background", "entities", "camera", "groundFx", "fx", "trails", "particles", "overlays", "apex", "signatures"] as const;
 /** True when the combatant carries a status of this kind (no closure, no allocation). */
 function hasStatus(e: Combatant, kind: string): boolean {
   const s = e.statuses;
@@ -234,6 +243,16 @@ export class BattleRenderer implements ImpactHost {
   readonly flashes = new FlashBudget();
   /** The Apex skills' presentation (echo blows, prismatic hits, Stormcrown, the warrior's form). */
   apex!: ApexDirector;
+  /** The signature skills' presentation (src/game/render/signatures/), and the preview sandbox. */
+  sig!: SignatureDirector;
+  private sandbox: Sandbox | null = null;
+  private readonly sigGround = new Container();
+  private readonly sigFx = new Container();
+  /** Synthetic casts on the live fight (development, `?debug=1`): the same events, dealing nothing. */
+  readonly sigDriver = new SigDriver((ev) => this.sigSynthetic(ev));
+  private lastWorldTime = -1;
+  private quality: VisualQuality = "full";
+  private readonly sigBody: SigBody = { x: 0, y: 0, chestY: 0, height: 0, scale: 1, wx: 0, wy: 0, facing: 1, boss: false, ally: false, player: false, rig: null };
   private readonly apexView: ApexPlayerView = { rig: null as unknown as Rig, drawX: 0, drawY: 0, scale: 1, zIndex: 0, facing: 1, state: "idle", swings: 0, path: "none", seed: 0, dead: false };
   private flashAlpha = 0;
   private flashTime = 0;
@@ -350,6 +369,16 @@ export class BattleRenderer implements ImpactHost {
     this.numbers = new DamageNumbers(32);
     this.apex = new ApexDirector(this.apexHost, this.entityLayer);
     this.apex.prism.reduced = this.reduced;
+    this.sig = new SignatureDirector(this.sigHost);
+    this.sig.setQuality(this.quality);
+    this.sig.setReduced(this.reduced);
+    this.sandbox = new Sandbox(
+      () => playerSpec(this.world?.loadout.weaponPath ?? "none"),
+      (c, a, d) => this.flash(c, a, d),
+      (ev) => this.controller.signatureSound(ev),
+    );
+    this.sandbox.setReduced(this.reduced);
+    this.sandbox.setQuality(this.quality);
     app.stage.addChild(this.root);
     this.root.addChild(this.cameraLayer);
     // A render group: moving the camera is one transform on the GPU side, not a re-walk of every
@@ -362,14 +391,14 @@ export class BattleRenderer implements ImpactHost {
       this.decalLayer.addChild(s);
       this.decalPool.push({ sprite: s, rx: 0, ry: 0, life: 0, total: 1, live: false });
     }
-    this.cameraLayer.addChild(this.decalLayer, this.groundFx, this.entityLayer, this.projectileLayer, this.orbLayer, this.trails.graphics, this.fxGraphics, this.apex.fx, this.particles.container, this.numbers.container, this.apex.prism.container, this.cinematicLayer);
+    this.cameraLayer.addChild(this.decalLayer, this.groundFx, this.sigGround, this.entityLayer, this.projectileLayer, this.orbLayer, this.trails.graphics, this.fxGraphics, this.apex.fx, this.sigFx, this.particles.container, this.numbers.container, this.apex.prism.container, this.cinematicLayer);
     this.entityLayer.sortableChildren = true;
     this.entityLayer.addChild(this.focusTicks);
     this.focusTicks.zIndex = 9000;
     this.pulse.texture = vignette();
     this.pulse.tint = 0xcc3f4b;
     this.pulse.alpha = 0;
-    this.root.addChild(this.pulse, this.letterbox, this.chevrons, this.flashRect);
+    this.root.addChild(this.pulse, this.letterbox, this.chevrons, this.sandbox.root, this.flashRect);
     this.flashRect.blendMode = "add";
     this.resizeObs = new ResizeObserver(() => {
       // Repainting the watercolour layers is expensive; wait for the size to settle.
@@ -400,6 +429,14 @@ export class BattleRenderer implements ImpactHost {
     this.trails.destroy();
     this.numbers?.destroy();
     this.apex?.destroy();
+    this.sig?.destroy();
+    this.sandbox?.destroy();
+    this.sandbox = null;
+    this.sigDriver.clear();
+    clearSignatureShapes();
+    clearJudgementCache();
+    clearSovereignCache();
+    destroySigTextures();
     this.background?.destroy();
     this.background = null;
     this.fxPool = [];
@@ -436,6 +473,10 @@ export class BattleRenderer implements ImpactHost {
     this.lastTelegraphs.length = 0;
     this.impact.reset();
     this.apex?.reset();
+    // Every signature cast, mark and body modifier belongs to the old world.
+    this.sig?.reset();
+    this.sigDriver.clear();
+    this.lastWorldTime = world.time;
     this.flashes.reset();
     this.flashTime = 0;
     this.stopLeft = 0;
@@ -485,6 +526,8 @@ export class BattleRenderer implements ImpactHost {
     this.impact.setReduced(v);
     this.flashes.reduced = v;
     if (this.apex) this.apex.prism.reduced = v;
+    this.sig?.setReduced(v);
+    this.sandbox?.setReduced(v);
     if (v) this.flashTime = 0;
     this.background?.setReduced(v);
   }
@@ -492,12 +535,25 @@ export class BattleRenderer implements ImpactHost {
   /** The interface covers the bottom of the battlefield (a tall sheet): lift the framing above it. */
   setViewportInsets(insets: { bottom: number }): void {
     this.camera.setInsets(insets.bottom);
+    this.sandbox?.layout(this.width, this.height, this.camera.insetBottom);
   }
 
-  stats(): { particles: number; entities: number; renderer: string; trails: number } {
+  /**
+   * Visual quality (Settings): what the signature skills draw (full, balanced, performance). Visual
+   * only; the fight is identical at every setting. Resets the automatic step-down.
+   */
+  setVisualQuality(q: VisualQuality): void {
+    this.quality = q;
+    this.sig?.setQuality(q);
+    this.sandbox?.setQuality(q);
+  }
+
+  stats(): { particles: number; entities: number; renderer: string; trails: number; quality: string } {
     const r = this.app?.renderer;
     const type = r ? (r.type === 1 ? "WebGL" : r.type === 2 ? "WebGPU" : "Canvas") : "none";
-    return { particles: this.particles.count, entities: this.views.size, renderer: type, trails: this.trails.live };
+    // The visual quality drawn; "(auto)" when the renderer stepped it down on its own for slow frames.
+    const q = this.sig ? this.sig.drawnQuality + (this.sig.governor.steps > 0 ? " (auto)" : "") : this.quality;
+    return { particles: this.particles.count, entities: this.views.size, renderer: type, trails: this.trails.live, quality: q };
   }
 
   /**
@@ -539,6 +595,7 @@ export class BattleRenderer implements ImpactHost {
     this.pulse.height = h;
     this.camera.bleed = BLEED;
     this.camera.setViewport(w, h);
+    this.sandbox?.layout(w, h, this.camera.insetBottom);
     this.view.width = w;
     this.view.height = h;
     this.syncView();
@@ -668,6 +725,14 @@ export class BattleRenderer implements ImpactHost {
     this.apex.setRanks(world.loadout.apex);
     this.apex.updateForm(paused ? 0 : dt);
     if (perf) this.sec(8);
+    // Signature casts run on the fight's own clock (world seconds: slowed with it, held in a stop).
+    const wt = world.time;
+    const wdt = this.lastWorldTime < 0 || wt < this.lastWorldTime ? 0 : Math.min(0.25, wt - this.lastWorldTime);
+    this.lastWorldTime = wt;
+    if (this.sigDriver.pending > 0) this.sigDriver.update(wdt);
+    this.sig.update(frozen ? 0 : wdt, dt);
+    this.applySigMods();
+    if (perf) this.sec(9);
     if (!paused) this.frameCamera(world, alpha);
     this.camera.update(dt);
     const o = this.camera.out;
@@ -704,6 +769,7 @@ export class BattleRenderer implements ImpactHost {
     this.numbers.update(dt);
     if (perf) this.sec(6);
     this.updateCinematic(dt);
+    if (this.sandbox?.isActive) this.sandbox.update(dt);
     this.drawChevrons(world);
     // Screen-space overlays.
     if (this.flashTime > 0) {
@@ -846,6 +912,7 @@ export class BattleRenderer implements ImpactHost {
       const speedFrac = Math.min(1, Math.hypot(e.vel.x, e.vel.y) / 160);
       const variant = swingVariant(v.swings, e.state);
       const intro = this.bossIntro && this.bossIntro.bossId === e.id ? this.bossIntro : null;
+      const sigMod = this.sig.mods.get(e.id);
       if (intro) {
         // The boss's entrance stages its rig (rise, descent, walk-out) over the normal pose.
         rig.animate(intro.poseState, this.time, 0, e.seed, e.facing, intro.poseState === "move", 0.6, 0, this.frameDt, 0);
@@ -857,7 +924,11 @@ export class BattleRenderer implements ImpactHost {
         // After the return blink he stands settled in guard until the cast lets him go.
         if (this.fury.settled) rig.animate("idle", 0, 0, e.seed, e.facing, false, 0, 0, dt, 0);
         else rig.animate("attack", this.fury.t, FURY_SWING, e.seed, e.facing, false, 0, 0, dt, this.fury.variant);
-      } else if (!held) rig.animate(e.state, e.stateTime, e.stateDuration, e.seed, e.facing, moving, speedFrac, e.deathTime, dt, variant);
+      } else if (sigMod?.kneel && !e.dead) {
+        // Sovereign Awakening: the army kneels (a pose only; the simulation holds them).
+        rig.setDeath(DEATH_KNEEL, 1, e.seed);
+        rig.animate("dead", 0.4, 0, e.seed, e.facing, false, 0, 0.4, this.frameDt, 0);
+      } else if (!held && !(sigMod?.frozen && !e.dead)) rig.animate(e.state, e.stateTime, e.stateDuration, e.seed, e.facing, moving, speedFrac, e.deathTime, dt, variant);
       if (e.id === player.id) this.playerFacing = e.facing;
       rig.setHitFlash(e.hitFlash);
       // Time-based impact flash: full white, a light tint, or nothing (FlashState decides); a body
@@ -1794,6 +1865,8 @@ export class BattleRenderer implements ImpactHost {
     if (!world) return;
     const u = this.unit();
     let stormBatch = false;
+    // Signature casts first: a cast's stage exists before the hits it causes in the same batch.
+    this.sig.handle(events);
     for (const e of events) {
       switch (e.type) {
         case "attack_swing": {
@@ -1831,7 +1904,9 @@ export class BattleRenderer implements ImpactHost {
             const tv = this.views.get(target.id);
             const halfW = (tv ? tv.rig.top * 0.2 : 16) * this.figureScale(target.pos.y);
             const ax: ApexHitFields = e;
-            if (e.sourceId === world.player.id && e.faction === "enemy") {
+            if (e.sig && e.faction === "enemy" && this.sig.figure(e, this.pt.x, this.pt.y - 6, halfW, dir)) {
+              // A signature skill's hit: its figure in the skill's colour, a cast's repeats folded.
+            } else if (e.sourceId === world.player.id && e.faction === "enemy") {
               // The warrior's blows: a swing's echoes fold into its one figure (apex/ApexDirector).
               if (ax.prismatic && !stormBatch) this.apex.onPrism(this.pt.x, this.pt.y, dir, (tv ? tv.rig.top : CHEST / 0.62) * this.figureScale(target.pos.y), !!ax.echo);
               if (!ax.echo) this.apex.noteMainBlow(target.id);
@@ -2799,6 +2874,160 @@ export class BattleRenderer implements ImpactHost {
     darken: (color, amount) => this.darkenSky(color, amount),
     cue: (kind, skill, rank) => this.controller.apexCue(kind, skill, rank),
   };
+
+  // ---------------------------------------------------------------------
+  // Signature skills (src/game/render/signatures/): the director's host, body modifiers, the
+  // preview sandbox and the reveal moment, and synthetic casts for development.
+  // ---------------------------------------------------------------------
+
+  private readonly sigHost: SigHost = {
+    particles: this.particles,
+    camera: this.camera,
+    layers: { ground: this.sigGround, figures: this.entityLayer, fx: this.sigFx },
+    proj: {
+      sx: (x) => this.sx(x),
+      sy: (y) => this.sy(y),
+      fs: (y) => this.figureScale(y),
+      unit: () => this.unit(),
+      dy: () => this.depthUnit(),
+      top: () => this.vis.minY,
+      left: () => this.vis.minX,
+      right: () => this.vis.maxX,
+    },
+    isReduced: () => this.reduced,
+    body: (id, out) => {
+      const w = this.world;
+      const e = w?.entities.get(id);
+      const v = e ? this.views.get(id) : undefined;
+      if (!w || !e || !v || e.dead) return false;
+      const ds = this.figureScale(e.pos.y);
+      out.x = v.drawX + v.slide * ds;
+      out.y = v.drawY;
+      out.chestY = v.rig.top * 0.62 * ds;
+      out.height = v.rig.top * ds;
+      out.scale = ds;
+      out.wx = e.pos.x;
+      out.wy = e.pos.y;
+      out.facing = e.facing;
+      out.boss = e.kind === "boss";
+      out.ally = e.faction === "ally";
+      out.player = e.id === w.player.id;
+      out.rig = v.rig;
+      return true;
+    },
+    playerId: () => this.world?.player.id ?? -1,
+    playerSpec: () => playerSpec(this.world?.loadout.weaponPath ?? "none"),
+    flash: (color, alpha, duration) => this.flash(color, alpha, duration),
+    darken: (color, amount) => this.darkenSky(color, amount),
+    stop: (seconds, key, cooldown) => {
+      if (this.reduced) return 0;
+      return this.impact.stop(seconds, key, cooldown);
+    },
+    hold: (id, seconds) => {
+      if (!this.reduced) this.hold(id, seconds);
+    },
+    numbers: () => this.numbers ?? null,
+    each: (faction, fn) => {
+      const w = this.world;
+      if (!w) return;
+      for (const e of w.entities.values()) if (!e.dead && e.faction === faction && e.id !== w.player.id) fn(e.id);
+    },
+  };
+
+  /** Apply the signature presentation's body modifiers (space bending, vanishing, tints, glass). */
+  private applySigMods(): void {
+    const mods = this.sig.mods;
+    if (mods.size === 0) return;
+    for (const [id, m] of mods) {
+      const v = this.views.get(id);
+      if (!v) continue;
+      const root = v.rig.root;
+      if (m.dx !== 0 || m.dy !== 0) root.position.set(root.x + m.dx, root.y + m.dy);
+      if (m.stretch !== 0) {
+        root.scale.set(root.scale.x * (1 + m.stretch * 0.25), root.scale.y * (1 - m.stretch * 0.08));
+        root.skew.x = -m.lean * m.stretch * 0.5;
+      } else if (root.skew.x !== 0) root.skew.x = 0;
+      if (m.alpha !== 1) {
+        root.alpha *= m.alpha;
+        v.rig.shadow.alpha = m.alpha;
+        v.bar.visible = v.bar.visible && m.alpha > 0.5;
+      } else v.rig.shadow.alpha = 1;
+      if (m.tintK > 0) root.tint = mix(root.tint as number, m.tint, m.tintK);
+      if (m.white > 0) v.rig.setWhite(Math.max(m.white, v.lit));
+    }
+  }
+
+  /** Synthetic events (the driver): the director and the sounds, never the world. */
+  private sigSynthetic(events: GameEvent[]): void {
+    this.handleEvents(events);
+    this.controller.signatureSound(events);
+  }
+
+  /**
+   * Development: stage a signature cast on the live fight from synthetic events (the same events the
+   * simulation sends, dealing nothing). Picks the foes on the field as its targets. `?debug=1` only
+   * (the controller exposes the renderer there).
+   */
+  sigDebugCast(id: SignatureId, evo: EvolutionId | null = null, opts: { mastery?: MasteryTier; synergy?: SynergyId; enhanced?: boolean; hits?: boolean } = {}): boolean {
+    const w = this.world;
+    if (!w) return false;
+    const foes: SigActor[] = [];
+    for (const e of w.entities.values()) if (!e.dead && e.faction === "enemy") foes.push({ id: e.id, pos: { x: e.pos.x, y: e.pos.y }, kind: e.kind, hp: e.hp / Math.max(1, e.stats.maxHp), marked: e.statuses.some((st) => st.kind === "mark") });
+    const allies: SigActor[] = [];
+    for (const e of w.entities.values()) if (!e.dead && e.kind === "summon") allies.push({ id: e.id, pos: { x: e.pos.x, y: e.pos.y }, kind: "summon" });
+    const p = w.player;
+    this.sigDriver.play(buildScript({ castId: this.sigDriver.newCastId(), sig: id, evo, mastery: opts.mastery ?? 1, caster: { id: p.id, pos: { x: p.pos.x, y: p.pos.y }, kind: "player" }, foes, allies, enhanced: opts.enhanced, synergies: opts.synergy ? [opts.synergy] : [], hits: opts.hits ?? true, power: Math.round(p.stats.attack * 2.2) }));
+    return true;
+  }
+
+  /**
+   * The collection's preview: plays a skill's animation (the same director code as a real cast) on
+   * stand-in figures above the dimmed fight, dealing nothing and writing nothing to the world. One
+   * at a time; calling again restarts it. Returns false when there is no canvas yet.
+   */
+  previewSignature(id: SignatureId, evo: EvolutionId | null = null, opts: PreviewOptions = {}): boolean {
+    if (!this.sandbox || this.width <= 0) return false;
+    this.sandbox.layout(this.width, this.height, this.camera.insetBottom);
+    return this.sandbox.preview(id, evo, opts);
+  }
+
+  /** Close the preview (it fades out). */
+  stopPreview(): void {
+    this.sandbox?.stop();
+  }
+
+  /** A preview or a reveal is on screen. */
+  get previewActive(): boolean {
+    return this.sandbox?.isActive ?? false;
+  }
+
+  /**
+   * The battlefield half of a skill's reveal (the `signature_reveal` sheet is the interface's): the
+   * screen darkens, the skill's sigil forms, then its animation plays on stand-ins. Returns when the
+   * name and the details may show and how long the moment runs (the full rite for legendary and
+   * mythic, about six seconds; a short one for rare and epic, about three), or null without a canvas.
+   * It holds until `endSignatureReveal`.
+   */
+  playSignatureReveal(id: SignatureId): RevealTiming | null {
+    if (!this.sandbox || this.width <= 0) return null;
+    this.sandbox.layout(this.width, this.height, this.camera.insetBottom);
+    return this.sandbox.playReveal(id);
+  }
+
+  /** A tap on the reveal: skip to its details. True once the name may show. */
+  skipSignatureReveal(): boolean {
+    return this.sandbox?.skipReveal() ?? true;
+  }
+
+  /** The reveal's sheet closed (Equip or Later): the moment fades out. */
+  endSignatureReveal(): void {
+    this.sandbox?.endReveal();
+  }
+
+  /** Diagnostics for the signature presentation (and the automatic step-down). */
+  signatureStats(): ReturnType<SignatureDirector["stats"]> & { counters: SignatureDirector["counters"]; preview: boolean } {
+    return { ...this.sig.stats(), counters: this.sig.counters, preview: this.previewActive };
+  }
 
   private readonly ariseHost: AriseHost = {
     camera: this.camera,

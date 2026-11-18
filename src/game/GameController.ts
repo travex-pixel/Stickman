@@ -12,7 +12,7 @@ import { applyXp } from "./progression/xp";
 import { upgradeStat as doUpgradeStat, type UpgradeAttempt } from "./progression/upgrades";
 import { canUnlockSkill, unlockSkill as doUnlockSkill } from "./progression/skills";
 import { SKILLS } from "./data/skills";
-import { MASTERY_NAME, SIGNATURES, SYNERGIES, type EvolutionId, type MasteryTier, type SignatureId } from "./data/signatures";
+import { MASTERY_NAME, SIGNATURES, SYNERGIES, type EvolutionId, type MasteryTier, type SignatureId, type SynergyId } from "./data/signatures";
 import {
   addMastery,
   buySignatureRank as doBuySignatureRank,
@@ -222,7 +222,8 @@ export class GameController {
   }
 
   /** Diagnostics live in their own store so the HUD never re-renders for them. */
-  readonly diagStore = new Store<{ fps: number; particles: number; entities: number; renderer: string; frameMs: number }>({ fps: 0, particles: 0, entities: 0, renderer: "", frameMs: 0 });
+  /** `quality`: the visual quality drawn, "(auto)" when the renderer stepped it down for slow frames. */
+  readonly diagStore = new Store<{ fps: number; particles: number; entities: number; renderer: string; frameMs: number; quality?: string }>({ fps: 0, particles: 0, entities: 0, renderer: "", frameMs: 0, quality: "full" });
   private diagAccum = 0;
   readonly audio = new AudioManager();
   readonly save = new IndexedDbSaveManager();
@@ -340,6 +341,7 @@ export class GameController {
       }
       this.renderer = renderer;
       renderer.setReducedEffects(this.reducedEffects());
+      renderer.setVisualQuality(this.profile.settings.visualQuality ?? "full");
       if (this.world) renderer.setWorld(this.world);
       void this.drainPortraits();
     } catch (err) {
@@ -675,6 +677,7 @@ export class GameController {
     let cleared: Extract<GameEvent, { type: "stage_cleared" }> | null = null;
     this.renderer?.handleEvents(events);
     for (const c of this.cues.events(events, this.world?.player.id)) this.audio.playCue(c);
+    this.signatureDucks(events);
     for (const e of events) {
       switch (e.type) {
         case "death":
@@ -1800,9 +1803,45 @@ export class GameController {
    * Play a signature skill's sequence on the battlefield as a preview: the same animation as the
    * real cast, on stand-in figures, dealing nothing and touching nothing in the fight.
    */
-  previewSignature(id: SignatureId, evo: EvolutionId | null = null): boolean {
-    const r = this.renderer as unknown as { previewSignature?: (id: SignatureId, evo: EvolutionId | null) => boolean } | null;
-    return r?.previewSignature?.(id, evo) ?? false;
+  previewSignature(id: SignatureId, evo: EvolutionId | null = null, opts: { mastery?: MasteryTier; synergy?: SynergyId } = {}): boolean {
+    return this.renderer?.previewSignature(id, evo, opts) ?? false;
+  }
+
+  /** Close the preview (it fades out). */
+  stopSignaturePreview(): void {
+    this.renderer?.stopPreview();
+  }
+
+  /**
+   * The battlefield half of a signature skill's reveal (the sheet is the interface's): returns when
+   * the name and the details may show and how long the moment runs, or null when there is no canvas
+   * (show the sheet at once). Close it with `endSignatureReveal`.
+   */
+  playSignatureReveal(id: SignatureId): { nameAt: number; detailsAt: number; length: number; full: boolean } | null {
+    return this.renderer?.playSignatureReveal(id) ?? null;
+  }
+
+  /** A tap on the reveal: skip to its details. True once the name may show. */
+  skipSignatureReveal(): boolean {
+    return this.renderer?.skipSignatureReveal() ?? true;
+  }
+
+  endSignatureReveal(): void {
+    this.renderer?.endSignatureReveal();
+  }
+
+  /**
+   * Sounds of signature events that did not come through the simulation (the preview's stand-ins,
+   * development casts): the same cues as a real cast.
+   */
+  signatureSound(events: GameEvent[]): void {
+    for (const c of this.cues.events(events, this.world?.player.id)) this.audio.playCue(c);
+    this.signatureDucks(events);
+  }
+
+  /** King's Judgement's hush dips the whole mix for a moment. */
+  private signatureDucks(events: GameEvent[]): void {
+    for (const e of events) if (e.type === "sig_beat" && e.beat === "hush") this.audio.dip(0.45, 900);
   }
 
   /** The player has seen a signature skill's reveal (the next one may show, a moment later). */
@@ -2378,6 +2417,7 @@ export class GameController {
     p.settings = { ...p.settings, ...patch };
     this.audio.setVolumes(p.settings.music, p.settings.sfx);
     this.renderer?.setReducedEffects(this.reducedEffects());
+    if (patch.visualQuality) this.renderer?.setVisualQuality(patch.visualQuality);
     this.audio.setReduced(this.reducedEffects());
     this.commit();
   }

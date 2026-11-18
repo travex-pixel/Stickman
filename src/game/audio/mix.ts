@@ -3,7 +3,7 @@
  * voices in a sliding window of real time, so a fight at 2x speed with an army thins out instead
  * of smearing into a wall. The warrior's own hits always win: the army's blows give way to them.
  */
-export type SfxCategory = "swing" | "hit" | "crit" | "army" | "kill" | "ability" | "fury" | "event" | "ui" | "echo" | "prism" | "storm";
+export type SfxCategory = "swing" | "hit" | "crit" | "army" | "kill" | "ability" | "fury" | "event" | "ui" | "echo" | "prism" | "storm" | "sig" | "sig_hit";
 
 export interface Budget {
   /** Voices the category may start in any `windowMs` of real time. */
@@ -22,6 +22,10 @@ export const BUDGETS: Partial<Record<SfxCategory, Budget>> = {
   echo: { max: 2, windowMs: 450 },
   prism: { max: 2, windowMs: 900 },
   storm: { max: 1, windowMs: 700 },
+  // Signature skills: their moments (a form, an implosion, a roar) a few a second at most; their
+  // many small blows (a clone's cut, a blade, a bite) three in any 400ms, the rest dropped.
+  sig: { max: 3, windowMs: 600 },
+  sig_hit: { max: 3, windowMs: 400 },
 };
 
 export const REDUCED_BUDGETS: Partial<Record<SfxCategory, Budget>> = {
@@ -33,6 +37,8 @@ export const REDUCED_BUDGETS: Partial<Record<SfxCategory, Budget>> = {
   echo: { max: 1, windowMs: 600 },
   prism: { max: 1, windowMs: 1000 },
   storm: { max: 1, windowMs: 1000 },
+  sig: { max: 2, windowMs: 700 },
+  sig_hit: { max: 2, windowMs: 500 },
 };
 
 /** The army is silent this long after one of the warrior's blows (ms), and counts against his impacts. */

@@ -119,6 +119,21 @@ export class AudioManager {
     }
   }
 
+  /** Every sound dips to `level` for `ms`, then comes back (a hush, not silence). */
+  dip(level: number, ms: number): void {
+    if (!this.unlocked) return;
+    try {
+      Howler.volume(Math.max(0, Math.min(1, level)));
+      if (this.duckTimer) clearTimeout(this.duckTimer);
+      this.duckTimer = setTimeout(() => {
+        this.duckTimer = null;
+        Howler.volume(1);
+      }, ms);
+    } catch {
+      /* ignore */
+    }
+  }
+
   suspend(): void {
     if (this.ambience) this.ambience.pause();
   }

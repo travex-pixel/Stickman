@@ -172,6 +172,17 @@ export class ImpactDirector {
       ang += dir * tilt;
     } else if (sv && sv.rig.meleeKit === "heavy") ang += dir * 0.6;
 
+    // A signature skill's hit: its own stage stages the big moments (one stop, one flash, one
+    // shake at most per cast), so each of its many hits only reacts on the body: a flinch, the
+    // white or the tint, a few sparks. No camera, no stop of the world: a dragon's pass or a storm
+    // of blades must never become constant shaking.
+    if (e.sig) {
+      if (tv) tv.lastHitAbility = true;
+      this.react(tv, target, dir, e.heavy ? 0.09 : 0.05, e.heavy ? 9 : 4, 1);
+      if (e.heavy && !this.host.reduced) this.host.hold(e.targetId, 0.04);
+      this.sparks(x, y, ang, e.heavy ? 6 : 3, e.crit ? 0xe9c97a : elementColor(e.element), 0.8);
+      return;
+    }
     // An echo blow (Double or Triple Strike) is part of the swing that threw it: no stop, no
     // camera, no white flash (a body struck ten times a second must not strobe), only a light
     // reaction and a few sparks in the echo's colour. The third may shudder the body a hair (the
