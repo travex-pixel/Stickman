@@ -61,7 +61,10 @@ function Diagnostics() {
       <div>
         ent {d.entities} · fx {d.particles}
       </div>
-      <div>{d.renderer}</div>
+      <div>
+        {d.renderer}
+        {d.quality ? ` · ${d.quality}` : ""}
+      </div>
     </div>
   );
 }

@@ -31,7 +31,7 @@ export function SettingsSheet({ open }: { open: boolean }) {
           <Switch label="Short reveals" detail="Every BIND plays its short form. Your first bind always plays in full; tap to skip works either way." value={s.quickReveals} onChange={(v) => c.updateSettings({ quickReveals: v })} />
           <Switch label="Keep screen on" detail="The screen stays awake while the game is open." value={s.keepAwake} onChange={(v) => c.updateSettings({ keepAwake: v })} />
           <Switch label="Reduced effects" detail="Less motion, shake and flashing." value={s.reducedEffects} onChange={(v) => c.updateSettings({ reducedEffects: v })} />
-          <Quality value={s.visualQuality ?? "full"} onChange={(q) => c.updateSettings({ visualQuality: q })} />
+          <Quality value={s.visualQuality ?? "full"} drawn={c.visualQualityDrawn()?.drawn ?? null} onChange={(q) => c.updateSettings({ visualQuality: q })} />
           <Switch label="Diagnostics" value={s.diagnostics} onChange={(v) => c.updateSettings({ diagnostics: v })} />
           {s.diagnostics && <DiagLine />}
         </div>
@@ -69,6 +69,7 @@ function DiagLine() {
   return (
     <p className="t-label text-jade tnum px-5 py-2">
       {d.fps} fps · {d.frameMs} ms · {d.renderer} · particles {d.particles}
+      {d.quality ? ` · quality ${d.quality}` : ""}
     </p>
   );
 }
@@ -98,8 +99,10 @@ const QUALITY: { id: VisualQuality; label: string; detail: string }[] = [
  * How much the battlefield draws for the signature skills. Visual only: the fight is the same at
  * every setting. Reduced effects (above) is separate and stricter.
  */
-function Quality({ value, onChange }: { value: VisualQuality; onChange: (q: VisualQuality) => void }) {
+function Quality({ value, drawn, onChange }: { value: VisualQuality; drawn: VisualQuality | null; onChange: (q: VisualQuality) => void }) {
   const cur = QUALITY.find((q) => q.id === value) ?? QUALITY[0]!;
+  // The renderer steps down on its own when frames stay slow: say so, or the choice would look ignored.
+  const stepped = drawn && drawn !== value ? (QUALITY.find((q) => q.id === drawn) ?? null) : null;
   return (
     <div className="flex flex-col gap-1.5 px-5 py-2 shadow-[inset_0_-1px_0_var(--line)]" data-testid="visual-quality">
       <span className="flex min-w-0 flex-col">
@@ -107,6 +110,11 @@ function Quality({ value, onChange }: { value: VisualQuality; onChange: (q: Visu
         <span className="t-label text-t2" data-testid="visual-quality-detail">
           {cur.detail} The fight is the same at every setting.
         </span>
+        {stepped && (
+          <span className="t-label text-gold" data-testid="visual-quality-auto">
+            Drawn at {stepped.label} for now: frames were slow on this phone. Choose a setting to try again.
+          </span>
+        )}
       </span>
       <Segmented value={value} onChange={onChange} label="Visual quality">
         {QUALITY.map((q) => (

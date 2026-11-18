@@ -384,6 +384,25 @@ test.describe("Signature skills on the battlefield and in Settings", () => {
       expect(b!.x + b!.width, id).toBeLessThanOrEqual(page.viewportSize()!.width);
     }
   });
+
+  test("Visual quality says when the battlefield stepped itself down for slow frames, and a choice resets it", async ({ page }) => {
+    await waitForGame(page);
+    type G = { current: string; steps: number; enabled: boolean };
+    // As the automatic safety leaves it after slow frames (software rendering here would do it on its own, unpredictably).
+    await page.evaluate(() => {
+      const c = (window as unknown as { __ASCEND__: Ctl & { renderer: { sig: { governor: G; setQuality(q: string): void } } } }).__ASCEND__;
+      c.renderer.sig.setQuality("full");
+      c.renderer.sig.governor.enabled = false;
+      c.renderer.sig.governor.current = "balanced";
+      c.renderer.sig.governor.steps = 1;
+      c.openSettings();
+    });
+    await expect(page.getByTestId("visual-quality-auto")).toContainText("Balanced");
+    await expect(page.getByTestId("quality-full")).toHaveAttribute("aria-pressed", "true");
+    await page.getByTestId("quality-full").scrollIntoViewIfNeeded();
+    await page.getByTestId("quality-full").click();
+    await expect(page.getByTestId("visual-quality-auto")).toHaveCount(0);
+  });
 });
 
 const VIEWPORTS = [

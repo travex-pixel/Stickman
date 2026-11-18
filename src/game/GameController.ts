@@ -12,7 +12,7 @@ import { applyXp } from "./progression/xp";
 import { upgradeStat as doUpgradeStat, type UpgradeAttempt } from "./progression/upgrades";
 import { canUnlockSkill, unlockSkill as doUnlockSkill } from "./progression/skills";
 import { SKILLS } from "./data/skills";
-import { MASTERY_NAME, SIGNATURES, SYNERGIES, type EvolutionId, type MasteryTier, type SignatureId, type SynergyId } from "./data/signatures";
+import { MASTERY_NAME, SIGNATURES, SYNERGIES, type EvolutionId, type MasteryTier, type SignatureId, type SynergyId, type VisualQuality } from "./data/signatures";
 import {
   addMastery,
   buySignatureRank as doBuySignatureRank,
@@ -1807,6 +1807,17 @@ export class GameController {
    */
   previewSignature(id: SignatureId, evo: EvolutionId | null = null, opts: { mastery?: MasteryTier; synergy?: SynergyId; hold?: boolean; band?: number } = {}): boolean {
     return this.renderer?.previewSignature(id, evo, opts) ?? false;
+  }
+
+  /**
+   * The visual quality the battlefield is drawing now, against the one chosen in Settings: the
+   * renderer steps down on its own when frames stay slow (null without a renderer).
+   */
+  visualQualityDrawn(): { chosen: VisualQuality; drawn: VisualQuality } | null {
+    const r = this.renderer;
+    if (!r) return null;
+    const st = r.signatureStats();
+    return { chosen: st.chosen, drawn: st.quality };
   }
 
   /** Close the preview (it fades out). */
