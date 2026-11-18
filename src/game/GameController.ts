@@ -12,7 +12,19 @@ import { applyXp } from "./progression/xp";
 import { upgradeStat as doUpgradeStat, type UpgradeAttempt } from "./progression/upgrades";
 import { canUnlockSkill, unlockSkill as doUnlockSkill } from "./progression/skills";
 import { SKILLS } from "./data/skills";
-import type { EvolutionId, SignatureId } from "./data/signatures";
+import { MASTERY_NAME, SIGNATURES, SYNERGIES, type EvolutionId, type MasteryTier, type SignatureId } from "./data/signatures";
+import {
+  addMastery,
+  buySignatureRank as doBuySignatureRank,
+  checkDiscoveries,
+  chooseEvolution as doChooseEvolution,
+  equipSignature as doEquipSignature,
+  markRevealed,
+  pendingReveals,
+  recordSynergy,
+  signatureState,
+  unequipSignature as doUnequipSignature,
+} from "./progression/signatures";
 import { APEX_NAME, anyApexReady, apexDoor, apexEffectText, apexOpen, apexRanks, apexVisible, buyApexRank } from "./progression/apex";
 import { APEX_MAX, APEX_SKILLS, type ApexSkillId } from "./data/apex";
 import { anyAbilityRankReady, rankAbility as doRankAbility } from "./progression/abilityRanks";
@@ -282,6 +294,8 @@ export class GameController {
       if (away !== null) offline = applyOfflineProgress(profile, away, now >>> 0);
     }
     refreshObjectives(profile, new Date(now));
+    // Signature skills the save already qualifies for are found now; their reveals wait their turn.
+    checkDiscoveries(profile);
     profile.lastActive = now;
     profile.progress.runs += 1;
     this.profileStore.set({ profile, v: 1 });
@@ -599,6 +613,11 @@ export class GameController {
       }
     }
     this.tutorialElapsed += dt;
+    this.revealAccum += dt;
+    if (this.revealAccum >= 1) {
+      this.revealAccum = 0;
+      this.maybeRevealSignature();
+    }
     this.hudAccum += dt;
     if (this.hudAccum >= 0.08) {
       this.hudAccum = 0;
@@ -656,6 +675,7 @@ export class GameController {
           if (e.kind === "enemy" || e.kind === "boss") {
             kills += 1;
             if (e.elite) this.objectiveEvent("elites", 1);
+            this.countForSignatures(e);
             p.progress.killsByEnemy[e.defId] = (p.progress.killsByEnemy[e.defId] ?? 0) + 1;
             if (e.kind === "boss") {
               p.progress.bossKills += 1;
@@ -675,7 +695,8 @@ export class GameController {
               if (s.level > before && s.deployed) this.toast(`${summonDef(s.defId).name} reached level ${s.level}`, "level", true);
             }
             dirty = true;
-          } else if (e.kind === "summon") {
+          } else if (e.kind === "summon" && !e.sig) {
+            // (A Legion soldier's end is not a shadow lost.)
             this.run.summonsLost += 1;
             if (this.run.summonsLost === 1) this.toast("A shadow has fallen. It will return.", "warn", true);
           }
@@ -781,6 +802,22 @@ export class GameController {
         case "shake":
           this.renderer?.shake(e.strength);
           break;
+        case "kill_streak": {
+          const pr = signatureState(p).progress;
+          if (e.count > pr.bestChain && p.player.signatures) p.player.signatures.progress.bestChain = e.count;
+          break;
+        }
+        case "sig_cast":
+          this.sigUse(e.sig, 1, 0);
+          dirty = true;
+          break;
+        case "sig_synergy":
+          if (recordSynergy(p, e.synergy)) {
+            const def = SYNERGIES.find((d) => d.id === e.synergy);
+            if (def) this.toast(`Combination discovered: ${def.name}`, "level", 2);
+            dirty = true;
+          }
+          break;
         case "freeze":
           // A stop of the world is a beat, not a pause: at most about six frames, none with reduced effects.
           if (!this.reducedEffects()) this.loop.addFreeze(Math.min(e.duration, AUTHORED_FREEZE_MAX));
@@ -846,6 +883,7 @@ export class GameController {
       this.uiStore.update((u) => ({ ...u, newBadges: { ...u.newBadges, skills: true } }));
     }
     this.watchApexDoors();
+    this.checkSignatureDiscoveries();
     const newAch = evaluateAchievements(p);
     // Several earned at once are one line, not a queue of them.
     if (newAch.length === 1) this.toast(`Achievement: ${newAch[0]!.replace(/_/g, " ")}`, "level");
@@ -1175,6 +1213,7 @@ export class GameController {
     if (this.run.resolved) return;
     this.run.resolved = true;
     const p = this.profile;
+    this.recordBossTime();
     const res = resolveBossVictory(p, stage, computeModifiers(p).goldFind);
     p.player.gold += res.gold;
     p.player.riftCores += res.cores;
@@ -1336,6 +1375,7 @@ export class GameController {
     if (this.run.resolved) return;
     this.run.resolved = true;
     const p = this.profile;
+    this.recordBossTime();
     const goldFind = computeModifiers(p).goldFind;
     const gold = Math.round(stageClearGold(stage, goldFind) * 0.5);
     const xp = Math.round(stageClearXp(stage) * 0.5 * computeModifiers(p).xpMult);
@@ -1387,8 +1427,10 @@ export class GameController {
 
   private onModeCleared(mode: ModeId, wave: number, time: number): void {
     const p = this.profile;
-    if (mode === "trial") this.objectiveEvent("bossWins", 1);
-    else this.objectiveEvent("modeRuns", 1);
+    if (mode === "trial") {
+      this.objectiveEvent("bossWins", 1);
+      this.recordBossTime();
+    } else this.objectiveEvent("modeRuns", 1);
     // A Crypt Keeper is boss-grade: it counts for the weekly boss objective too.
     if (mode === "crypt") this.objectiveEvent("bossWins", 1);
     this.sfx("level_up", { volume: 0.9, rate: 0.9 });
@@ -1621,30 +1663,119 @@ export class GameController {
   // the renderer side fills preview). Each returns whether it took.
   // ---------------------------------------------------------------------
 
-  /** Equip a found signature skill in a slot (moving it if it sits in another). */
+  /** Equip a found signature skill in a slot (moving it if it sits in another). Not in a boss or mode fight. */
   equipSignature(id: SignatureId, slot: number): boolean {
-    void id;
-    void slot;
-    return false;
+    this.userGesture();
+    if (this.inFight()) {
+      this.toast("Change signature skills once the fight is over", "info");
+      return false;
+    }
+    if (!doEquipSignature(this.profile, id, slot)) {
+      this.sfx("error", { volume: 0.3 });
+      return false;
+    }
+    this.signatureChanged();
+    return true;
   }
 
-  /** Empty a signature slot. */
+  /** Empty a signature slot. Not in a boss or mode fight. */
   unequipSignature(slot: number): boolean {
-    void slot;
-    return false;
+    this.userGesture();
+    if (this.inFight()) {
+      this.toast("Change signature skills once the fight is over", "info");
+      return false;
+    }
+    if (!doUnequipSignature(this.profile, slot)) return false;
+    this.signatureChanged();
+    return true;
   }
 
-  /** Buy the next rank of a signature skill with skill points. */
+  /** Buy the next rank of a signature skill with skill points (any time, as Apex ranks). */
   buySignatureRank(id: SignatureId): boolean {
-    void id;
-    return false;
+    this.userGesture();
+    const rank = doBuySignatureRank(this.profile, id);
+    if (rank === null) {
+      this.sfx("error", { volume: 0.3 });
+      return false;
+    }
+    this.toast(`${SIGNATURES[id].name} rank ${rank}`, "level");
+    this.signatureChanged();
+    return true;
   }
 
-  /** Choose (or change) a signature skill's evolution. */
+  /** Choose (or change) a signature skill's evolution. Not in a boss or mode fight. */
   chooseEvolution(id: SignatureId, evo: EvolutionId): boolean {
-    void id;
-    void evo;
-    return false;
+    this.userGesture();
+    if (this.inFight()) {
+      this.toast("Change evolutions once the fight is over", "info");
+      return false;
+    }
+    if (!doChooseEvolution(this.profile, id, evo)) {
+      this.sfx("error", { volume: 0.3 });
+      return false;
+    }
+    this.signatureChanged();
+    return true;
+  }
+
+  private signatureChanged(): void {
+    this.refreshLoadout();
+    this.afterProgression();
+    this.commit();
+  }
+
+  /** Mastery from the fight: a cast or a kill of skill `id` (tier-ups are said once, the evolution choice pointed to). */
+  private sigUse(id: SignatureId, casts: number, kills: number): void {
+    const tier = addMastery(this.profile, id, casts, kills);
+    if (tier === null) return;
+    this.announceMastery(id, tier);
+    this.refreshLoadout();
+  }
+
+  private announceMastery(id: SignatureId, tier: MasteryTier): void {
+    const name = SIGNATURES[id].name;
+    if (tier === 1 && SIGNATURES[id].evolutions.length > 0) this.toast(`${name}: Adept. Choose its evolution in Skills`, "level", 2);
+    else this.toast(`${name}: ${MASTERY_NAME[tier]}`, "level", 2);
+    if (this.uiStore.get().panel !== "skills") this.uiStore.update((u) => ({ ...u, newBadges: { ...u.newBadges, skills: true } }));
+  }
+
+  /** A foe fell: the counters signature discovery keeps (elites, bosses by kind) and mastery kills. */
+  private countForSignatures(e: Extract<GameEvent, { type: "death" }>): void {
+    const s = this.profile.player.signatures;
+    if (!s) return;
+    if (e.elite) s.progress.elites += 1;
+    if (e.kind === "boss") s.progress.bossKills[e.defId] = (s.progress.bossKills[e.defId] ?? 0) + 1;
+    if (e.sig) this.sigUse(e.sig, 0, 1);
+  }
+
+  /** A boss fight won: how long it took, from its entrance's end (Time Fracture's discovery). */
+  private recordBossTime(): void {
+    const w = this.world;
+    const s = this.profile.player.signatures;
+    if (!w || !s || w.bossEngagedAt < 0) return;
+    const sec = Math.max(0.1, Math.round((w.time - w.bossEngagedAt) * 10) / 10);
+    if (s.progress.fastestBoss <= 0 || sec < s.progress.fastestBoss) s.progress.fastestBoss = sec;
+  }
+
+  private revealAccum = 0;
+
+  /** New signature skills found: they wait in line for their reveal. */
+  private checkSignatureDiscoveries(): void {
+    const found = checkDiscoveries(this.profile);
+    if (found.length === 0) return;
+    if (this.uiStore.get().panel !== "skills") this.uiStore.update((u) => ({ ...u, newBadges: { ...u.newBadges, skills: true } }));
+  }
+
+  /**
+   * One reveal at a time, only while the warrior is farming with nothing else on screen (never in a
+   * boss or mode fight, never over another card, never from offline progress). The rest wait.
+   */
+  private maybeRevealSignature(): void {
+    const w = this.world;
+    if (!w || !w.farming || w.player.dead || this.pending || this.uiStore.get().modal || this.modalQueue.length > 0) return;
+    const next = pendingReveals(this.profile)[0];
+    if (!next) return;
+    this.uiStore.update((u) => ({ ...u, modal: { kind: "signature_reveal", id: next } }));
   }
 
   /**
@@ -1656,9 +1787,12 @@ export class GameController {
     return r?.previewSignature?.(id, evo) ?? false;
   }
 
-  /** The player has seen a signature skill's reveal (the next one may show). */
+  /** The player has seen a signature skill's reveal (the next one may show, a moment later). */
   signatureRevealed(id: SignatureId): void {
-    void id;
+    if (markRevealed(this.profile, id)) this.commit();
+    const m = this.uiStore.get().modal;
+    if (m?.kind === "signature_reveal" && m.id === id) this.closeModal();
+    this.revealAccum = 0;
   }
 
   apexCue(kind: "rank" | "max", _skill: string, rank: number): void {

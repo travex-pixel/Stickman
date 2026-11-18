@@ -87,10 +87,11 @@ function soldierStats(rt: SignatureRuntime, c: Cast, m: Muster): CombatStats {
       def += s.stats.defense;
     }
     const n = army.length;
-    return { maxHp: Math.round((hp / n) * LEGION.armyShare * m.hpMult), attack: Math.round((atk / n) * LEGION.armyShare * m.attackMult * rank * 10) / 10, attackSpeed: 1.2, critChance: 0.1, critDamage: 1.5, defense: Math.round((def / n) * 0.5), moveSpeed: 150, range: shade.range, hpRegen: 0 };
+    const attack = Math.max((atk / n) * LEGION.armyShare, w.player.stats.attack * LEGION.warriorShare);
+    return { maxHp: Math.round((hp / n) * LEGION.armyShare * m.hpMult), attack: Math.round(attack * m.attackMult * rank * 10) / 10, attackSpeed: 1.2, critChance: w.player.stats.critChance, critDamage: w.player.stats.critDamage, defense: Math.round((def / n) * 0.5), moveSpeed: 150, range: shade.range, hpRegen: 0 };
   }
   const p = w.player.stats;
-  return { maxHp: Math.round(p.maxHp * 0.3 * m.hpMult), attack: Math.round(p.attack * LEGION.warriorShare * m.attackMult * rank * 10) / 10, attackSpeed: 1.2, critChance: 0.1, critDamage: 1.5, defense: 0, moveSpeed: 150, range: shade.range, hpRegen: 0 };
+  return { maxHp: Math.round(p.maxHp * 0.3 * m.hpMult), attack: Math.round(p.attack * LEGION.warriorShare * m.attackMult * rank * 10) / 10, attackSpeed: 1.2, critChance: p.critChance, critDamage: p.critDamage, defense: 0, moveSpeed: 150, range: shade.range, hpRegen: 0 };
 }
 
 function begin(rt: SignatureRuntime, c: Cast, center: Vec2): { windup: number; length: number } {

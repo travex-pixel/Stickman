@@ -24,7 +24,8 @@ export const sovereign: SkillImpl = {
   begin(rt, c) {
     const w = rt.world;
     const def = SIGNATURES.sovereign_awakening;
-    const aura = c.master ? SOVEREIGN.auraForMaster : SOVEREIGN.auraFor;
+    // Each rank past the first holds the aura SOVEREIGN.auraPerRank seconds longer.
+    const aura = (c.master ? SOVEREIGN.auraForMaster : SOVEREIGN.auraFor) + SOVEREIGN.auraPerRank * (c.entry.rank - 1);
     const p = w.player;
     rt.at(c, 0, () => {
       const army = w.summonEntities().filter((s) => !s.summon?.temporary && s.state !== "emerge");

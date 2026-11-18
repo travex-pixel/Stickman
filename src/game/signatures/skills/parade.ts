@@ -41,7 +41,8 @@ function begin(rt: SignatureRuntime, c: Cast): { windup: number; length: number 
   const executioner = c.evo === "executioner";
   const phantom = c.evo === "phantom_king";
   const clones = after ? PARADE.afterimage.clones + (c.master ? 2 : 0) : PARADE.clones;
-  const gap = after ? PARADE.afterimage.gap : PARADE.cloneGap;
+  // Every clone strikes before the finisher, inside the cast time.
+  const gap = Math.min(after ? PARADE.afterimage.gap : PARADE.cloneGap, (def.castTime - 0.05 - PARADE.vanishFor - 0.08) / clones);
   const tFinish = Math.min(def.castTime - 0.05, PARADE.vanishFor + clones * gap + 0.08);
   const origin = { ...p.pos };
   const hunters = phantom || rt.foes().some((e) => rt.marked(e));

@@ -8,6 +8,8 @@ import type { EquipmentItem, Profile } from "./profile";
 import { clampFarmStage, resolveCycle, resolveFarmingDefeat } from "./campaign";
 import { computeModifiers } from "./stats";
 import { nodeLevel } from "./ascension";
+import { addMastery, isDiscovered } from "./signatures";
+import type { MasteryTier, SignatureId } from "../data/signatures";
 
 /**
  * Offline progression. Not a formula: it samples real farming cycles in the real simulation
@@ -45,7 +47,16 @@ export interface CycleSample {
   xp: number;
   drops: number;
   shards: Record<string, number>;
+  /** Signature skills' uses in the cycle (casts plus kills), when any is equipped. */
+  sigUses?: Partial<Record<SignatureId, number>>;
 }
+
+/**
+ * Signature mastery offline: the uses the sampled cycles measured, at this share (the warrior is
+ * not watched), and never more than OFFLINE_MASTERY_CAP_SECONDS of live play would give.
+ */
+export const OFFLINE_MASTERY_SHARE = 0.5;
+export const OFFLINE_MASTERY_CAP_SECONDS = 2 * 3600;
 
 /** Farms one cycle of `stage` headlessly and reports what it yielded. Deterministic per seed. */
 export function sampleCycle(profile: Profile, stage: number, seed: number): CycleSample {
@@ -64,6 +75,10 @@ export function sampleCycle(profile: Profile, stage: number, seed: number): Cycl
       else if (e.type === "xp") out.xp += e.amount;
       else if (e.type === "shard_gain") out.shards[e.summonId] = (out.shards[e.summonId] ?? 0) + e.amount;
       else if (e.type === "encounters_cleared") cleared = true;
+      if ((e.type === "sig_cast" || (e.type === "death" && e.sig && e.kind !== "summon")) && e.sig) {
+        out.sigUses ??= {};
+        out.sigUses[e.sig] = (out.sigUses[e.sig] ?? 0) + 1;
+      }
     }
     out.drops += w.takeLoot().length;
     if (w.phase === "defeat") {
@@ -100,6 +115,8 @@ export interface OfflineSummary {
   bossWaiting: number;
   /** The warrior could not hold a stage and stepped back. */
   fellBack: boolean;
+  /** Signature mastery credited (uses), and the tier reached where one rose. Absent when none was. */
+  signatures?: { id: SignatureId; uses: number; tier: MasteryTier | null }[];
 }
 
 /**
@@ -119,7 +136,13 @@ export function applyOfflineProgress(profile: Profile, elapsedSeconds: number, s
   const sum: OfflineSummary = { seconds, capped, foughtSeconds: 0, startStage, endStage: stage, stagesCleared: [], cycles: 0, kills: 0, elites: 0, gold: 0, xp: 0, essence: 0, items: [], salvageGold: 0, shards: {}, bossWaiting: 0, fellBack: false };
   let drops = 0;
   const rng = new Rng(seed >>> 0);
+  const sigUses: Partial<Record<SignatureId, number>> = {};
+  let sigSeconds = 0;
   const addYield = (s: CycleSample, n: number) => {
+    if (s.sigUses) {
+      for (const [id, a] of Object.entries(s.sigUses) as [SignatureId, number][]) sigUses[id] = (sigUses[id] ?? 0) + a * n;
+      sigSeconds += s.seconds * n;
+    }
     sum.kills += s.kills * n;
     sum.elites += s.elites * n;
     sum.gold += s.gold * n;
@@ -211,6 +234,7 @@ export function applyOfflineProgress(profile: Profile, elapsedSeconds: number, s
   p.player.gold += sum.gold + sum.salvageGold;
   p.player.essence += sum.essence;
   p.progress.totalKills += sum.kills;
+  creditSignatures(p, sum, sigUses, sigSeconds);
   return sum;
 }
 
@@ -219,4 +243,24 @@ export function elapsedAway(lastActive: number, now: number): number | null {
   if (!Number.isFinite(lastActive) || lastActive <= 0 || !Number.isFinite(now)) return null;
   const s = (now - lastActive) / 1000;
   return s < 0 ? null : s;
+}
+
+/**
+ * Signature skills offline: mastery at the measured rate (scaled and capped; nothing is cast or
+ * revealed), and the elites fought toward Death Parade's discovery.
+ */
+function creditSignatures(p: Profile, sum: OfflineSummary, uses: Partial<Record<SignatureId, number>>, seconds: number): void {
+  const s = p.player.signatures;
+  if (!s) return;
+  if (sum.elites > 0) s.progress.elites += sum.elites;
+  const lines: { id: SignatureId; uses: number; tier: MasteryTier | null }[] = [];
+  for (const [id, n] of Object.entries(uses) as [SignatureId, number][]) {
+    if (!isDiscovered(p, id) || n <= 0 || seconds <= 0) continue;
+    const cap = (n / seconds) * OFFLINE_MASTERY_CAP_SECONDS;
+    const credit = Math.floor(Math.min(cap, n * OFFLINE_MASTERY_SHARE));
+    if (credit <= 0) continue;
+    const tier = addMastery(p, id, 0, credit);
+    lines.push({ id, uses: credit, tier });
+  }
+  if (lines.length > 0) sum.signatures = lines;
 }

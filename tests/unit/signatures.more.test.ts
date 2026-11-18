@@ -152,19 +152,21 @@ describe("Legion Awakening", () => {
     expect(end.some((x) => x.e.type === "sig_end" && x.e.sig === "legion_awakening")).toBe(true);
   });
 
-  it("soldiers' strength follows the fielded army's", () => {
-    const weak = sigWorld([entry("legion_awakening")]);
-    const strong = sigWorld([entry("legion_awakening")], { army: true });
-    for (const w of [weak, strong]) for (const x of [400, 430]) foe(w, x, 90);
-    cast(weak, "legion_awakening");
-    cast(strong, "legion_awakening");
-    const a = beats(run(weak, 0.5)).find((x) => x.e.beat === "rise")!;
-    const b = beats(run(strong, 0.5)).find((x) => x.e.beat === "rise")!;
-    const sa = weak.entities.get(a.e.targetIds[0]!)!;
-    const sb = strong.entities.get(b.e.targetIds[0]!)!;
-    const armyAtk = strong.loadout.summons.reduce((x, s) => x + s.stats.attack, 0) / strong.loadout.summons.length;
-    expect(sb.stats.attack).toBeCloseTo(armyAtk * LEGION.armyShare, 0);
-    expect(sa.stats.attack).not.toBeCloseTo(sb.stats.attack, 0);
+  it("soldiers' strength follows the fielded army's (never under a share of the warrior's)", () => {
+    const rise = (armyAttack: number | null) => {
+      const w = sigWorld([entry("legion_awakening")], { army: true });
+      if (armyAttack !== null) for (const s of w.loadout.summons) s.stats.attack = armyAttack;
+      for (const x of [400, 430]) foe(w, x, 90);
+      cast(w, "legion_awakening");
+      const r = beats(run(w, 0.5)).find((x) => x.e.beat === "rise")!;
+      return { s: w.entities.get(r.e.targetIds[0]!)!, w };
+    };
+    const strong = rise(1e6);
+    expect(strong.s.stats.attack).toBeCloseTo(1e6 * LEGION.armyShare, -1);
+    const weak = rise(1);
+    expect(weak.s.stats.attack).toBeCloseTo(weak.w.player.stats.attack * LEGION.warriorShare, 0);
+    // They strike with the warrior's crit rate.
+    expect(weak.s.stats.critChance).toBe(weak.w.player.stats.critChance);
   });
 
   it("never more than the cap stand at once; Veteran Souls raise fewer, sturdier, longer", () => {

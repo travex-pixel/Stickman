@@ -318,7 +318,7 @@ describe("Death Parade", () => {
     cast(w, "death_parade");
     expect(w.player.state).toBe("cast");
     let hiddenAll = true;
-    run(w, PARADE.vanishFor + 0.6, (ww) => {
+    run(w, SIGNATURES.death_parade.castTime - 0.1, (ww) => {
       if (!isHidden(ww.player)) hiddenAll = false;
     });
     expect(hiddenAll).toBe(true);
@@ -404,13 +404,13 @@ describe("signature skills and the rest of the fight", () => {
     // Two identical worlds: one drained of events every step (as a renderer would), one never.
     const a = sigWorld([entry("void_collapse"), entry("death_parade"), entry("abyssal_devourer")], { seed: 2 });
     const b = sigWorld([entry("void_collapse"), entry("death_parade"), entry("abyssal_devourer")], { seed: 2 });
-    for (const w of [a, b]) for (let i = 0; i < 5; i++) foe(w, 260 + i * 60, 40 + i * 20, { hp: 5000 });
+    for (const w of [a, b]) for (let i = 0; i < 5; i++) foe(w, 260 + i * 60, 40 + i * 20, { hp: 1e7 });
     run(a, 12);
     for (let i = 0; i < Math.round(12 / FIXED_DT); i++) b.update(FIXED_DT);
     const hpA = [...a.entities.values()].filter((e) => e.faction === "enemy").map((e) => e.hp);
     const hpB = [...b.entities.values()].filter((e) => e.faction === "enemy").map((e) => e.hp);
     expect(hpA).toEqual(hpB);
-    expect(hpA.some((h) => h < 5000)).toBe(true);
+    expect(hpA.some((h) => h < 1e7)).toBe(true);
   });
 
   it("the selection AI: one cast at a time, a lockout between, nothing during the Fury", () => {

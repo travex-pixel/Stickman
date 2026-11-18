@@ -181,8 +181,8 @@ const SIG: Record<SignatureId, SignatureDef> = {
       { id: "consumption", name: "Consumption", line: "Every foe it kills feeds the next collapse, which hits harder." },
     ],
     cooldown: 14,
-    castTime: 0.35,
-    power: 2.2,
+    castTime: 0.2,
+    power: 9,
     radius: 120,
     cinematic: false,
     colors: [0x5b3f8c, 0x0b0910],
@@ -223,8 +223,8 @@ const SIG: Record<SignatureId, SignatureDef> = {
       { id: "phantom_king", name: "Phantom King", line: "Clone strikes can set off your other signature skills' combinations." },
     ],
     cooldown: 18,
-    castTime: 1.3,
-    power: 1.1,
+    castTime: 0.75,
+    power: 1.4,
     radius: 9999,
     cinematic: false,
     colors: [0x3d4552, 0xc4453f],
@@ -244,8 +244,8 @@ const SIG: Record<SignatureId, SignatureDef> = {
       { id: "temporal_execution", name: "Temporal Execution", line: "Foes already under another skill's effect take far more from the release." },
     ],
     cooldown: 22,
-    castTime: 0.3,
-    power: 0.6,
+    castTime: 0.2,
+    power: 3,
     radius: 200,
     cinematic: false,
     colors: [0xd8dde8, 0x3f6fd8],
@@ -265,7 +265,7 @@ const SIG: Record<SignatureId, SignatureDef> = {
       { id: "legion_commander", name: "Legion Commander", line: "Soldiers take on the strengths of your fielded army's roles." },
     ],
     cooldown: 28,
-    castTime: 0.45,
+    castTime: 0.25,
     power: 0.5,
     radius: 9999,
     cinematic: true,
@@ -286,8 +286,8 @@ const SIG: Record<SignatureId, SignatureDef> = {
       { id: "ancient_devourer", name: "Ancient Devourer", line: "It turns and makes a second pass, diving from above." },
     ],
     cooldown: 26,
-    castTime: 0.4,
-    power: 0.9,
+    castTime: 0.25,
+    power: 4.5,
     radius: 9999,
     cinematic: true,
     colors: [0x1c1830, 0xc4453f],
@@ -307,8 +307,8 @@ const SIG: Record<SignatureId, SignatureDef> = {
       { id: "world_breaker", name: "World Breaker", line: "A wider impact, and a second shockwave rolls out after the first." },
     ],
     cooldown: 32,
-    castTime: 0.5,
-    power: 4,
+    castTime: 0.35,
+    power: 8,
     radius: 150,
     cinematic: true,
     colors: [0xe9c97a, 0x15121c],
@@ -324,7 +324,7 @@ const SIG: Record<SignatureId, SignatureDef> = {
     hint: "Defeat the stage-90 boss with three signature skills mastered.",
     evolutions: [],
     cooldown: 75,
-    castTime: 1,
+    castTime: 0.8,
     power: 0,
     radius: 9999,
     cinematic: true,
@@ -445,7 +445,7 @@ export const SIG_OPENING_SHARE = 0.3;
 
 /** Statuses: how long they last and what they do. */
 export const VOID_MARK = { duration: 6, bonus: 0.25 } as const;
-export const SHADOW_MARK = { duration: 5, bonus: 0.12 } as const;
+export const SHADOW_MARK = { duration: 5, bonus: 0.1 } as const;
 
 /** Void Collapse. */
 export const VOID = {
@@ -458,7 +458,7 @@ export const VOID = {
   shockwaveReach: 1.7,
   shockwavePower: 0.45,
   horizon: { pullSpeed: 260, reach: 1.25, trap: 1.0, trapMaster: 1.6, implodeDelay: 0.35 },
-  supernova: { bursts: 3, radius: 55, power: 0.55, gap: 0.14, leapRange: 170 },
+  supernova: { bursts: 3, radius: 55, power: 0.25, gap: 0.14, leapRange: 170 },
   consumption: { perStack: 0.07, cap: 10, capMaster: 16, radiusPerStack: 0.03, refundMaster: 0.5, refundCap: 4 },
 } as const;
 
@@ -476,7 +476,7 @@ export const DEVOURER = {
   extendCap: 0.4,
   worldEater: { bite: 62, depthBand: 80, bitesPerFoe: 2, bitesPerFoeMaster: 3 },
   soulFeeder: { perStack: 0.5, cap: 3, capMaster: 5 },
-  ancient: { turn: 0.35, diveFor: 0.45, radius: 80, power: 2.2 },
+  ancient: { turn: 0.35, diveFor: 0.45, radius: 80, power: 5 },
   departFor: 0.35,
 } as const;
 
@@ -484,13 +484,13 @@ export const DEVOURER = {
 export const PARADE = {
   vanishFor: 0.15,
   clones: 4,
-  cloneGap: 0.22,
-  finisherPower: 1.8,
+  cloneGap: 0.12,
+  finisherPower: 2.6,
   executeBelow: 0.15,
-  afterimage: { clones: 6, gap: 0.14 },
+  afterimage: { clones: 6, gap: 0.08 },
   executioner: { below: 0.34, bonus: 0.8, bonusMaster: 1.2 },
   hunters: { bonus: 0.35 },
-  bladeParade: { blades: 1, bladesEnhanced: 2, power: 0.3 },
+  bladeParade: { blades: 1, bladesEnhanced: 2, power: 0.4 },
 } as const;
 
 /** King's Judgement. */
@@ -500,11 +500,11 @@ export const JUDGEMENT = {
   meteorAt: 0.95,
   fallFor: 0.6,
   bossBonus: 1.0,
-  fallenStar: { stars: 3, starsMaster: 5, gap: 0.22, radius: 60, power: 1.1 },
+  fallenStar: { stars: 3, starsMaster: 5, gap: 0.22, radius: 60, power: 2 },
   absolute: { bossBonus: 2.2, radius: 0.7, echoPower: 0.5, echoDelay: 0.9 },
-  worldBreaker: { radius: 1.45, delay: 0.4, reach: 2, power: 0.7 },
+  worldBreaker: { radius: 1.45, delay: 0.4, reach: 2, power: 1.2 },
   /** Legion Meteor: each risen soldier hurled into the impact. */
-  legion: { power: 0.8, radius: 60 },
+  legion: { power: 1.5, radius: 60 },
 } as const;
 
 /** Legion Awakening. */
@@ -514,10 +514,10 @@ export const LEGION = {
   soldiers: 5,
   lifetime: 6,
   /** The charge's blow on arrival, and the soldiers' strength against the fielded army's average. */
-  chargePower: 0.8,
+  chargePower: 3,
   armyShare: 0.6,
-  /** With no army fielded, a soldier's attack against the warrior's. */
-  warriorShare: 0.25,
+  /** A soldier's attack is at least this share of the warrior's (with no army, or a weak one). */
+  warriorShare: 0.6,
   corpseMemory: 6,
   endless: { soldiers: 8, soldiersMaster: 11 },
   veteran: { soldiers: 3, hp: 2.4, attack: 1.7, lifetime: 8, lifetimeMaster: 10 },
@@ -530,8 +530,8 @@ export const FRACTURE = {
   freezeFor: 2,
   bossSlow: 0.45,
   /** Share of the damage frozen foes take that time keeps and releases on resume. */
-  store: 0.5,
-  stopTheWorld: { freezeFor: 3, store: 0.4, freezeForMaster: 3.6 },
+  store: 1,
+  stopTheWorld: { freezeFor: 3, store: 0.8, freezeForMaster: 3.6 },
   fracturedFuture: { echoes: 1, echoesMaster: 2, delay: 0.28, share: 0.5 },
   temporal: { bonus: 1.0, executeBelowMaster: 0.2 },
   delayedGap: 0.06,
@@ -555,6 +555,7 @@ export const SOVEREIGN = {
   kneelFor: 0.6,
   auraFor: 10,
   auraForMaster: 12,
+  auraPerRank: 0.5,
   /** Other signature cooldowns tick this much faster in the aura; summons strike this much harder. */
   cooldownRate: 0.6,
   summonBonus: 0.25,

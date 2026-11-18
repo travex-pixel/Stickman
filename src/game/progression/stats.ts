@@ -10,6 +10,7 @@ import { GEAR_SETS, setCounts } from "../data/gearSets";
 import { ASCEND_MIN_STAGE, LIMIT_BREAK_MAX, LIMIT_BREAK_STEP, TREE_COMPOUND, aetherGoldMult, aetherPowerMult, nodeLevel } from "./ascension";
 import { apexDamageMult, noApex, type ApexRanks } from "../data/apex";
 import { STRENGTH_LEVEL_CAP } from "./xp";
+import { signatureDamageMult } from "./signatures";
 
 /** Each Ascendant rank multiplies core stats. Rank is earned in Rank Trials, not bought. */
 export const RANK_STAT_STEP = 0.08;
@@ -379,15 +380,20 @@ export function computePlayerStats(profile: Profile, without: ReadonlySet<PowerS
  * A single number players can compare at a glance. `apex`: the warrior's Apex ranks, whose echoes,
  * prismatic crits and bolt raise what a swing deals (`apexDamageMult`); none, nothing changes.
  */
-export function combatPower(stats: CombatStats, apex?: ApexRanks): number {
-  const dps = stats.attack * stats.attackSpeed * (1 + stats.critChance * (stats.critDamage - 1)) * (apex ? apexDamageMult(stats, apex) : 1);
+export function combatPower(stats: CombatStats, apex?: ApexRanks, signatures = 1): number {
+  const dps = stats.attack * stats.attackSpeed * (1 + stats.critChance * (stats.critDamage - 1)) * (apex ? apexDamageMult(stats, apex) : 1) * signatures;
   const ehp = stats.maxHp / Math.max(0.15, 30 / (30 + stats.defense));
   return Math.round(dps * 4 + ehp * 0.6);
 }
 
-/** The warrior's Power (the Hero panel's number), with any source left out; Apex counts unless left out. */
+/**
+ * The warrior's Power (the Hero panel's number), with any source left out; Apex counts unless left
+ * out. Signature skills in their slots count by what they add to boss damage (signatureDamageMult);
+ * they have no row of their own in the breakdown, and leave only with every source (the base).
+ */
 export function profilePower(profile: Profile, without: ReadonlySet<PowerSource> = NONE): number {
-  return combatPower(computePlayerStats(profile, without), without.has("apex") ? undefined : { ...noApex(), ...profile.player.apex });
+  const sig = without.size >= POWER_SOURCES.length ? 1 : signatureDamageMult(profile);
+  return combatPower(computePlayerStats(profile, without), without.has("apex") ? undefined : { ...noApex(), ...profile.player.apex }, sig);
 }
 
 const UPGRADEABLE: readonly UpgradeableStat[] = ["attack", "maxHp", "defense", "attackSpeed", "critChance", "critDamage"];
