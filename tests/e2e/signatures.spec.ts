@@ -379,8 +379,9 @@ for (const vp of VIEWPORTS) {
       for (const id of ids) {
         const box = await page.getByTestId(id).boundingBox();
         expect(box, `${label} ${id}`).not.toBeNull();
-        expect(box!.height, `${label} ${id} target`).toBeGreaterThanOrEqual(44);
-        expect(box!.width, `${label} ${id} target`).toBeGreaterThanOrEqual(44);
+        // Rounded: a box laid out at 44 can measure 43.99997 while the panel settles.
+        expect(Math.round(box!.height), `${label} ${id} target`).toBeGreaterThanOrEqual(44);
+        expect(Math.round(box!.width), `${label} ${id} target`).toBeGreaterThanOrEqual(44);
       }
     };
     for (const [label, sig] of [["some", SOME], ["full", FULL]] as const) {
