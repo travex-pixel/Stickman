@@ -132,6 +132,25 @@ export function glowRingTex(): Texture {
   });
 }
 
+/** A broad soft band at radius 120 of 256 (the ink under a ring's light). */
+export function bandRingTex(): Texture {
+  return make("sig-band", 256, 256, (ctx, w) => {
+    const c = w / 2;
+    const img = ctx.createImageData(w, w);
+    for (let y = 0; y < w; y++) {
+      for (let x = 0; x < w; x++) {
+        const d = Math.hypot(x - c + 0.5, y - c + 0.5);
+        const off = Math.abs(d - 120);
+        const a = Math.exp(-(off * off) / 40);
+        const i = (y * w + x) * 4;
+        img.data[i] = img.data[i + 1] = img.data[i + 2] = 255;
+        img.data[i + 3] = Math.round(255 * Math.min(1, a));
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+  });
+}
+
 /** A hole: opaque and flat in the middle, falling off at the edge (a black core, an ink pool). */
 export function holeTex(): Texture {
   return make("sig-hole", 64, 64, (ctx, w) => {

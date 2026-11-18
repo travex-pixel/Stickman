@@ -39,6 +39,7 @@ import { SigDriver, buildScript, type SigActor } from "./signatures/driver";
 import { destroySigTextures } from "./signatures/textures";
 import { clearJudgementCache } from "./signatures/skills/judgement";
 import { clearSovereignCache } from "./signatures/skills/sovereign";
+import { clearVoidCache } from "./signatures/skills/void";
 import type { EvolutionId, MasteryTier, SignatureId, SynergyId, VisualQuality } from "../data/signatures";
 import { DEATH_KNEEL } from "./rigs/Rig";
 
@@ -438,6 +439,7 @@ export class BattleRenderer implements ImpactHost {
     clearSignatureShapes();
     clearJudgementCache();
     clearSovereignCache();
+    clearVoidCache();
     destroySigTextures();
     this.background?.destroy();
     this.background = null;
@@ -480,6 +482,8 @@ export class BattleRenderer implements ImpactHost {
     this.sigDriver.clear();
     this.sigTinted.clear();
     this.lastWorldTime = world.time;
+    const sl = world.loadout.signatures;
+    if (sl && this.sig) this.sig.prewarm([...sl.equipped.map((e) => e.id), ...(sl.crown ? [sl.crown.id] : [])], playerSpec(world.loadout.weaponPath));
     this.flashes.reset();
     this.flashTime = 0;
     this.stopLeft = 0;

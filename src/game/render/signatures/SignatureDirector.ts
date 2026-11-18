@@ -5,6 +5,8 @@ import { fmtNum, type NumberStyle } from "../DamageNumbers";
 import { blankMod, type BodyMod, type SigBody, type SigHost } from "./host";
 import { SigKit } from "./kit";
 import { CRIMSON, GILT, GILT_HOT, sigPalette } from "./palette";
+import { bandRingTex, bladeEdgeTex, bladeTex, finTex, glowRingTex, holeTex, scaleTex, smokeTex, starTex, streakTex } from "./textures";
+import type { RigSpec } from "../rigs/Rig";
 import { FrameGovernor, fxProfile, type FxProfile } from "./quality";
 import { Stage, type SigCastEvent, type StageServices } from "./stage";
 import { Dragon, clearDragonCache, type DragonLook } from "./skills/dragon";
@@ -542,6 +544,23 @@ export class SignatureDirector {
     if (kind === "cage" || kind === "clock") this.host.layers.ground.addChild(n);
     else this.marksLayer.addChild(n);
     return n;
+  }
+
+  /**
+   * Make what the equipped skills will need before their first cast (textures, the dragon, the
+   * clones' figure), so the first cast of a fight does not hitch. Called when a world starts.
+   */
+  prewarm(ids: readonly SignatureId[], heroSpec: RigSpec): void {
+    if (ids.length === 0) return;
+    for (const t of [streakTex, bladeTex, bladeEdgeTex, scaleTex, finTex, glowRingTex, bandRingTex, holeTex, smokeTex, starTex]) t();
+    if (ids.includes("abyssal_devourer") && this.dragons.length === 0) {
+      const d = this.dragon({ size: 1, segments: this.profile.dragonSegments, deep: 0x1c1830, mid: 0x3a2c5c, rim: 0x6b4fb0, eye: CRIMSON, gilded: false, crowned: false, mane: false });
+      if (d) this.freeDragon(d);
+    }
+    if (ids.includes("death_parade")) {
+      const r = this.kit.rig("prewarm", { ...heroSpec, finish: "shadow" });
+      this.kit.freeRig(r);
+    }
   }
 
   /** Signature effects on screen this frame (casts, marks, the kit's own). */

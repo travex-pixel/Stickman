@@ -1,4 +1,4 @@
-import type { Container, Graphics, Sprite } from "pixi.js";
+import { Container, Graphics, GraphicsContext, type Sprite } from "pixi.js";
 import type { Vec2 } from "../../../engine/math";
 import { easeInCubic, easeOutBack, easeOutCubic } from "../../anim/ease";
 import { shard, softCircle } from "../../textures";
@@ -37,6 +37,12 @@ export class VoidStage extends Stage {
   private box: Container | null = null;
   private back: Graphics | null = null;
   private front: Graphics | null = null;
+  /**
+   * The accretion rings, drawn once and only turned: each a tilted, squashed node holding a dashed
+   * circle that spins in its plane (behind the core), and a still lip of light across the near side
+   * (in front of it). No geometry is built per frame.
+   */
+  private readonly rings: { back: Container; dash: Graphics; front: Container; lip: Graphics }[] = [];
   private halo: Sprite | null = null;
   private core: Sprite | null = null;
   private rim: Sprite | null = null;
@@ -177,9 +183,22 @@ export class VoidStage extends Stage {
       this.rune.alpha = 0;
     }
     this.back = this.graphics(box);
+    const n = this.compact ? 1 : this.rich ? 3 : 2;
+    const light = this.gilded ? GILT_HOT : this.pal.core;
+    for (let i = 0; i < n; i++) {
+      const back = new Container();
+      const dash = new Graphics(dashContext(i, i === 0 ? this.pal.mid : this.pal.deep, i === 0 ? light : this.pal.glow));
+      back.addChild(dash);
+      box.addChild(back);
+      this.rings.push({ back, dash, front: new Container(), lip: new Graphics(lipContext(i === 0 ? light : this.pal.glow)) });
+    }
     this.halo = this.sprite(box, holeTex(), false);
     this.core = this.sprite(box, holeTex(), false);
     this.rim = this.sprite(box, glowRingTex(), true);
+    for (const r of this.rings) {
+      r.front.addChild(r.lip);
+      box.addChild(r.front);
+    }
     this.front = this.graphics(box);
     if (this.halo) this.halo.tint = this.pal.deep;
     if (this.core) this.core.tint = 0x000000;
@@ -467,31 +486,28 @@ export class VoidStage extends Stage {
     if (!back || !front) return;
     back.clear();
     front.clear();
-    if (this.phase === 0 || this.phase >= 3) return;
-    const pal = this.pal;
-    const R = this.coreR * (this.phase === 1 ? easeOutCubic(span01(this.phaseT, 0, this.formD)) : 1 + 0.35 * this.intensity);
-    const rings = this.compact ? 1 : this.rich ? 3 : 2;
-    const light = this.gilded ? GILT_HOT : pal.core;
-    // Accretion rings: tilted ellipses, the far half behind the core and the near half in front, each
-    // a dark ink band with a white-hot line, broken into turning dashes so the spin reads.
-    for (let i = 0; i < rings; i++) {
-      const rx = R * (1.9 + i * 0.75);
-      const ry = rx * (0.24 + i * 0.05);
-      const tilt = -0.28 + i * 0.12;
-      const dash = 7 + i * 2;
-      const turn = this.spin * (1 - i * 0.22) * (i % 2 === 0 ? 1 : -0.8);
-      for (let d = 0; d < dash; d++) {
-        const a0 = (d / dash) * Math.PI * 2 + turn;
-        const a1 = a0 + ((Math.PI * 2) / dash) * 0.62;
-        // Behind the core (angles where sin < 0 are the far side).
-        const mid = (a0 + a1) / 2;
-        const g = Math.sin(mid) < 0 ? back : front;
-        arc(g, rx, ry, tilt, a0, a1);
-        g.stroke({ width: 3.2 - i * 0.6, color: i === 0 ? pal.mid : pal.deep, alpha: 0.85 });
-        arc(g, rx, ry, tilt, a0 + 0.05, a1 - 0.05);
-        g.stroke({ width: 1.1, color: i === 0 ? light : pal.glow, alpha: 0.75 * (0.6 + 0.4 * this.intensity) });
+    const show = this.phase !== 0 && this.phase < 3;
+    for (const r of this.rings) {
+      r.back.visible = show;
+      r.front.visible = show;
+    }
+    if (!show) return;
+    {
+      const Rr = this.coreR * (this.phase === 1 ? easeOutCubic(span01(this.phaseT, 0, this.formD)) : 1 + 0.35 * this.intensity);
+      for (let i = 0; i < this.rings.length; i++) {
+        const r = this.rings[i]!;
+        const rx = Rr * (1.9 + i * 0.75);
+        const ry = rx * (0.24 + i * 0.05);
+        const tilt = -0.28 + i * 0.12;
+        r.back.rotation = r.front.rotation = tilt;
+        r.back.scale.set(rx / 100, ry / 100);
+        r.front.scale.set(rx / 100, ry / 100);
+        r.dash.rotation = this.spin * (1 - i * 0.22) * (i % 2 === 0 ? 1 : -0.8);
+        r.lip.alpha = 0.6 + 0.4 * this.intensity;
       }
     }
+    const pal = this.pal;
+    const R = this.coreR * (this.phase === 1 ? easeOutCubic(span01(this.phaseT, 0, this.formD)) : 1 + 0.35 * this.intensity);
     // The photon ring's electric hint at the edge of the horizon (Event Horizon burns it brighter).
     const hz = this.evo === "event_horizon" ? 1 : 0.45;
     back.circle(0, 0, R * 1.4).stroke({ width: 1.2, color: pal.accent, alpha: 0.5 * hz * this.intensity });
@@ -508,6 +524,11 @@ export class VoidStage extends Stage {
   }
 
   override dispose(): void {
+    for (const r of this.rings) {
+      r.back.destroy({ children: true });
+      r.front.destroy({ children: true });
+    }
+    this.rings.length = 0;
     for (const id of this.caught) {
       const m = this.svc.mod(id);
       m.dx = 0;
@@ -518,20 +539,39 @@ export class VoidStage extends Stage {
   }
 }
 
-/** A point on a tilted ellipse. */
-function arc(g: Graphics, rx: number, ry: number, tilt: number, a0: number, a1: number): void {
-  const c = Math.cos(tilt);
-  const s = Math.sin(tilt);
-  const n = 6;
-  for (let i = 0; i <= n; i++) {
-    const a = a0 + ((a1 - a0) * i) / n;
-    const x = Math.cos(a) * rx;
-    const y = Math.sin(a) * ry;
-    const px = x * c - y * s;
-    const py = x * s + y * c;
-    if (i === 0) g.moveTo(px, py);
-    else g.lineTo(px, py);
+const RING_CTX = new Map<string, GraphicsContext>();
+
+/** Accretion ring `i` (unit radius 100): turning dashes, an ink band under a white-hot line. */
+function dashContext(i: number, ink: number, light: number): GraphicsContext {
+  const key = `dash|${i}|${ink}|${light}`;
+  const hit = RING_CTX.get(key);
+  if (hit && !hit.destroyed) return hit;
+  const g = new GraphicsContext();
+  const dash = 7 + i * 2;
+  for (let d = 0; d < dash; d++) {
+    const a0 = (d / dash) * Math.PI * 2;
+    const a1 = a0 + ((Math.PI * 2) / dash) * 0.62;
+    g.arc(0, 0, 100, a0, a1).stroke({ width: 9 - i * 1.5, color: ink, alpha: 0.85 });
+    g.arc(0, 0, 100, a0 + 0.05, a1 - 0.05).stroke({ width: 3, color: light, alpha: 0.8 });
   }
+  RING_CTX.set(key, g);
+  return g;
+}
+
+/** The near half of a ring (unit radius 100), a thin line of light passing in front of the core. */
+function lipContext(light: number): GraphicsContext {
+  const key = `lip|${light}`;
+  const hit = RING_CTX.get(key);
+  if (hit && !hit.destroyed) return hit;
+  const g = new GraphicsContext();
+  g.arc(0, 0, 100, 0.25, Math.PI - 0.25).stroke({ width: 3.5, color: light, alpha: 0.7 });
+  RING_CTX.set(key, g);
+  return g;
+}
+
+export function clearVoidCache(): void {
+  for (const c of RING_CTX.values()) c.destroy();
+  RING_CTX.clear();
 }
 
 /** The Master's rune ring (unit radius 100, squashed by the caller): glyph ticks between two circles. */

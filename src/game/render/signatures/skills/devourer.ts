@@ -475,29 +475,39 @@ export class DevourerStage extends Stage {
     this.drawRift(this.exitG, this.exit, this.time + 1.3);
   }
 
-  /** A rift: a tall jagged tear, ink inside, a crimson-violet lip, turning streaks within. */
+  /**
+   * A rift: a tall jagged tear, ink inside, a crimson-violet lip, rings of the void within. Drawn once
+   * at full size; opening and closing only scale it (no geometry per frame).
+   */
   private drawRift(g: Graphics | null, r: { x: number; y: number; k: number; on: boolean }, time: number): void {
     if (!g) return;
-    g.clear();
-    if (!r.on || r.k <= 0.01) return;
-    const S = this.size;
-    const h = 52 * S * easeOutCubic(r.k);
-    const w = 15 * S * (0.6 + 0.4 * r.k);
-    const n = 14;
-    const pts = this.riftPts;
-    pts.length = 0;
-    for (let i = 0; i < n; i++) {
-      const a = (i / n) * Math.PI * 2;
-      const jag = 1 + (i % 2 === 0 ? 0.22 : -0.12) * Math.sin(time * 6 + i);
-      pts.push(r.x + Math.cos(a) * w * jag, r.y + Math.sin(a) * h * (i % 2 === 0 ? 1 : 0.94));
+    if (!r.on || r.k <= 0.01) {
+      g.visible = false;
+      return;
     }
-    g.poly(pts).fill({ color: this.pal.ink, alpha: 0.95 });
-    g.poly(pts).stroke({ width: 4 * S, color: this.pal.mid, alpha: 0.75 });
-    g.poly(pts).stroke({ width: 1.6 * S, color: this.gilded ? GILT : CRIMSON, alpha: 0.95 });
-    for (let i = 0; i < 3; i++) {
-      const a = time * (2 + i) + i * 2.1;
-      g.ellipse(r.x, r.y, w * (0.3 + i * 0.2), h * (0.3 + i * 0.18)).stroke({ width: 1, color: this.pal.glow, alpha: 0.25 + 0.1 * Math.sin(a) });
+    if (g.label !== "rift") {
+      g.label = "rift";
+      g.clear();
+      const S = this.size;
+      const h = 52 * S;
+      const w = 15 * S;
+      const n = 14;
+      const pts = this.riftPts;
+      pts.length = 0;
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2;
+        const jag = 1 + (i % 2 === 0 ? 0.22 : -0.12) * Math.sin(i * 1.7);
+        pts.push(Math.cos(a) * w * jag, Math.sin(a) * h * (i % 2 === 0 ? 1 : 0.94));
+      }
+      g.poly(pts).fill({ color: this.pal.ink, alpha: 0.95 });
+      g.poly(pts).stroke({ width: 4 * S, color: this.pal.mid, alpha: 0.75 });
+      g.poly(pts).stroke({ width: 1.6 * S, color: this.gilded ? GILT : CRIMSON, alpha: 0.95 });
+      for (let i = 0; i < 3; i++) g.ellipse(0, 0, w * (0.3 + i * 0.2), h * (0.3 + i * 0.18)).stroke({ width: 1, color: this.pal.glow, alpha: 0.3 });
     }
+    g.visible = true;
+    g.position.set(r.x, r.y);
+    // A slow breath in the tear as it holds open.
+    g.scale.set((0.6 + 0.4 * r.k) * (1 + 0.04 * Math.sin(time * 7)), easeOutCubic(r.k));
   }
 
   override dispose(): void {

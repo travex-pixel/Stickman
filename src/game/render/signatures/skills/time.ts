@@ -39,6 +39,8 @@ export class TimeStage extends Stage {
   private crack = 0;
   private readonly targets: number[] = [];
   private delayedCount = 0;
+  private minute: Graphics | null = null;
+  private faceKey = -1;
 
   constructor(...a: ConstructorParameters<typeof Stage>) {
     super(...a);
@@ -274,7 +276,6 @@ export class TimeStage extends Stage {
     const g = this.face;
     const box = this.box;
     if (!g || !box) return;
-    g.clear();
     if (this.phase === 0 || (this.phase === 3 && this.phaseT > 0.05)) {
       box.visible = this.phase !== 3;
       return;
@@ -286,6 +287,25 @@ export class TimeStage extends Stage {
     box.alpha = this.phase === 1 ? Math.min(1, this.phaseT * 5) : 1;
     const silver = this.pal.mid;
     const ink = this.pal.deep;
+    // The minute ring is drawn once and turned; the face only when its hands or cracks change
+    // (a tick each half second): no geometry most frames.
+    if ((this.master || this.evo === "stop_the_world") && !this.minute) {
+      const m = this.graphics(box);
+      const rr = R * 1.18;
+      m.circle(0, 0, rr).stroke({ width: 1, color: silver, alpha: 0.5 });
+      for (let i = 0; i < 24; i++) {
+        const a = (i / 24) * Math.PI * 2;
+        m.moveTo(Math.cos(a) * rr * 0.96, Math.sin(a) * rr * 0.96).lineTo(Math.cos(a) * rr * 1.04, Math.sin(a) * rr * 1.04);
+      }
+      m.stroke({ width: 1, color: silver, alpha: 0.7 });
+      this.minute = m;
+    }
+    if (this.minute) this.minute.rotation = -this.t * 0.6;
+    const cNow = this.phase === 1 ? 0.35 * span01(this.phaseT, 0.1, 0.3) : this.crack;
+    const key = Math.max(0, Math.round(4 * cNow)) * 1e6 + Math.round(this.hand * 500) + this.phase * 1e8;
+    if (key === this.faceKey) return;
+    this.faceKey = key;
+    g.clear();
     // The face: a translucent ink disc, a silver rim, roman ticks.
     g.circle(0, 0, R).fill({ color: ink, alpha: 0.55 });
     g.circle(0, 0, R).stroke({ width: 3.2, color: silver, alpha: 0.95 });
@@ -296,17 +316,6 @@ export class TimeStage extends Stage {
       g.moveTo(Math.cos(a) * R * (long ? 0.7 : 0.76), Math.sin(a) * R * (long ? 0.7 : 0.76)).lineTo(Math.cos(a) * R * 0.84, Math.sin(a) * R * 0.84);
     }
     g.stroke({ width: 1.8, color: silver, alpha: 0.95 });
-    if (this.master || this.evo === "stop_the_world") {
-      // The minute ring, turning the other way.
-      const rr = R * 1.18;
-      const turn = -this.t * 0.6;
-      g.circle(0, 0, rr).stroke({ width: 1, color: silver, alpha: 0.5 });
-      for (let i = 0; i < 24; i++) {
-        const a = (i / 24) * Math.PI * 2 + turn;
-        g.moveTo(Math.cos(a) * rr * 0.96, Math.sin(a) * rr * 0.96).lineTo(Math.cos(a) * rr * 1.04, Math.sin(a) * rr * 1.04);
-      }
-      g.stroke({ width: 1, color: silver, alpha: 0.7 });
-    }
     // Hands: running backwards while it forms, stopped dead while time is.
     const handCol = this.gilded ? GILT : 0xffffff;
     const ha = this.hand - Math.PI / 2;

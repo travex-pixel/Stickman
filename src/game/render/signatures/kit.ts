@@ -5,7 +5,7 @@ import { easeInCubic, easeOutCubic } from "../anim/ease";
 import { softCircle } from "../textures";
 import type { FxProfile } from "./quality";
 import type { SigHost } from "./host";
-import { streakTex } from "./textures";
+import { bandRingTex, glowRingTex, streakTex } from "./textures";
 
 /**
  * The signature skills' toolkit: pooled, capped primitives every skill composes its moments from.
@@ -31,6 +31,9 @@ export const MAX_RIGS = 18;
 
 interface RingRec {
   live: boolean;
+  /** Sprites (no geometry per frame): the ink band under, the light line over. */
+  ink: Sprite;
+  line: Sprite;
   x: number;
   y: number;
   r0: number;
@@ -138,7 +141,15 @@ export class SigKit {
     this.fxLight.blendMode = "add";
     host.layers.ground.addChild(this.groundInk, this.groundLight);
     host.layers.fx.addChild(this.fxInk, this.streakLayer, this.fxLight);
-    for (let i = 0; i < MAX_RINGS; i++) this.rings.push({ live: false, x: 0, y: 0, r0: 0, r1: 0, squash: 0.36, life: 0, total: 1, delay: 0, color: 0, light: 0xffffff, width: 2, ground: true, inward: false });
+    for (let i = 0; i < MAX_RINGS; i++) {
+      const ink = new Sprite(bandRingTex());
+      const line = new Sprite(glowRingTex());
+      ink.anchor.set(0.5);
+      line.anchor.set(0.5);
+      line.blendMode = "add";
+      ink.visible = line.visible = false;
+      this.rings.push({ live: false, ink, line, x: 0, y: 0, r0: 0, r1: 0, squash: 0.36, life: 0, total: 1, delay: 0, color: 0, light: 0xffffff, width: 2, ground: true, inward: false });
+    }
     for (let i = 0; i < MAX_CUTS; i++) this.cuts.push({ live: false, line: false, x: 0, y: 0, x2: 0, y2: 0, r: 0, a0: 0, sweep: 0, squash: 1, color: 0, light: 0xffffff, width: 2, life: 0, total: 1, delay: 0 });
     for (let i = 0; i < MAX_STREAKS; i++) {
       const s = new Sprite(streakTex());
@@ -180,6 +191,14 @@ export class SigKit {
       r.delay = o.delay ?? 0;
       r.ground = o.ground ?? true;
       r.inward = o.inward ?? false;
+      // Ground rings lie under the figures; upright ones stand in the light above them.
+      const layer = r.ground ? this.host.layers.ground : this.host.layers.fx;
+      if (r.ink.parent !== layer) layer.addChild(r.ink);
+      if (r.line.parent !== layer) layer.addChild(r.line);
+      r.ink.tint = color >= 0 ? color : 0;
+      r.line.tint = light >= 0 ? light : 0xffffff;
+      r.ink.visible = false;
+      r.line.visible = false;
       this.dirty = true;
       return;
     }
@@ -325,6 +344,7 @@ export class SigKit {
   graphics(layer: Container, add = false): Graphics {
     const g = this.gpool.pop() ?? new Graphics();
     g.clear();
+    g.label = "";
     g.blendMode = add ? "add" : "normal";
     g.alpha = 1;
     g.visible = true;
@@ -372,7 +392,9 @@ export class SigKit {
    * Lend a rig of a kind (a clone, a soldier, a stand-in), added to the figures layer. `fade` > 0
    * makes it an afterimage that fades and returns itself; 0 leaves it to the caller (`freeRig`).
    */
-  rig(key: string, spec: RigSpec, fade = 0, alpha = 1): Rig | null {
+  rig(name: string, spec: RigSpec, fade = 0, alpha = 1): Rig | null {
+    // Pooled by the figure's look, so a clone with crimson eyes is never handed one with gold.
+    const key = `${name}|${JSON.stringify(spec)}`;
     let rec: RigRec | undefined;
     for (const r of this.rigs) {
       if (!r.live && r.key === key) {
@@ -584,6 +606,7 @@ export class SigKit {
   /** Advance the primitives. `dt` is effect time (it stops in a hit-stop), `realDt` real time. */
   update(dt: number, realDt: number): void {
     this.updatePush(realDt);
+    this.updateRings(dt);
     for (const r of this.rigs) {
       if (!r.live || r.total <= 0) continue;
       r.life -= realDt;
@@ -624,10 +647,8 @@ export class SigKit {
 
   /** Redraw the shared geometry; skills draw their own into the same graphics in `paint`. */
   beginPaint(): boolean {
-    let any = false;
-    for (const r of this.rings) if (r.live) any = true;
-    if (!any) for (const c of this.cuts) if (c.live) any = true;
-    return any;
+    for (const c of this.cuts) if (c.live) return true;
+    return false;
   }
 
   clearPaint(): void {
@@ -637,8 +658,8 @@ export class SigKit {
     this.fxLight.clear();
   }
 
-  /** Draw rings and cuts for this frame (call after `clearPaint`). */
-  paint(dt: number): void {
+  /** Move the rings (sprites, scaled and faded: no geometry is built for them). */
+  private updateRings(dt: number): void {
     let n = 0;
     for (const r of this.rings) {
       if (!r.live) continue;
@@ -649,6 +670,8 @@ export class SigKit {
       r.life -= dt;
       if (r.life <= 0) {
         r.live = false;
+        r.ink.visible = false;
+        r.line.visible = false;
         continue;
       }
       n++;
@@ -656,14 +679,24 @@ export class SigKit {
       const e = r.inward ? easeInCubic(k) : easeOutCubic(k);
       const rad = Math.max(0.5, r.r0 + (r.r1 - r.r0) * e);
       const fade = r.inward ? Math.min(1, k * 3) * (1 - k * 0.3) : 1 - k * k;
-      const w = Math.max(0.3, r.width * (r.inward ? 0.6 + 0.4 * k : 1 - k * 0.55));
-      const ink = r.ground ? this.groundInk : this.fxInk;
-      const light = r.ground ? this.groundLight : this.fxLight;
-      const ry = Math.max(0.5, rad * r.squash);
-      if (r.color >= 0) ink.ellipse(r.x, r.y, rad, ry).stroke({ width: w * 2.6, color: r.color, alpha: 0.75 * fade });
-      if (r.light >= 0) light.ellipse(r.x, r.y, rad, ry).stroke({ width: w * 0.7, color: r.light, alpha: 0.95 * fade });
+      // The texture's ring sits at radius 120; a heavier ring is drawn stronger, not wider.
+      const sx = rad / 120;
+      const sy = Math.max(0.004, (rad * r.squash) / 120);
+      const weight = Math.min(1, 0.45 + r.width * 0.12);
+      r.ink.visible = r.color >= 0;
+      r.line.visible = r.light >= 0;
+      r.ink.position.set(r.x, r.y);
+      r.ink.scale.set(sx * 1.02, sy * 1.02);
+      r.ink.alpha = 0.8 * fade * weight;
+      r.line.position.set(r.x, r.y);
+      r.line.scale.set(sx, sy);
+      r.line.alpha = Math.min(1, 1.1 * fade * weight);
     }
     this.drawnRings = n;
+  }
+
+  /** Draw cuts for this frame (call after `clearPaint`). */
+  paint(dt: number): void {
     for (const c of this.cuts) {
       if (!c.live) continue;
       if (c.delay > 0) {
@@ -736,7 +769,11 @@ export class SigKit {
 
   /** Drop everything in flight (a new world); lent sprites stay with their owners until freed. */
   reset(): void {
-    for (const r of this.rings) r.live = false;
+    for (const r of this.rings) {
+      r.live = false;
+      r.ink.visible = false;
+      r.line.visible = false;
+    }
     for (const c of this.cuts) c.live = false;
     for (const s of this.streaks) {
       s.live = false;
@@ -767,6 +804,11 @@ export class SigKit {
     this.cpool.length = 0;
     for (const s of this.streaks) s.s.destroy();
     this.streaks.length = 0;
+    for (const r of this.rings) {
+      r.ink.destroy();
+      r.line.destroy();
+    }
+    this.rings.length = 0;
     this.streakLayer.destroy();
     this.groundInk.destroy();
     this.groundLight.destroy();
