@@ -26,34 +26,12 @@ import {
   synergyViews,
   type MasteryView,
 } from "@/game/progression/signatures";
+import { evolutionWaits } from "@/components/signatures/news";
 import { SigGlyph, activationText, rarityWord, sigColour, signatureFocus, useSignatureFocus } from "@/components/signatures/shared";
 
 const CROWN: SignatureId = "sovereign_awakening";
 /** How long the panel stays lowered while a preview plays above it. */
 const PREVIEW_MS = { cinematic: 6000, plain: 4200 } as const;
-
-/** An evolution waits to be chosen: the skill reached Adept with none picked. */
-function evolutionWaits(p: Profile, id: SignatureId): boolean {
-  return SIGNATURES[id].evolutions.length > 0 && chosenEvolution(p, id) === null && signatureMastery(p, id).tier >= 1;
-}
-
-/**
- * Something to do in the collection: an empty slot and a found skill to fill it, an evolution to
- * choose, or a rank to buy for a skill in use (a warrior with points banked would otherwise see
- * the dot forever, for skills he never equips).
- */
-export function signatureNews(p: Profile): boolean {
-  const s = signatureState(p);
-  if (s.discovered.length === 0) return false;
-  const slots = equippedSignatures(p);
-  const unequipped = s.discovered.some((id) => id !== CROWN && !slots.includes(id));
-  if (unequipped && slots.some((x) => x === null)) return true;
-  for (const id of s.discovered) {
-    if (evolutionWaits(p, id)) return true;
-    if ((slots.includes(id) || id === CROWN) && canBuySignatureRank(p, id).ok) return true;
-  }
-  return false;
-}
 
 /** The slot a skill sits in, or -1. */
 function slotOf(slots: (SignatureId | null)[], id: SignatureId): number {

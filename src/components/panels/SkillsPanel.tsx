@@ -27,7 +27,8 @@ import { ABILITY_ICON } from "@/components/ui/abilityIcons";
 import { slotForm } from "@/game/progression/techniques";
 import { usePanelDetent, useRaisePanel } from "@/hooks/usePanelDetent";
 import { signaturesVisible } from "@/game/progression/signatures";
-import { SignaturesView, signatureNews } from "./SignaturesView";
+import { SignaturesView } from "./SignaturesView";
+import { signatureNews } from "@/components/signatures/news";
 import { useCompactFit } from "@/hooks/useCompactFit";
 
 const BRANCHES: SkillBranch[] = ["power", "soul", "command"];
