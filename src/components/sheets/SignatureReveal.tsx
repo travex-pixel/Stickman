@@ -26,6 +26,8 @@ const SKIP_GUARD_MS = 400;
  */
 const RITE = { sigil: 250, name: 1250, watch: 2100, told: 5600 } as const;
 const SHORT = { watch: 150, told: 1500 } as const;
+/** The share of the screen's height, from its top, the sheet leaves clear for the skill to play in. */
+const PREVIEW_BAND = 0.4;
 /** Without a preview to watch, the rite does not hold the field open for nothing. */
 const NO_PREVIEW_HOLD = 900;
 
@@ -54,7 +56,9 @@ export function SignatureReveal({ modal, open }: { modal: RevealModal; open: boo
     timers.current = [];
   };
   const at = (ms: number, fn: () => void) => timers.current.push(setTimeout(fn, ms));
-  const play = useCallback(() => c.previewSignature(id, null), [c, id]);
+  // The skill plays in the band of battlefield the sheet leaves clear (its upper part), and keeps
+  // playing there until the sheet closes.
+  const play = useCallback(() => c.previewSignature(id, null, { hold: true, band: Math.round(window.innerHeight * PREVIEW_BAND) }), [c, id]);
 
   useEffect(() => {
     opened.current = performance.now();
@@ -74,7 +78,10 @@ export function SignatureReveal({ modal, open }: { modal: RevealModal; open: boo
       at(SHORT.watch, () => void play());
       at(SHORT.told, () => setPhase("told"));
     }
-    return clear;
+    return () => {
+      clear();
+      c.stopSignaturePreview();
+    };
     // One run per reveal (the component is keyed by the skill).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -83,6 +90,7 @@ export function SignatureReveal({ modal, open }: { modal: RevealModal; open: boo
     if (finished.current) return;
     finished.current = true;
     clear();
+    c.stopSignaturePreview();
     if (equip && !crown) {
       const empty = equippedSignatures(profile).findIndex((s) => s === null);
       if (empty >= 0) {
@@ -101,7 +109,8 @@ export function SignatureReveal({ modal, open }: { modal: RevealModal; open: boo
     setPhase("told");
   };
 
-  const dark = phase === "dark" || phase === "sigil" || phase === "name";
+  // Only the rite darkens the whole screen; a short reveal names the skill under the field it plays on.
+  const dark = grand && (phase === "dark" || phase === "sigil" || phase === "name");
   const empty = equippedSignatures(profile).some((s) => s === null);
   return (
     <AnimatePresence>

@@ -1801,9 +1801,11 @@ export class GameController {
 
   /**
    * Play a signature skill's sequence on the battlefield as a preview: the same animation as the
-   * real cast, on stand-in figures, dealing nothing and touching nothing in the fight.
+   * real cast, on stand-in figures, dealing nothing and touching nothing in the fight. `hold`: it
+   * stays up, playing again, until `stopSignaturePreview` (the reveal); `band`: the page's px from
+   * its top within which it must play (a sheet covers the rest).
    */
-  previewSignature(id: SignatureId, evo: EvolutionId | null = null, opts: { mastery?: MasteryTier; synergy?: SynergyId } = {}): boolean {
+  previewSignature(id: SignatureId, evo: EvolutionId | null = null, opts: { mastery?: MasteryTier; synergy?: SynergyId; hold?: boolean; band?: number } = {}): boolean {
     return this.renderer?.previewSignature(id, evo, opts) ?? false;
   }
 

@@ -53,8 +53,13 @@ export interface PreviewOptions {
   /** A combination to show in the preview (its partner is staged with it where it needs one). */
   synergy?: SynergyId;
   enhanced?: boolean;
-  /** Keep the preview up after the animation (the reveal holds it until closed). */
+  /** Keep the preview up after the animation (the reveal holds it until closed), playing it again after a breath. */
   hold?: boolean;
+  /**
+   * The height (canvas px, from its top) the stand-ins must play within: a sheet over the rest of
+   * the screen (the reveal) leaves only that band of the battlefield to be seen. Omitted: the canvas.
+   */
+  band?: number;
 }
 
 /** What the reveal tells the interface: when to show the name, when the details, and its length. */
@@ -173,14 +178,31 @@ export class Sandbox {
 
   /** The canvas size and the band the interface covers at the bottom. */
   layout(w: number, h: number, insetBottom: number): void {
-    this.width = w;
-    this.height = h;
-    const reserve = 70;
-    this.groundTop = Math.max(h * 0.36, (h - reserve) * 0.46);
-    this.groundBottom = h - reserve;
-    this.camera.setViewport(w, h);
-    this.camera.setInsets(insetBottom);
+    this.canvasH = h;
+    this.insetBottom = insetBottom;
     this.dim.clear().rect(0, 0, w, h).fill(0x07060a);
+    // A band (the reveal's sheet covers the rest): the stand-ins and the camera live in it alone.
+    const band = this.band > 0 ? Math.max(160, Math.min(h, this.band)) : h;
+    this.width = w;
+    this.height = band;
+    const reserve = band < h ? Math.min(70, band * 0.12) : 70;
+    this.groundTop = Math.max(band * 0.36, (band - reserve) * 0.46);
+    this.groundBottom = band - reserve;
+    this.camera.setViewport(w, band);
+    this.camera.setInsets(band < h ? 0 : insetBottom);
+  }
+
+  private canvasH = 640;
+  private insetBottom = 0;
+  /** The visible band asked for by the running preview (0: the whole canvas). */
+  private band = 0;
+  /** A held preview plays again after a breath: what it plays, and when it last finished. */
+  private replay: { id: SignatureId; evo: EvolutionId | null; o: PreviewOptions; idleAt: number } | null = null;
+
+  private setBand(band: number): void {
+    if (band === this.band) return;
+    this.band = band;
+    this.layout(this.width, this.canvasH, this.insetBottom);
   }
 
   private sx(x: number): number {
@@ -287,6 +309,8 @@ export class Sandbox {
   /** Play a skill's animation on stand-ins. Restarts if one is running. */
   preview(id: SignatureId, evo: EvolutionId | null, o: PreviewOptions = {}): boolean {
     this.stopNow();
+    this.setBand(o.band ?? 0);
+    this.replay = o.hold ? { id, evo, o, idleAt: -1 } : null;
     this.active = true;
     this.root.visible = true;
     this.dimTarget = 0.66;
@@ -304,6 +328,8 @@ export class Sandbox {
    */
   playReveal(id: SignatureId): RevealTiming {
     this.stopNow();
+    this.replay = null;
+    this.setBand(0);
     const def = signatureDef(id);
     const full = def.rarity === "legendary" || def.rarity === "mythic";
     const timing: RevealTiming = full ? { nameAt: 0.9, detailsAt: 5.4, length: 6.4, full } : { nameAt: 0.5, detailsAt: 2.6, length: 3.0, full };
@@ -336,6 +362,7 @@ export class Sandbox {
 
   /** Close the preview (fades out). */
   stop(): void {
+    this.replay = null;
     if (!this.active) return;
     this.dimTarget = 0;
     this.closeAt = this.time;
@@ -428,6 +455,17 @@ export class Sandbox {
     this.stage.alpha = this.dimTarget > 0 ? 1 : Math.min(1, this.dimK / 0.5);
     this.director.update(dt, real);
     this.particles.update(dt);
+    // A held preview (the reveal) plays its skill again after a breath, for as long as it is shown.
+    const rp = this.replay;
+    if (rp && this.time < this.closeAt) {
+      if (this.driver.pending > 0 || this.director.liveStages > 0) rp.idleAt = -1;
+      else if (rp.idleAt < 0) rp.idleAt = this.time;
+      else if (this.time - rp.idleAt >= 0.9) {
+        rp.idleAt = -1;
+        this.cast(rp.id, rp.evo, rp.o);
+        this.camera.snap();
+      }
+    }
     this.updateActors(dt, real);
     // Frame the stand-ins.
     const b = this.box;

@@ -3013,7 +3013,13 @@ export class BattleRenderer implements ImpactHost {
   previewSignature(id: SignatureId, evo: EvolutionId | null = null, opts: PreviewOptions = {}): boolean {
     if (!this.sandbox || this.width <= 0) return false;
     this.sandbox.layout(this.width, this.height, this.camera.insetBottom);
-    return this.sandbox.preview(id, evo, opts);
+    // A band is asked for in the page's px from its top: the canvas may start lower.
+    let band = opts.band;
+    if (band !== undefined) {
+      const top = this.app?.canvas?.getBoundingClientRect?.().top ?? 0;
+      band = Math.max(0, band - top);
+    }
+    return this.sandbox.preview(id, evo, { ...opts, band });
   }
 
   /** Close the preview (it fades out). */

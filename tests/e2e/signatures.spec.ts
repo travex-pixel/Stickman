@@ -271,7 +271,11 @@ test.describe("A signature skill's reveal", () => {
     await expect(page.getByTestId("signature-reveal-name")).toHaveText("Abyssal Devourer");
     await expect(page.getByTestId("signature-reveal-rarity")).toContainText("Legendary");
     await expect(m).toHaveAttribute("data-phase", "watch", { timeout: 3000 });
-    expect(await calls(page)).toContainEqual(["previewSignature", ["abyssal_devourer", null]]);
+    // It plays held (until the sheet closes) in the band of battlefield the sheet leaves clear.
+    const pv = (await calls(page)).find(([n]) => n === "previewSignature");
+    expect(pv?.[1]?.[0]).toBe("abyssal_devourer");
+    expect(pv?.[1]?.[2]).toMatchObject({ hold: true });
+    expect((pv?.[1]?.[2] as { band: number }).band).toBeGreaterThan(0);
     // Within the cap the words and the actions are up, untouched.
     await expect(m).toHaveAttribute("data-phase", "told", { timeout: 6000 });
     await expect(page.getByTestId("signature-reveal-description")).toBeVisible();
@@ -280,6 +284,43 @@ test.describe("A signature skill's reveal", () => {
     expect(c).toContainEqual(["equipSignature", ["abyssal_devourer", 2]]);
     expect(c).toContainEqual(["signatureRevealed", ["abyssal_devourer"]]);
     await expect(m).toHaveCount(0);
+  });
+
+  test("the skill plays where the sheet leaves the battlefield clear, for as long as the sheet is up, and stops with it", async ({ page }) => {
+    await waitForGame(page);
+    await seed(page, { ...SOME, discovered: [...(SOME.discovered as string[]), "legion_awakening"] });
+    type Sb = { renderer: { previewActive: boolean; sandbox: { actors: { rig: { root: { visible: boolean; getGlobalPosition(): { x: number; y: number } } } }[] } } };
+    /** The lowest foot of a stand-in on screen, as a share of the page's height (null: none shown). */
+    const lowest = () =>
+      page.evaluate(() => {
+        const r = (window as unknown as { __ASCEND__: Sb }).__ASCEND__.renderer;
+        const ys = r.sandbox.actors.filter((a) => a.rig.root.visible).map((a) => a.rig.root.getGlobalPosition().y);
+        const canvasTop = document.querySelector("canvas")?.getBoundingClientRect().top ?? 0;
+        return ys.length ? (Math.max(...ys) + canvasTop) / window.innerHeight : null;
+      });
+    const active = () => page.evaluate(() => (window as unknown as { __ASCEND__: Sb }).__ASCEND__.renderer.previewActive);
+    await reveal(page, "legion_awakening");
+    const m = page.getByTestId("modal-signature_reveal");
+    await expect(m).toHaveAttribute("data-phase", "watch", { timeout: 5000 });
+    await expect.poll(lowest, { timeout: 10_000 }).not.toBeNull();
+    // The sheet is clear above 30% of the screen and all but opaque from 46%: the stand-ins stand above that.
+    expect(await lowest()).toBeLessThan(0.42);
+    await expect(m).toHaveAttribute("data-phase", "told", { timeout: 8000 });
+    // While the words are read the skill is still on the field (it plays again), not the bare fight.
+    await page.waitForTimeout(1500);
+    expect(await active()).toBe(true);
+    await page.getByTestId("signature-reveal-later").click();
+    await expect(m).toHaveCount(0);
+    await expect.poll(active, { timeout: 30_000 }).toBe(false);
+    // A short reveal (rare, epic) plays in the same clear band.
+    await reveal(page, "death_parade");
+    const m2 = page.getByTestId("modal-signature_reveal");
+    await expect(page.getByTestId("signature-reveal-name")).toHaveText("Death Parade");
+    await expect.poll(lowest, { timeout: 10_000 }).not.toBeNull();
+    expect(await lowest()).toBeLessThan(0.42);
+    await expect(m2).toHaveAttribute("data-phase", "told", { timeout: 3000 });
+    await page.getByTestId("signature-reveal-later").click();
+    await expect.poll(active, { timeout: 30_000 }).toBe(false);
   });
 
   test("a tap skips the rite to its words; Later only marks it seen", async ({ page }) => {
