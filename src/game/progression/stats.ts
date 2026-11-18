@@ -83,10 +83,18 @@ export function statUnlockRule(stat: UpgradeableStat): StatUnlockRule | undefine
   return STAT_UNLOCKS.find((r) => r.stat === stat);
 }
 
+/**
+ * A stat opens once the stat before it reaches the rule's level, or once that stat can grow no
+ * further: at its value ceiling (3.2 attacks a second, 85% crit) no level of it is sold, so after an
+ * ascension resets levels to 1 a warrior whose attack speed is already at the ceiling from other
+ * sources could otherwise never open crit rate (nor, behind it, crit damage).
+ */
 export function isStatUnlocked(profile: Profile, stat: UpgradeableStat): boolean {
   const rule = statUnlockRule(stat);
   if (!rule) return true;
-  return profile.player.statLevels[rule.requires] >= rule.level;
+  const level = profile.player.statLevels[rule.requires];
+  if (level >= rule.level || level >= statCap(profile, rule.requires)) return true;
+  return statAtCeiling(profile, rule.requires);
 }
 
 export function statUpgradeCost(stat: UpgradeableStat, level: number): number {
