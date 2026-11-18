@@ -495,6 +495,29 @@ describe("the focus at a signature skill's key beats", () => {
     dir.destroy();
   });
 
+  it("tells the battle news to wait only while a key beat holds it", () => {
+    const { host } = fakeHost();
+    const dir = new SignatureDirector(host, true);
+    const s = script("death_parade", null, 1, 605);
+    const vanish = beatAt(s, "vanish");
+    const fin = beatAt(s, "finisher");
+    const d = new SigDriver((ev) => dir.handle(ev));
+    d.play(s);
+    let heldMid = false;
+    let heldBefore = false;
+    let t = 0;
+    for (; t < 4; t += 1 / 30) {
+      d.update(1 / 30);
+      dir.update(1 / 30, 1 / 30);
+      if (t < vanish - 0.05 && dir.focusHeld) heldBefore = true;
+      if (Math.abs(t - (vanish + fin) / 2) < 1 / 30 && dir.focusHeld) heldMid = true;
+    }
+    expect(heldBefore).toBe(false);
+    expect(heldMid).toBe(true);
+    expect(dir.focusHeld).toBe(false);
+    dir.destroy();
+  });
+
   it("applies only on key beats: the setup skills never ask, a cinematic asks for each beat under a second", () => {
     for (const sig of ["void_collapse", "time_fracture", "shadow_storm"] as SignatureId[]) {
       const { host } = fakeHost();

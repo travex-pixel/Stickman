@@ -1495,7 +1495,8 @@ export class GameController {
     if (p.equipment.inventory.length >= INVENTORY_CAP) {
       this.objectiveEvent("gear", 1);
       p.player.gold += salvageValue(item);
-      this.toast("Inventory full. Item salvaged for gold.", "warn");
+      // A full bag in the late game salvages most drops: chatter, not news that queues over the fight.
+      this.toast("Inventory full. Item salvaged for gold.", "warn", true);
       return;
     }
     p.equipment.inventory.push(item);
@@ -2514,7 +2515,9 @@ export class GameController {
 
   private pillContext(): PillContext {
     this.pillCtx.fighting = this.inFight();
-    this.pillCtx.blocked = this.renderer?.furyTotalShowing ?? false;
+    // The Fury's running total, or a signature skill's key beat (under a second or two), owns the
+    // top of the battlefield: news waits, chatter is dropped.
+    this.pillCtx.blocked = (this.renderer?.furyTotalShowing ?? false) || (this.renderer?.signatureMoment ?? false);
     return this.pillCtx;
   }
 

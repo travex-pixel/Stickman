@@ -2464,6 +2464,11 @@ export class BattleRenderer implements ImpactHost {
     return this.numbers?.tallyOn ?? false;
   }
 
+  /** A signature skill's key beat is on screen (its focus is held): the news line waits. */
+  get signatureMoment(): boolean {
+    return this.sig?.focusHeld ?? false;
+  }
+
   get cinematicActive(): boolean {
     return this.arise !== null;
   }

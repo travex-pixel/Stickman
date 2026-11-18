@@ -191,6 +191,10 @@ export class SignatureDirector {
   /** Real seconds since the focus let go (a new one waits FOCUS_REST), and whether one is held now. */
   private focusRest = FOCUS_REST;
   private focusOn = false;
+  /** A signature skill's key beat holds the focus now (the battle news waits it out). */
+  get focusHeld(): boolean {
+    return this.focusOn;
+  }
   private focusOwner: Stage | null = null;
 
   constructor(
