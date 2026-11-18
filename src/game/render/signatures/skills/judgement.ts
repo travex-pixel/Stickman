@@ -168,6 +168,8 @@ export class JudgementStage extends Stage {
     switch (e.beat) {
       case "hush":
         this.hushT = 0;
+        // The focus: the hush and the hand opening (anticipation), then the landing (impact).
+        this.focusFor(0.6);
         break;
       case "hand":
         this.place(e.to, e.radius || this.cast.radius);
@@ -186,6 +188,7 @@ export class JudgementStage extends Stage {
         else {
           this.place(e.from, e.radius || this.cast.radius);
           this.impact();
+          this.focusFor(0.5);
         }
         break;
       case "charge":

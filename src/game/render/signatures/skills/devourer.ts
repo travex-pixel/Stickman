@@ -80,6 +80,8 @@ export class DevourerStage extends Stage {
     switch (e.beat) {
       case "portal":
         this.portal(e.from);
+        // The focus: the rift tearing and the head pouring out (anticipation).
+        this.focusFor(0.55);
         break;
       case "pass":
         this.startPass(e);
@@ -92,6 +94,7 @@ export class DevourerStage extends Stage {
         break;
       case "impact":
         this.landing(e.from, e.radius || 80);
+        this.focusFor(0.45);
         break;
       default:
         break;

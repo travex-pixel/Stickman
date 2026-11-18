@@ -2,7 +2,7 @@ import type { Container, Graphics, Sprite, Texture } from "pixi.js";
 import type { GameEvent } from "../../engine/events";
 import type { Vec2 } from "../../engine/math";
 import type { EvolutionId, MasteryTier, SignatureId } from "../../data/signatures";
-import type { Rig } from "../rigs/Rig";
+import type { Rig, RigSpec } from "../rigs/Rig";
 import type { SigKit } from "./kit";
 import type { SigBody, SigHost, BodyMod } from "./host";
 import type { FxProfile } from "./quality";
@@ -24,6 +24,12 @@ export interface StageServices {
   label(text: string, x: number, y: number, color: number): void;
   /** Whether a body carries another skill's mark (void, shadow, trapped, slowed). */
   hasMark(id: number): boolean;
+  /**
+   * Draw the body `id` (raised by this cast) as `spec` instead of its kind's figure: the renderer
+   * reads it when it first draws the body. Taken back when the body leaves or the cast ends.
+   */
+  dress(id: number, spec: RigSpec): void;
+  undress(id: number): void;
   /** The dragon (at most two exist; reused), and its return. */
   dragon(look: DragonLook): Dragon | null;
   freeDragon(d: Dragon): void;
@@ -54,6 +60,16 @@ export abstract class Stage {
   tail = 0.8;
   /** Counted against the cinematic cap while true. */
   cinematic = false;
+  /**
+   * The focus this cast asks for at its key moments (see `focusNow`): until `focusEnd` (stage
+   * seconds) at strength `focusK`. `focusArmy` false when the army is part of the show (it kneels for
+   * the crown), so only the other figures are quieted.
+   */
+  private focusEnd = -1;
+  private focusK = 0;
+  focusArmy = true;
+  /** Real seconds this cast has held the focus (the director caps it). */
+  focusHeld = 0;
   private readonly sprites: Sprite[] = [];
   private readonly rigs: Rig[] = [];
   private readonly gfx: Graphics[] = [];
@@ -134,6 +150,24 @@ export abstract class Stage {
   }
 
   /**
+   * Where the camera leans while this cast plays, in place of the warrior (base px), or false: while
+   * he has vanished into the Parade, the clone striking now.
+   */
+  lead(out: { x: number; y: number }): boolean {
+    void out;
+    return false;
+  }
+
+  /**
+   * Widen the camera's box (base px) by more than one point (a cast spread over several bodies, like
+   * the Parade's round of foes). Returns false when `focus` says it all.
+   */
+  frame(box: { minX: number; minY: number; maxX: number; maxY: number }): boolean {
+    void box;
+    return false;
+  }
+
+  /**
    * A shape drawn above the field (a singularity, a clock, a hand) at `x` (base px), kept `margin`
    * inside the edges of what is on screen now: on a narrow portrait screen the knot it hangs over may
    * stand at, or past, the edge, and a half-drawn sigil reads as a glitch.
@@ -153,6 +187,33 @@ export abstract class Stage {
     out.y = pr.sy(c.y);
     out.top = out.y - lift * pr.fs(c.y);
     return true;
+  }
+
+  /**
+   * Ask for the focus for `seconds` (stage seconds) from now at strength `k` (0 to 1): the director
+   * quiets the other figures and dims the army not in the cast while any stage asks. Kept to the
+   * key beats (a cinematic's anticipation and impact, the Parade's vanish to its finisher).
+   */
+  protected focusFor(seconds: number, k = 1): void {
+    this.focusK = this.t < this.focusEnd ? Math.max(this.focusK, k) : k;
+    this.focusEnd = Math.max(this.focusEnd, this.t + seconds);
+  }
+
+  /** Let the focus go now. */
+  protected endFocus(): void {
+    this.focusEnd = -1;
+    this.focusK = 0;
+  }
+
+  /** The focus asked for this frame (0 to 1); a compact cast never asks. */
+  focusNow(): number {
+    return this.compact || this.t >= this.focusEnd ? 0 : this.focusK;
+  }
+
+  /** Whether a body is part of this cast's show (the Legion's soldiers): the focus never dims it. */
+  involves(id: number): boolean {
+    void id;
+    return false;
   }
 
   get finished(): boolean {

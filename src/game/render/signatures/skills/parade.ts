@@ -1,5 +1,6 @@
 import type { Sprite } from "pixi.js";
 import type { Vec2 } from "../../../engine/math";
+import type { EvolutionId } from "../../../data/signatures";
 import type { Rig, RigSpec } from "../../rigs/Rig";
 import { easeOutCubic } from "../../anim/ease";
 import { shard, softCircle } from "../../textures";
@@ -8,8 +9,10 @@ import { Stage, span01, type SigBeatEvent, type SigSynergyEvent } from "../stage
 import { bladeTex, smokeTex, starTex } from "../textures";
 
 /**
- * DEATH PARADE: the warrior vanishes; slate-and-gold clones of him step out beside his foes, each
- * striking its own way, then he returns for one sharp cut through all of them.
+ * DEATH PARADE: the warrior vanishes; clones of him step out beside his foes, each striking its own
+ * way, then he returns for one sharp cut through all of them. A clone is his own figure (his blade,
+ * his cape) in ink, darker than the slate army and cut out by a crimson rim and a crimson light behind
+ * it, with gold eyes: it must never be taken for one of the army it fights beside.
  *
  *   vanish    he breaks into ink and slate motes, an ivory afterimage left where he stood; the field
  *             dims a touch; a crimson tick marks each foe he means to visit.
@@ -52,8 +55,33 @@ interface Shot {
 }
 
 const STRIKE = 0.18;
+/** The clones' ink (darker than the army's slate) and their rim (a lit crimson that reads on ink). */
+const CLONE_INK = 0x1b1820;
+const CRIMSON_RIM = 0xe0574c;
+/** The blink's afterimages: crimson-black, lighter toward the clone. */
+const GHOST_NEAR = 0x7a2a2c;
+const GHOST_FAR = 0x2a1418;
+/** Speed lines: a warm pale, so the motion reads without the whiteness of a burst. */
+const SPEED = 0xf0cdc4;
 const HOLD = 0.2;
 const FADE = 0.14;
+
+/**
+ * A clone: the warrior's own figure in ink, rimmed in crimson (the edge every limb and the head
+ * carry), with gold eyes (Executioner: crimson): darker than the slate army, and cut apart from the
+ * ink foes by the rim and the light behind it.
+ */
+function take(box: { minX: number; minY: number; maxX: number; maxY: number }, x: number, y: number, top: number): void {
+  if (x < box.minX) box.minX = x;
+  if (x > box.maxX) box.maxX = x;
+  if (y > box.maxY) box.maxY = y;
+  if (top < box.minY) box.minY = top;
+}
+
+export function cloneSpec(warrior: RigSpec, evo: EvolutionId | null, gilded: boolean): RigSpec {
+  const eye = evo === "executioner" ? CRIMSON : gilded ? GILT_HOT : GILT;
+  return { ...warrior, body: CLONE_INK, accent: CRIMSON_RIM, eye, glow: CRIMSON, finish: "shadow", rim: 2.2, crown: evo === "phantom_king" };
+}
 
 export class ParadeStage extends Stage {
   private readonly clones: Clone[] = [];
@@ -75,10 +103,32 @@ export class ParadeStage extends Stage {
   constructor(...a: ConstructorParameters<typeof Stage>) {
     super(...a);
     this.tail = 0.5;
-    const ws = this.host.playerSpec();
-    const eye = this.evo === "executioner" ? CRIMSON : this.gilded ? GILT_HOT : GILT;
-    // The army's palette on the warrior's own figure: slate stone, gold edge and eyes.
-    this.spec = { ...ws, body: 0x4a5160, accent: this.gilded ? GILT_HOT : GILT, eye, glow: GILT, finish: "shadow", crown: this.evo === "phantom_king" };
+    this.spec = cloneSpec(this.host.playerSpec(), this.evo, this.gilded);
+  }
+
+  /**
+   * While he is gone the camera takes in every foe the clones will visit, and the clone striking
+   * now: the round may run past the warrior's own framing, and a clone cutting off screen is lost.
+   */
+  override lead(out: { x: number; y: number }): boolean {
+    if (this.hideTarget <= 0) return false;
+    for (let i = this.clones.length - 1; i >= 0; i--) {
+      const c = this.clones[i]!;
+      if (!c.live) continue;
+      out.x = c.x;
+      out.y = c.y - 50 * c.scale;
+      return true;
+    }
+    return false;
+  }
+
+  override frame(box: { minX: number; minY: number; maxX: number; maxY: number }): boolean {
+    if (this.hideTarget <= 0) return false;
+    // The foes in the Parade's reach (the simulation picks each clone's foe as it goes).
+    const ids = this.cast.targetIds;
+    for (let i = 0; i < ids.length; i++) if (this.body(ids[i]!)) take(box, this.b.x, this.b.y, this.b.y - this.b.height);
+    for (const c of this.clones) if (c.live) take(box, c.x, c.y, c.y - 100 * c.scale);
+    return true;
   }
 
   onBeat(e: SigBeatEvent): void {
@@ -162,6 +212,9 @@ export class ParadeStage extends Stage {
       k.emit(10);
     }
     if (!this.compact) this.host.darken(0x14131a, 0.28);
+    // The focus from the vanish to the finisher: the army and the other figures step back while
+    // only the clones move (the director caps how long it may hold).
+    this.focusFor(2);
     // Crimson ticks on each foe he means to visit (anticipation).
     for (const id of e.targetIds) if (!this.marks.has(id)) this.marks.set(id, 0);
     if (!this.tickG) this.tickG = this.graphics(this.host.layers.fx);
@@ -196,20 +249,21 @@ export class ParadeStage extends Stage {
     if (!this.compact && this.spec) {
       for (let i = 1; i <= n; i++) {
         const f = i / (n + 1);
-        k.afterimage("clone-ghost", this.spec, this.lastX + dx * f, this.lastY + dy * f, fs, facing, "dodge", 0, i % 2 === 0 ? 0x5a6272 : 0x2e3340, 0.25 + 0.35 * f, 0.18 + 0.1 * f);
+        k.afterimage("clone-ghost", this.spec, this.lastX + dx * f, this.lastY + dy * f, fs * 1.1, facing, "dodge", 0, i % 2 === 0 ? GHOST_NEAR : GHOST_FAR, 0.2 + 0.35 * f, 0.18 + 0.1 * f);
       }
     }
-    k.speedLines(this.lastX, this.lastY - 45 * fs, tx, ty - 45 * fs, this.compact ? 2 : 4, 50 * fs, 0xe8e2d8, 0.18);
+    k.speedLines(this.lastX, this.lastY - 45 * fs, tx, ty - 45 * fs, this.compact ? 2 : 3, 50 * fs, SPEED, 0.16);
     if (this.master && !this.compact) k.streak(this.lastX, this.lastY - 40 * fs, tx, ty - 40 * fs, Math.hypot(dx, dy) * 0.8, 2.2, CRIMSON, 0.3, { add: false, alpha: 0.7 });
     this.lastX = tx;
     this.lastY = ty;
     if (!this.spec) return;
     const rig = this.rig("clone", this.spec);
     if (!rig) return;
-    // A low gold light behind each clone: the army's gilt edge, so a clone reads apart from the ink foes.
-    const glow = this.compact ? null : this.sprite(this.host.layers.figures, softCircle(), true);
-    if (glow) glow.tint = this.gilded ? GILT_HOT : GILT;
-    const c: Clone = { rig, glow, x: tx, y: ty, scale: fs * 1.06, facing, t: 0, style, depth: e.to.y, live: true };
+    // A crimson light behind each clone, a little larger than the figure: with the rim it cuts the
+    // ink clone out of the slate army and the ink foes alike (Grandmaster: gilt).
+    const glow = this.sprite(this.host.layers.figures, softCircle(), true);
+    if (glow) glow.tint = this.gilded ? GILT : CRIMSON;
+    const c: Clone = { rig, glow, x: tx, y: ty, scale: fs * 1.12, facing, t: 0, style, depth: e.to.y, live: true };
     // Style 2 dashes through: it starts on the near side and ends past the foe.
     if (style === 2) c.x = tx - facing * 10 * this.u;
     this.clones.push(c);
@@ -237,7 +291,8 @@ export class ParadeStage extends Stage {
     const f = c.facing;
     const s = c.scale;
     const w = (heavy ? 5 : 3.8) * (this.compact ? 0.8 : 1);
-    const light = this.gilded || heavy ? GILT_HOT : 0xffffff;
+    // A gilt-hot edge on the crimson, never a white one: the cuts read as the Parade's, not a burst.
+    const light = GILT_HOT;
     const d = 0.05;
     const r = 38 * s;
     switch (c.style) {
@@ -249,7 +304,7 @@ export class ParadeStage extends Stage {
         break;
       case 2: // dash straight through
         k.slash(x - f * 40 * s, y + 2 * s, x + f * 46 * s, y - 2 * s, CRIMSON, light, w * 0.9, 0.26, d);
-        k.speedLines(x - f * 50 * s, y - 10 * s, x + f * 50 * s, y - 10 * s, 3, 30 * s, 0xe8e2d8, 0.16);
+        k.speedLines(x - f * 50 * s, y - 10 * s, x + f * 50 * s, y - 10 * s, 3, 30 * s, SPEED, 0.16);
         break;
       case 3: // cross
         k.slash(x - 22 * s, y - 24 * s, x + 22 * s, y + 22 * s, CRIMSON, light, w, 0.34, d);
@@ -257,7 +312,7 @@ export class ParadeStage extends Stage {
         break;
       case 4: // falling stab
         k.slash(x + f * 4 * s, y - 52 * s, x, y + 12 * s, CRIMSON, light, w * 1.1, 0.34, d);
-        k.ring(c.x, c.y, 4, 26 * s, 0.25, this.pal.deep, 0xe8e2d8, 2, { delay: d });
+        k.ring(c.x, c.y, 4, 26 * s, 0.25, this.pal.ink, CRIMSON, 2, { delay: d });
         break;
       default: // reversed cut
         k.cut(x + f * 4 * s, y - 4 * s, r, f === 1 ? -0.7 : Math.PI + 0.7, f * 1.9, CRIMSON, light, w, 0.34, { delay: d });
@@ -311,6 +366,9 @@ export class ParadeStage extends Stage {
     this.finTargets = this.visited.slice();
     for (const id of e.targetIds) if (!this.finTargets.includes(id)) this.finTargets.push(id);
     this.hideTarget = 0;
+    // The focus holds through the cut and a breath after it, then lets go.
+    this.endFocus();
+    this.focusFor(0.42);
     const pid = this.host.playerId();
     // He reappears: a puff of ink where he lands, a glint along his blade.
     if (this.body(pid)) {
@@ -367,7 +425,7 @@ export class ParadeStage extends Stage {
     }
     if (!this.compact) {
       const top = this.host.proj.top();
-      k.speedLines(first.x - pad * 2, (y0 + top) / 2 + 40 * this.u, last.x + pad * 2, (y1 + top) / 2 + 40 * this.u, 6, 160 * this.u, 0xe8e2d8, 0.26);
+      k.speedLines(first.x - pad * 2, (y0 + top) / 2 + 40 * this.u, last.x + pad * 2, (y1 + top) / 2 + 40 * this.u, 6, 160 * this.u, SPEED, 0.26);
     }
     // The clones still standing shatter into ink with the cut.
     for (const c of this.clones) if (c.live) c.t = Math.max(c.t, STRIKE + HOLD);
@@ -405,9 +463,9 @@ export class ParadeStage extends Stage {
     r.root.alpha = (t < 0.04 ? t / 0.04 : 1) * (1 - fade);
     r.root.tint = 0xffffff;
     if (c.glow) {
-      c.glow.position.set(x, r.root.y - 48 * c.scale);
-      c.glow.scale.set(c.scale * 1.6, c.scale * 2.2);
-      c.glow.alpha = 0.32 * r.root.alpha;
+      c.glow.position.set(x, r.root.y - 46 * c.scale);
+      c.glow.scale.set(c.scale * 1.35, c.scale * 2.1);
+      c.glow.alpha = (this.compact ? 0.35 : 0.5) * r.root.alpha;
       c.glow.zIndex = c.depth + 0.4;
     }
   }

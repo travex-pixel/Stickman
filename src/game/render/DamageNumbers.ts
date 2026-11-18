@@ -57,6 +57,8 @@ interface Num {
   /** Side it drifts toward (away from the attacker), and whether it must keep clear of the avoid box. */
   dir: number;
   avoid: boolean;
+  /** A figure of the signature skill in focus: never quieted by it. */
+  own: boolean;
 }
 
 interface Recent {
@@ -88,6 +90,8 @@ export class DamageNumbers {
   private readonly recent: Recent[] = [];
   private readonly numAdv = new Map<string, number>();
   private readonly labelAdv = new Map<string, number>();
+  /** Share of opacity taken from other figures while a signature skill holds the focus (0 to 1). */
+  private quiet = 0;
   private numH = BASE;
   private labelH = LABEL_BASE;
   /** The warrior's box in base px; numbers are kept out of it. */
@@ -143,7 +147,7 @@ export class DamageNumbers {
       holder.addChild(text, suffix, mark, label);
       holder.visible = false;
       this.container.addChild(holder);
-      this.pool.push({ holder, text, label, suffix, mark, gen: 0, bump: 0, life: 0, total: 1, age: 0, vx: 0, vy: 0, gravity: 0, active: false, size: 1, style: "normal", w: 0, h: 0, dir: 1, avoid: false });
+      this.pool.push({ holder, text, label, suffix, mark, gen: 0, bump: 0, life: 0, total: 1, age: 0, vx: 0, vy: 0, gravity: 0, active: false, size: 1, style: "normal", w: 0, h: 0, dir: 1, avoid: false, own: false });
     }
     this.prewarm(numStyle, labelStyle);
     const serif = serifFamily();
@@ -283,12 +287,14 @@ export class DamageNumbers {
   /**
    * A damage figure beside a target. (x, y) is the target's chest, `halfW` half its drawn width,
    * `dir` the side away from the attacker (+1 right, -1 left). `avoid` keeps it off the warrior.
-   * `life` (real seconds) shortens it, for a quick run of blows like the Ascendant Fury's.
+   * `life` (real seconds) shortens it, for a quick run of blows like the Ascendant Fury's. `own`
+   * marks a signature skill's figure, which the skill's focus never quiets.
    */
-  hit(x: number, y: number, halfW: number, dir: number, value: string, color: number, style: NumberStyle, avoid = true, life?: number): number {
+  hit(x: number, y: number, halfW: number, dir: number, value: string, color: number, style: NumberStyle, avoid = true, life?: number, own = false): number {
     const n = this.take();
     if (!n) return -1;
     this.fill(n, value, color, style);
+    n.own = own;
     if (life !== undefined) {
       n.total = life;
       n.life = life;
@@ -351,6 +357,15 @@ export class DamageNumbers {
     n.holder.visible = false;
   }
 
+  /**
+   * A signature skill's key beat holds the focus: damage figures from other sources lose `k` of
+   * their opacity (0 to 1) until it is set back to 0. The skill's own figures, blows the warrior
+   * takes (a threat), heals and words are never quieted.
+   */
+  setQuiet(k: number): void {
+    this.quiet = k < 0 ? 0 : k > 1 ? 1 : k;
+  }
+
   /** Figures started since the counter was last read (for the readability measurement). */
   spawned = 0;
 
@@ -359,6 +374,7 @@ export class DamageNumbers {
     const n = this.take();
     if (!n) return;
     this.fill(n, value, color, style);
+    n.own = false;
     n.dir = 0;
     n.avoid = style !== "taken";
     n.vx = 0;
@@ -507,7 +523,8 @@ export class DamageNumbers {
         n.holder.x = Math.min(this.maxX - half, Math.max(this.minX + half, n.holder.x));
       }
       this.keepClear(n);
-      n.holder.alpha = k > 0.6 ? 1 - easeOutCubic((k - 0.6) / 0.4) : 1;
+      const fade = k > 0.6 ? 1 - easeOutCubic((k - 0.6) / 0.4) : 1;
+      n.holder.alpha = this.quiet > 0 && !n.own && (n.style === "normal" || n.style === "crit") ? fade * (1 - this.quiet) : fade;
     }
   }
 

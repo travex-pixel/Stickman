@@ -12,7 +12,7 @@ import { Stage, type SigCastEvent, type StageServices } from "./stage";
 import { Dragon, clearDragonCache, type DragonLook } from "./skills/dragon";
 import { VoidStage } from "./skills/void";
 import { DevourerStage } from "./skills/devourer";
-import { ParadeStage } from "./skills/parade";
+import { ParadeStage, cloneSpec } from "./skills/parade";
 import { JudgementStage } from "./skills/judgement";
 import { LegionStage } from "./skills/legion";
 import { TimeStage } from "./skills/time";
@@ -37,6 +37,25 @@ const STAGES: Record<SignatureId, StageCtor> = {
 export const MAX_MARKED = 40;
 /** Casts staged at once, at most, whatever the quality (past this a cast shows only its figures). */
 export const HARD_STAGE_CAP = 10;
+/**
+ * The focus at a signature skill's key beats (a cinematic's anticipation and impact, the Parade from
+ * the vanish to the finisher): figures from other sources fade by FOCUS_NUMBERS of their opacity and
+ * the army not in the cast washes FOCUS_ARMY of the way toward FOCUS_ARMY_COLOR, so the skill is
+ * what the eye finds. Never the warrior, the foes (their telegraphs and threat colours), the
+ * figures of blows he takes, heals or words. It eases in at FOCUS_IN and out at FOCUS_OUT (per real
+ * second), and no cast holds it longer than FOCUS_MAX_HOLD real seconds, whatever it asks.
+ */
+export const FOCUS_NUMBERS = 0.6;
+export const FOCUS_ARMY = 0.42;
+export const FOCUS_ARMY_COLOR = 0x30333d;
+export const FOCUS_IN = 14;
+export const FOCUS_OUT = 7;
+export const FOCUS_MAX_HOLD = 2;
+/** Reduced effects: a gentler focus that comes and goes more slowly (no sudden change of light). */
+const FOCUS_REDUCED = 0.6;
+const FOCUS_REDUCED_IN = 6;
+const FOCUS_REDUCED_OUT = 4;
+
 /** Real seconds within which a cast's repeated hits on one body fold into one figure. */
 const FIGURE_MERGE = 0.5;
 
@@ -137,6 +156,8 @@ function shape(kind: "void" | "shadow" | "cage" | "clock" | "glass", gilded: boo
 export class SignatureDirector {
   readonly kit: SigKit;
   readonly mods = new Map<number, BodyMod>();
+  /** Bodies a cast raised that are drawn in its own figure (the Legion's soldiers), by id. */
+  readonly dress = new Map<number, RigSpec>();
   private readonly stages: Stage[] = [];
   private readonly byCast = new Map<number, Stage>();
   private readonly marks = new Map<number, MarkRec>();
@@ -153,6 +174,14 @@ export class SignatureDirector {
   private painted = false;
   /** Counters for diagnostics and tests. */
   readonly counters = { casts: 0, compact: 0, dropped: 0, beats: 0, synergies: 0, stepDowns: 0 };
+  /**
+   * The focus now (0 to 1, eased): how far other figures are quieted, and how far the army not in
+   * a cast is dimmed (none at the performance tier). The renderer applies both.
+   */
+  focusNumbers = 0;
+  focusArmy = 0;
+  /** Real seconds with any focus on, and real seconds counted (how much of play is focused). */
+  readonly focusClock = { on: 0, total: 0, longest: 0, run: 0 };
 
   constructor(
     readonly host: SigHost,
@@ -168,6 +197,12 @@ export class SignatureDirector {
       hasMark: (id) => {
         const m = this.marks.get(id);
         return !!m && m.void + m.shadow + m.trapped + m.slowed > 0;
+      },
+      dress: (id, spec) => {
+        this.dress.set(id, spec);
+      },
+      undress: (id) => {
+        this.dress.delete(id);
       },
       dragon: (look) => this.dragon(look),
       freeDragon: (d) => this.freeDragon(d),
@@ -277,6 +312,7 @@ export class SignatureDirector {
         case "death":
           for (const s of this.stages) s.onDeath(e.id, e.pos.x, e.pos.y);
           this.dropMarks(e.id);
+          this.dress.delete(e.id);
           break;
         default:
           break;
@@ -399,7 +435,7 @@ export class SignatureDirector {
       }
     }
     const style: NumberStyle = e.crit || e.heavy ? "crit" : "normal";
-    const handle = nums.hit(x, y, halfW, dir, fmtNum(e.amount), pal.number, style, true);
+    const handle = nums.hit(x, y, halfW, dir, fmtNum(e.amount), pal.number, style, true, undefined, true);
     let slot = this.figures[0];
     for (const f of this.figures) if (!slot || f.t < slot.t) slot = f;
     if (this.figures.length < 12) {
@@ -437,6 +473,7 @@ export class SignatureDirector {
       s.tick(dt, real);
       if (s.finished) this.drop(s);
     }
+    this.updateFocus(real);
     this.updateMarks(dt, real);
     // Geometry: redrawn only while something lives; an idle frame clears it once.
     const any = this.stages.length > 0 || this.kit.beginPaint();
@@ -461,6 +498,40 @@ export class SignatureDirector {
       if (this.governor.steps > steps) this.counters.stepDowns += 1;
       this.applyProfile();
     }
+  }
+
+  private updateFocus(real: number): void {
+    let wantN = 0;
+    let wantA = 0;
+    for (const s of this.stages) {
+      const k = s.focusNow();
+      if (k <= 0) continue;
+      s.focusHeld += real;
+      if (s.focusHeld > FOCUS_MAX_HOLD) continue;
+      if (k > wantN) wantN = k;
+      if (s.focusArmy && k > wantA) wantA = k;
+    }
+    const p = this.profile;
+    const amp = p.reduced ? FOCUS_REDUCED : 1;
+    wantN = Math.min(1, wantN) * amp;
+    wantA = p.quality === "performance" ? 0 : Math.min(1, wantA) * amp;
+    const rin = p.reduced ? FOCUS_REDUCED_IN : FOCUS_IN;
+    const rout = p.reduced ? FOCUS_REDUCED_OUT : FOCUS_OUT;
+    this.focusNumbers = approach(this.focusNumbers, wantN, real, rin, rout);
+    this.focusArmy = approach(this.focusArmy, wantA, real, rin, rout);
+    const c = this.focusClock;
+    c.total += real;
+    if (this.focusNumbers > 0.02 || this.focusArmy > 0.02) {
+      c.on += real;
+      c.run += real;
+      if (c.run > c.longest) c.longest = c.run;
+    } else c.run = 0;
+  }
+
+  /** Whether a body is part of a staged cast's show (the focus never dims it). */
+  involved(id: number): boolean {
+    for (const s of this.stages) if (s.involves(id)) return true;
+    return false;
   }
 
   private drop(s: Stage): void {
@@ -559,7 +630,8 @@ export class SignatureDirector {
       if (d) this.freeDragon(d);
     }
     if (ids.includes("death_parade")) {
-      const r = this.kit.rig("prewarm", { ...heroSpec, finish: "shadow" });
+      // The clone's own figure (pooled under the name the stage asks for), so the first cast does not build it.
+      const r = this.kit.rig("clone", cloneSpec(heroSpec, null, false));
       this.kit.freeRig(r);
     }
   }
@@ -573,12 +645,18 @@ export class SignatureDirector {
   frameInto(box: { minX: number; minY: number; maxX: number; maxY: number }): void {
     const f = this.focusOut;
     for (const s of this.stages) {
-      if (s.ended || s.compact || !s.focus(f)) continue;
+      if (s.ended || s.compact || s.frame(box) || !s.focus(f)) continue;
       if (f.x < box.minX) box.minX = f.x;
       if (f.x > box.maxX) box.maxX = f.x;
       if (f.y > box.maxY) box.maxY = f.y;
       if (f.top < box.minY) box.minY = f.top;
     }
+  }
+
+  /** Where the camera leans in place of the warrior (a cast that has taken him off the field), or false. */
+  lead(out: { x: number; y: number }): boolean {
+    for (const s of this.stages) if (!s.ended && !s.compact && s.lead(out)) return true;
+    return false;
   }
 
   /** Signature effects on screen this frame (casts, marks, the kit's own). */
@@ -608,9 +686,13 @@ export class SignatureDirector {
     this.byCast.clear();
     for (const id of [...this.marks.keys()]) this.dropMarks(id);
     this.mods.clear();
+    this.dress.clear();
     this.figures.length = 0;
     this.named.clear();
     this.svc.consumed = 0;
+    this.focusNumbers = 0;
+    this.focusArmy = 0;
+    this.focusClock.run = 0;
     this.kit.reset();
     this.painted = false;
   }
@@ -622,6 +704,13 @@ export class SignatureDirector {
     this.kit.destroy();
     this.marksLayer.destroy({ children: true });
   }
+}
+
+/** Move `v` toward `want` at `up` per second when rising and `down` when falling; snaps to 0 at the end. */
+function approach(v: number, want: number, dt: number, up: number, down: number): number {
+  const r = want > v ? up : down;
+  const n = v + (want - v) * Math.min(1, dt * r);
+  return n < 0.004 && want === 0 ? 0 : n;
 }
 
 /** Release shapes shared by every director (the renderer calls it when it unmounts). */

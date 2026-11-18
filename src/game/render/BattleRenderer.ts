@@ -32,7 +32,7 @@ import { FuryGhosts } from "./FuryGhosts";
 import { AriseCinematic, FailedBind, REDUCED_FADE, REVEAL_LENGTH, type AriseHost, type RevealStaging } from "./cinematics/arise";
 import { FlashBudget } from "./flashBudget";
 import { ApexDirector, type ApexHitFields, type ApexHost, type ApexPlayerView, type ApexSkill } from "./apex/ApexDirector";
-import { SignatureDirector, clearSignatureShapes } from "./signatures/SignatureDirector";
+import { FOCUS_ARMY, FOCUS_ARMY_COLOR, FOCUS_NUMBERS, SignatureDirector, clearSignatureShapes } from "./signatures/SignatureDirector";
 import type { SigBody, SigHost } from "./signatures/host";
 import { Sandbox, type PreviewOptions, type RevealTiming } from "./signatures/Sandbox";
 import { SigDriver, buildScript, type SigActor } from "./signatures/driver";
@@ -49,6 +49,8 @@ interface EntityView extends ImpactState {
   barKey?: number;
   /** Tinted down by a boss entrance (restored when it ends). */
   dimmed?: boolean;
+  /** Dimmed by a signature skill's focus (an ally not in the cast; restored when it lets go). */
+  focusDim?: boolean;
   /** How far a big ally has thinned out for standing in front of the warrior (0 to 1). */
   veil: number;
   /** Light caught from a Stormcrown bolt (0 to 1, dying away): the body reads lit. */
@@ -255,6 +257,9 @@ export class BattleRenderer implements ImpactHost {
   private quality: VisualQuality = "full";
   /** Bodies the signature presentation washed with a tint last frame. */
   private readonly sigTinted = new Set<number>();
+  /** Allies dimmed by a signature skill's focus this frame, and the quiet last handed out. */
+  private focusDimmed = 0;
+  private focusQuiet = 0;
   private readonly sigBody: SigBody = { x: 0, y: 0, chestY: 0, height: 0, scale: 1, wx: 0, wy: 0, facing: 1, boss: false, ally: false, player: false, rig: null };
   private readonly apexView: ApexPlayerView = { rig: null as unknown as Rig, drawX: 0, drawY: 0, scale: 1, zIndex: 0, facing: 1, state: "idle", swings: 0, path: "none", seed: 0, dead: false };
   private flashAlpha = 0;
@@ -739,6 +744,7 @@ export class BattleRenderer implements ImpactHost {
     if (this.sigDriver.pending > 0) this.sigDriver.update(wdt);
     this.sig.update(frozen ? 0 : wdt, dt);
     this.applySigMods();
+    this.applySigFocus(world);
     if (perf) this.sec(9);
     if (!paused) this.frameCamera(world, alpha);
     this.camera.update(dt);
@@ -858,8 +864,12 @@ export class BattleRenderer implements ImpactHost {
     b.maxX += pad;
     b.minY -= pad * 0.5;
     b.maxY += pad * 0.35;
-    this.camera.frame(b, this.sx(px), this.sy(py) - top * 0.5);
+    // While a cast has taken him off the field (the Parade), the camera leans toward its lead.
+    if (this.sig.lead(this.leadPt)) this.camera.frame(b, this.leadPt.x, this.leadPt.y);
+    else this.camera.frame(b, this.sx(px), this.sy(py) - top * 0.5);
   }
+
+  private readonly leadPt = { x: 0, y: 0 };
 
   private syncEntities(world: World, alpha: number, dt: number, fxDt: number, realDt: number): void {
     const seen = this.seen;
@@ -1045,7 +1055,8 @@ export class BattleRenderer implements ImpactHost {
   }
 
   private createView(e: Combatant): EntityView {
-    let spec = e.kind === "player" ? playerSpec(this.world?.loadout.weaponPath ?? "none") : e.kind === "summon" ? summonSpec(e.defId) : enemySpec(e.defId);
+    // A body a signature cast raised wears that cast's figure (the Legion's soldiers are its own).
+    let spec = e.kind === "player" ? playerSpec(this.world?.loadout.weaponPath ?? "none") : e.kind === "summon" ? (this.sig.dress.get(e.id) ?? summonSpec(e.defId)) : enemySpec(e.defId);
     const affix = e.enemy?.elite;
     if (affix) spec = eliteSpec(spec, ELITES[affix].color);
     const rig = new Rig(spec);
@@ -2982,6 +2993,40 @@ export class BattleRenderer implements ImpactHost {
     }
   }
 
+  /**
+   * A signature skill's key beat holds the focus (SignatureDirector): other damage figures and the
+   * Apex figures fade a share of their opacity, and the army not in the cast is dimmed. The warrior,
+   * the foes (their telegraphs and threat colours) and the cast's own bodies are never touched; a
+   * boss entrance owns the tints while it plays.
+   */
+  private applySigFocus(world: World): void {
+    const quiet = this.sig.focusNumbers * FOCUS_NUMBERS;
+    if (quiet !== this.focusQuiet) {
+      this.focusQuiet = quiet;
+      this.numbers.setQuiet(quiet);
+      this.apex.prism.container.alpha = 1 - quiet;
+    }
+    const k = this.bossIntro ? 0 : this.sig.focusArmy * FOCUS_ARMY;
+    if (k <= 0.004 && this.focusDimmed === 0) return;
+    const base = this.dimOthers > 0.005 ? mix(0xffffff, 0x000000, this.dimOthers) : 0xffffff;
+    const pid = world.player.id;
+    let n = 0;
+    for (const [id, v] of this.views) {
+      const dim = k > 0.004 && v.kind === "summon" && id !== pid && !this.sig.involved(id);
+      if (dim) {
+        const root = v.rig.root;
+        // A body washed by a signature this frame keeps that wash under the dim.
+        root.tint = mix(this.sigTinted.has(id) ? root.tint : base, FOCUS_ARMY_COLOR, k);
+        v.focusDim = true;
+        n += 1;
+      } else if (v.focusDim) {
+        if (!this.sigTinted.has(id) && !this.bossIntro) v.rig.root.tint = base;
+        v.focusDim = false;
+      }
+    }
+    this.focusDimmed = n;
+  }
+
   /** Synthetic events (the driver): the director and the sounds, never the world. */
   private sigSynthetic(events: GameEvent[]): void {
     this.handleEvents(events);
@@ -3056,8 +3101,8 @@ export class BattleRenderer implements ImpactHost {
   }
 
   /** Diagnostics for the signature presentation (and the automatic step-down). */
-  signatureStats(): ReturnType<SignatureDirector["stats"]> & { counters: SignatureDirector["counters"]; preview: boolean } {
-    return { ...this.sig.stats(), counters: this.sig.counters, preview: this.previewActive };
+  signatureStats(): ReturnType<SignatureDirector["stats"]> & { counters: SignatureDirector["counters"]; preview: boolean; focus: { numbers: number; army: number; dimmed: number; clock: SignatureDirector["focusClock"] } } {
+    return { ...this.sig.stats(), counters: this.sig.counters, preview: this.previewActive, focus: { numbers: this.sig.focusNumbers, army: this.sig.focusArmy, dimmed: this.focusDimmed, clock: this.sig.focusClock } };
   }
 
   private readonly ariseHost: AriseHost = {
