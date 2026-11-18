@@ -1026,6 +1026,14 @@ apart for each. The small repeated blows (clone cuts, blades, bites, signature h
 fixed pitch and budgeted (three in any 400 ms); a signature hit is a quiet tick, never the warrior's
 hit on top. The hush dips the whole mix for 0.9 s.
 
+**Measured** (`?perf=1`, stage 49, five shadows, AUTO at 2x, four skills equipped and the crown,
+balanced quality, two interleaved rounds of 25 s a side, software WebGL, so noisy): simulate plus
+render JS at the 95th percentile was 12.8 ms with signatures against 16.6 ms without at 1x, and
+45.6 ms against 49.2 ms at 4x CPU throttling: within the noise, and the signature scene kills faster,
+so it often had fewer bodies on the field. The signature section itself costs 0.3 to 3.2 ms at its
+95th percentile. A first build that redrew its rings and accretion discs every frame measured 1.28x
+and 1.36x; drawing them once and only moving them (sprites, cached shapes) is what brought it down.
+
 ## Testing
 
 - `npm run test`: unit tests for every rule, plus a balance harness that simulates whole runs with
