@@ -25,6 +25,11 @@ export interface RigSpec {
   floating?: boolean;
   /** ivory = the hero, ink = enemies, shadow = the player's summoned army. */
   finish?: "ivory" | "ink" | "shadow";
+  /**
+   * A shadow figure's edge drawn as a solid rim this many times the army's width, head included
+   * (Death Parade's clones: an ink figure cut out in crimson). Unset: the army's thin gilt edge.
+   */
+  rim?: number;
   /** The army's role idle. */
   idle?: IdleRole;
 }
@@ -232,7 +237,7 @@ export class Rig {
     this.body.addChild(this.hips);
 
     // The Oathbound carry a thin gold edge so they read against both the ink horde and the ground.
-    const edge = finish === "shadow" ? { width: 1.1 * u, color: s.accent, alpha: 0.55 } : null;
+    const edge = finish === "shadow" ? { width: 1.1 * u * (s.rim ?? 1), color: s.accent, alpha: s.rim ? 0.95 : 0.55 } : null;
     const limbShape = (g: GraphicsContext, len: number, w: number, color: number, taper: number) => {
       if (edge) {
         g.poly([-w / 2, 0, w / 2, 0, (w / 2) * taper, len, (-w / 2) * taper, len]).stroke(edge);
@@ -337,6 +342,13 @@ export class Rig {
       headG.rect(-headR * 0.95, cy - headR * 0.08, headR * 1.9, headR * 0.28).fill(darken(gold, 0.25));
     }
     });
+    if (edge && s.rim) {
+      // The rim runs round the head too, under it, so the head reads as cut out like the body.
+      const ring = this.part((g) => {
+        g.circle(0, 0, headR).stroke(edge);
+      });
+      this.head.addChild(ring);
+    }
     this.head.addChild(headG);
     // Eyes: the brightest pixels on every figure. Enemies glare, summons glow, the hero is calm.
     const eyeY = s.hood ? headR * 0.15 : -headR * 0.05;
