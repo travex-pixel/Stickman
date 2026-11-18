@@ -182,7 +182,7 @@ const SIG: Record<SignatureId, SignatureDef> = {
     ],
     cooldown: 14,
     castTime: 0.2,
-    power: 9,
+    power: 13,
     radius: 120,
     cinematic: false,
     colors: [0x5b3f8c, 0x0b0910],

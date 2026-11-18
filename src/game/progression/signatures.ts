@@ -443,8 +443,12 @@ export const SIG_BOSS_SHARE: Readonly<Record<SignatureId, number>> = {
 /** An evolution chosen (and awakened at Master) adds this much to a skill's share. */
 export const SIG_EVOLVED_FACTOR = 1.1;
 export const SIG_MASTER_FACTOR = 1.12;
-/** The crown: the Sovereign's aura lifts every equipped skill by about this much. */
-export const SIG_CROWN_SHARE = 0.15;
+/**
+ * The crown: what the Sovereign adds to boss damage at rank 1 with three or more skills equipped.
+ * Measured on full late loadouts (rank 10, evolved, Master) it adds 0 to 9% (about 4%), not the
+ * 31% a share of 0.15 claimed; Power had overstated those loadouts by a fifth to a third.
+ */
+export const SIG_CROWN_SHARE = 0.02;
 
 /**
  * Signature skills in Power: what the equipped ones add to boss damage, by their measured shares,
