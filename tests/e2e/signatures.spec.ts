@@ -121,7 +121,9 @@ test.describe("Signature skills in the Skills panel", () => {
     // A found skill's detail: what it does now, when it acts, rank and mastery.
     await page.getByTestId("signature-back").click();
     await page.getByTestId("signature-row-void_collapse").click();
-    await expect(page.getByTestId("signature-effect")).toContainText("singularity");
+    // What it does at rank 3, in the simulation's own words and numbers.
+    await expect(page.getByTestId("signature-effect")).toContainText("draws foes in");
+    await expect(page.getByTestId("signature-effect")).toContainText("implodes for");
     await expect(page.getByTestId("signature-activation")).toContainText("every 14 s");
     await expect(page.getByTestId("signature-rank")).toHaveAttribute("data-rank", "3");
     await expect(page.getByTestId("signature-mastery")).toBeVisible();
@@ -474,9 +476,12 @@ for (const vp of VIEWPORTS) {
       await page.waitForTimeout(200);
       expect(await offPanel(), `${label} detail scrolled`).toEqual([]);
     }
-    // Swap: every slot armed, the prompt and its Cancel on one line.
-    await page.getByTestId("signature-back").click();
+    // Swap: every slot armed, the prompt and its Cancel on one line. With every skill found the
+    // fourth slot is open, so all four are filled first (otherwise Equip simply fills the empty one).
+    await seed(page, { ...FULL, slots: ["void_collapse", "death_parade", "abyssal_devourer", "kings_judgement"] }, 9);
+    await openCollection(page);
     await page.getByTestId("signature-row-shadow_storm").click();
+    await expect(page.getByTestId("signature-equip")).toHaveText("Swap in");
     await page.getByTestId("signature-equip").click();
     await expect(page.getByTestId("signature-prompt")).toContainText("Tap the slot");
     expect(await offPanel(), "swap").toEqual([]);
