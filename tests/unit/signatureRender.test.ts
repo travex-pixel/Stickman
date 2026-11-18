@@ -226,6 +226,31 @@ function play(dir: SignatureDirector, s: Timed[], seconds = 16): void {
 }
 
 describe("the signature director", () => {
+  it("frames the full height of what a far cast draws: Time Fracture's clock and King's Judgement's hand", () => {
+    const far: SigActor[] = [
+      { id: 2, pos: { x: 560, y: 60 }, kind: "enemy", hp: 1 },
+      { id: 3, pos: { x: 575, y: 80 }, kind: "enemy", hp: 1 },
+      { id: 4, pos: { x: 590, y: 70 }, kind: "enemy", hp: 1 },
+    ];
+    for (const [sig, above] of [["time_fracture", 120 + 46], ["kings_judgement", 175 + 40]] as const) {
+      const { host } = fakeHost();
+      const dir = new SignatureDirector(host, true);
+      const d = new SigDriver((ev) => dir.handle(ev));
+      d.play(buildScript({ castId: 11, sig, evo: null, mastery: 1, caster: CASTER, foes: far, hits: false }));
+      let top = Infinity;
+      for (let t = 0; t < 1.2; t += 1 / 30) {
+        d.update(1 / 30);
+        dir.update(1 / 30, 1 / 30);
+        const b = { minX: 140, minY: 150, maxX: 230, maxY: 290 };
+        dir.frameInto(b);
+        top = Math.min(top, b.minY);
+      }
+      // The projection is 1:1 with the ground at 200 + y (the knot centres on y 70): the drawing reaches `above` over it.
+      expect(top, sig).toBeLessThan(200 + 70 - above);
+      dir.destroy();
+    }
+  });
+
   it("frames a cast aimed away from the warrior: the camera's box takes in a far singularity and what it draws above it", () => {
     const { host } = fakeHost();
     const dir = new SignatureDirector(host, false);
