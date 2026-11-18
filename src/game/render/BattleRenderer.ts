@@ -2898,13 +2898,15 @@ export class BattleRenderer implements ImpactHost {
     body: (id, out) => {
       const w = this.world;
       const e = w?.entities.get(id);
-      const v = e ? this.views.get(id) : undefined;
-      if (!w || !e || !v || e.dead) return false;
+      if (!w || !e || e.dead) return false;
+      const v = this.views.get(id);
       const ds = this.figureScale(e.pos.y);
-      out.x = v.drawX + v.slide * ds;
-      out.y = v.drawY;
-      out.chestY = v.rig.top * 0.62 * ds;
-      out.height = v.rig.top * ds;
+      // A body raised this frame has no view yet: its world place and a standard figure stand in.
+      const top = v ? v.rig.top : CHEST / 0.62;
+      out.x = v ? v.drawX + v.slide * ds : this.sx(e.pos.x);
+      out.y = v ? v.drawY : this.sy(e.pos.y);
+      out.chestY = top * 0.62 * ds;
+      out.height = top * ds;
       out.scale = ds;
       out.wx = e.pos.x;
       out.wy = e.pos.y;
@@ -2912,7 +2914,7 @@ export class BattleRenderer implements ImpactHost {
       out.boss = e.kind === "boss";
       out.ally = e.faction === "ally";
       out.player = e.id === w.player.id;
-      out.rig = v.rig;
+      out.rig = v ? v.rig : null;
       return true;
     },
     playerId: () => this.world?.player.id ?? -1,

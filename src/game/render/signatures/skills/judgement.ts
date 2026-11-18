@@ -177,7 +177,15 @@ export class JudgementStage extends Stage {
         this.fall(e.from, e.to, e.duration || 0.6);
         break;
       case "impact":
-        this.impact();
+        if (e.index > 0) this.echo(e.from, e.radius || this.cast.radius * 0.6);
+        else {
+          this.place(e.from, e.radius || this.cast.radius);
+          this.impact();
+        }
+        break;
+      case "charge":
+        // Legion Meteor: a risen soldier hurls itself into the fall, an ink comet with a gold head.
+        this.comet(e.from, e.to);
         break;
       case "shockwave":
         this.kit.ring(this.gx, this.gy, this.r * 0.4, (e.radius || this.cast.radius * 1.8) * this.u, 0.7, this.pal.deep, GILT_HOT, 6, { squash: this.squash });
@@ -277,6 +285,8 @@ export class JudgementStage extends Stage {
       this.star.tint = GILT_HOT;
     }
     k.ring(x, y, 10, this.r * 1.2 * big, 0.45, this.pal.deep, GILT_HOT, 8, { squash: this.squash });
+    // The wide shockwave rolling out after it.
+    k.ring(x, y, this.r * 0.4, this.r * 1.9 * big, 0.75, this.pal.deep, GILT, 5, { squash: this.squash, delay: 0.08 });
     if (!this.compact) {
       k.ring(x, y, 6, this.r * 0.85 * big, 0.38, -1, 0xffffff, 4, { squash: this.squash, delay: 0.04 });
       k.ring(x, y - 30 * this.u, 8, this.r * 0.7 * big, 0.35, -1, GILT, 3, { ground: false, squash: 0.9 });
@@ -333,6 +343,35 @@ export class JudgementStage extends Stage {
     k.stop(0.1, "sig-judgement", 0.6);
     k.shake(0.42);
     k.punch(0.06);
+  }
+
+  /** Absolute Judgement's echo on the boss: a second, smaller blow where it stands. */
+  private echo(at: Vec2, r: number): void {
+    const g = this.ground(at, this.q);
+    const k = this.kit;
+    k.ring(g.x, g.y, 6, r * this.u * 1.3, 0.4, this.pal.deep, GILT_HOT, 5, { squash: this.squash });
+    k.slash(g.x, this.host.proj.top(), g.x, g.y - 20 * this.u, GILT_DEEP, GILT_HOT, 3.5, 0.3);
+    const st = this.sprite(this.host.layers.fx, starTex(), true);
+    if (st) {
+      st.position.set(g.x, g.y - 40 * this.u);
+      st.tint = GILT_HOT;
+      st.scale.set(2 * this.u);
+      this.echoStar = st;
+      this.echoT = 0;
+    }
+    k.punch(0.03);
+    k.flash(0xfff0d0, 0.2, 0.15);
+  }
+
+  private echoStar: Sprite | null = null;
+  private echoT = -1;
+  private readonly comets: { ax: number; ay: number; bx: number; by: number; t: number; d: number; done: boolean }[] = [];
+
+  private comet(from: Vec2, to: Vec2): void {
+    const a = this.chestAt(from, this.p);
+    const b = this.ground(to, this.q);
+    this.comets.push({ ax: a.x, ay: a.y, bx: b.x, by: b.y, t: 0, d: 0.28, done: false });
+    this.svc.label("Legion Meteor", b.x, b.y - 150 * this.u, 0xeedba0);
   }
 
   private fallenStar(from: Vec2, to: Vec2): void {
@@ -475,6 +514,45 @@ export class JudgementStage extends Stage {
       }
     }
     if (this.crackT >= 0) this.crackT += dt;
+    if (this.echoStar && this.echoT >= 0) {
+      this.echoT += dt;
+      const kk = span01(this.echoT, 0, 0.35);
+      this.echoStar.scale.set((0.4 + 2.2 * easeOutCubic(Math.min(1, kk * 3))) * this.u * (1 - kk * 0.4));
+      this.echoStar.alpha = 1 - kk;
+    }
+    for (const c of this.comets) {
+      if (c.done) continue;
+      c.t += dt;
+      const kk = Math.min(1, c.t / c.d);
+      const e = kk * kk;
+      const x = c.ax + (c.bx - c.ax) * e;
+      const y = c.ay + (c.by - c.ay) * e - Math.sin(kk * Math.PI) * 60 * this.u;
+      if (dt > 0) {
+        const o = k.o(x, y, smokeTex(), this.pal.ink);
+        o.additive = false;
+        o.alpha = 0.6;
+        o.speed[0] = 0;
+        o.speed[1] = 10;
+        o.life[0] = 0.2;
+        o.life[1] = 0.35;
+        o.scale[0] = 0.3;
+        o.scale[1] = 0.45;
+        k.emit(1);
+        const g = k.o(x, y, softCircle(), GILT);
+        g.speed[0] = 0;
+        g.speed[1] = 20;
+        g.life[0] = 0.12;
+        g.life[1] = 0.22;
+        g.scale[0] = 0.1;
+        g.scale[1] = 0.16;
+        k.emit(1);
+      }
+      if (kk >= 1) {
+        c.done = true;
+        k.ring(c.bx, c.by, 6, 70 * this.u, 0.4, this.pal.ink, GILT, 3, { squash: this.squash });
+        k.punch(0.012);
+      }
+    }
     void real;
   }
 

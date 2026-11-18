@@ -82,6 +82,37 @@ export class SerpentPath {
     }
   }
 
+  /**
+   * Fill with points already dense (a curve sampled by the caller), adding the serpentine wave by
+   * arc length, tapered in only at the start: appending more points later and building again leaves
+   * the part already travelled exactly where it was.
+   */
+  buildRaw(raw: number[], amp: number, wave: number, phase: number): void {
+    this.clear();
+    const k = raw.length / 2;
+    if (k < 2) return;
+    let s = 0;
+    for (let i = 0; i < k; i++) {
+      if (i > 0) s += Math.hypot(raw[i * 2]! - raw[i * 2 - 2]!, raw[i * 2 + 1]! - raw[i * 2 - 1]!);
+      const a = i > 0 ? i - 1 : 0;
+      const b = i < k - 1 ? i + 1 : k - 1;
+      const tx = raw[b * 2]! - raw[a * 2]!;
+      const ty = raw[b * 2 + 1]! - raw[a * 2 + 1]!;
+      const tl = Math.hypot(tx, ty) || 1;
+      const w = Math.sin((s / wave) * Math.PI * 2 + phase) * amp * Math.min(1, s / 80);
+      this.push(raw[i * 2]! + (-ty / tl) * w, raw[i * 2 + 1]! + (tx / tl) * w);
+    }
+  }
+
+  /** Arc distance at raw point index `f` (fractional). */
+  lengthAt(f: number): number {
+    if (this.n === 0) return 0;
+    const i = Math.max(0, Math.min(this.n - 1, Math.floor(f)));
+    const j = Math.min(this.n - 1, i + 1);
+    const k = Math.max(0, Math.min(1, f - i));
+    return this.len[i]! + (this.len[j]! - this.len[i]!) * k;
+  }
+
   /** Point and tangent angle at arc distance `s` (clamped). */
   at(s: number, out: { x: number; y: number; a: number }): void {
     const n = this.n;
@@ -290,7 +321,7 @@ export class Dragon {
    * Place the body: head at `headS` along `path`, `time` for the ripple, `alpha` overall. A segment
    * near the hero's chest (`veilX`, `veilY`) thins so he is never lost behind it.
    */
-  layout(path: SerpentPath, headS: number, time: number, alpha: number, veilX: number, veilY: number, veilR: number): void {
+  layout(path: SerpentPath, headS: number, time: number, alpha: number, veilX: number, veilY: number, veilR: number, sMin = 0, sMax = Infinity): void {
     const sp = this.spacing;
     const total = path.total;
     const tmp = this.tmp;
@@ -306,7 +337,7 @@ export class Dragon {
         continue;
       }
       const s = headS - (i + 0.6) * sp;
-      if (s < 0 || s > total) {
+      if (s < sMin || s > Math.min(total, sMax)) {
         seg.visible = false;
         fin.visible = false;
         continue;
@@ -337,7 +368,7 @@ export class Dragon {
       }
     }
     // The head: at the path's front, pointing along it.
-    if (headS < 0 || headS - sp * 0.2 > total) {
+    if (headS < sMin || headS - sp * 0.2 > Math.min(total, sMax)) {
       this.head.visible = false;
       this.headPos.visible = false;
     } else {

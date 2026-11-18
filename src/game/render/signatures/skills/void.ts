@@ -47,6 +47,8 @@ export class VoidStage extends Stage {
   /** 0 nothing, 1 forming, 2 pulling, 3 imploded, 4 fading. */
   private phase = 0;
   private phaseT = 0;
+  /** Seconds since the singularity formed (its grow-in runs whether or not the pull came with it). */
+  private formT = -1;
   private formD = 0.35;
   private pullD = 0.9;
   private spin = 0;
@@ -92,7 +94,8 @@ export class VoidStage extends Stage {
       case "form":
         this.center = { x: e.to.x, y: e.to.y };
         if (e.radius > 0) this.radius = e.radius;
-        this.formD = Math.max(0.15, e.duration || 0.35);
+        this.formD = Math.min(0.35, Math.max(0.15, e.duration || 0.35));
+        this.formT = 0;
         this.place();
         this.build();
         this.phase = 1;
@@ -312,6 +315,7 @@ export class VoidStage extends Stage {
 
   update(dt: number, real: number): void {
     this.phaseT += dt;
+    if (this.formT >= 0) this.formT += dt;
     this.spin += dt * (this.phase === 2 ? 5 + 6 * this.intensity : 2.5);
     const k = this.kit;
     const pal = this.pal;
@@ -386,7 +390,7 @@ export class VoidStage extends Stage {
     let coreK: number;
     let alpha = 1;
     if (this.phase <= 1) coreK = easeOutBack(span01(this.phaseT, 0, this.formD));
-    else if (this.phase === 2) coreK = 1 + 0.35 * this.intensity + 0.06 * Math.sin(this.t * 22);
+    else if (this.phase === 2) coreK = (1 + 0.35 * this.intensity + 0.06 * Math.sin(this.t * 22)) * (this.formT >= 0 ? easeOutBack(span01(this.formT, 0, 0.3)) : 1);
     else if (this.phase === 3) {
       // Collapse to a point in 70ms, then gone.
       coreK = this.phaseT < 0.07 ? 1.35 * (1 - easeInCubic(this.phaseT / 0.07)) + 0.05 : 0;

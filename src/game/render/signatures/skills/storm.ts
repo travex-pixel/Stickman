@@ -87,7 +87,7 @@ export class StormStage extends Stage {
     const body = this.sprite(fx, bladeTex(), false);
     const edge = this.compact ? null : this.sprite(fx, bladeEdgeTex(), true);
     if (body) {
-      body.tint = this.pal.mid;
+      body.tint = this.pal.deep;
       body.anchor.set(0.5);
     }
     if (edge) {
@@ -102,13 +102,21 @@ export class StormStage extends Stage {
     return b;
   }
 
-  private launch(e: { index: number; to: { x: number; y: number }; targetIds: number[]; duration: number }): void {
+  private launch(e: { index: number; from?: { x: number; y: number }; to: { x: number; y: number }; targetIds: number[]; duration: number }): void {
     let b = this.blades.find((x) => x.state === 0);
+    const relaunch = !b;
     if (!b) b = this.addBlade(this.blades.length, this.blades.length + 1);
     this.launched += 1;
-    this.orbitPos(b, this.p);
-    b.ax = this.p.x;
-    b.ay = this.p.y;
+    if (relaunch && e.from) {
+      // A blade loosed again from where its last foe fell (Hunter's Instinct at Master).
+      const a = this.chestAt(e.from, this.p);
+      b.ax = a.x;
+      b.ay = a.y;
+    } else {
+      this.orbitPos(b, this.p);
+      b.ax = this.p.x;
+      b.ay = this.p.y;
+    }
     const id = e.targetIds[0] ?? -1;
     if (id >= 0 && this.body(id)) {
       b.bx = this.b.x + (Math.random() - 0.5) * 8 * this.u;
@@ -131,7 +139,7 @@ export class StormStage extends Stage {
   }
 
   private orbitPos(b: Blade, out: { x: number; y: number }): number {
-    const r = (34 + b.ring * 14) * this.scale;
+    const r = (44 + b.ring * 16) * this.scale;
     const a = b.slot + this.spin * (b.ring === 1 ? -1 : 1);
     out.x = this.ox + Math.cos(a) * r;
     out.y = this.oy + Math.sin(a) * r * 0.32;
@@ -175,13 +183,13 @@ export class StormStage extends Stage {
         const k = easeOutCubic(span01(this.gatherT, b.appear, b.appear + 0.18));
         const a = this.orbitPos(b, this.p);
         const front = Math.sin(a) > 0;
-        const sc = this.scale * 0.55 * (0.4 + 0.6 * k) * (front ? 1 : 0.85);
+        const sc = this.scale * 1.0 * (0.4 + 0.6 * k) * (front ? 1 : 0.85);
         const rot = a + Math.PI / 2;
         for (const s of [body, b.edge]) {
           if (!s) continue;
           s.position.set(this.p.x, this.p.y);
           s.rotation = rot;
-          s.scale.set(sc, sc * 0.9);
+          s.scale.set(sc, sc * 1.25);
           s.alpha = k * (front ? 1 : 0.6);
           s.zIndex = this.pwy + (front ? 0.3 : -0.3) + (s === b.edge ? 0.01 : 0);
         }
@@ -199,17 +207,19 @@ export class StormStage extends Stage {
         const tx = 2 * u * (b.cx - b.ax) + 2 * e * (b.bx - b.cx);
         const ty = 2 * u * (b.cy - b.ay) + 2 * e * (b.by - b.cy);
         const rot = Math.atan2(ty, tx);
-        const sc = this.scale * 0.62;
+        const sc = this.scale * 1.15;
         for (const s of [body, b.edge]) {
           if (!s) continue;
           s.position.set(x, y);
           s.rotation = rot;
-          s.scale.set(sc * 1.15, sc * 0.85);
+          s.scale.set(sc * 1.15, sc * 1.1);
           s.alpha = 1;
           s.zIndex = 8000 + (s === b.edge ? 1 : 0);
         }
-        if (dt > 0 && this.profile.secondary) {
-          this.kit.streak(x - Math.cos(rot) * 18 * this.u, y - Math.sin(rot) * 18 * this.u, x, y, 22 * this.u, 1, this.pal.glow, 0.12, { alpha: 0.7 });
+        if (dt > 0) {
+          // An ink wake behind it, and (full staging) a violet light along it.
+          this.kit.streak(x - Math.cos(rot) * 26 * this.u, y - Math.sin(rot) * 26 * this.u, x, y, 34 * this.u, 2.2, this.pal.ink, 0.16, { alpha: 0.75, add: false });
+          if (this.profile.secondary) this.kit.streak(x - Math.cos(rot) * 18 * this.u, y - Math.sin(rot) * 18 * this.u, x, y, 22 * this.u, 1, this.pal.glow, 0.12, { alpha: 0.7 });
           if (this.master) this.kit.streak(x - Math.cos(rot) * 18 * this.u, y - Math.sin(rot) * 18 * this.u + 3, x, y + 3, 18 * this.u, 0.6, light, 0.1, { alpha: 0.6 });
         }
         if (k >= 1) {

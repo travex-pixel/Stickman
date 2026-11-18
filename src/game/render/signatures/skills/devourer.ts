@@ -1,54 +1,65 @@
 import type { Graphics } from "pixi.js";
 import type { Vec2 } from "../../../engine/math";
-import { easeInCubic, easeOutBack, easeOutCubic } from "../../anim/ease";
+import { curvePoint, devourerCurve } from "../../../signatures/geometry";
+import { easeOutBack, easeOutCubic } from "../../anim/ease";
 import { shard, softCircle } from "../../textures";
 import { CRIMSON, GILT, GILT_HOT } from "../palette";
-import { Stage, span01, type SigBeatEvent, type SigSynergyEvent } from "../stage";
+import { Stage, type SigBeatEvent, type SigHitEvent, type SigSynergyEvent } from "../stage";
 import { smokeTex } from "../textures";
 import { SerpentPath, type Dragon } from "./dragon";
 
 /**
  * ABYSSAL DEVOURER: a portal tears at the field's edge and a serpent dragon of ink sweeps through.
  *
- *   portal  a vertical rift rips open at the edge (ink inside, a jagged crimson-violet lip, sparks),
- *           the field dims a touch and the camera leans in.
- *   pass    the dragon pours out of the rift and winds across the field along a curve through the
- *           foes, its body following the head's exact path; the jaw opens as each foe nears and
- *           snaps shut on it (a crimson bite, ink spray); smoke trails from its back; a second rift
- *           opens ahead and swallows it, tail last.
- *   feed    (Soul Feeder) a soul is torn from the bitten foe into the maw; the eyes and a light
- *           running down the spine burn brighter with each.
- *   second_pass (Ancient Devourer) it does not leave: it turns up and away, then dives from above
- *           onto the group and climbs out of the frame.
+ *   portal       a vertical rift rips open where the dragon will enter the frame (ink inside, a jagged
+ *                crimson-violet lip, turning streaks, sparks); the field dims; the camera leans in.
+ *   pass         the dragon pours out of the rift and winds across the field. Its head follows the
+ *                simulation's own curve (signatures/geometry.ts: from the edge, through the cast's
+ *                centre, to the far edge, in the pass's time), so it is drawn where it bites; every
+ *                segment of the body follows the head's path, with a serpentine wave in it and a
+ *                ripple down it. The jaw opens as a foe comes near and snaps shut on each bite (crimson
+ *                crescents, ink spray); smoke trails off its back; a second rift swallows it, tail last.
+ *   feed         (Soul Feeder) a soul is torn from the fallen into the maw; the eyes and a light
+ *                running down the spine burn brighter with each.
+ *   second_pass  (Ancient Devourer, or a crowned cast) it climbs out of the frame, turns, and dives
+ *                from above onto the strongest knot left; `impact` is its landing.
  *
- * World Eater is larger and winds through the whole depth of the field. Gravity Feast bends the
- * path into the singularity, where it coils once and bites everything held there. Master grows a
- * full mane of fins; Grandmaster gilds horns, fins and whiskers; a crowned cast wears a gilt crown.
+ * World Eater is larger and sweeps the whole depth. Gravity Feast: its curve already bends through
+ * the singularity; as the head crosses it the jaws snap three times in a violet-crimson whirl. Master
+ * grows a full mane of fins; Grandmaster gilds horns, fins and whiskers; a crowned cast wears a crown.
  */
 const FLIGHT = 64;
+/** Samples of the simulation's curve. */
+const SAMPLES = 90;
 
 export class DevourerStage extends Stage {
   private dragon: Dragon | null = null;
   private readonly path = new SerpentPath();
-  private readonly ctrl: number[] = [];
+  private readonly raw: number[] = [];
+  /** Head arc distance; -1 before the pass. */
   private headS = -1;
+  /** The pass: its time, length (world s), and the raw index where the sampled curve ends. */
+  private passT = -1;
+  private passD = 1.25;
+  private passEnd = SAMPLES;
   private speed = 0;
   private time = 0;
   private size = 1;
+  /** Visible window along the path (between the rifts). */
+  private sMin = 0;
+  private sMax = Infinity;
   private portalG: Graphics | null = null;
   private exitG: Graphics | null = null;
-  /** Rifts: where, how open (0..1), and whether they are opening or closing. */
   private readonly rift = { x: 0, y: 0, k: 0, open: false, on: false };
   private readonly exit = { x: 0, y: 0, k: 0, open: false, on: false };
-  private readonly bites: { s: number; id: number; done: boolean }[] = [];
   private feeds = 0;
   private smokeT = 0;
+  private biteT = 0;
   private pushId = 0;
-  private dive = -1;
-  private leaving = false;
-  private feast: { x: number; y: number } | null = null;
+  private readonly snaps: number[] = [];
   private readonly hero = { x: 0, y: 0, r: 0 };
   private readonly pt = { x: 0, y: 0 };
+  private readonly cp = { x: 0, y: 0, a: 0 };
 
   constructor(...a: ConstructorParameters<typeof Stage>) {
     super(...a);
@@ -60,13 +71,13 @@ export class DevourerStage extends Stage {
 
   private flightY(wy: number): number {
     const pr = this.host.proj;
-    return pr.sy(wy) - FLIGHT * pr.fs(wy);
+    return pr.sy(wy) - FLIGHT * pr.fs(Math.max(0, Math.min(150, wy)));
   }
 
   onBeat(e: SigBeatEvent): void {
     switch (e.beat) {
       case "portal":
-        this.openRift(e.from);
+        this.portal(e.from);
         break;
       case "pass":
         this.startPass(e);
@@ -77,8 +88,8 @@ export class DevourerStage extends Stage {
       case "second_pass":
         this.secondPass(e);
         break;
-      case "depart":
-        this.leaving = true;
+      case "impact":
+        this.landing(e.from, e.radius || 80);
         break;
       default:
         break;
@@ -88,15 +99,36 @@ export class DevourerStage extends Stage {
   override onSynergy(e: SigSynergyEvent): void {
     if (e.synergy !== "gravity_feast") return;
     const pr = this.host.proj;
-    this.feast = { x: pr.sx(e.pos.x), y: pr.sy(e.pos.y) - 78 * pr.fs(e.pos.y) };
-    this.svc.label("Gravity Feast", this.feast.x, this.feast.y - 60 * this.u, 0xe8c0ff);
+    const x = pr.sx(e.pos.x);
+    const y = this.flightY(e.pos.y);
+    this.svc.label("Gravity Feast", x, y - 70 * this.u, 0xe8c0ff);
+    // The jaws snap three times in a whirl of violet and crimson at the singularity.
+    this.snaps.push(0, 0.07, 0.14);
+    this.kit.ring(x, y, 4, 70 * this.u, 0.45, this.pal.deep, 0xe8c0ff, 4, { ground: false, squash: 0.6 });
+    this.kit.spiral(x, y, 50 * this.u, 12, softCircle(), CRIMSON, true, 0.45, 16);
+    this.kit.spiral(x, y, 70 * this.u, 10, shard(), this.pal.ink, false, 0.5, 12);
+    this.kit.punch(0.02);
   }
 
-  private openRift(from: Vec2): void {
+  override onHit(e: SigHitEvent): void {
+    if (e.sig !== "abyssal_devourer" || this.biteT > 0) return;
+    this.biteT = 0.07;
+    const d = this.dragon;
+    if (d && d.headPos.visible) {
+      this.bite(d.mouth.x, d.mouth.y, e.targetId);
+      d.jawOpen = 0;
+    } else {
+      const c = this.chestAt(e.pos, this.pt);
+      this.bite(c.x, c.y, e.targetId);
+    }
+  }
+
+  /** The rift where the dragon enters (moved to where its path comes into the frame at the pass). */
+  private portal(from: Vec2): void {
     const pr = this.host.proj;
-    const margin = 26 * this.u;
+    const margin = 52 * this.u;
     this.rift.x = Math.min(pr.right() - margin, Math.max(pr.left() + margin, pr.sx(from.x)));
-    this.rift.y = this.flightY(from.y);
+    this.rift.y = this.flightY(Math.max(20, Math.min(130, from.y)));
     this.rift.on = true;
     this.rift.open = true;
     this.rift.k = 0;
@@ -104,10 +136,14 @@ export class DevourerStage extends Stage {
     const k = this.kit;
     if (!this.compact) {
       this.host.darken(0x120e1c, 0.32);
-      const center = this.ground(this.cast.center, this.p);
-      this.pushId = k.pushIn((center.x + this.rift.x) / 2, center.y - 50 * this.u, 1.07, 0.35, 1.4, 0.6);
+      const c = this.ground(this.cast.center, this.p);
+      this.pushId = k.pushIn((c.x + this.rift.x) / 2, c.y - 50 * this.u, 1.07, 0.35, 1.4, 0.6);
     }
-    const o = k.o(this.rift.x, this.rift.y, shard(), CRIMSON);
+    this.riftSparks(this.rift.x, this.rift.y);
+  }
+
+  private riftSparks(x: number, y: number): void {
+    const o = this.kit.o(x, y, shard(), CRIMSON);
     o.speed[0] = 40;
     o.speed[1] = 160;
     o.life[0] = 0.3;
@@ -116,7 +152,7 @@ export class DevourerStage extends Stage {
     o.scale[1] = 0.35;
     o.alignToVelocity = true;
     o.spread = 30 * this.size;
-    k.emit(12);
+    this.kit.emit(12);
   }
 
   private acquireDragon(): void {
@@ -138,89 +174,143 @@ export class DevourerStage extends Stage {
   private startPass(e: SigBeatEvent): void {
     this.acquireDragon();
     const pr = this.host.proj;
-    if (!this.rift.on) this.openRift(e.from);
-    const ctrl = this.ctrl;
-    ctrl.length = 0;
-    const sx = this.rift.x;
-    const sy = this.rift.y;
-    const dir = pr.sx(e.to.x) >= sx ? 1 : -1;
-    // Out of the rift: a short straight first, so the body pours out level.
-    ctrl.push(sx - dir * 30 * this.size, sy, sx, sy, sx + dir * 40 * this.size, sy - 6 * this.size);
-    // Through the foes it means to strike, in the order it meets them (close ones merged).
-    const pts: { x: number; y: number; id: number }[] = [];
-    for (const id of e.targetIds) {
-      if (!this.body(id)) continue;
-      pts.push({ x: this.b.x, y: this.b.y - this.b.chestY, id });
+    const curve = devourerCurve(e.from, this.cast.center, e.to);
+    const raw = this.raw;
+    raw.length = 0;
+    // A lead-in behind the start (inside the portal), then the simulation's curve sampled evenly in
+    // its time, then a run-out past the end (into the exit, or up and away for a turn).
+    const p = this.pt;
+    curvePoint(curve, 0, p);
+    const x0 = pr.sx(p.x);
+    const y0 = this.flightY(p.y);
+    curvePoint(curve, 0.02, p);
+    const dx = pr.sx(p.x) - x0;
+    const dy = this.flightY(p.y) - y0;
+    const dl = Math.hypot(dx, dy) || 1;
+    for (let i = 6; i >= 1; i--) raw.push(x0 - (dx / dl) * i * 14 * this.size, y0 - (dy / dl) * i * 14 * this.size);
+    const lead = raw.length / 2;
+    for (let k = 0; k <= SAMPLES; k++) {
+      curvePoint(curve, k / SAMPLES, p);
+      raw.push(pr.sx(p.x), this.flightY(p.y));
     }
-    pts.sort((a, b) => (a.x - b.x) * dir);
-    let lastX = sx + dir * 40 * this.size;
-    const eater = this.evo === "world_eater";
-    let zig = 0;
-    for (const p of pts) {
-      if ((p.x - lastX) * dir < 34 * this.size) continue;
-      if (this.feast && (this.feast.x - lastX) * dir > 0 && (this.feast.x - p.x) * dir < 0) this.coil(ctrl, dir);
-      // World Eater sweeps the whole depth: it alternates between the far and the near ground.
-      const y = eater ? (zig++ % 2 === 0 ? this.flightY(25) : this.flightY(125)) : p.y;
-      ctrl.push(p.x, y);
-      lastX = p.x;
-      if (ctrl.length > 22) break;
-    }
-    if (this.feast && (this.feast.x - lastX) * dir > 0) this.coil(ctrl, dir);
-    // Out the far side: through an exit rift, or (Ancient Devourer) up and away for its turn.
-    const margin = 26 * this.u;
-    const ex = Math.min(pr.right() - margin, Math.max(pr.left() + margin, pr.sx(e.to.x)));
-    const ey = this.flightY(e.to.y);
-    if (this.evo === "ancient_devourer") {
-      ctrl.push(ex - dir * 40 * this.size, ey - 20 * this.size, ex + dir * 10 * this.size, pr.top() + 40 * this.u, ex - dir * 60 * this.size, pr.top() - 120 * this.size);
+    this.passEnd = lead + SAMPLES;
+    const ex = raw[raw.length - 2]!;
+    const ey = raw[raw.length - 1]!;
+    const tx = ex - raw[raw.length - 4]!;
+    const ty = ey - raw[raw.length - 3]!;
+    const tl = Math.hypot(tx, ty) || 1;
+    const turn = this.evo === "ancient_devourer" || this.enhanced;
+    if (turn) {
+      // Up and out of the frame, curling back the way it came, for the dive.
+      for (let i = 1; i <= 14; i++) {
+        const a = (i / 14) * Math.PI * 0.9;
+        raw.push(ex + (tx / tl) * Math.sin(a) * 90 * this.size, ey - (1 - Math.cos(a)) * 140 * this.size);
+      }
     } else {
-      this.exit.x = ex;
-      this.exit.y = ey;
-      ctrl.push(ex, ey, ex + dir * 60 * this.size, ey);
+      for (let i = 1; i <= 30; i++) raw.push(ex + (tx / tl) * i * 14 * this.size, ey + (ty / tl) * i * 14 * this.size);
     }
-    this.path.build(ctrl, (eater ? 16 : 11) * this.size, 150 * this.size, this.castId * 0.7);
-    const travel = this.path.total;
-    this.speed = travel / Math.max(0.6, e.duration || 1.5);
-    this.headS = 0;
-    this.bites.length = 0;
-    for (const p of pts) this.bites.push({ s: this.path.nearest(p.x, p.y), id: p.id, done: false });
-    if (this.feast) {
-      const s = this.path.nearest(this.feast.x, this.feast.y);
-      for (let i = 0; i < 3; i++) this.bites.push({ s: s + (i - 1) * 40 * this.size, id: -1, done: false });
+    this.path.buildRaw(raw, (this.evo === "world_eater" ? 16 : 12) * this.size, 150 * this.size, this.castId * 0.7);
+    // The rifts sit where the path enters and leaves the visible frame.
+    const margin = 52 * this.u;
+    const left = pr.left() + margin;
+    const right = pr.right() - margin;
+    let sIn = this.path.lengthAt(lead);
+    let sOut = this.path.lengthAt(this.passEnd);
+    for (let i = lead; i <= this.passEnd; i++) {
+      const x = this.path.xs[i]!;
+      if (x >= left && x <= right) {
+        sIn = this.path.len[i]!;
+        break;
+      }
     }
-    this.bites.sort((a, b) => a.s - b.s);
-  }
-
-  /** Gravity Feast: a tight coil round the singularity, inserted into the path. */
-  private coil(ctrl: number[], dir: number): void {
-    const f = this.feast!;
-    const r = 34 * this.size;
-    for (let i = 0; i <= 6; i++) {
-      const a = -Math.PI / 2 - dir * (i / 6) * Math.PI * 2;
-      ctrl.push(f.x + Math.cos(a) * r * dir, f.y + Math.sin(a) * r * 0.8 - (i === 0 || i === 6 ? 0 : 0));
+    for (let i = this.passEnd; i >= lead; i--) {
+      const x = this.path.xs[i]!;
+      if (x >= left && x <= right) {
+        sOut = this.path.len[i]!;
+        break;
+      }
     }
+    this.path.at(sIn, this.cp);
+    const moved = Math.hypot(this.rift.x - this.cp.x, this.rift.y - this.cp.y) > 4;
+    this.rift.x = this.cp.x;
+    this.rift.y = this.cp.y;
+    this.rift.on = true;
+    this.rift.open = true;
+    if (moved) this.riftSparks(this.rift.x, this.rift.y);
+    if (!this.portalG) this.portalG = this.graphics(this.host.layers.fx);
+    this.sMin = sIn;
+    if (!turn) {
+      this.path.at(sOut, this.cp);
+      this.exit.x = this.cp.x;
+      this.exit.y = this.cp.y;
+      this.sMax = sOut;
+    } else this.sMax = Infinity;
+    this.passT = 0;
+    this.passD = Math.max(0.4, e.duration || 1.25);
+    this.headS = this.path.lengthAt(lead);
+    this.speed = (this.path.lengthAt(this.passEnd) - this.path.lengthAt(lead)) / this.passD;
   }
 
   private secondPass(e: SigBeatEvent): void {
     this.acquireDragon();
     const pr = this.host.proj;
-    const target = this.chestAt(e.to, this.q);
-    const tx = target.x;
-    const ty = target.y;
-    // Append the dive: from high above, down onto the group, and up out of the frame.
-    const ctrl = this.ctrl;
+    const aim = this.chestAt(e.to, this.q);
+    const raw = this.raw;
     const fromX = pr.sx(e.from.x);
-    ctrl.push(fromX, pr.top() - 60 * this.size, tx + 40 * this.size, ty - 120 * this.size, tx, ty, tx - 50 * this.size, ty - 30 * this.size, tx - 120 * this.size, pr.top() - 160 * this.size);
-    const s0 = this.headS;
-    this.path.build(ctrl, 10 * this.size, 150 * this.size, this.castId * 0.7);
-    const sTarget = this.path.nearest(tx, ty);
-    this.speed = Math.max(this.speed, (sTarget - s0) / Math.max(0.3, (e.duration || 0.85) * 0.85));
-    for (const id of e.targetIds) {
-      if (!this.body(id)) continue;
-      this.bites.push({ s: this.path.nearest(this.b.x, this.b.y - this.b.chestY), id, done: false });
+    const top = pr.top();
+    // From high above, down onto the group, and up out of the frame again.
+    const ax = raw.length > 1 ? raw[raw.length - 2]! : fromX;
+    const ay = raw.length > 1 ? raw[raw.length - 1]! : top - 200;
+    if (raw.length === 0) raw.push(ax, ay);
+    const legs: [number, number][] = [
+      [(ax + fromX) / 2, Math.min(ay, top - 150 * this.size)],
+      [fromX, top - 90 * this.size],
+      [(fromX + aim.x) / 2, (top + aim.y) / 2 - 30 * this.size],
+      [aim.x, aim.y],
+      [aim.x + (aim.x - fromX) * 0.6, aim.y - 30 * this.size],
+      [aim.x + (aim.x - fromX) * 1.2, top - 160 * this.size],
+    ];
+    let px = ax;
+    let py = ay;
+    let aimIndex = 0;
+    for (let l = 0; l < legs.length; l++) {
+      const [lx, ly] = legs[l]!;
+      const steps = 10;
+      for (let i = 1; i <= steps; i++) raw.push(px + ((lx - px) * i) / steps, py + ((ly - py) * i) / steps);
+      if (l === 3) aimIndex = raw.length / 2 - 1;
+      px = lx;
+      py = ly;
     }
-    this.bites.push({ s: sTarget, id: -1, done: false });
-    this.bites.sort((a, b) => a.s - b.s);
-    this.dive = sTarget;
+    this.path.buildRaw(raw, 8 * this.size, 150 * this.size, this.castId * 0.7);
+    this.sMax = Infinity;
+    if (this.headS < 0) this.headS = 0;
+    const sAim = this.path.lengthAt(aimIndex);
+    this.passT = -1;
+    this.speed = Math.max(this.speed, (sAim - this.headS) / Math.max(0.2, e.duration || 0.45));
+  }
+
+  private landing(at: Vec2, r: number): void {
+    const g = this.ground(at, this.p);
+    const pr = this.host.proj;
+    const sq = Math.min(0.6, Math.max(0.25, pr.dy() / pr.unit()));
+    this.kit.ring(g.x, g.y, 10, r * this.u * 1.3, 0.5, this.pal.deep, 0xffe6df, 5, { squash: sq });
+    this.kit.ring(g.x, g.y, 6, r * this.u * 0.9, 0.4, -1, CRIMSON, 2.5, { squash: sq, delay: 0.05 });
+    const o = this.kit.o(g.x, g.y, shard(), this.pal.ink);
+    o.additive = false;
+    o.speed[0] = 120;
+    o.speed[1] = 300;
+    o.angle[0] = -Math.PI * 0.95;
+    o.angle[1] = -Math.PI * 0.05;
+    o.life[0] = 0.4;
+    o.life[1] = 0.7;
+    o.scale[0] = 0.25;
+    o.scale[1] = 0.5;
+    o.gravity = 600;
+    o.spin = 10;
+    this.kit.emit(14);
+    this.kit.shake(0.18);
+    this.kit.flash(0xe8dcef, 0.2, 0.15);
+    this.kit.stop(0.05, "sig-devourer-dive", 0.4);
   }
 
   private feed(from: Vec2): void {
@@ -248,8 +338,8 @@ export class DevourerStage extends Stage {
     const a = this.dragon ? this.dragon.headPos.a : 0;
     // The jaws close: two crimson crescents meeting, white-hot at the teeth.
     const r = 16 * this.size;
-    k.cut(x, y, r, a - 2.2, 1.3, CRIMSON, light, 2.6, 0.2);
-    k.cut(x, y, r, a + 2.2, -1.3, CRIMSON, light, 2.6, 0.2);
+    k.cut(x, y, r, a - 2.2, 1.3, CRIMSON, light, 2.8, 0.22);
+    k.cut(x, y, r, a + 2.2, -1.3, CRIMSON, light, 2.8, 0.22);
     const o = k.o(x, y, shard(), this.pal.ink);
     o.additive = false;
     o.speed[0] = 80;
@@ -277,56 +367,71 @@ export class DevourerStage extends Stage {
 
   update(dt: number, real: number): void {
     this.time += real;
-    const pr = this.host.proj;
-    // Rifts open and close.
+    this.biteT = Math.max(0, this.biteT - real);
     const step = dt / 0.28;
     this.rift.k = this.rift.open ? Math.min(1, this.rift.k + step) : Math.max(0, this.rift.k - step);
     this.exit.k = this.exit.open ? Math.min(1, this.exit.k + step) : Math.max(0, this.exit.k - step);
     const d = this.dragon;
     if (!d || this.headS < 0) return;
-    this.headS += this.speed * dt;
-    const total = this.path.total;
+    // The head: on the simulation's curve by its time while the pass runs, then on at its speed.
+    if (this.passT >= 0) {
+      this.passT += dt;
+      const t = Math.min(1, this.passT / this.passD);
+      const lead = this.passEnd - SAMPLES;
+      const s = this.path.lengthAt(lead + t * SAMPLES);
+      this.headS = t < 1 ? s : Math.max(this.headS + this.speed * dt, s);
+    } else this.headS += this.speed * dt;
     const len = d.length;
-    // The entry rift closes once the tail is out; the exit opens as the head comes near.
-    if (this.headS > len + 20) this.rift.open = false;
-    if (this.exit.x !== 0 || this.exit.y !== 0) {
-      if (this.headS > total - 160 * this.size) {
-        this.exit.on = true;
-        this.exit.open = this.headS < total + len;
-        if (!this.exitG) this.exitG = this.graphics(this.host.layers.fx);
-      }
+    // The entry rift closes once the tail is through it; the exit opens as the head nears it.
+    if (this.headS - len > this.sMin + 20) this.rift.open = false;
+    if (this.sMax !== Infinity && this.headS > this.sMax - 160 * this.size) {
+      this.exit.on = true;
+      this.exit.open = this.headS - len < this.sMax;
+      if (!this.exitG) this.exitG = this.graphics(this.host.layers.fx);
     }
-    // Jaw: opens as the next bite nears, snaps shut on it.
-    let open = 0;
-    for (const b of this.bites) {
-      if (b.done) continue;
-      const ahead = b.s - this.headS;
-      if (ahead <= 0) {
-        b.done = true;
-        if (d.headPos.visible) this.bite(d.mouth.x, d.mouth.y, b.id);
+    // Snaps scheduled by a combination.
+    for (let i = this.snaps.length - 1; i >= 0; i--) {
+      this.snaps[i] = this.snaps[i]! - real;
+      if (this.snaps[i]! <= 0) {
+        this.snaps.splice(i, 1);
+        if (d.headPos.visible) this.bite(d.mouth.x, d.mouth.y, -1);
         d.jawOpen = 0;
-        continue;
       }
-      const w = 70 * this.size;
-      if (ahead < w) open = Math.max(open, 1 - ahead / w);
     }
-    d.jawOpen = Math.max(open > 0 ? easeOutBack(open) * 0.95 : 0, d.jawOpen - real * 8);
+    // Jaw: opens as the nearest foe ahead comes within reach.
+    let open = 0;
+    if (d.headPos.visible) {
+      const hx = d.mouth.x;
+      const hy = d.mouth.y;
+      const ca = Math.cos(d.headPos.a);
+      const sa = Math.sin(d.headPos.a);
+      const reach = 90 * this.size;
+      this.host.each("enemy", (id) => {
+        if (!this.body(id)) return;
+        const fx = this.b.x - hx;
+        const fy = this.b.y - this.b.chestY - hy;
+        if (fx * ca + fy * sa < -10) return;
+        const dd = Math.hypot(fx, fy);
+        if (dd < reach) open = Math.max(open, 1 - dd / reach);
+      });
+    }
+    d.jawOpen = Math.max(open > 0 ? Math.min(1, easeOutBack(open) * 0.95) : 0, d.jawOpen - real * 8);
     // The hero is never lost behind the body.
     if (this.body(this.host.playerId())) {
       this.hero.x = this.b.x;
       this.hero.y = this.b.y - this.b.chestY;
       this.hero.r = this.b.height * 0.6;
     } else this.hero.r = 0;
-    const fade = this.interrupted ? 1 - span01(this.sinceEnd, 0, 0.4) : 1;
-    d.layout(this.path, this.headS, this.time, fade, this.hero.x, this.hero.y, this.hero.r);
+    const fade = this.interrupted ? 1 - Math.min(1, this.sinceEnd / 0.4) : 1;
+    d.layout(this.path, this.headS, this.time, fade, this.hero.x, this.hero.y, this.hero.r, this.sMin, this.sMax);
     d.drawLines(this.path, this.headS, this.time, this.enhanced ? GILT : CRIMSON, this.enhanced ? 0.8 : this.feeds > 0 ? Math.min(1, 0.4 + this.feeds * 0.25) : this.gilded ? 0.4 : 0);
-    // Smoke off its back.
+    // Smoke off its back (and, Master, violet motes off the mane).
     if (!this.compact && dt > 0) {
       this.smokeT -= dt;
       if (this.smokeT <= 0) {
         this.smokeT = this.profile.secondary ? 0.035 : 0.08;
         const i = 3 + Math.floor(Math.random() * Math.max(1, this.profile.dragonSegments - 5));
-        if (d.segmentPoint(this.path, this.headS, i, this.pt)) {
+        if (d.segmentPoint(this.path, this.headS, i, this.pt) && this.pt.y > this.host.proj.top() - 20) {
           const o = this.kit.o(this.pt.x, this.pt.y, smokeTex(), this.pal.ink);
           o.additive = false;
           o.alpha = 0.45;
@@ -356,20 +461,11 @@ export class DevourerStage extends Stage {
         }
       }
     }
-    // The dive's arrival shakes the ground once.
-    if (this.dive >= 0 && this.headS >= this.dive) {
-      this.dive = -1;
-      const g = this.ground(this.cast.center, this.p);
-      this.kit.ring(g.x, g.y, 10, 120 * this.u, 0.5, this.pal.deep, 0xffe6df, 4, { squash: pr.dy() / pr.unit() });
-      this.kit.shake(0.14);
-      this.kit.flash(0xe8dcef, 0.18, 0.15);
-    }
-    if (this.headS > total + len + 10) {
+    if (this.headS - len > Math.min(this.path.total, this.sMax) + 10) {
       d.hide();
       this.headS = -1;
       if (this.pushId) this.kit.releasePush(this.pushId);
     }
-    void this.leaving;
   }
 
   override paint(): void {
@@ -395,12 +491,10 @@ export class DevourerStage extends Stage {
     g.poly(pts).fill({ color: this.pal.ink, alpha: 0.95 });
     g.poly(pts).stroke({ width: 4 * S, color: this.pal.mid, alpha: 0.75 });
     g.poly(pts).stroke({ width: 1.6 * S, color: this.gilded ? GILT : CRIMSON, alpha: 0.95 });
-    // The void turning inside.
     for (let i = 0; i < 3; i++) {
       const a = time * (2 + i) + i * 2.1;
       g.ellipse(r.x, r.y, w * (0.3 + i * 0.2), h * (0.3 + i * 0.18)).stroke({ width: 1, color: this.pal.glow, alpha: 0.25 + 0.1 * Math.sin(a) });
     }
-    void easeInCubic;
   }
 
   override dispose(): void {

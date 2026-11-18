@@ -95,6 +95,14 @@ export class ParadeStage extends Stage {
       case "finisher":
         this.finisher(e);
         break;
+      case "blade": {
+        // Blade Parade: shadow blades loosed from a clone's strike.
+        const a = this.chestAt(e.from, this.p);
+        const id = e.targetIds[0] ?? -1;
+        const b = id >= 0 && this.body(id) ? { x: this.b.x, y: this.b.y - this.b.chestY } : this.chestAt(e.to, this.q);
+        this.shoot(a.x, a.y - 10 * this.u, b.x, b.y);
+        break;
+      }
       default:
         break;
     }
@@ -163,9 +171,11 @@ export class ParadeStage extends Stage {
     const k = this.kit;
     const pr = this.host.proj;
     const target = e.targetIds[0] ?? -1;
-    let tx = pr.sx(e.to.x);
-    let ty = pr.sy(e.to.y);
-    const fs = pr.fs(e.to.y);
+    // Where the clone stands: the beat's `from` (the simulation's), else beside its foe.
+    const stand = Math.hypot(e.from.x - e.to.x, e.from.y - e.to.y) > 4 ? e.from : e.to;
+    let tx = pr.sx(stand.x);
+    let ty = pr.sy(stand.y);
+    const fs = pr.fs(stand.y);
     let facing: 1 | -1 = 1;
     let chestX = tx;
     let chestY = ty - 50 * fs;
@@ -297,7 +307,9 @@ export class ParadeStage extends Stage {
   private finisher(e: SigBeatEvent): void {
     this.finT = 0;
     this.fin = { x: e.to.x, y: e.to.y };
-    this.finTargets = e.targetIds.length > 0 ? e.targetIds.slice() : this.visited.slice();
+    // One cut through every foe the clones visited and the one he returns to.
+    this.finTargets = this.visited.slice();
+    for (const id of e.targetIds) if (!this.finTargets.includes(id)) this.finTargets.push(id);
     this.hideTarget = 0;
     const pid = this.host.playerId();
     // He reappears: a puff of ink where he lands, a glint along his blade.

@@ -73,9 +73,16 @@ export class LegionStage extends Stage {
       case "darken":
         this.darkT = 0;
         break;
-      case "rise":
-        this.rise(e.from, e.targetIds[0] ?? -1, e.index);
+      case "rise": {
+        // One beat names every soldier raised (real temporary summons where foes fell). Without any
+        // (a development cast), stand-ins rise in a rank beside the warrior.
+        if (e.targetIds.length > 0) e.targetIds.forEach((id, i) => this.rise(e.from, id, i + 1));
+        else {
+          const n = this.evo === "endless_legion" ? 8 : this.evo === "veteran_souls" ? 3 : 5;
+          for (let i = 0; i < n; i++) this.rise({ x: e.from.x - 34 + (i % 3) * 24 - (i > 2 ? 12 : 0), y: Math.max(16, Math.min(134, e.from.y - 44 + i * 22)) }, -1, i + 1);
+        }
         break;
+      }
       case "charge":
         this.charge(e);
         break;
@@ -126,8 +133,11 @@ export class LegionStage extends Stage {
   private charge(e: SigBeatEvent): void {
     this.chargeT = 0;
     this.lineT = 0;
+    // The charge runs at the group (`to`); stand-ins spread round it, real soldiers are the fight's.
     const foes: { x: number; y: number }[] = [];
-    for (const id of e.targetIds) if (this.body(id)) foes.push({ x: this.b.x, y: this.b.y });
+    this.host.each("enemy", (id) => {
+      if (foes.length < 8 && this.body(id)) foes.push({ x: this.b.x, y: this.b.y });
+    });
     if (foes.length === 0) {
       const c = this.ground(e.to, this.q);
       foes.push({ x: c.x, y: c.y });

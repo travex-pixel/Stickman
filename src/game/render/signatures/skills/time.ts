@@ -3,7 +3,7 @@ import { easeOutBack, easeOutCubic } from "../../anim/ease";
 import { shard, softCircle } from "../../textures";
 import { CRIMSON, ELECTRIC, GILT, GILT_HOT } from "../palette";
 import { Stage, span01, type SigBeatEvent, type SigSynergyEvent } from "../stage";
-import { starTex } from "../textures";
+import { glowRingTex, holeTex, starTex } from "../textures";
 
 /**
  * TIME FRACTURE: a cracked clock-sigil turns over the field and time stops for the foes.
@@ -92,6 +92,13 @@ export class TimeStage extends Stage {
       case "delayed":
         this.delayed(e.targetIds[0] ?? -1, e.from, e.index);
         break;
+      case "pull":
+        // Frozen Singularity: the glass of every frozen body streams into a small singularity.
+        this.singularity(e.from, e.targetIds);
+        break;
+      case "implode":
+        this.collapse();
+        break;
       default:
         break;
     }
@@ -176,6 +183,52 @@ export class TimeStage extends Stage {
   }
 
   private readonly stars: { s: Sprite; t: number; size: number }[] = [];
+  private sing: { x: number; y: number; t: number; core: Sprite | null; rim: Sprite | null; gone: boolean } | null = null;
+
+  private singularity(at: { x: number; y: number }, ids: number[]): void {
+    const pr = this.host.proj;
+    const x = pr.sx(at.x);
+    const y = pr.sy(at.y) - 110 * pr.fs(at.y);
+    const core = this.sprite(this.host.layers.fx, holeTex(), false);
+    if (core) core.tint = 0x000000;
+    const rim = this.sprite(this.host.layers.fx, glowRingTex(), true);
+    if (rim) rim.tint = 0xdfe8ff;
+    this.sing = { x, y, t: 0, core, rim, gone: false };
+    for (const id of ids) {
+      if (!this.body(id)) continue;
+      const bx = this.b.x;
+      const by = this.b.y - this.b.chestY;
+      this.kit.streak(bx, by, x, y, 50 * this.u, 1.4, 0xdfe8ff, 0.3);
+      const o = this.kit.o(bx, by, shard(), 0xdfe8ff);
+      o.target = { x, y, strength: 18 };
+      o.speed[0] = 20;
+      o.speed[1] = 80;
+      o.life[0] = 0.3;
+      o.life[1] = 0.45;
+      o.scale[0] = 0.15;
+      o.scale[1] = 0.3;
+      o.spin = 8;
+      this.kit.emit(6);
+      o.target = undefined;
+    }
+    this.svc.label("Frozen Singularity", x, y - 50 * this.u, 0xd4e4ff);
+  }
+
+  private collapse(): void {
+    const s = this.sing;
+    if (!s) return;
+    s.gone = true;
+    const k = this.kit;
+    const st = this.sprite(this.host.layers.fx, starTex(), true);
+    if (st) {
+      st.position.set(s.x, s.y);
+      st.tint = 0xe6f0ff;
+      this.stars.push({ s: st, t: 0, size: 2.4 });
+    }
+    k.ring(s.x, s.y, 4, 70 * this.u, 0.32, this.pal.deep, 0xffffff, 3, { ground: false, squash: 1 });
+    k.ring(this.gx, this.gy, 8, 150 * this.u, 0.5, this.pal.deep, 0xdfe8ff, 4, { squash: this.squash, delay: 0.04 });
+    k.stop(0.05, "sig-syn", 0.4);
+  }
 
   update(dt: number, real: number): void {
     this.phaseT += dt;
@@ -191,6 +244,22 @@ export class TimeStage extends Stage {
         this.kit.ring(this.cx, this.cy, this.R * 1.02, this.R * 1.25, 0.3, -1, 0xdfe8ff, 1.5, { ground: false, squash: 1 });
       }
       this.crack = Math.min(1, 0.35 + this.phaseT / this.freezeD);
+    }
+    if (this.sing && !this.sing.gone) {
+      const s = this.sing;
+      s.t += dt;
+      const R = 16 * this.u * easeOutBack(span01(s.t, 0, 0.12));
+      if (s.core) {
+        s.core.position.set(s.x, s.y);
+        s.core.scale.set((R * 1.2) / 32);
+      }
+      if (s.rim) {
+        s.rim.position.set(s.x, s.y);
+        s.rim.scale.set((R * 1.15) / 120);
+      }
+    } else if (this.sing) {
+      if (this.sing.core) this.sing.core.visible = false;
+      if (this.sing.rim) this.sing.rim.visible = false;
     }
     for (const st of this.stars) {
       st.t += dt;

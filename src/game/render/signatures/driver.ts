@@ -1,6 +1,7 @@
 import type { GameEvent } from "../../engine/events";
 import type { Vec2 } from "../../engine/math";
-import { signatureDef, type EvolutionId, type MasteryTier, type SignatureBeat, type SignatureId, type SignatureStatus, type SynergyId } from "../../data/signatures";
+import { DEVOURER, FRACTURE, JUDGEMENT, LEGION, PARADE, SIGNATURES, SOVEREIGN, STORM, VOID, signatureDef, type EvolutionId, type MasteryTier, type SignatureBeat, type SignatureId, type SignatureStatus, type SynergyId } from "../../data/signatures";
+import { curvePoint, devourerCurve, orbitPoint } from "../../signatures/geometry";
 import type { EntityKind } from "../../entities/types";
 
 /**
@@ -10,9 +11,9 @@ import type { EntityKind } from "../../entities/types";
  * director code on stand-ins) and for development before the simulation's events land. It deals
  * nothing and writes nothing to any world: it only produces events for the presentation.
  *
- * Timings follow the catalogue's numbers (`castTime`, `radius`) and the beats' meanings; where the
- * contract leaves a moment open (how long a pull lasts, when a clone lands), the values here are the
- * presentation's assumptions, and the director stages whatever moments actually arrive.
+ * Timings and shapes follow the simulation's own layout (src/game/signatures/skills/*: the same
+ * constants and the shared geometry), so a preview plays the moments a real cast sends, in the same
+ * order; the director stages whatever moments actually arrive either way.
  */
 export interface SigActor {
   id: number;
@@ -33,10 +34,8 @@ export interface ScriptInput {
   foes: SigActor[];
   /** The army (Sovereign Awakening's kneel). */
   allies?: SigActor[];
-  /** Where foes fell recently (Legion Awakening's soldiers rise there). */
-  corpses?: Vec2[];
-  /** Ids for summoned stand-ins (Legion soldiers), allocated by the caller. */
-  nextId?: () => number;
+  /** Legion Awakening's soldiers (the caller raises them where foes fell; the preview's stand-ins). */
+  soldiers?: SigActor[];
   enhanced?: boolean;
   /** Combinations to stage in this cast (the preview shows them on request). */
   synergies?: SynergyId[];
@@ -95,7 +94,7 @@ class Writer {
   }
   beat(t: number, beat: SignatureBeat, o: { index?: number; from?: Vec2; to?: Vec2; targetIds?: number[]; radius?: number; duration?: number } = {}): void {
     const c = this.inp.caster.pos;
-    this.out.push({ t, e: { type: "sig_beat", castId: this.castId, sig: this.inp.sig, beat, index: o.index ?? 1, from: o.from ?? { x: c.x, y: c.y }, to: o.to ?? o.from ?? { x: c.x, y: c.y }, targetIds: o.targetIds ?? [], radius: o.radius ?? 0, duration: o.duration ?? 0 } });
+    this.out.push({ t, e: { type: "sig_beat", castId: this.castId, sig: this.inp.sig, beat, index: o.index ?? 0, from: o.from ?? { x: c.x, y: c.y }, to: o.to ?? o.from ?? { x: c.x, y: c.y }, targetIds: o.targetIds ?? [], radius: o.radius ?? 0, duration: o.duration ?? 0 } });
   }
   status(t: number, a: SigActor, status: SignatureStatus, on: boolean, duration: number): void {
     this.out.push({ t, e: { type: "sig_status", targetId: a.id, status, on, duration, pos: { x: a.pos.x, y: a.pos.y } } });
@@ -127,42 +126,51 @@ export function buildScript(inp: ScriptInput): Timed[] {
   const body: (() => void)[] = [];
   const evo = inp.evo;
   const master = inp.mastery >= 2;
+  const ARENA_MIN_X = 44;
+  const ARENA_MAX_X = 596;
+  const ARENA_MIN_Y = 8;
+  const ARENA_MAX_Y = 142;
   switch (inp.sig) {
     case "void_collapse": {
-      const r = def.radius;
+      // As the simulation lays it out (signatures/skills/voidCollapse.ts): form and pull together
+      // just after the cast, the implosion when the pull is done, the ring a beat later.
+      const R = def.radius;
       const horizon = evo === "event_horizon";
-      const pull = horizon ? 1.05 : 0.9;
-      const near = foes.filter((f) => dist2(f.pos, center) <= (r * 1.5) ** 2);
+      const tPull = VOID.formAt;
+      const pullFor = VOID.pullFor;
+      const tImp = tPull + pullFor + (horizon ? VOID.horizon.implodeDelay : 0);
+      const tRing = tImp + VOID.shockwaveDelay;
+      const near = foes.filter((f) => dist2(f.pos, center) <= R * R);
       targets = near.length > 0 ? near : foes.slice(0, 1);
-      const tImp = def.castTime + pull;
       windup = tImp;
-      length = tImp + (evo === "supernova" ? (master ? 1.5 : 1.15) : 0.95);
+      length = tRing + 0.35 + (evo === "supernova" ? VOID.supernova.bursts * VOID.supernova.gap + (master ? 0.5 : 0.2) : 0);
       body.push(() => {
-        w.beat(0, "form", { from: caster.pos, to: center, radius: r, duration: def.castTime, targetIds: targets.map((f) => f.id) });
-        w.beat(def.castTime, "pull", { to: center, radius: r * 1.5, duration: pull, targetIds: targets.map((f) => f.id) });
+        w.beat(tPull, "form", { from: center, radius: R, duration: tImp - tPull });
+        w.beat(tPull, "pull", { from: center, radius: R, duration: pullFor, targetIds: targets.map((f) => f.id) });
         if (horizon) {
-          w.beat(def.castTime + 0.25, "horizon_trap", { to: center, radius: r, duration: 1, targetIds: targets.map((f) => f.id) });
-          for (const f of targets) if (f.kind !== "boss") w.status(def.castTime + 0.25, f, "trapped", true, 1.2);
+          w.beat(tPull + pullFor, "horizon_trap", { from: center, radius: R, duration: VOID.horizon.trap, targetIds: targets.filter((f) => f.kind !== "boss").map((f) => f.id) });
+          for (const f of targets) if (f.kind !== "boss") w.status(tPull + pullFor, f, "trapped", true, VOID.horizon.trap);
         }
-        w.beat(tImp, "implode", { to: center, radius: r, targetIds: targets.map((f) => f.id) });
+        w.beat(tImp, "implode", { from: center, radius: R, targetIds: targets.map((f) => f.id) });
         for (const f of targets) {
-          w.hit(tImp + 0.01, f, 1, true);
-          w.status(tImp + 0.01, f, "void_mark", true, 6);
+          w.hit(tImp, f, 1, true);
+          w.status(tImp, f, "void_mark", true, 6);
         }
-        const outer = foes.filter((f) => !targets.includes(f));
-        w.beat(tImp + 0.12, "shockwave", { to: center, radius: r * 2.2, duration: 0.55, targetIds: outer.map((f) => f.id) });
-        for (const f of outer) w.hit(tImp + 0.12 + Math.sqrt(dist2(f.pos, center)) / (r * 2.2) * 0.4, f, 0.45);
+        const reach = R * VOID.shockwaveReach;
+        const outer = foes.filter((f) => !targets.includes(f) && dist2(f.pos, center) <= reach * reach);
+        w.beat(tRing, "shockwave", { from: center, radius: reach, duration: 0.35, targetIds: outer.map((f) => f.id) });
+        for (const f of outer) w.hit(tRing, f, 0.45);
         if (evo === "supernova") {
-          const leaps = foes.slice().sort((a, b) => dist2(a.pos, center) - dist2(b.pos, center)).slice(0, 3);
+          const leaps = foes.slice().sort((a, b) => dist2(b.pos, center) - dist2(a.pos, center)).slice(0, VOID.supernova.bursts);
           leaps.forEach((f, i) => {
-            const t = tImp + 0.3 + i * 0.14;
-            w.beat(t, "supernova_burst", { index: i + 1, from: center, to: f.pos, radius: 46, duration: 0.18, targetIds: [f.id] });
-            w.hit(t + 0.18, f, 0.6);
+            const t = tRing + 0.05 + i * VOID.supernova.gap;
+            w.beat(t, "supernova_burst", { index: i + 1, from: center, to: f.pos, radius: VOID.supernova.radius, duration: 0.25, targetIds: [f.id] });
+            w.hit(t, f, 0.55);
             if (master) {
-              const next = foes.find((g) => g !== f && !leaps.includes(g)) ?? foes[(i + 1) % foes.length];
+              const next = foes.find((g) => !leaps.includes(g)) ?? foes[(i + 1) % foes.length];
               if (next) {
-                w.beat(t + 0.32, "supernova_burst", { index: i + 4, from: f.pos, to: next.pos, radius: 38, duration: 0.16, targetIds: [next.id] });
-                w.hit(t + 0.48, next, 0.4);
+                w.beat(t + VOID.supernova.gap, "supernova_burst", { index: i + 1 + VOID.supernova.bursts, from: f.pos, to: next.pos, radius: VOID.supernova.radius, duration: 0.25, targetIds: [next.id] });
+                w.hit(t + VOID.supernova.gap, next, 0.4);
               }
             }
           });
@@ -171,184 +179,240 @@ export function buildScript(inp: ScriptInput): Timed[] {
       break;
     }
     case "abyssal_devourer": {
+      // The simulation's pass (signatures/skills/devourer.ts): a portal at the warrior's edge, the
+      // head sweeping a quadratic curve through the cast's centre to the far edge, bites as it passes.
       const eater = evo === "world_eater";
-      const fromLeft = center.x >= caster.pos.x ? true : false;
-      const portal: Vec2 = { x: fromLeft ? 30 : 610, y: eater ? 75 : Math.max(20, Math.min(130, center.y - 10)) };
-      const exit: Vec2 = { x: fromLeft ? 610 : 30, y: eater ? 75 : Math.max(20, Math.min(130, center.y + 10)) };
-      const passT = def.castTime + 0.35;
-      const passD = eater ? 1.7 : 1.45;
-      windup = passT + 0.2;
       const ancient = evo === "ancient_devourer";
-      length = passT + passD + (ancient ? 1.4 : 0.6);
+      const fromLeft = caster.pos.x <= (ARENA_MIN_X + ARENA_MAX_X) / 2;
+      const highFirst = center.y >= (ARENA_MIN_Y + ARENA_MAX_Y) / 2;
+      const from: Vec2 = { x: fromLeft ? ARENA_MIN_X - 6 : ARENA_MAX_X + 6, y: highFirst ? ARENA_MIN_Y + 14 : ARENA_MAX_Y - 14 };
+      const to: Vec2 = { x: fromLeft ? ARENA_MAX_X + 6 : ARENA_MIN_X - 6, y: highFirst ? ARENA_MAX_Y - 14 : ARENA_MIN_Y + 14 };
+      const tPass = DEVOURER.portalFor;
+      const D = DEVOURER.passFor;
+      const bite = eater ? DEVOURER.worldEater.bite : DEVOURER.bite;
+      const curve = devourerCurve(from, center, to);
+      const dives = ancient ? (master ? 2 : 1) : inp.enhanced ? 1 : 0;
+      windup = tPass;
+      length = tPass + D + dives * (DEVOURER.ancient.turn + DEVOURER.ancient.diveFor) + 0.05 + DEVOURER.departFor;
       const feast = w.has("gravity_feast");
       body.push(() => {
-        w.beat(0, "portal", { from: portal, to: center, radius: eater ? 44 : 34, duration: passT });
-        if (feast) w.synergy(passT - 0.02, "gravity_feast", center, foes.filter((f) => f.marked).map((f) => f.id));
-        w.beat(passT, "pass", { index: 1, from: portal, to: exit, radius: eater ? 75 : 36, duration: passD, targetIds: foes.map((f) => f.id) });
-        const sorted = foes.slice().sort((a, b) => (fromLeft ? a.pos.x - b.pos.x : b.pos.x - a.pos.x));
-        sorted.forEach((f) => {
-          const k = Math.abs(f.pos.x - portal.x) / Math.abs(exit.x - portal.x);
-          w.hit(passT + passD * Math.min(0.95, k * 0.9 + 0.04), f, 1, true);
-        });
-        if (evo === "soul_feeder") sorted.slice(0, 2).forEach((f, i) => w.beat(passT + 0.4 + i * 0.3, "feed", { index: i + 1, from: f.pos, to: f.pos, targetIds: [f.id] }));
-        let end = passT + passD;
-        if (ancient) {
-          const dive: Vec2 = { x: center.x, y: center.y };
-          w.beat(end + 0.25, "second_pass", { index: 2, from: { x: exit.x, y: -60 }, to: dive, radius: 60, duration: 0.85, targetIds: foes.map((f) => f.id) });
-          for (const f of foes) if (dist2(f.pos, dive) < 90 * 90) w.hit(end + 1.0, f, 1.2, true);
-          end += 1.15;
+        w.beat(0, "portal", { from, to: from, radius: 40, duration: tPass });
+        w.beat(tPass, "pass", { from, to, radius: bite, duration: D });
+        // Bites: when the head passes each foe (sampled as the simulation does).
+        const p = { x: 0, y: 0 };
+        let fed = 0;
+        for (const f of foes) {
+          for (let k = 0; k <= 60; k++) {
+            curvePoint(curve, k / 60, p);
+            if (Math.hypot(p.x - f.pos.x, p.y - f.pos.y) <= bite + 10) {
+              w.hit(tPass + (D * k) / 60, f, 1, true);
+              if (evo === "soul_feeder" && (f.hp ?? 1) < 0.35 && fed < 3) w.beat(tPass + (D * k) / 60 + 0.02, "feed", { index: ++fed, from: f.pos, to: p, targetIds: [f.id] });
+              break;
+            }
+          }
         }
-        w.beat(end, "depart", { from: ancient ? center : exit, to: ancient ? { x: center.x, y: -80 } : exit, duration: 0.45 });
+        if (feast) w.synergy(tPass + D * 0.5, "gravity_feast", center, foes.filter((f) => f.marked).map((f) => f.id));
+        let t = tPass + D;
+        for (let k = 0; k < dives; k++) {
+          t += DEVOURER.ancient.turn;
+          const aim = densest(foes, DEVOURER.ancient.radius, center);
+          const sky = { x: aim.x - (fromLeft ? -60 : 60), y: ARENA_MIN_Y - 90 };
+          w.beat(t, "second_pass", { index: k + 1, from: sky, to: aim, radius: DEVOURER.ancient.radius, duration: DEVOURER.ancient.diveFor });
+          const hit = foes.filter((f) => dist2(f.pos, aim) <= DEVOURER.ancient.radius ** 2);
+          w.beat(t + DEVOURER.ancient.diveFor, "impact", { index: k + 1, from: aim, radius: DEVOURER.ancient.radius, targetIds: hit.map((f) => f.id) });
+          for (const f of hit) w.hit(t + DEVOURER.ancient.diveFor, f, 2, true);
+          t += DEVOURER.ancient.diveFor;
+        }
+        w.beat(t + 0.05, "depart", { from: dives > 0 ? center : to, to, duration: DEVOURER.departFor });
       });
       break;
     }
     case "death_parade": {
+      // signatures/skills/parade.ts: vanish, the clones one after another (each from where it stands
+      // to its foe), the finisher as he reappears beside the last.
       const after = evo === "afterimage";
       const exec = evo === "executioner";
-      const n = after ? 6 : 4;
-      const step = after ? 0.13 : 0.2;
+      const n = after ? PARADE.afterimage.clones + (master ? 2 : 0) : PARADE.clones;
+      const gap = after ? PARADE.afterimage.gap : PARADE.cloneGap;
+      const tFinish = Math.min(def.castTime - 0.05, PARADE.vanishFor + n * gap + 0.08);
       const hunters = w.has("hunters_parade");
-      const order = foes.slice().sort((a, b) => (hunters ? Number(!!b.marked) - Number(!!a.marked) : 0) || (exec ? (a.hp ?? 1) - (b.hp ?? 1) : 0) || dist2(a.pos, caster.pos) - dist2(b.pos, caster.pos));
-      const picks: SigActor[] = [];
-      for (let i = 0; i < n && order.length > 0; i++) picks.push(order[i % order.length]!);
-      targets = picks;
-      windup = 0.22;
-      length = def.castTime + 0.55;
+      const blades = w.has("blade_parade");
+      const used = new Map<number, number>();
+      const order = () => foes.slice().sort((a, b) => (used.get(a.id) ?? 0) - (used.get(b.id) ?? 0) || (hunters ? Number(!!b.marked) - Number(!!a.marked) : 0) || (a.hp ?? 1) - (b.hp ?? 1) || a.id - b.id);
+      windup = PARADE.vanishFor;
+      length = tFinish + 0.25;
       body.push(() => {
-        w.beat(0, "vanish", { from: caster.pos, duration: def.castTime, targetIds: picks.map((f) => f.id) });
-        if (hunters) w.synergy(0.05, "hunters_parade", center, foes.filter((f) => f.marked).map((f) => f.id));
-        picks.forEach((f, i) => {
-          const t = 0.18 + i * step;
-          const side = i % 2 === 0 ? -1 : 1;
+        w.beat(0, "vanish", { from: caster.pos, duration: tFinish });
+        if (hunters) w.synergy(0, "hunters_parade", caster.pos, foes.filter((f) => f.marked).map((f) => f.id));
+        if (blades) w.synergy(0, "blade_parade", caster.pos, []);
+        const picks: SigActor[] = [];
+        for (let i = 1; i <= n && foes.length > 0; i++) {
+          const f = order()[0]!;
+          used.set(f.id, (used.get(f.id) ?? 0) + 1);
+          picks.push(f);
+          const t = PARADE.vanishFor + (i - 1) * gap;
+          const side = i % 2 === 0 ? 1 : -1;
           const stand: Vec2 = { x: f.pos.x + side * 26, y: f.pos.y };
-          w.beat(t, "clone", { index: i + 1, from: caster.pos, to: stand, targetIds: [f.id], duration: step * 1.3 });
-          w.hit(t + 0.06, f, exec && (f.hp ?? 1) < 0.34 ? 1.8 : 1, false, i === picks.length - 1);
-          if (w.has("blade_parade")) w.synergy(t + 0.07, "blade_parade", f.pos, foes.filter((g) => g !== f).slice(0, 2).map((g) => g.id));
-          if ((f.hp ?? 1) < 0.2) w.beat(t + 0.08, "execute", { index: i + 1, from: f.pos, to: f.pos, targetIds: [f.id] });
-        });
-        const fin = def.castTime - 0.12;
-        const lead = picks[picks.length - 1] ?? foes[0];
-        w.beat(fin, "finisher", { from: caster.pos, to: lead ? { x: lead.pos.x - 30, y: lead.pos.y } : caster.pos, targetIds: picks.map((f) => f.id), radius: 80, duration: 0.3 });
-        for (const f of new Set(picks)) w.hit(fin + 0.05, f, 1.4, true, true);
+          w.beat(t, "clone", { index: i, from: stand, to: f.pos, targetIds: [f.id], duration: gap });
+          if ((f.hp ?? 1) < PARADE.executeBelow) w.beat(t, "execute", { index: i, from: f.pos, targetIds: [f.id] });
+          else w.hit(t, f, exec && (f.hp ?? 1) < PARADE.executioner.below ? 1.8 : 1);
+          if (blades) {
+            const near = foes.filter((g) => g !== f).slice(0, inp.enhanced ? 2 : 1);
+            near.forEach((g, k) => {
+              w.beat(t, "blade", { index: k + 1, from: f.pos, to: g.pos, targetIds: [g.id], duration: STORM.flight });
+              w.hit(t + STORM.flight, g, 0.3);
+            });
+          }
+        }
+        targets = picks;
+        const lead = foes.slice().sort((a, b) => (a.hp ?? 1) - (b.hp ?? 1))[0];
+        const stand = lead ? { x: lead.pos.x + (caster.pos.x <= lead.pos.x ? -24 : 24), y: lead.pos.y } : caster.pos;
+        w.beat(tFinish, "finisher", { index: n + 1, from: caster.pos, to: stand, targetIds: lead ? [lead.id] : [], duration: 0.2 });
+        if (lead) w.hit(tFinish, lead, PARADE.finisherPower, true, true);
       });
       break;
     }
     case "kings_judgement": {
+      // signatures/skills/judgement.ts: hush, hand, sigil, meteor, impact; then the evolutions' extras.
       const absolute = evo === "absolute_judgement";
       const breaker = evo === "world_breaker";
       const bossFoe = foes.find((f) => f.kind === "boss");
       if (absolute && bossFoe) center = { x: bossFoe.pos.x, y: bossFoe.pos.y };
-      const r = def.radius * (breaker ? 1.35 : 1);
-      const near = foes.filter((f) => dist2(f.pos, center) <= r * r);
+      const R = def.radius * (absolute ? JUDGEMENT.absolute.radius : 1) * (breaker ? JUDGEMENT.worldBreaker.radius : 1) * (inp.enhanced ? 1.25 : 1);
+      const tImpact = JUDGEMENT.meteorAt + JUDGEMENT.fallFor;
+      const near = foes.filter((f) => dist2(f.pos, center) <= R * R);
       targets = near;
-      const tImp = 1.85;
-      windup = tImp;
-      length = tImp + (evo === "fallen_star" ? 1.35 : breaker ? 1.15 : 0.9);
+      windup = tImpact;
+      const stars = evo === "fallen_star" ? (master ? JUDGEMENT.fallenStar.starsMaster : JUDGEMENT.fallenStar.stars) + (inp.enhanced ? 1 : 0) : inp.enhanced ? 1 : 0;
+      length = tImpact + 0.4 + stars * JUDGEMENT.fallenStar.gap + (breaker ? JUDGEMENT.worldBreaker.delay + 0.45 : 0) + (absolute ? JUDGEMENT.absolute.echoDelay : 0);
       const legion = w.has("legion_meteor");
       body.push(() => {
-        w.beat(0, "hush", { from: caster.pos, duration: def.castTime });
-        w.beat(0.3, "hand", { from: { x: center.x, y: -40 }, to: center, radius: r, duration: 1.5, targetIds: near.map((f) => f.id) });
-        w.beat(0.6, "sigil", { to: center, radius: r, duration: tImp - 0.6 });
-        w.beat(1.25, "meteor", { from: { x: center.x + 140, y: -260 }, to: center, radius: r, duration: tImp - 1.25 });
-        if (legion) w.synergy(1.5, "legion_meteor", center, []);
-        w.beat(tImp, "impact", { to: center, radius: r, targetIds: near.map((f) => f.id) });
-        for (const f of near) w.hit(tImp + 0.01, f, f.kind === "boss" ? (absolute ? 3 : 2) : 1.5, true, true);
-        w.beat(tImp + 0.08, "shockwave", { to: center, radius: r * 1.8, duration: 0.6 });
-        if (breaker) {
-          w.beat(tImp + 0.45, "second_shockwave", { to: center, radius: r * 2.4, duration: 0.65 });
-          for (const f of foes) w.hit(tImp + 0.6, f, 0.4);
+        w.beat(0, "hush", { from: center, duration: tImpact });
+        w.beat(JUDGEMENT.handAt, "hand", { from: { x: center.x, y: ARENA_MIN_Y - 70 }, to: center, radius: R, duration: JUDGEMENT.sigilAt - JUDGEMENT.handAt, targetIds: near.map((f) => f.id) });
+        w.beat(JUDGEMENT.sigilAt, "sigil", { from: center, radius: R, duration: tImpact - JUDGEMENT.sigilAt });
+        w.beat(JUDGEMENT.meteorAt, "meteor", { from: { x: center.x + 90, y: ARENA_MIN_Y - 160 }, to: center, radius: R, duration: JUDGEMENT.fallFor });
+        w.beat(tImpact, "impact", { from: center, radius: R, targetIds: near.map((f) => f.id), duration: 0.4 });
+        for (const f of near) w.hit(tImpact, f, f.kind === "boss" ? 2 : 1.5, true, true);
+        if (legion) {
+          const soldiers = inp.allies ?? [];
+          w.synergy(tImpact, "legion_meteor", center, soldiers.map((s) => s.id));
+          soldiers.forEach((s, k) => w.beat(tImpact + 0.04 + k * 0.06, "charge", { index: k + 1, from: s.pos, to: center, targetIds: [s.id], radius: JUDGEMENT.legion.radius, duration: 0.08 }));
         }
-        if (evo === "fallen_star") {
-          for (let i = 0; i < 3; i++) {
-            const f = foes[(i + 1) % Math.max(1, foes.length)];
-            const to = f ? f.pos : { x: center.x + (i - 1) * 90, y: center.y };
-            w.beat(tImp + 0.3 + i * 0.25, "fallen_star", { index: i + 1, from: { x: to.x + 90, y: -200 }, to, radius: 50, duration: 0.35, targetIds: f ? [f.id] : [] });
-            if (f) w.hit(tImp + 0.65 + i * 0.25, f, 0.7, true);
-          }
+        for (let i = 1; i <= stars; i++) {
+          const f = foes[i % Math.max(1, foes.length)];
+          const at = f ? f.pos : { x: center.x + (i - 2) * 80, y: center.y };
+          const t = tImpact + JUDGEMENT.fallenStar.gap * i;
+          w.beat(t, "fallen_star", { index: i, from: { x: at.x + 60, y: ARENA_MIN_Y - 120 }, to: at, radius: JUDGEMENT.fallenStar.radius, targetIds: f ? [f.id] : [], duration: 0.18 });
+          if (f) w.hit(t + 0.18, f, 0.7, true);
+        }
+        if (absolute && bossFoe) w.beat(tImpact + JUDGEMENT.absolute.echoDelay, "impact", { index: 1, from: bossFoe.pos, radius: R * 0.6, targetIds: [bossFoe.id], duration: 0.3 });
+        if (breaker) {
+          const reach = R * JUDGEMENT.worldBreaker.reach;
+          w.beat(tImpact + JUDGEMENT.worldBreaker.delay, "second_shockwave", { from: center, radius: reach, duration: 0.45, targetIds: foes.map((f) => f.id) });
+          for (const f of foes) w.hit(tImpact + JUDGEMENT.worldBreaker.delay + 0.1, f, 0.4);
         }
       });
       break;
     }
     case "legion_awakening": {
-      const n = evo === "endless_legion" ? 8 : evo === "veteran_souls" ? 3 : 5;
-      const spots: Vec2[] = [];
-      const corpses = inp.corpses ?? [];
-      for (let i = 0; i < n; i++) {
-        const c = corpses[i];
-        spots.push(c ? { x: c.x, y: c.y } : { x: caster.pos.x - 30 + (i % 3) * 22 - (i > 2 ? 12 : 0), y: Math.max(16, Math.min(134, caster.pos.y - 40 + i * 20)) });
-      }
-      const ids = spots.map(() => (inp.nextId ? inp.nextId() : -1));
-      windup = 1.7;
-      length = 3.4 + (evo === "veteran_souls" ? 0.6 : 0);
+      // signatures/skills/legion.ts: darken; at riseAt one `rise` naming every soldier raised (real
+      // temporary summons; here, stand-ins the caller placed), then the charge to the group.
+      const soldiers = inp.soldiers ?? [];
+      windup = LEGION.chargeAt;
+      length = LEGION.chargeAt + 0.3 + (evo === "veteran_souls" ? 1 : 0.6);
       body.push(() => {
-        w.beat(0, "darken", { from: caster.pos, duration: length });
-        spots.forEach((s, i) => w.beat(0.3 + i * (evo === "endless_legion" ? 0.08 : 0.13), "rise", { index: i + 1, from: s, to: s, targetIds: ids[i]! >= 0 ? [ids[i]!] : [], duration: 0.6 }));
-        w.beat(1.45, "charge", { from: caster.pos, to: center, targetIds: foes.map((f) => f.id), radius: 80, duration: 0.8 });
-        foes.forEach((f, i) => w.hit(1.75 + (i % 4) * 0.08, f, 0.8));
+        w.beat(0, "darken", { from: caster.pos, duration: LEGION.chargeAt + 0.3 });
+        w.beat(LEGION.riseAt, "rise", { from: caster.pos, targetIds: soldiers.map((s) => s.id), duration: LEGION.chargeAt - LEGION.riseAt });
+        let ax = 0;
+        let ay = 0;
+        for (const s of soldiers) {
+          ax += s.pos.x;
+          ay += s.pos.y;
+        }
+        const avg = soldiers.length > 0 ? { x: ax / soldiers.length, y: ay / soldiers.length } : caster.pos;
+        w.beat(LEGION.chargeAt, "charge", { from: avg, to: center, targetIds: soldiers.map((s) => s.id), duration: 0.3 });
+        foes.forEach((f, i) => w.hit(LEGION.chargeAt + 0.3 + (i % 4) * 0.08, f, 0.8));
       });
       break;
     }
     case "time_fracture": {
+      // signatures/skills/fracture.ts: the clock, the freeze, the resume, the held blows released.
       const r = def.radius;
-      const freeze = evo === "stop_the_world" ? 2.8 : 2;
+      const freeze = evo === "stop_the_world" ? (master ? FRACTURE.stopTheWorld.freezeForMaster : FRACTURE.stopTheWorld.freezeFor) : FRACTURE.freezeFor;
       const near = foes.filter((f) => dist2(f.pos, center) <= r * r);
       targets = near;
-      const tRes = def.castTime + freeze;
+      const tRes = FRACTURE.freezeAt + freeze;
       windup = tRes;
-      length = tRes + (evo === "fractured_future" ? 1.0 : 0.7);
+      const echoes = evo === "fractured_future" ? (master ? FRACTURE.fracturedFuture.echoesMaster : FRACTURE.fracturedFuture.echoes) : 0;
+      length = tRes + near.length * FRACTURE.delayedGap + echoes * FRACTURE.fracturedFuture.delay + 0.3;
       body.push(() => {
-        w.beat(0, "clock", { to: center, radius: r, duration: def.castTime });
-        w.beat(def.castTime, "freeze", { to: center, radius: r, duration: freeze, targetIds: near.map((f) => f.id) });
-        for (const f of near) w.status(def.castTime, f, f.kind === "boss" ? "slowed" : "frozen", true, freeze);
-        w.beat(tRes, "resume", { to: center, radius: r, targetIds: near.map((f) => f.id) });
+        w.beat(0, "clock", { from: center, radius: r, duration: tRes });
+        w.beat(FRACTURE.freezeAt, "freeze", { from: center, radius: r, duration: freeze, targetIds: near.map((f) => f.id) });
+        for (const f of near) w.status(FRACTURE.freezeAt, f, f.kind === "boss" ? "slowed" : "frozen", true, freeze);
+        w.beat(tRes, "resume", { from: center, radius: r, targetIds: near.map((f) => f.id) });
         for (const f of near) w.status(tRes, f, f.kind === "boss" ? "slowed" : "frozen", false, 0);
-        if (w.has("frozen_singularity")) w.synergy(tRes + 0.02, "frozen_singularity", center, near.map((f) => f.id));
-        near.forEach((f, i) => {
-          w.beat(tRes + 0.05 + i * 0.07, "delayed", { index: i + 1, from: f.pos, to: f.pos, targetIds: [f.id] });
-          w.hit(tRes + 0.06 + i * 0.07, f, evo === "temporal_execution" && f.marked ? 1.8 : 1, true);
-          if (evo === "fractured_future") {
-            w.beat(tRes + 0.35 + i * 0.07, "delayed", { index: near.length + i + 1, from: f.pos, to: f.pos, targetIds: [f.id] });
-            w.hit(tRes + 0.36 + i * 0.07, f, 0.5);
+        const frozen = near.filter((f) => f.kind !== "boss");
+        if (w.has("frozen_singularity") && frozen.length >= 2) {
+          let x = 0;
+          let y = 0;
+          for (const f of frozen) {
+            x += f.pos.x;
+            y += f.pos.y;
+          }
+          const at = { x: x / frozen.length, y: y / frozen.length };
+          const rr = SIGNATURES.void_collapse.radius * FRACTURE.singularity.radius;
+          w.synergy(tRes, "frozen_singularity", at, frozen.map((f) => f.id));
+          w.beat(tRes, "pull", { from: at, radius: rr, targetIds: frozen.map((f) => f.id), duration: 0 });
+          w.beat(tRes, "implode", { from: at, radius: rr, targetIds: frozen.map((f) => f.id) });
+        }
+        near.forEach((f, k) => {
+          const t = tRes + FRACTURE.delayedGap * k;
+          w.beat(t, "delayed", { index: 1, from: f.pos, targetIds: [f.id] });
+          w.hit(t, f, evo === "temporal_execution" && f.marked ? 1.8 : 1, true);
+          for (let j = 1; j <= echoes; j++) {
+            w.beat(t + FRACTURE.fracturedFuture.delay * j, "delayed", { index: 1 + j, from: f.pos, targetIds: [f.id] });
+            w.hit(t + FRACTURE.fracturedFuture.delay * j, f, FRACTURE.fracturedFuture.share);
           }
         });
       });
       break;
     }
     case "shadow_storm": {
+      // signatures/skills/storm.ts: the gather names the blade count; blades leave the orbit one by one.
       const thousand = evo === "thousand_blades";
-      const n = thousand ? 12 : 6;
-      const gather = 0.8;
-      const step = thousand ? 0.045 : 0.075;
+      const n = thousand ? STORM.thousand.blades : STORM.blades;
+      const gap = thousand ? STORM.thousand.gap : STORM.gap;
       const order = evo === "hunters_instinct" ? foes.slice().sort((a, b) => (a.hp ?? 1) - (b.hp ?? 1)) : foes.slice().sort((a, b) => dist2(a.pos, center) - dist2(b.pos, center));
-      windup = gather + 0.15;
-      length = gather + n * step + (evo === "black_tempest" ? 1.3 : 0.5);
+      const volleyEnd = STORM.gatherFor + (n - 1) * gap + STORM.flight;
+      const pulses = evo === "black_tempest" ? (master ? STORM.tempest.pulsesMaster : 1) : 0;
+      windup = STORM.gatherFor + STORM.flight;
+      length = volleyEnd + pulses * STORM.tempest.growFor + 0.2;
       body.push(() => {
-        // `index` on the gather beat carries the blade count (a presentation assumption; see the report).
-        w.beat(0, "gather", { index: n, from: caster.pos, duration: gather, radius: 34 });
-        for (let i = 0; i < n && order.length > 0; i++) {
-          const f = order[i % Math.min(order.length, thousand ? 6 : 4)]!;
-          const t = gather + i * step;
-          w.beat(t, "blade", { index: i + 1, from: caster.pos, to: f.pos, targetIds: [f.id], duration: 0.16 });
-          w.hit(t + 0.16, f, thousand ? 0.5 : 1);
-          if (i < order.length) w.status(t + 0.16, f, "shadow_mark", true, 6);
+        w.beat(0, "gather", { index: n, from: caster.pos, duration: STORM.gatherFor });
+        for (let i = 1; i <= n && order.length > 0; i++) {
+          const f = order[(i - 1) % Math.min(order.length, thousand ? 6 : 4)]!;
+          const t = STORM.gatherFor + (i - 1) * gap;
+          w.beat(t, "blade", { index: i, from: orbitPoint(caster.pos, i - 1, n, t), to: f.pos, targetIds: [f.id], duration: STORM.flight });
+          w.hit(t + STORM.flight, f, thousand ? STORM.thousand.power : 1);
+          w.status(t + STORM.flight, f, "shadow_mark", true, 6);
         }
-        if (evo === "black_tempest") {
-          const t = gather + n * step + 0.1;
-          w.beat(t, "tempest", { from: center, to: center, radius: 170, duration: 0.9, targetIds: foes.map((f) => f.id) });
-          for (const f of foes) w.hit(t + Math.sqrt(dist2(f.pos, center)) / 170 * 0.9, f, 0.6);
+        for (let k = 0; k < pulses; k++) {
+          const t0 = volleyEnd + 0.1 + k * STORM.tempest.growFor;
+          w.beat(t0, "tempest", { index: k + 1, from: caster.pos, radius: def.radius, duration: STORM.tempest.growFor });
+          for (const f of foes) w.hit(t0 + Math.min(1, Math.sqrt(dist2(f.pos, caster.pos)) / def.radius) * STORM.tempest.growFor, f, STORM.tempest.power);
         }
       });
       break;
     }
     case "sovereign_awakening": {
-      const aura = 10;
-      windup = def.castTime + 0.6;
-      length = 0.6 + def.castTime + aura;
+      const aura = master ? SOVEREIGN.auraForMaster : SOVEREIGN.auraFor;
+      windup = def.castTime;
+      length = def.castTime + aura;
       body.push(() => {
-        w.beat(0, "kneel", { from: caster.pos, duration: 0.6, targetIds: (inp.allies ?? []).map((a) => a.id) });
-        w.beat(0.6, "crown", { from: caster.pos, to: caster.pos, duration: def.castTime });
-        w.beat(0.6 + def.castTime, "aura", { from: caster.pos, radius: 120, duration: aura });
-        w.beat(0.6 + def.castTime + aura, "sovereign_end", { from: caster.pos });
+        w.beat(0, "kneel", { from: caster.pos, duration: SOVEREIGN.kneelFor, targetIds: (inp.allies ?? []).map((a) => a.id) });
+        w.beat(0.35, "crown", { from: caster.pos, duration: def.castTime - 0.35 });
+        w.beat(def.castTime, "aura", { from: caster.pos, radius: 180, duration: aura });
+        w.beat(def.castTime + aura, "sovereign_end", { from: caster.pos });
       });
       break;
     }

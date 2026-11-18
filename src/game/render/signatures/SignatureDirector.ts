@@ -316,14 +316,17 @@ export class SignatureDirector {
   private synergyMoment(e: Extract<GameEvent, { type: "sig_synergy" }>, owner: Stage | undefined): void {
     // Combinations without a stage of their own on the field get one (the frozen singularity fires a
     // collapse even when Void Collapse is cooling down; a crowned ultimate may crown the Fury).
-    if (e.synergy === "frozen_singularity" || e.synergy === "legion_meteor" || e.synergy === "crowned_ultimate") {
+    // Frozen Singularity and Legion Meteor arrive as beats of their owner's cast (Time Fracture's
+    // pull and implode, King's Judgement's charges); the crowned ultimate may crown the Fury, which
+    // has no stage of its own.
+    if (e.synergy === "crowned_ultimate") {
       if (this.stages.length >= HARD_STAGE_CAP) return;
       const fake: SigCastEvent = { type: "sig_cast", castId: -1 - this.counters.synergies, sig: synergyOwner(e.synergy), evo: null, mastery: owner?.mastery ?? 1, rank: 1, casterId: this.host.playerId(), origin: e.pos, center: e.pos, radius: 60, targetIds: e.targetIds, windup: 0, length: 1.2, boss: false, enhanced: e.synergy === "crowned_ultimate" };
       const st = new SynergyStage(this.kit, this.host, this.svc, sigPalette(fake.sig, fake.mastery), fake, this.liveCount() >= this.profile.maxLive, e, owner ?? null);
       this.stages.push(st);
     }
     const name = SYNERGY_NAME[e.synergy];
-    if (name && (e.synergy === "frozen_singularity" || e.synergy === "legion_meteor" || e.synergy === "crowned_ultimate")) {
+    if (name && e.synergy === "crowned_ultimate") {
       const pr = this.host.proj;
       this.label(name, pr.sx(e.pos.x), pr.sy(e.pos.y) - 130 * pr.unit(), SYNERGY_COLOR[e.synergy]);
     }
@@ -520,9 +523,10 @@ export class SignatureDirector {
         m.glassG.scale.set(s);
         m.glassG.alpha = Math.min(1, m.frozen * 4);
         const md = this.mod(id);
-        md.tint = 0xb8c6dc;
-        md.tintK = Math.max(md.tintK, 0.7);
-        md.white = Math.max(md.white, 0.12);
+        // Glass: the body goes pale (its white copy at half strength) and cold, held mid-motion.
+        md.tint = 0xb8c8e4;
+        md.tintK = Math.max(md.tintK, 0.75);
+        md.white = Math.max(md.white, 0.5);
         md.frozen = true;
       }
     }

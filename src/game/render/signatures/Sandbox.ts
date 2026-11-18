@@ -43,6 +43,9 @@ interface StandIn {
   /** Drawn place (base px). */
   x: number;
   y: number;
+  /** A soldier waiting to rise (hidden), or rising (seconds since the rise; -1 standing). */
+  hidden: boolean;
+  emerge: number;
 }
 
 export interface PreviewOptions {
@@ -221,7 +224,7 @@ export class Sandbox {
   private add(kind: StandIn["kind"], spec: RigSpec, wx: number, wy: number, facing: 1 | -1): StandIn {
     const rig = new Rig(spec);
     this.figures.addChild(rig.shadow, rig.root);
-    const a: StandIn = { id: this.nextId++, wx, wy, rig, kind, facing, flash: 0, flinch: 0, move: null, x: this.sx(wx), y: this.sy(wy) };
+    const a: StandIn = { id: this.nextId++, wx, wy, rig, kind, facing, flash: 0, flinch: 0, move: null, x: this.sx(wx), y: this.sy(wy), hidden: false, emerge: -1 };
     this.actors.push(a);
     return a;
   }
@@ -242,7 +245,18 @@ export class Sandbox {
       kinds.forEach((k, i) => allies.push(this.add("ally", summonSpec(k), 120 + i * 30, 40 + i * 40, 1)));
     }
     const actor = (a: StandIn, i: number): SigActor => ({ id: a.id, pos: { x: a.wx, y: a.wy }, kind: "enemy", hp: i === 1 ? 0.15 : i === 3 ? 0.3 : 0.9, marked: o.synergy === "hunters_parade" ? i % 2 === 0 : i === 0 });
-    const corpses: Vec2[] = id === "legion_awakening" ? [{ x: 250, y: 50 }, { x: 236, y: 92 }, { x: 270, y: 120 }, { x: 214, y: 70 }, { x: 290, y: 84 }, { x: 228, y: 30 }, { x: 300, y: 40 }, { x: 260, y: 140 }] : [];
+    // Legion Awakening raises soldiers where foes fell: stand-ins wait hidden at those places.
+    const corpses: Vec2[] = [{ x: 250, y: 50 }, { x: 236, y: 92 }, { x: 270, y: 120 }, { x: 214, y: 70 }, { x: 290, y: 84 }, { x: 228, y: 30 }, { x: 300, y: 40 }, { x: 260, y: 140 }];
+    const soldiers: StandIn[] = [];
+    const raising = id === "legion_awakening" || (id === "kings_judgement" && o.synergy === "legion_meteor");
+    if (raising) {
+      const count = evo === "endless_legion" ? 8 : evo === "veteran_souls" ? 3 : 5;
+      for (let i = 0; i < count; i++) {
+        const s = this.add("ally", summonSpec("shade"), corpses[i]!.x, corpses[i]!.y, 1);
+        s.hidden = id === "legion_awakening";
+        soldiers.push(s);
+      }
+    }
     const synergies: SynergyId[] = o.synergy ? [o.synergy] : [];
     const script = buildScript({
       castId: this.driver.newCastId(),
@@ -251,9 +265,8 @@ export class Sandbox {
       mastery: o.mastery ?? 1,
       caster: { id: hero.id, pos: { x: hero.wx, y: hero.wy }, kind: "player" },
       foes: foes.map(actor),
-      allies: allies.map((a) => ({ id: a.id, pos: { x: a.wx, y: a.wy }, kind: "summon" })),
-      corpses,
-      nextId: () => -1,
+      allies: (soldiers.length > 0 && id === "kings_judgement" ? soldiers : allies).map((a) => ({ id: a.id, pos: { x: a.wx, y: a.wy }, kind: "summon" as const })),
+      soldiers: soldiers.map((a) => ({ id: a.id, pos: { x: a.wx, y: a.wy }, kind: "summon" as const })),
       enhanced: o.enhanced ?? false,
       synergies,
       hits: false,
@@ -352,6 +365,26 @@ export class Sandbox {
             a.move = { fx: a.wx, fy: a.wy, tx: a.wx + (e.to.x - a.wx) * k, ty: a.wy + (e.to.y - a.wy) * k, t0: this.time, t1: this.time + Math.max(0.3, e.duration) };
           }
         }
+        if (e.beat === "rise") {
+          for (const id of e.targetIds) {
+            const a = this.actors.find((x) => x.id === id);
+            if (a) {
+              a.hidden = false;
+              a.emerge = 0;
+              a.rig.snap();
+            }
+          }
+        }
+        if (e.beat === "charge") {
+          let i = 0;
+          for (const id of e.targetIds) {
+            const a = this.actors.find((x) => x.id === id);
+            if (!a) continue;
+            const side = a.wx <= e.to.x ? -1 : 1;
+            a.move = { fx: a.wx, fy: a.wy, tx: e.to.x + side * (20 + (i % 3) * 10), ty: e.to.y + ((i % 3) - 1) * 14, t0: this.time, t1: this.time + Math.max(0.2, e.duration || 0.3) + 0.2 };
+            i++;
+          }
+        }
         if (e.beat === "finisher") {
           const hero = this.actors.find((x) => x.kind === "player");
           if (hero) {
@@ -442,7 +475,15 @@ export class Sandbox {
       const rig = a.rig;
       a.flash = Math.max(0, a.flash - real);
       a.flinch = Math.max(0, a.flinch - real * 2);
-      if (m?.kneel) {
+      rig.root.visible = !a.hidden;
+      rig.shadow.visible = !a.hidden;
+      if (a.hidden) continue;
+      if (a.emerge >= 0) a.emerge += real;
+      if (a.emerge >= 0 && a.emerge < 0.6) {
+        rig.animate("emerge", a.emerge, 0.6, 0.3 + a.id * 0.13, a.facing, false, 0, 0, real, 0);
+      } else if (a.move && a.kind === "ally") {
+        rig.animate("move", this.time, 0.5, 0.3 + a.id * 0.13, a.wx <= a.move.tx ? 1 : -1, true, 1, 0, real, 0);
+      } else if (m?.kneel) {
         rig.setDeath(DEATH_KNEEL, 1, 0.5);
         rig.animate("dead", 0.4, 0, 0.5, a.facing, false, 0, 0.4, real, 0);
       } else if (!m?.frozen) rig.animate(a.flinch > 0.1 ? "hit" : "idle", a.flinch > 0.1 ? 0.25 - a.flinch : this.time, a.flinch > 0.1 ? 0.25 : 0, 0.3 + a.id * 0.13, a.facing, false, 0, 0, dt > 0 ? real : 0, 0);
