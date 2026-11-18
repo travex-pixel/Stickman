@@ -187,6 +187,11 @@ export class LegionStage extends Stage {
           s.y = this.b.y;
           const m = this.svc.mod(s.id);
           m.white = Math.max(m.white, s.t < 0.6 ? 0.25 * (1 - s.t / 0.6) : 0);
+          // Legion Commander: each soldier carries a fielded role's colour.
+          if (this.evo === "legion_commander" && !this.ended) {
+            m.tint = ROLE_ACCENT[s.role % 4]!;
+            m.tintK = Math.max(m.tintK, 0.35);
+          }
           if (s.charge && s.chargeT < 0.6 && dt > 0 && Math.random() < 0.3) k.speedLines(s.x - s.facing * 40 * this.u, s.y - 40 * s.scale, s.x, s.y - 40 * s.scale, 1, 30 * s.scale, 0xe8e2d8, 0.15);
         }
         continue;

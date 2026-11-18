@@ -244,7 +244,8 @@ export class JudgementStage extends Stage {
     const L = this.host.layers;
     if (!this.sigilBox) {
       this.sigilBox = this.container(L.ground);
-      this.sigil = new Graphics(sigilCtx(this.evo === "absolute_judgement" || this.enhanced, this.master && !this.compact));
+      // Absolute Judgement and a crowned cast crown the sigil; so does Grandmaster's gilded form.
+      this.sigil = new Graphics(sigilCtx(this.evo === "absolute_judgement" || this.enhanced || this.gilded, this.master && !this.compact));
       this.sigil.blendMode = "add";
       this.sigilBox.addChild(this.sigil);
     }
@@ -337,6 +338,21 @@ export class JudgementStage extends Stage {
     if (this.crater) {
       this.crater.tint = 0x0a0810;
       this.crater.position.set(x, y);
+    }
+    if (this.gilded && !this.compact) {
+      // Grandmaster: a rain of gilt sparks falls back over the crater.
+      const g = k.o(x, y - 120 * this.u, softCircle(), GILT_HOT);
+      g.speed[0] = 20;
+      g.speed[1] = 90;
+      g.angle[0] = -Math.PI;
+      g.angle[1] = 0;
+      g.life[0] = 0.8;
+      g.life[1] = 1.3;
+      g.scale[0] = 0.08;
+      g.scale[1] = 0.16;
+      g.gravity = 160;
+      g.spread = this.r * 1.4;
+      k.emit(24);
     }
     k.flash(0xfff4dc, 0.42, 0.3);
     this.host.darken(0x1a1408, 0.4);
