@@ -337,8 +337,9 @@ function Detail({ id, slots, pick, onBack, onPick, onEquip, short }: { id: Signa
   useEffect(() => () => lower(0), [lower]);
   const canPreview = found || !disc.hidden;
   const preview = () => {
+    // It does not play over a boss or mode fight (nor before the battlefield exists).
     if (!c.previewSignature(id, evo)) {
-      c.toast(`${def.name}: its preview cannot play here yet`, "info");
+      c.toast(`${def.name}: the preview plays outside boss and mode fights`, "info");
       return;
     }
     const ms = def.cinematic ? PREVIEW_MS.cinematic : PREVIEW_MS.plain;

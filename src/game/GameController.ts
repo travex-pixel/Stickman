@@ -1806,6 +1806,8 @@ export class GameController {
    * its top within which it must play (a sheet covers the rest).
    */
   previewSignature(id: SignatureId, evo: EvolutionId | null = null, opts: { mastery?: MasteryTier; synergy?: SynergyId; hold?: boolean; band?: number } = {}): boolean {
+    // A boss or mode fight is not dimmed under stand-ins: its telegraphs are the player's to read.
+    if (this.inFight()) return false;
     return this.renderer?.previewSignature(id, evo, opts) ?? false;
   }
 

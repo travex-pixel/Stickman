@@ -385,6 +385,20 @@ test.describe("Signature skills on the battlefield and in Settings", () => {
     }
   });
 
+  test("no preview dims a boss fight: it waits for farming", async ({ page }) => {
+    await waitForGame(page);
+    await seed(page, FULL);
+    type B = Ctl & { world: { mode: string; phase: string }; renderer: { previewActive: boolean }; previewSignature(id: string, evo: string | null): boolean };
+    await page.evaluate(() => (window as unknown as { __ASCEND__: B }).__ASCEND__.startRun(84, "boss"));
+    await expect.poll(() => page.evaluate(() => (window as unknown as { __ASCEND__: B }).__ASCEND__.world.mode)).toBe("boss");
+    expect(await page.evaluate(() => (window as unknown as { __ASCEND__: B }).__ASCEND__.previewSignature("kings_judgement", null))).toBe(false);
+    expect(await page.evaluate(() => (window as unknown as { __ASCEND__: B }).__ASCEND__.renderer.previewActive)).toBe(false);
+    // Back on the farm it plays.
+    await page.evaluate(() => (window as unknown as { __ASCEND__: B }).__ASCEND__.startRun(84));
+    await expect.poll(() => page.evaluate(() => (window as unknown as { __ASCEND__: B }).__ASCEND__.world.mode)).toBe("campaign");
+    expect(await page.evaluate(() => (window as unknown as { __ASCEND__: B }).__ASCEND__.previewSignature("kings_judgement", null))).toBe(true);
+  });
+
   test("Visual quality says when the battlefield stepped itself down for slow frames, and a choice resets it", async ({ page }) => {
     await waitForGame(page);
     type G = { current: string; steps: number; enabled: boolean };
