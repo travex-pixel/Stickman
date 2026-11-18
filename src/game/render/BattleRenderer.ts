@@ -391,7 +391,7 @@ export class BattleRenderer implements ImpactHost {
       this.decalLayer.addChild(s);
       this.decalPool.push({ sprite: s, rx: 0, ry: 0, life: 0, total: 1, live: false });
     }
-    this.cameraLayer.addChild(this.decalLayer, this.groundFx, this.sigGround, this.entityLayer, this.projectileLayer, this.orbLayer, this.trails.graphics, this.fxGraphics, this.apex.fx, this.sigFx, this.particles.container, this.numbers.container, this.apex.prism.container, this.cinematicLayer);
+    this.cameraLayer.addChild(this.decalLayer, this.sigGround, this.groundFx, this.entityLayer, this.projectileLayer, this.orbLayer, this.trails.graphics, this.fxGraphics, this.apex.fx, this.sigFx, this.particles.container, this.numbers.container, this.apex.prism.container, this.cinematicLayer);
     this.entityLayer.sortableChildren = true;
     this.entityLayer.addChild(this.focusTicks);
     this.focusTicks.zIndex = 9000;

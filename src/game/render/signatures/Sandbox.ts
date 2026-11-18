@@ -234,8 +234,9 @@ export class Sandbox {
     this.clearActors();
     this.nextId = 1;
     const hero = this.add("player", this.heroSpec(), 180, 78, 1);
-    const foeKinds = ["husk", "ashborn_brute", "husk", "veilshot", "husk", "ember_acolyte"];
-    const spots: [number, number][] = [[372, 62], [418, 92], [446, 52], [470, 104], [398, 128], [500, 72]];
+    // A loose knot of ink foes: lean blades and an archer in front, a brute at the back.
+    const foeKinds = ["husk", "husk", "ashborn_brute", "veilshot", "husk", "ember_acolyte"];
+    const spots: [number, number][] = [[360, 70], [420, 108], [470, 40], [452, 128], [404, 34], [500, 86]];
     const foes: StandIn[] = [];
     const n = id === "kings_judgement" || id === "void_collapse" ? 6 : 5;
     for (let i = 0; i < n; i++) foes.push(this.add("enemy", enemySpec(foeKinds[i]!), spots[i]![0], spots[i]![1], -1));
@@ -514,7 +515,7 @@ export class Sandbox {
     const R = Math.min(this.width * 0.2, 80);
     const cy = top + R + 40;
     const form = this.reduced ? 1 : easeOutBack(Math.min(1, r.t / (r.timing.full ? 0.8 : 0.45)));
-    const fade = r.started ? Math.max(0.25, 1 - (r.t - r.animAt) * 0.8) : 1;
+    const fade = r.started ? Math.max(0.12, 1 - (r.t - r.animAt) * 1.2) : 1;
     if (!r.started && r.t >= r.animAt) {
       r.started = true;
       const evo = def.evolutions[0]?.id ?? null;

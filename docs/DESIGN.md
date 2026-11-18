@@ -919,6 +919,113 @@ the most flashes the budget let start in any second, 3. Frame time with the `?pe
 the same scene without Apex at 4x CPU throttling, and as noisy as the machine at 1x; the Apex
 section itself is 0.1ms at the median.
 
+## How the signature skills look and sound
+
+The eight signature skills (`src/game/data/signatures.ts`) are staged in `src/game/render/signatures/`.
+The simulation sends each cast's moments as events (`sig_cast`, `sig_beat` at the world moment a beat
+happens, `sig_status`, `sig_synergy`, `sig_end`, and `hit.sig`); a `SignatureDirector` turns each cast
+into a stage that reacts to those beats and animates between them, on the fight's own clock (world
+seconds: slowed with it, held in a stop). Damage is never the renderer's: a cast plays the same with
+the renderer, without it, and at every quality. The director never writes to the world.
+
+**One toolkit, eight looks.** Every skill is composed from one pooled, capped toolkit (`kit.ts`):
+ground rings and shockwaves (an ink band under a white-hot line), cuts and slashes, streaks (speed
+lines, the radial smear of bending space, trails), debris spirals (pieces started round a ring and
+drawn in by an attractor), lent sprites, graphics and rigs, afterimages (a rig posed once and faded),
+camera push-ins (one owner at a time, always released), stops and flashes through the renderer's one
+hit-stop policy and the flash budget. What makes each skill recognisable is its own shape, motion and
+colour, not a tint: violet and electric blue are ink (deep washes drawn over the scene), the light is
+white-hot cores and gilt; Apex's spectrum stays Apex's.
+
+| Skill | Anticipation | Action | Impact | Aftermath |
+|---|---|---|---|---|
+| Void Collapse | a point of black tears open above the group's heads; a violet-ink lens, a white-violet photon ring, an ink pool on the ground | accretion rings spin up (the far half behind the core, the near half in front); gravitational rings contract over the ground; light smears inward; debris spirals in; the caught lean and stretch toward it | the core collapses to a point, a beat of nothing, a white-violet star and the flash; bodies snap back | a circular shockwave runs out over the ground kicking dust; Void Marks over the struck |
+| Abyssal Devourer | a jagged rift tears where the dragon's path enters the frame; the field dims, the camera leans in | a serpent of ink scales pours out and flies the simulation's own curve; every segment follows the head's path (a serpentine wave in it, a ripple down it); fins, whiskers, crimson eyes, smoke | the jaw opens as a foe nears and snaps on each bite: crimson crescents, ink spray | a second rift swallows it tail last |
+| Death Parade | he breaks into ink and slate motes (an ivory afterimage left); the field dims; a crimson tick over each foe he will visit | slate-and-gold clones blink in beside their foes (afterimages, speed lines), each striking its own way: rising cut, overhead, dash through, cross, falling stab, reversed cut | he reappears, a glint runs his blade, one long crimson cut through every foe visited; a stop, the flash, speed lines | the clones break into ink |
+| King's Judgement | the field falls to ink and the mix dips (the hush); a spectral gilt hand opens above the target finger by finger | a gold sigil draws itself on the ground (gold, never the foes' crimson) and pulses faster; the hand closes and points; an ink meteor with molten gold fissures falls with smoke and embers | the biggest blow in the game: a white-gold star, the flash, a stop, one shake, three rings, rock and gold thrown up | a smoking crater; the sigil breaks; the hand dissolves into gold dust |
+| Legion Awakening | the field sinks to night | an ink pool opens under each soldier the simulation raises (a gold spark ring at its lip) as it claws up out of it | a gold war-cry ring; the rank charges with speed lines and dust | they sink back into ink |
+| Time Fracture | a pale silver clock stands over the field, hands running backwards, electric-blue cracks spreading | the hands stop dead; colour drains from the backdrop; the frozen go pale glass and hold mid-motion; motes hang; a tick each half second, the cracks grow | the clock shatters into glass; a ripple in and out | every held blow lands at once: a blue-white star and a ring of cracks on each body |
+| Shadow Storm | violet-ink blades with white edges cut themselves out of the air and orbit him on a tilted ring, passing behind and in front of him | one by one they leave the orbit and fly an arc to their foe, an ink wake behind each | a short violet cut with a white edge; a Shadow Mark | — |
+| Sovereign Awakening | the field darkens; his army kneels | a column of violet ink rises round him, gold gathers, the crown draws itself spike by spike; the camera leans in | it settles on his brow: a ring, the flash | the reign: a slow violet ring at his feet, a small gilt crown floating over his head, a violet cape; at its end the crown breaks into gold dust |
+
+**Evolutions** each change what is seen, not only the numbers: Event Horizon locks a bright horizon
+ring on the ground and cages the trapped; Supernova throws white embers that burst into eight-ray
+stars (Master: six-ray chains); Consumption carries the fallen's souls orbiting the next core, which
+collapses larger. World Eater is a larger dragon sweeping the whole depth; Soul Feeder tears souls into
+the maw and lights a pulse running down the spine; Ancient Devourer climbs out of the frame and dives
+from above onto its landing. Afterimage leaves a chain of copies behind every blink; Executioner gives
+the clones crimson eyes, reticles on the wounded and a guillotine stroke from above; Phantom King
+crowns the clones in gilt and their cuts throw violet sparks. Fallen Star sends smaller meteors with
+their own rings; Absolute Judgement makes the hand larger, crowns the sigil and echoes on the boss;
+World Breaker cracks the ground in gold and rolls a second shockwave. Endless Legion raises more,
+quicker; Veteran Souls raises big armoured greatswords who do not sink; Legion Commander gives each
+soldier a fielded role's colours. Stop the World stands a larger clock with a minute ring and drains
+the field further; Fractured Future echoes each release as a ghost of the clock's hand; Temporal
+Execution turns the release crimson-gold on bodies under another mark. Thousand Blades: smaller blades
+in two counter-turning rings; Black Tempest: a ring of spinning blades runs outward over the ground;
+Hunter's Instinct: crimson glints and a seeking hook that ends in a stab from above.
+
+**Mastery.** Master adds a layer: Void's counter-turning rune ring, the dragon's full mane of fins and
+violet motes, a crimson ink trail behind every clone's blink, the sigil's outer rune ring, the gold
+standard-line under the Legion's charge, the clock's minute ring, a second light trail on each blade,
+a second ring at the Sovereign's feet. Grandmaster gilds: the white-hot light turns gilt, rims and
+fins go gold, the figures read in gold.
+
+**Combinations** get their own moment, and a name on the field once a fight: Gravity Feast (the
+dragon's curve already bends through the singularity; its jaws snap three times there in a violet and
+crimson whirl), Hunter's Parade (a crimson reticle on the marked, heavier gilt-edged cuts), Blade
+Parade (shadow blades fly from every clone's strike), Legion Meteor (each soldier hurls itself into
+the fall as an ink comet with a gold head and adds a ring), Frozen Singularity (the glass of every
+frozen body streams into a small singularity that implodes), Crowned Ultimate (a gilt crown flares
+over the warrior; a crowned dragon wears a crown and gold eyes, a crowned judgement a larger hand).
+
+**On bodies.** Void Mark: a small black singularity glyph ringed in violet over the head; Shadow
+Mark: two crossed shadow blades; trapped: a violet cage ring at the feet; frozen: the body pale glass,
+cold and held mid-motion, with shards; slowed (a boss in the freeze): a slow clock under its feet.
+
+**Readability.** The singularity hovers above heads, not on them; the dragon's segments thin out near
+the hero; the warrior's own hit sparks, telegraphs and the boss's wind-up rims are never covered by a
+signature's ground layer (it sits under the fighters). A signature's many hits only react on the body
+(a flinch, the white, a few sparks): no camera, no stop. The big moment of each cast asks the camera
+and the flash budget once. No constant shaking: a shake is a single one-off at a landing.
+
+**Figures.** A signature hit's figure is in its skill's colour; one cast's repeated hits on a body (a
+dragon's two bites, a storm's blades) fold into one figure with a small "×n".
+
+**Visual quality** (Settings; `setVisualQuality`): full, balanced, performance. Lower tiers cut
+particles (×1, ×0.6, ×0.3), secondary layers (rune rings, smoke, trails), distortion (the smear and the
+bend), camera moves and afterimages, and draw fewer dragon segments (26, 22, 15); every tier keeps
+each skill's silhouette and impact. Reduced effects is stricter at any tier: no flash, shake, stop,
+distortion, push-in or fringe; the fewest particles; shapes, colours and motion still say which skill
+it is.
+
+**Caps and cleanup.** At most two cinematic casts (one in performance) and five or six casts at once
+are staged in full; past that a cast gets its compact form (key silhouette and impact only), and past
+ten only its figures. Marked bodies ≤ 40, lent sprites ≤ 220, rigs ≤ 18, two dragons, 40 rings, 32
+cuts, 120 streaks. A new world drops every cast, mark and modifier; a body that leaves loses its marks.
+If frames stay slow (60% of frames over 26 ms in a 3 s window) while signature effects are on screen,
+the renderer steps the signature visuals down a tier on its own (never below performance; a new
+choice in Settings resets it) and says so in diagnostics (`quality: balanced (auto)`).
+
+**Preview and reveal.** `renderer.previewSignature(id, evo, { mastery, synergy })` plays the same
+director on stand-in figures (the hero, a knot of ink foes, the army for the crown) in a sandbox above
+the dimmed fight, from the synthetic driver (`driver.ts`), which writes the simulation's own timings
+and beat shapes; it deals nothing and writes nothing. `stopPreview()` closes it. The reveal
+(`playSignatureReveal(id)`) darkens the screen, draws the skill's sigil (a gilt ring, its rarity's
+ticks, the skill's emblem), then plays its animation; it returns when the name and the details may
+show (legendary and mythic: 0.9 s and 5.4 s of a 6.4 s rite; rare and epic: 0.5 s and 2.6 s of 3 s)
+and holds until `endSignatureReveal()`; `skipSignatureReveal()` jumps to the details.
+
+**Sound.** Each skill's moments have their own synthesised voice: the singularity's indrawn air and
+its implosion (a crack, a sub drop), the rift tearing and the dragon's growl, its bites, the vanishing
+snap, the clones' thin slices and the finisher's ringing cut, the hush's far bell, the meteor's
+falling whistle and the impact (the deepest sound in the game, a struck D minor inside it), the
+Legion's rising low chord and war drums, the clock's tick-tock, glass held ringing and shattering, the
+blades whirring up and zipping, the crown's chord. A combination is two struck chords a step of D minor
+apart for each. The small repeated blows (clone cuts, blades, bites, signature hits) are struck at a
+fixed pitch and budgeted (three in any 400 ms); a signature hit is a quiet tick, never the warrior's
+hit on top. The hush dips the whole mix for 0.9 s.
+
 ## Testing
 
 - `npm run test`: unit tests for every rule, plus a balance harness that simulates whole runs with

@@ -24,6 +24,8 @@ import { bladeEdgeTex, bladeTex } from "../textures";
 interface Blade {
   body: Sprite | null;
   edge: Sprite | null;
+  /** A violet light behind the blade, so ink reads against ink. */
+  glow: Sprite | null;
   /** Orbit slot (angle offset) and ring. */
   slot: number;
   ring: number;
@@ -85,7 +87,9 @@ export class StormStage extends Stage {
     // In the figures layer: orbiting blades pass behind and in front of him.
     const fx = this.host.layers.figures;
     const body = this.sprite(fx, bladeTex(), false);
+    const glow = this.sprite(fx, softCircle(), true);
     const edge = this.compact ? null : this.sprite(fx, bladeEdgeTex(), true);
+    if (glow) glow.tint = this.gilded ? GILT : this.pal.glow;
     if (body) {
       body.tint = this.pal.deep;
       body.anchor.set(0.5);
@@ -97,7 +101,7 @@ export class StormStage extends Stage {
     const twoRings = this.evo === "thousand_blades" && !this.compact;
     const ring = twoRings ? i % 2 : 0;
     const per = twoRings ? Math.ceil(count / 2) : count;
-    const b: Blade = { body, edge, slot: ((twoRings ? Math.floor(i / 2) : i) / per) * Math.PI * 2 + ring * 0.3, ring, state: 0, t: 0, d: 0.16, ax: 0, ay: 0, bx: 0, by: 0, cx: 0, cy: 0, appear: i * 0.04 };
+    const b: Blade = { body, edge, glow, slot: ((twoRings ? Math.floor(i / 2) : i) / per) * Math.PI * 2 + ring * 0.3, ring, state: 0, t: 0, d: 0.16, ax: 0, ay: 0, bx: 0, by: 0, cx: 0, cy: 0, appear: i * 0.04 };
     this.blades.push(b);
     return b;
   }
@@ -185,13 +189,14 @@ export class StormStage extends Stage {
         const front = Math.sin(a) > 0;
         const sc = this.scale * 1.0 * (0.4 + 0.6 * k) * (front ? 1 : 0.85);
         const rot = a + Math.PI / 2;
-        for (const s of [body, b.edge]) {
+        for (const s of [b.glow, body, b.edge]) {
           if (!s) continue;
           s.position.set(this.p.x, this.p.y);
           s.rotation = rot;
-          s.scale.set(sc, sc * 1.25);
-          s.alpha = k * (front ? 1 : 0.6);
-          s.zIndex = this.pwy + (front ? 0.3 : -0.3) + (s === b.edge ? 0.01 : 0);
+          if (s === b.glow) s.scale.set(sc * 0.9, sc * 0.35);
+          else s.scale.set(sc, sc * 1.25);
+          s.alpha = k * (front ? 1 : 0.6) * (s === b.glow ? 0.55 : 1);
+          s.zIndex = this.pwy + (front ? 0.3 : -0.3) + (s === b.edge ? 0.01 : s === b.glow ? -0.01 : 0);
         }
         if (hunter && body && Math.random() < 0.05 && dt > 0) this.kit.cut(this.p.x, this.p.y, 3 * this.u, 0, 6.2, -1, CRIMSON, 1.4, 0.12);
         continue;
@@ -208,13 +213,14 @@ export class StormStage extends Stage {
         const ty = 2 * u * (b.cy - b.ay) + 2 * e * (b.by - b.cy);
         const rot = Math.atan2(ty, tx);
         const sc = this.scale * 1.15;
-        for (const s of [body, b.edge]) {
+        for (const s of [b.glow, body, b.edge]) {
           if (!s) continue;
           s.position.set(x, y);
           s.rotation = rot;
-          s.scale.set(sc * 1.15, sc * 1.1);
-          s.alpha = 1;
-          s.zIndex = 8000 + (s === b.edge ? 1 : 0);
+          if (s === b.glow) s.scale.set(sc * 1.1, sc * 0.4);
+          else s.scale.set(sc * 1.15, sc * 1.1);
+          s.alpha = s === b.glow ? 0.6 : 1;
+          s.zIndex = 8000 + (s === b.edge ? 1 : s === b.glow ? -1 : 0);
         }
         if (dt > 0) {
           // An ink wake behind it, and (full staging) a violet light along it.
@@ -224,7 +230,7 @@ export class StormStage extends Stage {
         }
         if (k >= 1) {
           b.state = 2;
-          for (const s of [body, b.edge]) if (s) s.visible = false;
+          for (const s of [b.glow, body, b.edge]) if (s) s.visible = false;
           this.bite(b.bx, b.by, rot);
         }
       }
