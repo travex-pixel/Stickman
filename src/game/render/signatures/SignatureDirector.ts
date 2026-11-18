@@ -456,8 +456,9 @@ export class SignatureDirector {
         else m.lean = 0;
       }
     }
+    const steps = this.governor.steps;
     if (!this.preview && this.governor.frame(real, this.busy)) {
-      this.counters.stepDowns += 1;
+      if (this.governor.steps > steps) this.counters.stepDowns += 1;
       this.applyProfile();
     }
   }

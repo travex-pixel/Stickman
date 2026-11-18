@@ -58,26 +58,37 @@ export function lowerQuality(q: VisualQuality): VisualQuality {
   return QUALITY_ORDER[Math.max(0, i - 1)]!;
 }
 
-/** Frames whose time is at or above this (ms) count as slow. */
-export const SLOW_FRAME_MS = 26;
+/**
+ * Frames whose time is at or above this (ms) count as slow: under about 30 a second. A phone that
+ * always runs near 30 is not slowed by the signatures, so the baseline check below also applies.
+ */
+export const SLOW_FRAME_MS = 34;
+/** Busy frames must also run this much slower than the same screen without signature effects. */
+export const BASELINE_RATIO = 1.2;
 /** Window (real seconds) over which frames are judged. */
 export const GOVERNOR_WINDOW = 3;
 /** Share of slow frames in the window (while signature effects were on screen) that steps down. */
 export const SLOW_SHARE = 0.6;
-/** After a step down, wait this long (real seconds) before judging again. */
+/** After a step down (or up), wait this long (real seconds) before judging again. */
 export const GOVERNOR_COOLDOWN = 8;
+/** Busy frames at or under this (ms) are smooth; this many smooth windows in a row step back up. */
+export const SMOOTH_FRAME_MS = 22;
+export const SMOOTH_WINDOWS = 4;
 
 /**
- * The automatic safety: when frames stay slow while signature effects are on screen, the renderer
- * steps the signature visuals down one tier on its own (never below performance), and says so in
- * diagnostics. It only ever steps down; a new choice in Settings resets it. Pure: fed frame times.
+ * The automatic safety: when frames stay slow while signature effects are on screen, and slower
+ * than the same screen without them, the renderer steps the signature visuals down one tier on its
+ * own (never below performance), and says so in diagnostics. A phone that always runs slowly is
+ * left at the player's choice: only a slowdown the signatures cause is theirs to fix. Once frames
+ * have been smooth with effects on screen for a while, it steps back up, never above the choice.
+ * A new choice in Settings resets it. Pure: fed frame times.
  */
 export class FrameGovernor {
   enabled = true;
   /** The player's choice, and the tier actually drawn. */
   chosen: VisualQuality = "full";
   current: VisualQuality = "full";
-  /** Steps taken since the choice was made. */
+  /** Steps down taken since the choice was made (less any taken back). */
   steps = 0;
   /** Why the last step was taken (diagnostics). */
   reason = "";
@@ -85,6 +96,12 @@ export class FrameGovernor {
   private frames = 0;
   private slow = 0;
   private busy = 0;
+  private busyMs = 0;
+  private quietMs = 0;
+  private quiet = 0;
+  /** Frame time of the screen without signature effects (an average that follows the device). */
+  private baseline = 0;
+  private smoothRun = 0;
   private cooldown = 0;
 
   choose(q: VisualQuality): void {
@@ -93,6 +110,7 @@ export class FrameGovernor {
     this.steps = 0;
     this.reason = "";
     this.resetWindow();
+    this.smoothRun = 0;
     this.cooldown = 0;
   }
 
@@ -101,14 +119,22 @@ export class FrameGovernor {
     this.frames = 0;
     this.slow = 0;
     this.busy = 0;
+    this.busyMs = 0;
+    this.quietMs = 0;
+    this.quiet = 0;
   }
 
   /**
    * One frame of `realDt` seconds; `active` when signature effects were on screen. Returns true
-   * when this frame stepped the tier down.
+   * when this frame changed the tier drawn.
    */
   frame(realDt: number, active: boolean): boolean {
     if (!this.enabled || realDt <= 0) return false;
+    const ms = realDt * 1000;
+    if (!active) {
+      this.quiet += 1;
+      this.quietMs += ms;
+    }
     if (this.cooldown > 0) {
       this.cooldown -= realDt;
       return false;
@@ -117,18 +143,40 @@ export class FrameGovernor {
     this.frames += 1;
     if (active) {
       this.busy += 1;
-      if (realDt * 1000 >= SLOW_FRAME_MS) this.slow += 1;
+      this.busyMs += ms;
+      if (ms >= SLOW_FRAME_MS) this.slow += 1;
     }
     if (this.elapsed < GOVERNOR_WINDOW) return false;
-    const stepped = this.busy >= this.frames * 0.5 && this.slow >= this.busy * SLOW_SHARE && this.current !== "performance";
-    if (stepped) {
-      const ms = Math.round((this.elapsed / Math.max(1, this.frames)) * 1000);
+    if (this.quiet >= 10) {
+      const q = this.quietMs / this.quiet;
+      this.baseline = this.baseline > 0 ? this.baseline * 0.7 + q * 0.3 : q;
+    }
+    const busyMean = this.busy > 0 ? this.busyMs / this.busy : 0;
+    const busyEnough = this.busy >= this.frames * 0.5;
+    const theirs = this.baseline <= 0 || busyMean >= this.baseline * BASELINE_RATIO;
+    let changed = false;
+    if (busyEnough && this.slow >= this.busy * SLOW_SHARE && theirs && this.current !== "performance") {
       this.current = lowerQuality(this.current);
       this.steps += 1;
-      this.reason = `frames averaged ${ms}ms with signature effects on screen`;
+      this.reason = `frames averaged ${Math.round(busyMean)}ms with signature effects on screen${this.baseline > 0 ? ` (${Math.round(this.baseline)}ms without)` : ""}`;
       this.cooldown = GOVERNOR_COOLDOWN;
+      this.smoothRun = 0;
+      changed = true;
+    } else if (busyEnough && this.steps > 0 && busyMean <= SMOOTH_FRAME_MS) {
+      this.smoothRun += 1;
+      if (this.smoothRun >= SMOOTH_WINDOWS) {
+        const i = QUALITY_ORDER.indexOf(this.current);
+        this.current = QUALITY_ORDER[Math.min(QUALITY_ORDER.indexOf(this.chosen), i + 1)]!;
+        this.steps = Math.max(0, this.steps - 1);
+        this.reason = this.steps > 0 ? this.reason : "";
+        this.cooldown = GOVERNOR_COOLDOWN;
+        this.smoothRun = 0;
+        changed = true;
+      }
+    } else if (busyEnough) {
+      this.smoothRun = 0;
     }
     this.resetWindow();
-    return stepped;
+    return changed;
   }
 }

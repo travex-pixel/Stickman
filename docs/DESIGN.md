@@ -1003,9 +1003,13 @@ it is.
 are staged in full; past that a cast gets its compact form (key silhouette and impact only), and past
 ten only its figures. Marked bodies ≤ 40, lent sprites ≤ 220, rigs ≤ 18, two dragons, 40 rings, 32
 cuts, 120 streaks. A new world drops every cast, mark and modifier; a body that leaves loses its marks.
-If frames stay slow (60% of frames over 26 ms in a 3 s window) while signature effects are on screen,
-the renderer steps the signature visuals down a tier on its own (never below performance; a new
-choice in Settings resets it) and says so in diagnostics (`quality: balanced (auto)`).
+If frames stay slow while signature effects are on screen (60% of them at 34 ms or more in a 3 s
+window) and slower than the same screen without them (by a fifth, against a running average of the
+quiet frames), the renderer steps the signature visuals down a tier on its own (never below
+performance) and says so in diagnostics (`quality: balanced (auto)`). A phone that always runs near
+30 frames a second is left at the player's choice: the slowness is not the signatures'. After four
+smooth windows in a row (busy frames averaging 22 ms or less) it steps back up, never above the
+choice; a new choice in Settings resets it.
 
 **Preview and reveal.** `renderer.previewSignature(id, evo, { mastery, synergy })` plays the same
 director on stand-in figures (the hero, a knot of ink foes, the army for the crown) in a sandbox above

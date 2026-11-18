@@ -145,7 +145,7 @@ describe("visual quality", () => {
     }
   });
 
-  it("steps down one tier when frames stay slow with signature effects on screen, never below performance", () => {
+  it("steps down one tier when frames stay slow with signature effects on screen and slower than without, never below performance", () => {
     const g = new FrameGovernor();
     g.choose("full");
     const run = (seconds: number, dt: number, busy: boolean) => {
@@ -158,7 +158,10 @@ describe("visual quality", () => {
     // Slow frames with nothing of the signatures on screen are not theirs to fix.
     run(GOVERNOR_WINDOW * 2, 0.05, false);
     expect(g.current).toBe("full");
-    run(GOVERNOR_WINDOW + 0.1, 0.05, true);
+    // The screen without them runs at 30 a second; with them it falls to 20.
+    run(GOVERNOR_WINDOW * 3, 1 / 30, false);
+    // (The first window after the effects arrive may be half quiet; the next is wholly theirs.)
+    run(GOVERNOR_WINDOW * 2 + 0.1, 0.05, true);
     expect(g.current).toBe("balanced");
     expect(g.reason).toMatch(/ms/);
     run(60, 0.05, true);
@@ -168,6 +171,29 @@ describe("visual quality", () => {
     expect(g.current).toBe("balanced");
     expect(g.steps).toBe(0);
   });
+
+  it("leaves a phone that always runs near 30 a second at the player's choice", () => {
+    const g = new FrameGovernor();
+    g.choose("full");
+    for (let i = 0; i < 20; i++) {
+      for (let t = 0; t < 2; t += 1 / 30) g.frame(1 / 30, false);
+      for (let t = 0; t < 4; t += 1 / 28) g.frame(1 / 28, true);
+    }
+    expect(g.current).toBe("full");
+    expect(g.steps).toBe(0);
+  });
+
+  it("steps back up once frames are smooth again, never above the choice", () => {
+    const g = new FrameGovernor();
+    g.choose("balanced");
+    for (let t = 0; t < GOVERNOR_WINDOW * 3; t += 1 / 30) g.frame(1 / 30, false);
+    for (let t = 0; t < GOVERNOR_WINDOW * 2 + 0.1; t += 0.05) g.frame(0.05, true);
+    expect(g.current).toBe("performance");
+    for (let t = 0; t < 120; t += 1 / 60) g.frame(1 / 60, true);
+    expect(g.current).toBe("balanced");
+    expect(g.steps).toBe(0);
+  });
+
 });
 
 /** A host without a renderer: plain containers, fixed bodies, counters for flashes and stops. */
