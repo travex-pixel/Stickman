@@ -1014,7 +1014,15 @@ and beat shapes; it deals nothing and writes nothing. `stopPreview()` closes it.
 (`playSignatureReveal(id)`) darkens the screen, draws the skill's sigil (a gilt ring, its rarity's
 ticks, the skill's emblem), then plays its animation; it returns when the name and the details may
 show (legendary and mythic: 0.9 s and 5.4 s of a 6.4 s rite; rare and epic: 0.5 s and 2.6 s of 3 s)
-and holds until `endSignatureReveal()`; `skipSignatureReveal()` jumps to the details.
+and holds until `endSignatureReveal()`; `skipSignatureReveal()` jumps to the details. The game's
+reveal does not use that canvas rite: the `signature_reveal` sheet draws the rite itself (sigil, name,
+rarity, words) and asks for a held preview in the band of battlefield it leaves clear
+(`previewSignature(id, null, { hold: true, band })`, the top 40% of the screen): the stand-ins are laid
+out in that band, the skill plays again after a breath while the words are read, and the sheet stops it
+when it closes. One sigil, one darkening. A preview is refused during a boss or mode fight (the fight's
+telegraphs are never dimmed under stand-ins). The camera takes in a cast aimed away from the warrior
+(its `focus`: a singularity, a clock, the judgement's hand, a volley's knot) so nothing plays at the
+screen's edge. When the step-down has acted, Settings says which tier is drawn.
 
 **Sound.** Each skill's moments have their own synthesised voice: the singularity's indrawn air and
 its implosion (a crack, a sub drop), the rift tearing and the dragon's growl, its bites, the vanishing
