@@ -535,12 +535,42 @@ starts a fight.
 **The selection AI** (`signatures/ai.ts`). Nothing begins during the Ascendant Fury, a boss's
 entrance, the end of a fight, the warrior's own cast, dodge or stagger, or an empty field; a global
 lockout of 1.25 s (raw) separates any two casts and a cinematic skill comes at most once every 6 s.
-With the Fury charged and AUTO about to cast it, nothing that would hold the warrior begins. Setup
+With the Fury charged and AUTO about to cast it, nothing that would hold the warrior begins (a
+Fury AUTO is still keeping for three foes holds nothing back). Setup
 skills (Void Collapse, Shadow Storm, Time Fracture) want unmarked foes; exploiters (Abyssal
 Devourer, Death Parade) hold up to 2.5 s for a setup about to be ready when nothing is marked;
 King's Judgement wants a boss or a crowd and never falls on a lone, nearly dead foe; in a boss
 fight the boss-effective skills weigh more. It draws nothing (ties go to the earlier slot) and reads
 only the world.
+
+**Patience.** Most skills want two foes or more (King's Judgement three, or a fresh one; the
+Sovereign four). A strong warrior farming kills foes one by one as they come, so those skills sat
+ready: an owner-like save (level 570, best-ever 84, ascended) farming stages 15 and 40 with 2 to 4
+skills equipped waited a median 17 to 25 s with a skill ready (p90 27 to 143 s), and the Sovereign
+never cast. Now a skill ready for `SIG_PATIENCE` (4 s) takes any live foe; King's Judgement waits
+6 s and then takes a lone foe with 60% health or more (an elite counts triple), never a nearly
+dead one; the Sovereign waits 12 s and takes any foe. With a skill in a slot, AUTO also casts a
+Fury charged for `SIG_FURY_PATIENCE` (16 s) on any foe instead of keeping it for three. The rhythm
+rules above stay. Without a skill in a slot nothing of this runs (the bit-identical check covers
+the crown found with nothing equipped). Measured (two seeds of 180 s farming, rank 1):
+
+| Stage | Equipped | Casts a minute, before | Casts a minute, after | Median (p90) ready wait, before / after |
+| --- | --- | --- | --- | --- |
+| 15 | Void, Devourer | Void 1.6, Devourer 1.2 | Void 3.9, Devourer 2.3 | 18.4 (50) / 2.7 (4.8) s |
+| 15 | Void, Devourer, Judgement, Legion + crown | Void 1.9, Devourer 1.2, Judgement 1.1, Legion 0, Sovereign 0 | Void 3.9, Devourer 2.1, Judgement 1.8, Legion 1.9, Sovereign 0.7 | 17.2 (143) / 4.1 (10.8) s |
+| 15 | Storm, Fracture, Parade, Judgement | Storm 4.1, Parade 2.1, Fracture 1.1, Judgement 1.4 | Storm 4.8, Parade 3.2, Fracture 2.5, Judgement 1.8 | 8.4 (23) / 3.2 (5.3) s |
+| 40 | Void, Devourer | Void 2.5, Devourer 1.2 | Void 3.9, Devourer 2.1 | 16.7 (27) / 3.0 (4.6) s |
+| 40 | Void, Devourer, Judgement, Legion + crown | Void 1.9, Devourer 1.1, Legion 0.5, Judgement 0.9, Sovereign 0 | Void 3.9, Devourer 2.1, Legion 2.1, Judgement 1.8, Sovereign 0.7 | 24.9 (99) / 4.3 (10.8) s |
+| 40 | Storm, Fracture, Parade, Judgement | Storm 4.0, Parade 2.3, Fracture 1.2, Judgement 0.9 | Storm 4.6, Parade 3.2, Fracture 2.5, Judgement 1.8 | 6.7 (25) / 3.4 (5.9) s |
+| 84 | Void, Devourer | Void 3.9, Devourer 2.0 | Void 4.7, Devourer 2.4 | 2.6 (14) / 2.5 (4.8) s |
+| 84 | Void, Devourer, Judgement, Legion + crown | Void 3.4, Devourer 2.0, Legion 1.2, Judgement 0.8, Sovereign 0.4 | Void 4.7, Devourer 2.5, Legion 2.3, Judgement 1.6, Sovereign 0.8 | 7.1 (58) / 4.5 (12.6) s |
+| 84 | Storm, Fracture, Parade, Judgement | Storm 5.3, Parade 3.3, Fracture 2.4, Judgement 1.8 | Storm 5.6, Parade 3.8, Fracture 2.9, Judgement 2.1 | 3.5 (9.3) / 2.6 (5.7) s |
+
+King's Judgement, the one cinematic that waited, now comes about once its 32 s cooldown allows (1.6
+to 2.1 a minute), not more. The Fury's patience was chosen by measurement: at 3 s the farming Fury
+came 1.6 to 1.8 times as often as without skills, at 8 s 1.1 to 1.3, at 14 s 1.01 to 1.11, at 16 s
+1.00 to 1.11. Boss fights do not change (the boss is always there): stage 84, three seeds of 90 s,
+Fury 21.0 a minute without and 19.2 to 19.7 with (x0.92 to 0.94), the same before and after.
 
 **The skills as built** (rank 1; `power` is times the warrior's attack per blow; cooldowns in
 seconds; ranks multiply the damage by 1 + 0.12 a rank, x2.08 at 10):
@@ -620,7 +650,14 @@ card, never during a boss or mode fight, never from offline. `signatureRevealed`
 closes its card; the next follows after another calm moment.
 
 **Power** counts the equipped skills by their measured share of boss damage (`SIG_BOSS_SHARE`),
-times their rank, evolution and mastery, the crown on top. They have no row of their own in the
+times their rank, evolution and mastery, the crown on top (`SIG_CROWN_SHARE`, 0.02 a rank-1 crown:
+measured on full late loadouts the crown adds 0 to 9%, about 4%; at 0.15 Power read full late
+loadouts 1.22 to 1.33 times their measured boss damage, now 0.88 to 1.06). Measured on the
+owner-like save at stages 102 and 126, six seeds of 120 s: four skills rank 10, evolved, Master,
+and the crown, x2.00 / x1.76 to 1.83 boss damage against Power x2.12 / x1.78; three of them and
+the crown x1.71 to 1.90 against x1.66 to 1.79; three at rank 1 x1.18 to 1.21 against x1.20;
+Void Collapse alone at rank 1 x1.07 to 1.08 against x1.08. (An earlier check that read a 3-skill
+loadout as four, the fourth slot staying shut without five skills found, gave 1.17 to 1.30.) They have no row of their own in the
 Power sheet (its sources are the menus'); until one is added they are spread over the others.
 
 **Balance, measured** (the economy simulator's warriors: its player from a new save at gates 21
@@ -631,7 +668,7 @@ full time, AUTO on, three seeds of 90 s (singles) or four of 120 s (full loadout
 
 | Equipped | New player, gate 21 | New player, gate 60 | Level 561, gate 72 |
 | --- | --- | --- | --- |
-| Void Collapse, rank 1 | x1.12 | x1.12 | x1.05 |
+| Void Collapse, rank 1 | x1.21 | x1.11 | x1.07 to 1.08 |
 | Shadow Storm, rank 1 | x1.16 | x1.15 | x1.13 |
 | Death Parade, rank 1 | x1.18 | x1.11 | x1.00 |
 | Time Fracture, rank 1 | x1.09 | x1.16 | x1.12 |
@@ -642,7 +679,11 @@ full time, AUTO on, three seeds of 90 s (singles) or four of 120 s (full loadout
 | The same, rank 10, evolved, Master | (x3.9) | x2.47 | x2.07 |
 | Fracture, Legion, Storm, Parade + crown, rank 10, evolved, Master | (x3.5) | (x2.1) | x2.03 |
 
-A skill alone at rank 1 adds 9 to 23% to a new player's boss damage where it is found, and 0 to
+Void Collapse first implode for 9 and added 12% for a new player and 4 to 5% for the late
+warrior (stages 102 and 126 of the owner-like save); at 13 it adds 21% at gate 21, 11% at gate 60,
+7 to 8% late, and no gate is skipped (gate 21: passes 21, fails 24 with 23% left against 35%
+without; gate 60: fails 60 with 19% left against 31%; from 24 at level 40: last won 36 either
+way). A skill alone at rank 1 adds 9 to 23% to a new player's boss damage where it is found, and 0 to
 16% to a late warrior's: his arts are at rank V and the Fury every four seconds carries most of his
 damage; Death Parade's hold costs about what its blows add for him until it is ranked. A full late
 loadout doubles a late warrior's boss damage (x2.03 to x2.07; the target was x1.8 to 2.3). The
@@ -681,7 +722,11 @@ zero, measured, it came exactly as often: 15.0 a minute); no hold begins while A
 a charged Fury. In farming it comes 15 to 17% less often although kills a minute are the same (63
 to 65): the warrior's own blows and arts find fewer foes standing, so his energy income falls 15%
 (1,104 to 938 a minute), and AUTO keeps a charged Fury for three foes at once, which a field the
-skills keep thin offers less often (charged and waiting 33% of the time without, 39% with). Their
+skills keep thin offers less often (charged and waiting 33% of the time without, 39% with). That
+was measured again later on the owner-like save (stages 38 and 70, four seeds of 6 minutes): 5.57 and
+6.16 Furies a minute without, x0.85 to 0.95 with 3 or 4 skills, charged 69 to 76% of the time
+either way. Since the Fury's patience (see Patience) it is x1.00 to 1.11, charged 64 to 68% of the
+time; boss fights are unchanged. Their
 blows charge nothing and their kills charge as any kill, as asked; nothing degenerate was found, so
 nothing was capped. The simulation's step costs 10.7 µs without signature skills and 20.1 µs with
 four (Endless Legion's eleven soldiers included) on this machine, headless.

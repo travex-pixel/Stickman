@@ -1,13 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { World, FIXED_DT } from "@/game/engine/World";
 import { buildLoadout, type PlayerLoadout } from "@/game/progression/loadout";
+import { ULTIMATE_ENERGY_COST } from "@/game/data/abilities";
 import { createDefaultProfile } from "@/game/progression/profile";
 import type { GameEvent } from "@/game/engine/events";
 import type { Combatant } from "@/game/entities/types";
 import { addStatus, hasStatus } from "@/game/combat/statuses";
 import { isHidden } from "@/game/combat/targeting";
 import { makeElite } from "@/game/entities/factory";
-import { DEVOURER, PARADE, SIGNATURES, SIG_GLOBAL_LOCKOUT, VOID, VOID_MARK, type EvolutionId, type MasteryTier, type SignatureId, type SignatureLoadoutEntry } from "@/game/data/signatures";
+import { DEVOURER, PARADE, SIGNATURES, SIG_FURY_PATIENCE, SIG_GLOBAL_LOCKOUT, SIG_PATIENCE, SIG_PATIENCE_JUDGEMENT, VOID, VOID_MARK, type EvolutionId, type MasteryTier, type SignatureId, type SignatureLoadoutEntry } from "@/game/data/signatures";
 import { SKILL_IMPLS } from "@/game/signatures/skills/index";
 import { curvePoint, devourerCurve } from "@/game/signatures/geometry";
 import { lateProfile } from "./apex.digest";
@@ -477,5 +478,62 @@ describe("signature skills and the rest of the fight", () => {
     w.kill(w.player, -1);
     const ev = run(w, 0.2);
     expect(ev.some((x) => x.e.type === "sig_end" && x.e.interrupted)).toBe(true);
+  });
+});
+
+describe("patience: a skill ready a while takes a lone foe", () => {
+  /** World seconds from a skill coming off cooldown to its first cast, or null if it never casts. */
+  function waitToCast(w: World, id: SignatureId, seconds: number): number | null {
+    let readyAt = -1;
+    for (let i = 0; i < Math.round(seconds / FIXED_DT); i++) {
+      w.update(FIXED_DT);
+      if (readyAt < 0 && w.sig!.cooldown(id) <= 0) readyAt = w.time;
+      for (const e of w.drainEvents()) if (e.type === "sig_cast" && e.sig === id) return w.time - readyAt;
+    }
+    return null;
+  }
+
+  it("Void Collapse waits SIG_PATIENCE seconds for a group, then collapses on the one foe there is", () => {
+    const w = sigWorld([entry("void_collapse")]);
+    foe(w, w.player.pos.x + 140, w.player.pos.y);
+    const waited = waitToCast(w, "void_collapse", 30);
+    expect(waited).not.toBeNull();
+    expect(waited!).toBeGreaterThanOrEqual(SIG_PATIENCE - 1e-6);
+    expect(waited!).toBeLessThan(SIG_PATIENCE + 0.5);
+  });
+
+  it("King's Judgement waits longer, takes a fresh lone foe, and never a nearly dead one", () => {
+    const fresh = sigWorld([entry("kings_judgement")]);
+    foe(fresh, fresh.player.pos.x + 140, fresh.player.pos.y);
+    const waited = waitToCast(fresh, "kings_judgement", 60);
+    expect(waited).not.toBeNull();
+    expect(waited!).toBeGreaterThanOrEqual(SIG_PATIENCE_JUDGEMENT - 1e-6);
+    const dying = sigWorld([entry("kings_judgement")]);
+    const f = foe(dying, dying.player.pos.x + 140, dying.player.pos.y);
+    f.hp = f.stats.maxHp * 0.1;
+    expect(waitToCast(dying, "kings_judgement", 60)).toBeNull();
+  });
+
+  it("with a skill equipped AUTO casts a Fury charged SIG_FURY_PATIENCE seconds on one foe; without, it keeps it for three", () => {
+    const furyAfter = (equipped: SignatureLoadoutEntry[]): number | null => {
+      const l = buildLoadout(lateProfile());
+      l.autoCast = true;
+      l.signatures = { equipped, crown: null };
+      const w = new World({ stage: 10, loadout: l, seed: 3 });
+      w.phase = "wave";
+      w.player.stats.moveSpeed = 0;
+      foe(w, w.player.pos.x + 400, w.player.pos.y);
+      w.energy = ULTIMATE_ENERGY_COST;
+      for (let i = 0; i < 40 / FIXED_DT; i++) {
+        w.update(FIXED_DT);
+        for (const e of w.drainEvents()) if (e.type === "cast" && e.ability === "ascendant_fury") return w.time;
+      }
+      return null;
+    };
+    expect(furyAfter([])).toBeNull();
+    const t = furyAfter([entry("legion_awakening")]);
+    expect(t).not.toBeNull();
+    expect(t!).toBeGreaterThanOrEqual(SIG_FURY_PATIENCE - 0.1);
+    expect(t!).toBeLessThan(SIG_FURY_PATIENCE + 1);
   });
 });
