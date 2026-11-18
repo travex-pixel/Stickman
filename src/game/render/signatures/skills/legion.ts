@@ -254,9 +254,15 @@ export class LegionStage extends Stage {
     const g = this.kit.groundLight;
     const fade = 1 - span01(this.lineT, 0.2, 0.9);
     if (fade <= 0) return;
-    const pts = this.soldiers.map((s) => (s.rig ? { x: s.rig.root.x, y: s.rig.root.y } : { x: s.x, y: s.y })).sort((a, b) => a.y - b.y);
-    g.moveTo(pts[0]!.x, pts[0]!.y);
-    for (const p of pts) g.lineTo(p.x, p.y);
+    // Through the rank from the far end to the near (the soldiers are kept in rising order of depth).
+    let first = true;
+    for (const s of this.soldiers) {
+      const x = s.rig ? s.rig.root.x : s.x;
+      const y = s.rig ? s.rig.root.y : s.y;
+      if (first) g.moveTo(x, y);
+      else g.lineTo(x, y);
+      first = false;
+    }
     g.stroke({ width: 3, color: GILT, alpha: 0.7 * fade });
   }
 

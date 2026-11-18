@@ -189,7 +189,8 @@ export class StormStage extends Stage {
         const front = Math.sin(a) > 0;
         const sc = this.scale * 1.0 * (0.4 + 0.6 * k) * (front ? 1 : 0.85);
         const rot = a + Math.PI / 2;
-        for (const s of [b.glow, body, b.edge]) {
+        for (let j = 0; j < 3; j++) {
+          const s = j === 0 ? b.glow : j === 1 ? body : b.edge;
           if (!s) continue;
           s.position.set(this.p.x, this.p.y);
           s.rotation = rot;
@@ -213,7 +214,8 @@ export class StormStage extends Stage {
         const ty = 2 * u * (b.cy - b.ay) + 2 * e * (b.by - b.cy);
         const rot = Math.atan2(ty, tx);
         const sc = this.scale * 1.15;
-        for (const s of [b.glow, body, b.edge]) {
+        for (let j = 0; j < 3; j++) {
+          const s = j === 0 ? b.glow : j === 1 ? body : b.edge;
           if (!s) continue;
           s.position.set(x, y);
           s.rotation = rot;
@@ -230,7 +232,10 @@ export class StormStage extends Stage {
         }
         if (k >= 1) {
           b.state = 2;
-          for (const s of [b.glow, body, b.edge]) if (s) s.visible = false;
+          for (let j = 0; j < 3; j++) {
+            const s = j === 0 ? b.glow : j === 1 ? body : b.edge;
+            if (s) s.visible = false;
+          }
           this.bite(b.bx, b.by, rot);
         }
       }

@@ -322,7 +322,7 @@ export class SignatureDirector {
     if (e.synergy === "crowned_ultimate") {
       if (this.stages.length >= HARD_STAGE_CAP) return;
       const fake: SigCastEvent = { type: "sig_cast", castId: -1 - this.counters.synergies, sig: synergyOwner(e.synergy), evo: null, mastery: owner?.mastery ?? 1, rank: 1, casterId: this.host.playerId(), origin: e.pos, center: e.pos, radius: 60, targetIds: e.targetIds, windup: 0, length: 1.2, boss: false, enhanced: e.synergy === "crowned_ultimate" };
-      const st = new SynergyStage(this.kit, this.host, this.svc, sigPalette(fake.sig, fake.mastery), fake, this.liveCount() >= this.profile.maxLive, e, owner ?? null);
+      const st = new SynergyStage(this.kit, this.host, this.svc, sigPalette(fake.sig, fake.mastery), fake, this.liveCount() >= this.profile.maxLive, e);
       this.stages.push(st);
     }
     const name = SYNERGY_NAME[e.synergy];

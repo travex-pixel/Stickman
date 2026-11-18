@@ -60,6 +60,8 @@ export class DevourerStage extends Stage {
   private readonly hero = { x: 0, y: 0, r: 0 };
   private readonly pt = { x: 0, y: 0 };
   private readonly cp = { x: 0, y: 0, a: 0 };
+  /** Reused for the rifts' outlines (no geometry arrays per frame). */
+  private readonly riftPts: number[] = [];
 
   constructor(...a: ConstructorParameters<typeof Stage>) {
     super(...a);
@@ -482,7 +484,8 @@ export class DevourerStage extends Stage {
     const h = 52 * S * easeOutCubic(r.k);
     const w = 15 * S * (0.6 + 0.4 * r.k);
     const n = 14;
-    const pts: number[] = [];
+    const pts = this.riftPts;
+    pts.length = 0;
     for (let i = 0; i < n; i++) {
       const a = (i / n) * Math.PI * 2;
       const jag = 1 + (i % 2 === 0 ? 0.22 : -0.12) * Math.sin(time * 6 + i);
