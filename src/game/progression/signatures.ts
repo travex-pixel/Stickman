@@ -429,11 +429,11 @@ export function signatureLoadout(p: Profile): SignatureLoadout {
 export const SIG_BOSS_SHARE: Readonly<Record<SignatureId, number>> = {
   void_collapse: 0.08,
   shadow_storm: 0.13,
-  death_parade: 0.04,
+  death_parade: 0.05,
   time_fracture: 0.13,
-  legion_awakening: 0.04,
-  abyssal_devourer: 0.05,
-  kings_judgement: 0.07,
+  legion_awakening: 0.05,
+  abyssal_devourer: 0.07,
+  kings_judgement: 0.08,
   sovereign_awakening: 0,
 };
 /** An evolution chosen (and awakened at Master) adds this much to a skill's share. */
