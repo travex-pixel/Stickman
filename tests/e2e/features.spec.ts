@@ -106,7 +106,9 @@ test.describe("onboarding", () => {
     await game(page, "c => { const p = c.profile; p.tutorial.finished = true; p.player.gold = 500; p.progress.bestStage = 2; p.progress.currentStage = 3; c['commit'](); c.startRun(3); }");
     await page.waitForTimeout(1500);
     await game(page, "c => { c.world.player.hp = 1; c.world.kill(c.world.player, -1); }");
-    await expect.poll(() => game<number>(page, "c => c.world.stage"), { timeout: 10_000 }).toBe(2);
+    // The fall plays out in world time (about 2.2 s) before the regroup; under software WebGL on a
+    // loaded machine the world can run at a third of real time, so allow for that rather than 10 s.
+    await expect.poll(() => game<number>(page, "c => c.world.stage"), { timeout: 30_000 }).toBe(2);
     expect(await game<boolean>(page, "c => c.profile.progress.autoPush")).toBe(false);
     await expect(page.getByTestId("push-stage")).toBeVisible();
     await expect(page.getByTestId("hand-guide")).toHaveAttribute("data-target", /upgrade-maxHp|upgrade-attack|tab-hero/, { timeout: 10_000 });
