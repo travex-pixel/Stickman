@@ -118,7 +118,8 @@ export function clearJudgementCache(): void {
 
 export class JudgementStage extends Stage {
   override focus(out: { x: number; y: number; top: number }): boolean {
-    return !this.ended && this.centreFocus(out, 150);
+    // The hand opens 175 above the ground and reaches about 60 higher.
+    return !this.ended && this.centreFocus(out, 235);
   }
 
   private gx = 0;

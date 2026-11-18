@@ -23,7 +23,11 @@ import { glowRingTex, holeTex, starTex } from "../textures";
  */
 export class TimeStage extends Stage {
   override focus(out: { x: number; y: number; top: number }): boolean {
-    return !this.ended && this.centreFocus(out, 90);
+    if (this.ended) return false;
+    out.x = this.cx;
+    out.y = this.gy;
+    out.top = Math.min(this.cy, this.gy - 120 * this.host.proj.fs(this.cast.center.y)) - this.R - 8;
+    return true;
   }
 
   private gx = 0;
