@@ -3,15 +3,17 @@ import { easeInCubic, easeOutCubic } from "../../anim/ease";
 import { softCircle } from "../../textures";
 import { CRIMSON, GILT, GILT_HOT } from "../palette";
 import { Stage, span01, type SigBeatEvent } from "../stage";
-import { bladeEdgeTex, bladeTex } from "../textures";
+import { bandRingTex, bladeEdgeTex, bladeTex, glowRingTex, streakTex } from "../textures";
 
 /**
  * SHADOW STORM: blades of shadow gather and orbit the warrior, then launch one by one into the
  * thickest knot of foes.
  *
- *   gather   violet-ink blades with white edges cut themselves out of the air round him and orbit on
- *            a tilted ellipse at chest height, spinning up (the far ones behind him, the near ones in
- *            front); he keeps fighting (no cast lock).
+ *   gather   violet-ink blades with white edges cut themselves out of the air round him (a white slit
+ *            each) and orbit on a tilted ring at chest height, spinning up, each with a light trail
+ *            behind it; the ring itself shows (an ink band under a violet-white line). The far
+ *            blades pass behind him, the near ones over everything, so the army never hides them.
+ *            He keeps fighting (no cast lock).
  *   blade    one leaves the orbit and flies an arc to its foe, a trail behind it, and bites: a short
  *            violet cut with a white edge. Its Shadow Mark shows on the body.
  *   tempest  (Black Tempest) a ring of spinning blades runs outward over the ground, cutting as it
@@ -26,6 +28,10 @@ interface Blade {
   edge: Sprite | null;
   /** A violet light behind the blade, so ink reads against ink. */
   glow: Sprite | null;
+  /** The light trail it draws round the orbit (and along its flight). */
+  trail: Sprite | null;
+  /** Whether its slit of light has been cut (as it appears). */
+  cut: boolean;
   /** Orbit slot (angle offset) and ring. */
   slot: number;
   ring: number;
@@ -40,6 +46,14 @@ interface Blade {
   cy: number;
   appear: number;
 }
+
+/** The orbiting blades are this much larger than a figure-scaled blade, and larger again in flight. */
+const ORBIT_SIZE = 1.45;
+const FLIGHT_SIZE = 1.6;
+/** The light along a blade's path: a pale violet, nearly white. */
+const BLADE_TRAIL = 0xc9b8ff;
+/** Shadow Storm casts often (a setup skill): its focus is lighter than a cinematic's. */
+const STORM_FOCUS = 0.7;
 
 export class StormStage extends Stage {
   override focus(out: { x: number; y: number; top: number }): boolean {
@@ -57,6 +71,10 @@ export class StormStage extends Stage {
   private tempestBlades: Sprite[] = [];
   private launched = 0;
   private pwy = 75;
+  /** The orbit ring: an ink band and its violet-white line, faded with the blades still in orbit. */
+  private ringInk: Sprite | null = null;
+  private ringLight: Sprite | null = null;
+  private ringK = 0;
 
   constructor(...a: ConstructorParameters<typeof Stage>) {
     super(...a);
@@ -68,9 +86,13 @@ export class StormStage extends Stage {
     switch (e.beat) {
       case "gather":
         this.gather(e.index > 1 ? e.index : this.evo === "thousand_blades" ? 12 : 6, e.duration || 0.8);
+        // The focus while the ring gathers round him (the figures of his own blows pop right over
+        // it), held a breath into the volley; a lighter one than a cinematic's.
+        this.focusFor(this.gatherD + 0.1, STORM_FOCUS);
         break;
       case "blade":
         this.launch(e);
+        if (this.launched <= 3) this.focusFor(0.12, STORM_FOCUS);
         break;
       case "tempest":
         this.startTempest(e);
@@ -85,6 +107,11 @@ export class StormStage extends Stage {
     this.gatherD = Math.max(0.2, d);
     const count = Math.min(this.compact ? 6 : 16, n);
     for (let i = 0; i < count; i++) this.addBlade(i, count);
+    const fig = this.host.layers.figures;
+    this.ringInk = this.sprite(fig, bandRingTex(), false);
+    if (this.ringInk) this.ringInk.tint = this.pal.ink;
+    this.ringLight = this.sprite(fig, glowRingTex(), true);
+    if (this.ringLight) this.ringLight.tint = this.gilded ? GILT : this.pal.glow;
   }
 
   private addBlade(i: number, count: number): Blade {
@@ -92,10 +119,18 @@ export class StormStage extends Stage {
     const fx = this.host.layers.figures;
     const body = this.sprite(fx, bladeTex(), false);
     const glow = this.sprite(fx, softCircle(), true);
-    const edge = this.compact ? null : this.sprite(fx, bladeEdgeTex(), true);
+    const edge = this.sprite(fx, bladeEdgeTex(), true);
+    const trail = this.compact ? null : this.sprite(fx, streakTex(), true);
     if (glow) glow.tint = this.gilded ? GILT : this.pal.glow;
+    if (trail) {
+      trail.tint = this.gilded ? GILT : BLADE_TRAIL;
+      // The streak is brightest near its head: the head rides with the blade.
+      trail.anchor.set(0.85, 0.5);
+      trail.alpha = 0;
+    }
     if (body) {
-      body.tint = this.pal.deep;
+      // Violet ink at full strength (not the near-black of the foes), so the white edge has a body.
+      body.tint = this.pal.mid;
       body.anchor.set(0.5);
     }
     if (edge) {
@@ -105,7 +140,7 @@ export class StormStage extends Stage {
     const twoRings = this.evo === "thousand_blades" && !this.compact;
     const ring = twoRings ? i % 2 : 0;
     const per = twoRings ? Math.ceil(count / 2) : count;
-    const b: Blade = { body, edge, glow, slot: ((twoRings ? Math.floor(i / 2) : i) / per) * Math.PI * 2 + ring * 0.3, ring, state: 0, t: 0, d: 0.16, ax: 0, ay: 0, bx: 0, by: 0, cx: 0, cy: 0, appear: i * 0.04 };
+    const b: Blade = { body, edge, glow, trail, cut: false, slot: ((twoRings ? Math.floor(i / 2) : i) / per) * Math.PI * 2 + ring * 0.3, ring, state: 0, t: 0, d: 0.16, ax: 0, ay: 0, bx: 0, by: 0, cx: 0, cy: 0, appear: i * 0.04 };
     this.blades.push(b);
     return b;
   }
@@ -184,6 +219,7 @@ export class StormStage extends Stage {
     this.spin += dt * (2.5 + 7 * spinUp);
     const hunter = this.evo === "hunters_instinct";
     const light = this.gilded ? GILT_HOT : 0xffffff;
+    let orbiting = 0;
     for (const b of this.blades) {
       const body = b.body;
       if (b.state === 0) {
@@ -191,17 +227,38 @@ export class StormStage extends Stage {
         const k = easeOutCubic(span01(this.gatherT, b.appear, b.appear + 0.18));
         const a = this.orbitPos(b, this.p);
         const front = Math.sin(a) > 0;
-        const sc = this.scale * 1.0 * (0.4 + 0.6 * k) * (front ? 1 : 0.85);
+        if (k > 0) orbiting += 1;
+        if (!b.cut && this.gatherT >= b.appear && (!this.compact || b.slot === 0)) {
+          // A slit of white light where it cuts itself out of the air.
+          b.cut = true;
+          const r = 12 * this.scale;
+          this.kit.slash(this.p.x - r, this.p.y + r * 0.4, this.p.x + r, this.p.y - r * 0.4, -1, light, 1.4, 0.14);
+        }
+        const sc = this.scale * ORBIT_SIZE * (0.4 + 0.6 * k) * (front ? 1 : 0.85);
         const rot = a + Math.PI / 2;
+        // The near half rides over every body (the army in front never hides it); the far half
+        // passes behind him.
+        const z = front ? 8000 : this.pwy - 0.3;
         for (let j = 0; j < 3; j++) {
           const s = j === 0 ? b.glow : j === 1 ? body : b.edge;
           if (!s) continue;
           s.position.set(this.p.x, this.p.y);
           s.rotation = rot;
-          if (s === b.glow) s.scale.set(sc * 0.9, sc * 0.35);
-          else s.scale.set(sc, sc * 1.25);
-          s.alpha = k * (front ? 1 : 0.6) * (s === b.glow ? 0.55 : 1);
-          s.zIndex = this.pwy + (front ? 0.3 : -0.3) + (s === b.edge ? 0.01 : s === b.glow ? -0.01 : 0);
+          if (s === b.glow) s.scale.set(sc * 1.0, sc * 0.42);
+          else s.scale.set(sc, sc * 1.3);
+          s.alpha = k * (front ? 1 : 0.7) * (s === b.glow ? 0.7 : 1);
+          s.zIndex = z + (s === b.edge ? 0.01 : s === b.glow ? -0.01 : 0);
+        }
+        const tr = b.trail;
+        if (tr) {
+          // The light trail behind it, along the ring in the way it turns.
+          const dir = b.ring === 1 ? -1 : 1;
+          tr.position.set(this.p.x, this.p.y);
+          tr.rotation = Math.atan2(Math.cos(a) * 0.32 * dir, -Math.sin(a) * dir);
+          const len = (30 + 26 * spinUp) * this.scale;
+          tr.scale.set(len / 64, (0.45 * sc) / 1);
+          tr.alpha = k * (front ? 0.55 : 0.3);
+          tr.zIndex = z - 0.02;
         }
         if (hunter && body && Math.random() < 0.05 && dt > 0) this.kit.cut(this.p.x, this.p.y, 3 * this.u, 0, 6.2, -1, CRIMSON, 1.4, 0.12);
         continue;
@@ -217,21 +274,32 @@ export class StormStage extends Stage {
         const tx = 2 * u * (b.cx - b.ax) + 2 * e * (b.bx - b.cx);
         const ty = 2 * u * (b.cy - b.ay) + 2 * e * (b.by - b.cy);
         const rot = Math.atan2(ty, tx);
-        const sc = this.scale * 1.15;
+        const sc = this.scale * FLIGHT_SIZE;
         for (let j = 0; j < 3; j++) {
           const s = j === 0 ? b.glow : j === 1 ? body : b.edge;
           if (!s) continue;
           s.position.set(x, y);
           s.rotation = rot;
-          if (s === b.glow) s.scale.set(sc * 1.1, sc * 0.4);
-          else s.scale.set(sc * 1.15, sc * 1.1);
-          s.alpha = s === b.glow ? 0.6 : 1;
+          if (s === b.glow) s.scale.set(sc * 1.2, sc * 0.45);
+          else s.scale.set(sc * 1.15, sc * 1.15);
+          s.alpha = s === b.glow ? 0.7 : 1;
           s.zIndex = 8000 + (s === b.edge ? 1 : s === b.glow ? -1 : 0);
+        }
+        const tr = b.trail;
+        if (tr) {
+          // In flight the trail stretches out behind it.
+          tr.position.set(x, y);
+          tr.rotation = rot;
+          tr.scale.set((70 * this.scale) / 64, 0.5 * sc);
+          tr.alpha = 0.75;
+          tr.zIndex = 7999;
         }
         if (dt > 0) {
           // An ink wake behind it, and (full staging) a violet light along it.
           this.kit.streak(x - Math.cos(rot) * 26 * this.u, y - Math.sin(rot) * 26 * this.u, x, y, 34 * this.u, 2.2, this.pal.ink, 0.16, { alpha: 0.75, add: false });
           if (this.profile.secondary) this.kit.streak(x - Math.cos(rot) * 18 * this.u, y - Math.sin(rot) * 18 * this.u, x, y, 22 * this.u, 1, this.pal.glow, 0.12, { alpha: 0.7 });
+          // A white-hot line along its path (the edge's light), so the volley reads as blades.
+          this.kit.streak(x - Math.cos(rot) * 22 * this.u, y - Math.sin(rot) * 22 * this.u, x, y, 26 * this.u, 0.8, light, 0.1, { alpha: 0.55 });
           if (this.master) this.kit.streak(x - Math.cos(rot) * 18 * this.u, y - Math.sin(rot) * 18 * this.u + 3, x, y + 3, 18 * this.u, 0.6, light, 0.1, { alpha: 0.6 });
         }
         if (k >= 1) {
@@ -240,8 +308,26 @@ export class StormStage extends Stage {
             const s = j === 0 ? b.glow : j === 1 ? body : b.edge;
             if (s) s.visible = false;
           }
+          if (b.trail) b.trail.visible = false;
           this.bite(b.bx, b.by, rot);
         }
+      }
+    }
+    // The orbit ring shows while blades are in orbit, fading as the last ones leave.
+    const want = this.gatherT >= 0 && orbiting > 0 && !this.ended ? Math.min(1, orbiting / 2) * easeOutCubic(span01(this.gatherT, 0, 0.25)) : 0;
+    this.ringK += (want - this.ringK) * Math.min(1, real * 12);
+    if (this.ringInk || this.ringLight) {
+      const r = 44 * this.scale;
+      const sx = (r * 2) / 240;
+      const sy = sx * 0.32;
+      for (let j = 0; j < 2; j++) {
+        const s = j === 0 ? this.ringInk : this.ringLight;
+        if (!s) continue;
+        s.position.set(this.ox, this.oy);
+        s.scale.set(sx, sy);
+        s.alpha = this.ringK * (j === 0 ? 0.45 : 0.6);
+        s.zIndex = 7998 + j * 0.01;
+        s.visible = this.ringK > 0.01;
       }
     }
     // The tempest ring.
@@ -265,7 +351,6 @@ export class StormStage extends Stage {
         this.kit.cut(tp.x + Math.cos(a) * r, tp.y + Math.sin(a) * r * sq - 20 * this.u, 14 * this.u, a, 1.4, this.pal.deep, light, 1.6, 0.16);
       }
     }
-    void real;
   }
 
   private bite(x: number, y: number, rot: number): void {

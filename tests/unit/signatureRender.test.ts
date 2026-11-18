@@ -4,7 +4,7 @@ import type { GameEvent } from "../../src/game/engine/events";
 import { SIGNATURE_IDS, SIGNATURES, SYNERGIES, type EvolutionId, type MasteryTier, type SignatureBeat, type SignatureId, type VisualQuality } from "../../src/game/data/signatures";
 import { buildScript, SigDriver, type SigActor, type Timed } from "../../src/game/render/signatures/driver";
 import { FrameGovernor, fxProfile, GOVERNOR_WINDOW, QUALITY_ORDER } from "../../src/game/render/signatures/quality";
-import { SignatureDirector, HARD_STAGE_CAP, MAX_MARKED } from "../../src/game/render/signatures/SignatureDirector";
+import { SignatureDirector, FOCUS_MAX_HOLD, HARD_STAGE_CAP, MAX_MARKED } from "../../src/game/render/signatures/SignatureDirector";
 import type { SigBody, SigHost } from "../../src/game/render/signatures/host";
 import { ParticleSystem } from "../../src/game/render/Particles";
 import { Camera } from "../../src/game/render/Camera";
@@ -454,6 +454,149 @@ describe("the signature director", () => {
       expect(dir.liveStages).toBe(0);
       dir.destroy();
     }
+  });
+});
+
+/** Play a script through a director, recording its focus each frame (real seconds at 30 a second). */
+function focusTrace(dir: SignatureDirector, s: Timed[], seconds: number): { t: number; numbers: number; army: number }[] {
+  const out: { t: number; numbers: number; army: number }[] = [];
+  const d = new SigDriver((ev) => dir.handle(ev));
+  d.play(s);
+  for (let t = 0; t < seconds; t += 1 / 30) {
+    d.update(1 / 30);
+    dir.update(1 / 30, 1 / 30);
+    out.push({ t, numbers: dir.focusNumbers, army: dir.focusArmy });
+  }
+  return out;
+}
+
+describe("the focus at a signature skill's key beats", () => {
+  const beatAt = (s: Timed[], beat: SignatureBeat): number => s.find(({ e }) => e.type === "sig_beat" && e.beat === beat)!.t;
+
+  it("the Parade holds it from the vanish to just after the finisher, never past the cap, and lets it go", () => {
+    const { host } = fakeHost();
+    const dir = new SignatureDirector(host, true);
+    const s = script("death_parade", null, 1, 600);
+    const vanish = beatAt(s, "vanish");
+    const fin = beatAt(s, "finisher");
+    const tr = focusTrace(dir, s, 4);
+    const on = tr.filter((f) => f.numbers > 0.02 || f.army > 0.02);
+    expect(on.length).toBeGreaterThan(0);
+    expect(on[0]!.t).toBeGreaterThanOrEqual(vanish - 1e-6);
+    // Fully on while the clones strike.
+    const mid = tr.find((f) => f.t >= (vanish + fin) / 2)!;
+    expect(mid.numbers).toBeGreaterThan(0.8);
+    expect(mid.army).toBeGreaterThan(0.8);
+    // Gone well within a second of the finisher, and never on longer than the cap allows (plus its fade).
+    expect(on[on.length - 1]!.t).toBeLessThan(fin + 1);
+    expect(on[on.length - 1]!.t - on[0]!.t).toBeLessThan(FOCUS_MAX_HOLD + 0.8);
+    expect(tr[tr.length - 1]!.numbers).toBe(0);
+    expect(tr[tr.length - 1]!.army).toBe(0);
+    dir.destroy();
+  });
+
+  it("applies only on key beats: the singularity and the clock never ask, the storm only while it gathers, a cinematic for each beat under a second", () => {
+    for (const sig of ["void_collapse", "time_fracture"] as SignatureId[]) {
+      const { host } = fakeHost();
+      const dir = new SignatureDirector(host, true);
+      const tr = focusTrace(dir, script(sig, null, 1, 610), 5);
+      expect(Math.max(...tr.map((f) => Math.max(f.numbers, f.army)))).toBe(0);
+      dir.destroy();
+    }
+    {
+      const { host } = fakeHost();
+      const dir = new SignatureDirector(host, true);
+      const tr = focusTrace(dir, script("shadow_storm", null, 1, 615), 5);
+      const on = tr.filter((f) => f.numbers > 0.02).length / 30;
+      expect(Math.max(...tr.map((f) => f.numbers))).toBeLessThanOrEqual(0.7 + 1e-9);
+      // The gathering and the first blades, plus the fade (counted while above 0.02).
+      expect(on).toBeGreaterThan(0.3);
+      expect(on).toBeLessThan(1.8);
+      dir.destroy();
+    }
+    for (const sig of ["abyssal_devourer", "kings_judgement", "legion_awakening", "sovereign_awakening"] as SignatureId[]) {
+      const { host } = fakeHost();
+      const dir = new SignatureDirector(host, true);
+      const len = sig === "sovereign_awakening" ? 14 : 9;
+      const tr = focusTrace(dir, script(sig, null, 1, 620), len);
+      const on = tr.filter((f) => f.numbers > 0.02).length / 30;
+      expect(on).toBeGreaterThan(0.2);
+      // A few beats at most: far less than the cast's length.
+      expect(on).toBeLessThan(2.2);
+      expect(tr[tr.length - 1]!.numbers).toBe(0);
+      dir.destroy();
+    }
+  });
+
+  it("the crown quiets the figures but never dims the kneeling army", () => {
+    const { host } = fakeHost();
+    const dir = new SignatureDirector(host, true);
+    const tr = focusTrace(dir, script("sovereign_awakening", null, 1, 630), 4);
+    expect(Math.max(...tr.map((f) => f.numbers))).toBeGreaterThan(0.5);
+    expect(Math.max(...tr.map((f) => f.army))).toBe(0);
+    dir.destroy();
+  });
+
+  it("is gentler with reduced effects, keeps the army undimmed at the performance tier, and a compact cast never asks", () => {
+    const peak = (o: { reduced?: boolean; quality?: VisualQuality }) => {
+      const { host } = fakeHost(o.reduced ?? false);
+      const dir = new SignatureDirector(host, true);
+      dir.setReduced(o.reduced ?? false);
+      dir.setQuality(o.quality ?? "balanced");
+      const tr = focusTrace(dir, script("death_parade", null, 1, 640), 3);
+      dir.destroy();
+      return { numbers: Math.max(...tr.map((f) => f.numbers)), army: Math.max(...tr.map((f) => f.army)) };
+    };
+    expect(peak({}).numbers).toBeGreaterThan(0.8);
+    expect(peak({ reduced: true }).numbers).toBeLessThanOrEqual(0.6 + 1e-9);
+    expect(peak({ reduced: true }).army).toBeLessThanOrEqual(0.6 + 1e-9);
+    expect(peak({ quality: "performance" }).army).toBe(0);
+    expect(peak({ quality: "performance" }).numbers).toBeGreaterThan(0.8);
+    // Past the live cap a cast is compact: it stages its silhouette and impact, and asks no focus.
+    const { host } = fakeHost();
+    const dir = new SignatureDirector(host, true);
+    dir.setQuality("performance");
+    const d = new SigDriver((ev) => dir.handle(ev));
+    for (let i = 0; i < fxProfile("performance", false).maxLive; i++) d.play(script("void_collapse", null, 1, 650 + i));
+    d.play(script("death_parade", null, 1, 660));
+    let most = 0;
+    for (let t = 0; t < 3; t += 1 / 30) {
+      d.update(1 / 30);
+      dir.update(1 / 30, 1 / 30);
+      most = Math.max(most, dir.focusNumbers);
+    }
+    expect(dir.counters.compact).toBeGreaterThan(0);
+    expect(most).toBe(0);
+    dir.destroy();
+  });
+
+  it("the Legion's soldiers are its own: drawn in its figure, never dimmed by its focus, given back when it ends", () => {
+    const { host } = fakeHost();
+    const dir = new SignatureDirector(host, true);
+    const d = new SigDriver((ev) => dir.handle(ev));
+    const s = script("legion_awakening", null, 1, 670);
+    d.play(s);
+    const rise = beatAt(s, "rise");
+    const end = s[s.length - 1]!.t;
+    let seen = false;
+    for (let t = 0; t < 12; t += 1 / 30) {
+      d.update(1 / 30);
+      dir.update(1 / 30, 1 / 30);
+      if (t > rise + 0.05 && t < end) {
+        for (const a of ALLIES) {
+          expect(dir.involved(a.id)).toBe(true);
+          const spec = dir.dress.get(a.id);
+          expect(spec).toBeDefined();
+          // Not the army's slate figure.
+          expect(spec!.body).not.toBe(0x4a5160);
+          seen = true;
+        }
+      }
+    }
+    expect(seen).toBe(true);
+    expect(dir.dress.size).toBe(0);
+    expect(dir.involved(ALLIES[0]!.id)).toBe(false);
+    dir.destroy();
   });
 });
 
