@@ -45,6 +45,8 @@ export interface ApexPlayerView {
   path: WeaponPath;
   seed: number;
   dead: boolean;
+  /** Gone from the field for a moment (vanished into Death Parade): his form's lights go with him. */
+  hidden?: boolean;
 }
 
 export interface ApexHost {
@@ -872,7 +874,7 @@ export class ApexDirector {
     const pv = this.host.player();
     const r = this.ranks;
     const front = this.formFront;
-    if (!pv || pv.dead || !this.owned) {
+    if (!pv || pv.dead || pv.hidden || !this.owned) {
       if (this.formDirty) {
         front.clear();
         this.formDirty = false;

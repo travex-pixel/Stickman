@@ -2867,6 +2867,8 @@ export class BattleRenderer implements ImpactHost {
       o.path = w.loadout.weaponPath;
       o.seed = p.seed;
       o.dead = p.dead;
+      // Vanished into a signature cast (the Parade): his form's lights are not left hanging there.
+      o.hidden = (this.sig.mods.get(p.id)?.alpha ?? 1) < 0.5;
       return o;
     },
     flash: (color, alpha, duration) => this.flash(color, alpha, duration),
@@ -2994,8 +2996,9 @@ export class BattleRenderer implements ImpactHost {
   }
 
   /**
-   * A signature skill's key beat holds the focus (SignatureDirector): other damage figures and the
-   * Apex figures fade a share of their opacity, and the army not in the cast is dimmed. The warrior,
+   * A signature skill's key beat holds the focus (SignatureDirector): other damage figures, the
+   * Apex figures and the essence orbs fade a share of their opacity, and the army not in the cast
+   * is dimmed. The warrior,
    * the foes (their telegraphs and threat colours) and the cast's own bodies are never touched; a
    * boss entrance owns the tints while it plays.
    */
@@ -3005,6 +3008,9 @@ export class BattleRenderer implements ImpactHost {
       this.focusQuiet = quiet;
       this.numbers.setQuiet(quiet);
       this.apex.prism.container.alpha = 1 - quiet;
+      // Essence orbs pop where foes fall: during the Parade they read as white bursts on every
+      // kill. They step back a little less than the figures and are back as soon as it lets go.
+      this.orbLayer.alpha = 1 - quiet * 0.75;
     }
     const k = this.bossIntro ? 0 : this.sig.focusArmy * FOCUS_ARMY;
     if (k <= 0.004 && this.focusDimmed === 0) return;
