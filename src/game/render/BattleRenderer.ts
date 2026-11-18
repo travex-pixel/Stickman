@@ -252,6 +252,8 @@ export class BattleRenderer implements ImpactHost {
   readonly sigDriver = new SigDriver((ev) => this.sigSynthetic(ev));
   private lastWorldTime = -1;
   private quality: VisualQuality = "full";
+  /** Bodies the signature presentation washed with a tint last frame. */
+  private readonly sigTinted = new Set<number>();
   private readonly sigBody: SigBody = { x: 0, y: 0, chestY: 0, height: 0, scale: 1, wx: 0, wy: 0, facing: 1, boss: false, ally: false, player: false, rig: null };
   private readonly apexView: ApexPlayerView = { rig: null as unknown as Rig, drawX: 0, drawY: 0, scale: 1, zIndex: 0, facing: 1, state: "idle", swings: 0, path: "none", seed: 0, dead: false };
   private flashAlpha = 0;
@@ -476,6 +478,7 @@ export class BattleRenderer implements ImpactHost {
     // Every signature cast, mark and body modifier belongs to the old world.
     this.sig?.reset();
     this.sigDriver.clear();
+    this.sigTinted.clear();
     this.lastWorldTime = world.time;
     this.flashes.reset();
     this.flashTime = 0;
@@ -2939,6 +2942,17 @@ export class BattleRenderer implements ImpactHost {
   /** Apply the signature presentation's body modifiers (space bending, vanishing, tints, glass). */
   private applySigMods(): void {
     const mods = this.sig.mods;
+    // A body washed last frame and not this one goes back to its own tint.
+    const base = this.dimOthers > 0.005 ? mix(0xffffff, 0x000000, this.dimOthers) : 0xffffff;
+    if (this.sigTinted.size > 0) {
+      for (const id of this.sigTinted) {
+        const m = mods.get(id);
+        if (m && m.tintK > 0) continue;
+        const v = this.views.get(id);
+        if (v && (!this.bossIntro || this.bossIntro.bossId !== id)) v.rig.root.tint = base;
+        this.sigTinted.delete(id);
+      }
+    }
     if (mods.size === 0) return;
     for (const [id, m] of mods) {
       const v = this.views.get(id);
@@ -2954,7 +2968,10 @@ export class BattleRenderer implements ImpactHost {
         v.rig.shadow.alpha = m.alpha;
         v.bar.visible = v.bar.visible && m.alpha > 0.5;
       } else v.rig.shadow.alpha = 1;
-      if (m.tintK > 0) root.tint = mix(root.tint as number, m.tint, m.tintK);
+      if (m.tintK > 0) {
+        root.tint = mix(base, m.tint, m.tintK);
+        this.sigTinted.add(id);
+      }
       if (m.white > 0) v.rig.setWhite(Math.max(m.white, v.lit));
     }
   }
