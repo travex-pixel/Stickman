@@ -13,6 +13,7 @@ import { EQUIPMENT_TEMPLATES, STAT_LABEL } from "@/game/data/equipment";
 import { SKILLS } from "@/game/data/skills";
 import { GEAR_EFFECTS, type GearEffectId } from "@/game/data/gearEffects";
 import { APEX_MAX, APEX_SKILLS, noApex, type ApexRanks } from "@/game/data/apex";
+import { SIGNATURE_IDS, SIGNATURE_RANK_MAX, SIGNATURE_SLOTS, SIGNATURES, SYNERGIES, emptySignatureState, type EvolutionId, type SignatureId, type SignatureState, type SynergyId, type VisualQuality } from "@/game/data/signatures";
 
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 const isStr = (v: unknown): v is string => typeof v === "string";
@@ -142,6 +143,7 @@ export function sanitizeProfile(raw: unknown): { profile: Profile; repaired: boo
       abilityRanks: sanitizeAbilityRanks(p.abilityRanks),
       ...sanitizeTechniques(p.techniques, p.artForms),
       apex: sanitizeApex(p.apex),
+      signatures: sanitizeSignatures(p.signatures),
     },
     equipment: { equipped, inventory },
     skills: { unlocked: Array.isArray(sk.unlocked) ? sk.unlocked.filter((id): id is string => isStr(id) && SKILLS.some((n) => n.id === id)) : [] },
@@ -199,6 +201,7 @@ export function sanitizeProfile(raw: unknown): { profile: Profile; repaired: boo
       autoAdvance: st.autoAdvance !== false,
       quickReveals: st.quickReveals === true,
       keepAwake: st.keepAwake !== false,
+      visualQuality: (["full", "balanced", "performance"] as const).includes(st.visualQuality as VisualQuality) ? (st.visualQuality as VisualQuality) : def.settings.visualQuality,
     },
   };
   // Deployed summons cannot exceed what the save could legitimately hold.
@@ -226,6 +229,43 @@ function sanitizeApex(v: unknown): ApexRanks {
     const r = v[id];
     if (isNum(r) && r > 0) out[id] = Math.min(APEX_MAX[id], Math.floor(r));
   }
+  return out;
+}
+
+/**
+ * Signature skills (v15). Unknown ids are dropped, ranks clamped, an evolution kept only if it
+ * belongs to its skill, a skill equipped only once and only if found. Discovery rules are not
+ * re-checked on load, so a save never loses a skill it found.
+ */
+export function sanitizeSignatures(v: unknown): SignatureState {
+  const out = emptySignatureState();
+  if (!isObj(v)) return out;
+  const isSig = (x: unknown): x is SignatureId => isStr(x) && (SIGNATURE_IDS as readonly string[]).includes(x);
+  const uniq = <T,>(xs: T[]) => xs.filter((x, i) => xs.indexOf(x) === i);
+  out.discovered = Array.isArray(v.discovered) ? uniq(v.discovered.filter(isSig)) : [];
+  out.revealed = Array.isArray(v.revealed) ? uniq(v.revealed.filter(isSig)).filter((id) => out.discovered.includes(id)) : [];
+  const slots = Array.isArray(v.slots) ? v.slots : [];
+  for (let i = 0; i < SIGNATURE_SLOTS; i++) {
+    const id = slots[i];
+    out.slots[i] = isSig(id) && id !== "sovereign_awakening" && out.discovered.includes(id) && !out.slots.includes(id) ? id : null;
+  }
+  const ranks = isObj(v.ranks) ? v.ranks : {};
+  const evos = isObj(v.evolutions) ? v.evolutions : {};
+  const mastery = isObj(v.mastery) ? v.mastery : {};
+  for (const id of out.discovered) {
+    const r = ranks[id];
+    out.ranks[id] = isNum(r) ? Math.max(1, Math.min(SIGNATURE_RANK_MAX, Math.floor(r))) : 1;
+    const e = evos[id];
+    if (isStr(e) && SIGNATURES[id].evolutions.some((x) => x.id === e)) out.evolutions[id] = e as EvolutionId;
+    const m = mastery[id];
+    if (isObj(m)) out.mastery[id] = { casts: isNum(m.casts) && m.casts > 0 ? Math.floor(m.casts) : 0, kills: isNum(m.kills) && m.kills > 0 ? Math.floor(m.kills) : 0 };
+  }
+  out.synergies = Array.isArray(v.synergies) ? uniq(v.synergies.filter((x): x is SynergyId => isStr(x) && SYNERGIES.some((s) => s.id === x))) : [];
+  const pr = isObj(v.progress) ? v.progress : {};
+  const count = (x: unknown) => (isNum(x) && x > 0 ? Math.floor(x) : 0);
+  const kills: Record<string, number> = {};
+  if (isObj(pr.bossKills)) for (const [k, n] of Object.entries(pr.bossKills)) if (k !== "__proto__" && count(n) > 0) kills[k] = count(n);
+  out.progress = { elites: count(pr.elites), bestChain: count(pr.bestChain), fastestBoss: isNum(pr.fastestBoss) && pr.fastestBoss > 0 ? pr.fastestBoss : 0, bossKills: kills };
   return out;
 }
 

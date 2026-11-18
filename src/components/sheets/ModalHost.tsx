@@ -93,6 +93,9 @@ function Route({ modal, open }: { modal: Modal; open: boolean }) {
     case "boss_intro":
       // The entrance is staged on the battlefield (banner and canvas); there is no sheet.
       return null;
+    case "signature_reveal":
+      // CONTRACT STUB: the menus side replaces this with the signature reveal.
+      return null;
     default: {
       const never: never = modal;
       return never;

@@ -134,6 +134,13 @@ export const MIGRATIONS: Migration[] = [
       return { ...raw, version: 14, player: { ...player, apex: { double: 0, triple: 0, prism: 0, crown: 0 } } };
     },
   },
+  {
+    // Signature skills: none found yet (the sanitiser fills the empty state), and visual quality
+    // starts at full spectacle (the sanitiser's default).
+    from: 14,
+    to: 15,
+    migrate: (raw) => ({ ...raw, version: 15 }),
+  },
 ];
 
 export function runMigrations(raw: Record<string, unknown>, targetVersion: number): { raw: Record<string, unknown>; migrated: boolean } {

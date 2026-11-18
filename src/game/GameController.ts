@@ -12,6 +12,7 @@ import { applyXp } from "./progression/xp";
 import { upgradeStat as doUpgradeStat, type UpgradeAttempt } from "./progression/upgrades";
 import { canUnlockSkill, unlockSkill as doUnlockSkill } from "./progression/skills";
 import { SKILLS } from "./data/skills";
+import type { EvolutionId, SignatureId } from "./data/signatures";
 import { APEX_NAME, anyApexReady, apexDoor, apexEffectText, apexOpen, apexRanks, apexVisible, buyApexRank } from "./progression/apex";
 import { APEX_MAX, APEX_SKILLS, type ApexSkillId } from "./data/apex";
 import { anyAbilityRankReady, rankAbility as doRankAbility } from "./progression/abilityRanks";
@@ -99,6 +100,8 @@ export type Modal =
   | { kind: "power" }
   | { kind: "boss_intro"; defId: string }
   | { kind: "technique"; id: AbilityId }
+  /** A signature skill found: its reveal (the full rite for legendary and mythic, a short one otherwise). */
+  | { kind: "signature_reveal"; id: SignatureId }
   | { kind: "mode_result"; mode: ModeId; title: string; subtitle: string; lines: { label: string; value: string; tone?: "gold" | "jade" | "violet" }[]; success: boolean; record?: boolean; items?: EquipmentItem[]; tyrant?: { claimed: number; newTiers: number[]; score: number } }
   | { kind: "rank_up"; from: number; to: number; rewards: string[] };
 
@@ -127,7 +130,7 @@ export interface UiState {
   /** A boss gate was just reached at this stage (drives the milestone banner). */
   gateFlash: number;
   /** A request for the Skills panel to show this view when it opens (Apex, from the Power sheet or a toast). */
-  skillsView: "apex" | null;
+  skillsView: "apex" | "signatures" | null;
 }
 
 export interface ViewTransform {
@@ -1613,6 +1616,51 @@ export class GameController {
   }
 
   /** The stinger of a bought Apex rank (the renderer cues it with its flourish). */
+  // ---------------------------------------------------------------------
+  // Signature skills (CONTRACT: names and shapes are fixed; the simulation side fills the bodies,
+  // the renderer side fills preview). Each returns whether it took.
+  // ---------------------------------------------------------------------
+
+  /** Equip a found signature skill in a slot (moving it if it sits in another). */
+  equipSignature(id: SignatureId, slot: number): boolean {
+    void id;
+    void slot;
+    return false;
+  }
+
+  /** Empty a signature slot. */
+  unequipSignature(slot: number): boolean {
+    void slot;
+    return false;
+  }
+
+  /** Buy the next rank of a signature skill with skill points. */
+  buySignatureRank(id: SignatureId): boolean {
+    void id;
+    return false;
+  }
+
+  /** Choose (or change) a signature skill's evolution. */
+  chooseEvolution(id: SignatureId, evo: EvolutionId): boolean {
+    void id;
+    void evo;
+    return false;
+  }
+
+  /**
+   * Play a signature skill's sequence on the battlefield as a preview: the same animation as the
+   * real cast, on stand-in figures, dealing nothing and touching nothing in the fight.
+   */
+  previewSignature(id: SignatureId, evo: EvolutionId | null = null): boolean {
+    const r = this.renderer as unknown as { previewSignature?: (id: SignatureId, evo: EvolutionId | null) => boolean } | null;
+    return r?.previewSignature?.(id, evo) ?? false;
+  }
+
+  /** The player has seen a signature skill's reveal (the next one may show). */
+  signatureRevealed(id: SignatureId): void {
+    void id;
+  }
+
   apexCue(kind: "rank" | "max", _skill: string, rank: number): void {
     void _skill;
     this.audio.playCue(this.cues.apexRank(kind === "max", rank));

@@ -9,6 +9,8 @@ import { ownedSpecies } from "../summons/extraction";
 import { slotForm } from "./techniques";
 import { activeSynergies, synergyTotals, type SynergyDef } from "../data/synergies";
 import { noApex, type ApexRanks } from "../data/apex";
+import type { SignatureLoadout } from "../data/signatures";
+import { signatureLoadout } from "./signatures";
 
 export interface DeployedSummonLoadout {
   instanceId: string;
@@ -39,6 +41,8 @@ export interface PlayerLoadout {
   slots: Partial<Record<AbilityId, AbilityId>>;
   /** Apex ranks (all zero without Apex: the world then fights exactly as before). */
   apex: ApexRanks;
+  /** Signature skills equipped (none: the world fights exactly as before). */
+  signatures: SignatureLoadout;
 }
 
 /** The deployed shadows that actually take the field (never more than the army's slots). */
@@ -77,6 +81,7 @@ export function buildLoadout(profile: Profile): PlayerLoadout {
     bestStage: profile.progress.bestStage,
     abilityRanks: { ...profile.player.abilityRanks },
     apex: { ...noApex(), ...profile.player.apex },
+    signatures: signatureLoadout(profile),
   };
 }
 

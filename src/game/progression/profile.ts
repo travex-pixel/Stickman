@@ -1,6 +1,7 @@
 import type { AbilityId, EquipSlot, Rarity, StatKey, SummonCommand, UpgradeableStat, WeaponPath } from "../data/ids";
 import type { GearEffectId } from "../data/gearEffects";
 import { noApex, type ApexRanks } from "../data/apex";
+import { emptySignatureState, type SignatureState, type VisualQuality } from "../data/signatures";
 
 export interface EquipmentItem {
   uid: string;
@@ -74,6 +75,8 @@ export interface Profile {
     artForms: Partial<Record<AbilityId, AbilityId>>;
     /** Apex ranks bought with skill points (see data/apex.ts). */
     apex: ApexRanks;
+    /** Signature skills found, equipped, ranked, evolved and mastered (see data/signatures.ts). */
+    signatures: SignatureState;
   };
   equipment: {
     equipped: Partial<Record<EquipSlot, string>>;
@@ -132,10 +135,10 @@ export interface Profile {
     vaultBest: number;
   };
   tutorial: { completed: string[]; finished: boolean };
-  settings: { music: number; sfx: number; reducedEffects: boolean; diagnostics: boolean; battleSpeed: 1 | 2; autoAdvance: boolean; /** Short reveals: every BIND plays its short form (the very first excepted). */ quickReveals: boolean; /** Keep the screen awake while the game is on screen. */ keepAwake: boolean };
+  settings: { music: number; sfx: number; reducedEffects: boolean; diagnostics: boolean; battleSpeed: 1 | 2; autoAdvance: boolean; /** Short reveals: every BIND plays its short form (the very first excepted). */ quickReveals: boolean; /** Keep the screen awake while the game is on screen. */ keepAwake: boolean; /** How much spectacle the renderer draws (never changes the fight). */ visualQuality: VisualQuality };
 }
 
-export const PROFILE_VERSION = 14;
+export const PROFILE_VERSION = 15;
 
 export function createDefaultProfile(now = Date.now()): Profile {
   return {
@@ -159,6 +162,7 @@ export function createDefaultProfile(now = Date.now()): Profile {
       techniques: [],
       artForms: {},
       apex: noApex(),
+      signatures: emptySignatureState(),
     },
     equipment: { equipped: {}, inventory: [] },
     skills: { unlocked: [] },
@@ -186,6 +190,6 @@ export function createDefaultProfile(now = Date.now()): Profile {
     tyrant: { week: "", best: 0, claimed: 0, allTimeBest: 0 },
     modes: { keyDay: "", keys: { vault: 3, rift: 3, crypt: 3, hunt: 3, tyrant: 2 }, endlessBest: 0, vaultBest: 0 },
     tutorial: { completed: [], finished: false },
-    settings: { music: 0.6, sfx: 0.8, reducedEffects: false, diagnostics: false, battleSpeed: 1, autoAdvance: true, quickReveals: false, keepAwake: true },
+    settings: { music: 0.6, sfx: 0.8, reducedEffects: false, diagnostics: false, battleSpeed: 1, autoAdvance: true, quickReveals: false, keepAwake: true, visualQuality: "full" },
   };
 }

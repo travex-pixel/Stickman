@@ -1,6 +1,7 @@
 import type { Vec2 } from "./math";
 import type { AbilityId, Element } from "../data/ids";
 import type { EntityKind, Faction } from "../entities/types";
+import type { EvolutionId, MasteryTier, SignatureBeat, SignatureId, SignatureStatus, SynergyId } from "../data/signatures";
 
 export type GameEvent =
   | { type: "spawn"; id: number; kind: EntityKind; defId: string; pos: Vec2 }
@@ -8,7 +9,7 @@ export type GameEvent =
    * Apex: `echo` marks the main hit of an echo blow (1 Double Strike's, 2 Triple Strike's);
    * `prismatic` a critical hit of the warrior's that turned prismatic (Prismatic Edge, Stormcrown).
    */
-  | { type: "hit"; targetId: number; sourceId: number; amount: number; crit: boolean; pos: Vec2; element: Element; faction: Faction; targetKind: EntityKind; heavy: boolean; echo?: 1 | 2; prismatic?: boolean }
+  | { type: "hit"; targetId: number; sourceId: number; amount: number; crit: boolean; pos: Vec2; element: Element; faction: Faction; targetKind: EntityKind; heavy: boolean; echo?: 1 | 2; prismatic?: boolean; sig?: SignatureId }
   | { type: "heal"; targetId: number; amount: number; pos: Vec2 }
   | { type: "death"; id: number; kind: EntityKind; defId: string; pos: Vec2; killerId: number; elite?: boolean }
   /** `cut`: the Ascendant Fury's sword cut (not a swing of his combo; its strikes stay an ability's). */
@@ -73,7 +74,27 @@ export type GameEvent =
    */
   | { type: "echo_strike"; id: number; targetId: number; index: 1 | 2; pos: Vec2; targetPos: Vec2; facing: 1 | -1; jumped: boolean }
   /** Apex, Stormcrown: the warrior `id`'s bolt struck `targetPos`, then forked to each of `forks` (sent before its hits). */
-  | { type: "storm_bolt"; id: number; targetPos: Vec2; forks: Vec2[] };
+  | { type: "storm_bolt"; id: number; targetPos: Vec2; forks: Vec2[] }
+  /**
+   * Signature skills (data/signatures.ts). A cast begins: everything the renderer needs to stage its
+   * anticipation. `castId` ties its beats, statuses, hits (`hit.sig`) and end together. `center` and
+   * `radius` are where it will land; `targetIds` the foes it means to strike (they may fall first).
+   * `windup` is world seconds until its first impact, `length` until it is over (aftermath included).
+   * `enhanced`: cast while Sovereign Awakening reigns (or, for an ultimate, its crowned form).
+   */
+  | { type: "sig_cast"; castId: number; sig: SignatureId; evo: EvolutionId | null; mastery: MasteryTier; rank: number; casterId: number; origin: Vec2; center: Vec2; radius: number; targetIds: number[]; windup: number; length: number; boss: boolean; enhanced: boolean }
+  /**
+   * One moment of a signature skill's sequence, sent at the world moment it happens (before the hits
+   * it causes). `index` counts repeated beats (clone 1, 2, 3...). `from`/`to` frame its motion (a pass,
+   * a blade, a clone's step); `radius` its reach; `duration` how long the beat itself lasts, if it lasts.
+   */
+  | { type: "sig_beat"; castId: number; sig: SignatureId; beat: SignatureBeat; index: number; from: Vec2; to: Vec2; targetIds: number[]; radius: number; duration: number }
+  /** The cast is over (`interrupted`: the fight ended, the warrior fell, or its target was gone). */
+  | { type: "sig_end"; castId: number; sig: SignatureId; interrupted: boolean }
+  /** A signature status put on (`on`) or taken off a body. */
+  | { type: "sig_status"; targetId: number; status: SignatureStatus; on: boolean; duration: number; pos: Vec2 }
+  /** A combination fired (`first`: the first time this save has seen it). Sent before its hits. */
+  | { type: "sig_synergy"; synergy: SynergyId; castId: number; pos: Vec2; targetIds: number[]; first: boolean };
 
 /** Whether a `cast` event starts a cast (the ultimate's later strikes repeat its event). */
 export function startsCast(e: Extract<GameEvent, { type: "cast" }>): boolean {

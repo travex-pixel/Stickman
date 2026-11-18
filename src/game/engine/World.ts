@@ -1,3 +1,4 @@
+import type { SignatureId } from "../data/signatures";
 import { Rng } from "./rng";
 import { EventQueue, type GameEvent } from "./events";
 import { clamp, dist, type Vec2 } from "./math";
@@ -68,6 +69,8 @@ export interface WorldSnapshot {
   ultimateActive: boolean;
   timeScale: number;
   chain: number;
+  /** Equipped signature skills in slot order (empty without any). */
+  signatures: { id: SignatureId; cooldown: number; cooldownMax: number; casting: boolean }[];
 }
 
 export interface WorldOptions {
@@ -683,6 +686,7 @@ export class World {
       projectiles: this.projectiles.length,
       ultimateActive: this.ultimate.active,
       chain: this.chain,
+      signatures: [],
       timeScale: this.timeScale,
     };
   }
