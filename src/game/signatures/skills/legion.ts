@@ -5,7 +5,7 @@ import { ARENA } from "../../engine/World";
 import { createSummon } from "../../entities/factory";
 import { addStatus } from "../../combat/statuses";
 import { summonDef } from "../../data/summons";
-import { LEGION, SHADOW_MARK, SIGNATURES, signatureRankMult } from "../../data/signatures";
+import { LEGION, SHADOW_MARK, SIGNATURES, SIG_PATIENCE, signatureRankMult } from "../../data/signatures";
 import type { Cast, SignatureRuntime } from "../runtime";
 import type { SkillImpl } from "./common";
 
@@ -32,7 +32,7 @@ export const legion: SkillImpl = {
     const foes = rt.foes();
     if (foes.length === 0) return null;
     const boss = foes.some((f) => f.kind === "boss");
-    if (foes.length < 2 && !boss) return null;
+    if (foes.length < 2 && !boss && !rt.patient("legion_awakening", SIG_PATIENCE)) return null;
     const g = rt.densest(150, foes);
     return { center: g?.center ?? { ...rt.world.player.pos }, radius: SIGNATURES.legion_awakening.radius, targets: foes, boss, score: 1 + foes.length * 0.5 };
   },

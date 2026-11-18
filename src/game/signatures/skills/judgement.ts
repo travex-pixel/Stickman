@@ -1,7 +1,7 @@
 import type { Combatant } from "../../entities/types";
 import type { Vec2 } from "../../engine/math";
 import { ARENA } from "../../engine/World";
-import { JUDGEMENT, SIGNATURES } from "../../data/signatures";
+import { JUDGEMENT, SIGNATURES, SIG_PATIENCE_JUDGEMENT, SIG_PATIENT_JUDGEMENT_WORTH } from "../../data/signatures";
 import type { Cast, SignatureRuntime } from "../runtime";
 import { hpFrac, type SkillImpl } from "./common";
 
@@ -26,12 +26,13 @@ export const judgement: SkillImpl = {
     if (foes.length === 0) return null;
     const boss = foes.find((f) => f.kind === "boss") ?? null;
     if (boss) return { center: { ...boss.pos }, radius: def.radius, targets: rt.within(boss.pos, def.radius, foes), boss: true, score: 4 };
-    if (e.evolution === "absolute_judgement" && foes.length < 3) return null;
+    const patient = rt.patient("kings_judgement", SIG_PATIENCE_JUDGEMENT);
+    if (e.evolution === "absolute_judgement" && foes.length < 3 && !patient) return null;
     const g = rt.densest(def.radius, foes);
     if (!g) return null;
-    // A lone foe (or two) nearly dead is not worth a judgement.
+    // A lone foe (or two) nearly dead is not worth a judgement; after a wait a fresh one is.
     const worth = g.members.reduce((a, m) => a + hpFrac(m) * (m.enemy?.elite ? 3 : 1), 0);
-    if (g.members.length < 3 && worth < 1.2) return null;
+    if (g.members.length < 3 && worth < (patient ? SIG_PATIENT_JUDGEMENT_WORTH : 1.2)) return null;
     return { center: g.center, radius: def.radius, targets: g.members, boss: false, score: g.members.length };
   },
   begin(rt, c, plan) {

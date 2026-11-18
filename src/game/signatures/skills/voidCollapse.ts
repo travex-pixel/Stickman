@@ -1,6 +1,6 @@
 import type { Combatant } from "../../entities/types";
 import type { Vec2 } from "../../engine/math";
-import { SIGNATURES, VOID, VOID_MARK } from "../../data/signatures";
+import { SIGNATURES, SIG_PATIENCE, VOID, VOID_MARK } from "../../data/signatures";
 import type { Cast, SignatureRuntime } from "../runtime";
 import { anchored, type Plan, type SkillImpl } from "./common";
 
@@ -24,7 +24,7 @@ export const voidCollapse: SkillImpl = {
     const g = rt.densest(def.radius, foes);
     if (!g) return null;
     const boss = g.members.some((e) => e.kind === "boss");
-    if (g.members.length < 2 && !boss) return null;
+    if (g.members.length < 2 && !boss && !rt.patient("void_collapse", SIG_PATIENCE)) return null;
     return { center: g.center, radius: def.radius, targets: g.members, boss, score: g.members.length + (boss ? 1 : 0) };
   },
   begin(rt, c, plan) {

@@ -1,5 +1,5 @@
 import type { Combatant } from "../../entities/types";
-import { SHADOW_MARK, SIGNATURES, STORM } from "../../data/signatures";
+import { SHADOW_MARK, SIGNATURES, SIG_PATIENCE, STORM } from "../../data/signatures";
 import { orbitPoint } from "../geometry";
 import type { Cast, SignatureRuntime } from "../runtime";
 import { byWounded, executeFoe, hpFrac, type SkillImpl } from "./common";
@@ -23,7 +23,7 @@ export const storm: SkillImpl = {
     const near = rt.within(rt.world.player.pos, def.radius);
     if (near.length === 0) return null;
     const boss = near.some((f) => f.kind === "boss");
-    if (near.length < 2 && !boss) return null;
+    if (near.length < 2 && !boss && !rt.patient("shadow_storm", SIG_PATIENCE)) return null;
     const g = rt.densest(100, near);
     return { center: g?.center ?? { ...near[0]!.pos }, radius: def.radius, targets: near, boss, score: Math.min(6, near.length) * 0.7 };
   },

@@ -1,5 +1,5 @@
 import { addStatus } from "../../combat/statuses";
-import { SIGNATURES, SOVEREIGN } from "../../data/signatures";
+import { SIGNATURES, SIG_PATIENCE_CROWN, SOVEREIGN } from "../../data/signatures";
 import type { SkillImpl } from "./common";
 
 /**
@@ -18,7 +18,8 @@ export const sovereign: SkillImpl = {
     if (rt.loadout.equipped.length === 0) return null;
     const foes = rt.foes();
     const boss = foes.some((f) => f.kind === "boss");
-    if (!boss && foes.length < 4) return null;
+    if (foes.length === 0) return null;
+    if (!boss && foes.length < 4 && !rt.patient("sovereign_awakening", SIG_PATIENCE_CROWN)) return null;
     return { center: { ...rt.world.player.pos }, radius: SIGNATURES.sovereign_awakening.radius, targets: foes, boss, score: 20 };
   },
   begin(rt, c) {

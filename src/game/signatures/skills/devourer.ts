@@ -2,7 +2,7 @@ import type { Combatant } from "../../entities/types";
 import type { Vec2 } from "../../engine/math";
 import { ARENA } from "../../engine/World";
 import { hasStatus } from "../../combat/statuses";
-import { DEVOURER, SIGNATURES } from "../../data/signatures";
+import { DEVOURER, SIGNATURES, SIG_PATIENCE } from "../../data/signatures";
 import { curvePoint, devourerCurve } from "../geometry";
 import { clampToField, type Cast, type SignatureRuntime } from "../runtime";
 import type { SkillImpl } from "./common";
@@ -32,7 +32,7 @@ export const devourer: SkillImpl = {
     const feast = feastPoint(rt);
     const g = rt.densest(120, foes);
     if (!g) return null;
-    if (foes.length < 2 && !boss) return null;
+    if (foes.length < 2 && !boss && !rt.patient("abyssal_devourer", SIG_PATIENCE)) return null;
     const center = feast?.pos ?? (boss && !boss.dead ? { ...boss.pos } : g.center);
     return { center: clampToField(center), radius: SIGNATURES.abyssal_devourer.radius, targets: foes, boss: !!boss, score: foes.length + (feast ? 2 : 0) };
   },

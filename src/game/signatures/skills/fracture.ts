@@ -1,7 +1,7 @@
 import type { Combatant } from "../../entities/types";
 import type { Vec2 } from "../../engine/math";
 import { hasStatus } from "../../combat/statuses";
-import { FRACTURE, SIGNATURES, VOID, VOID_MARK } from "../../data/signatures";
+import { FRACTURE, SIGNATURES, SIG_PATIENCE, VOID, VOID_MARK } from "../../data/signatures";
 import type { Cast, SignatureRuntime } from "../runtime";
 import { anchored, executeFoe, hpFrac, rawStrike, type SkillImpl } from "./common";
 
@@ -28,7 +28,7 @@ export const fracture: SkillImpl = {
     const boss = foes.find((f) => f.kind === "boss") ?? null;
     if (boss) return { center: { ...boss.pos }, radius: def.radius, targets: rt.within(boss.pos, def.radius, foes), boss: true, score: 2 + rt.within(boss.pos, def.radius, foes).length * 0.5 };
     const g = rt.densest(def.radius * 0.6, foes);
-    if (!g || g.members.length < 2) return null;
+    if (!g || (g.members.length < 2 && !rt.patient("time_fracture", SIG_PATIENCE))) return null;
     const held = rt.within(g.center, def.radius, foes);
     return { center: g.center, radius: def.radius, targets: held, boss: false, score: held.length * 0.9 };
   },

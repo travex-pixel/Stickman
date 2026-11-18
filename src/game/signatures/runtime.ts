@@ -1,5 +1,6 @@
 import type { World } from "../engine/World";
 import { ARENA, FURY_STRIKES } from "../engine/World";
+import { ULTIMATE_ENERGY_COST } from "../data/abilities";
 import type { Vec2 } from "../engine/math";
 import type { Element } from "../data/ids";
 import type { Combatant } from "../entities/types";
@@ -8,6 +9,7 @@ import { isHidden } from "../combat/targeting";
 import {
   SIGNATURES,
   SIG_CINEMATIC_GAP,
+  SIG_FURY_PATIENCE,
   SIG_GLOBAL_LOCKOUT,
   SIG_OPENING_SHARE,
   SHADOW_MARK,
@@ -86,6 +88,8 @@ export class SignatureRuntime {
   private cooldowns = new Map<SignatureId, number>();
   /** World time each skill last came off cooldown (an exploiter's patience counts from it). */
   readyAt = new Map<SignatureId, number>();
+  /** World time the Fury was last charged and waiting (-1 while it is not). */
+  private furyChargedAt = -1;
   private nextCastId = 1;
   /** Raw seconds until any signature skill may begin. */
   lockout = 0;
@@ -259,6 +263,9 @@ export class SignatureRuntime {
       if (next <= 0) this.readyAt.set(e.id, w.time);
     }
     this.lockout = Math.max(0, this.lockout - rawDt);
+    if (w.energy >= ULTIMATE_ENERGY_COST && !w.ultimate.active) {
+      if (this.furyChargedAt < 0) this.furyChargedAt = w.time;
+    } else this.furyChargedAt = -1;
     const over = w.phase === "victory" || w.phase === "defeat" || w.player.dead;
     for (let i = 0; i < this.casts.length; i++) {
       const c = this.casts[i]!;
@@ -297,6 +304,30 @@ export class SignatureRuntime {
 
   ready(id: SignatureId): boolean {
     return this.cooldown(id) <= 0;
+  }
+
+  /**
+   * Whether AUTO would cast a charged Fury now: on three foes or a boss, or, after SIG_FURY_PATIENCE
+   * seconds charged, on any foe (World.autoCast asks this only with signature skills equipped).
+   */
+  furyDue(): boolean {
+    const w = this.world;
+    if (!w.loadout.autoCast || !w.loadout.ultimateUnlocked || w.energy < ULTIMATE_ENERGY_COST || w.ultimate.active) return false;
+    const n = w.enemies().length;
+    return n >= 3 || !!w.boss || (n >= 1 && this.furyPatient());
+  }
+
+  /**
+   * The Fury has been charged (and not cast) at least SIG_FURY_PATIENCE seconds, with a skill in a
+   * slot (the crown found but nothing equipped changes nothing).
+   */
+  furyPatient(): boolean {
+    return this.loadout.equipped.length > 0 && this.furyChargedAt >= 0 && this.world.time - this.furyChargedAt >= SIG_FURY_PATIENCE;
+  }
+
+  /** Whether a skill has been ready at least `seconds` (patience: it then takes any live foe). */
+  patient(id: SignatureId, seconds: number): boolean {
+    return this.ready(id) && this.world.time - (this.readyAt.get(id) ?? 0) >= seconds;
   }
 
   /** Whether a cinematic may begin now (at most one every few seconds). */

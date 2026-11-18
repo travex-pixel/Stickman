@@ -1,6 +1,5 @@
 import { SIGNATURES, SIG_EXPLOIT_WAIT, type SignatureId, type SignatureLoadoutEntry } from "../data/signatures";
 import { SKILL_IMPLS, type Plan } from "./skills/index";
-import { ULTIMATE_ENERGY_COST } from "../data/abilities";
 import type { SignatureRuntime } from "./runtime";
 
 /**
@@ -49,9 +48,9 @@ export function chooseCast(rt: SignatureRuntime): { entry: SignatureLoadoutEntry
   let best: { entry: SignatureLoadoutEntry; plan: Plan; score: number } | null = null;
   const entries = rt.entries();
   // The Ascendant Fury goes first: with it charged and AUTO about to cast it, nothing that would
-  // hold the warrior begins (a skill that does not hold him still may).
-  const w = rt.world;
-  const furyDue = w.loadout.autoCast && w.loadout.ultimateUnlocked && w.energy >= ULTIMATE_ENERGY_COST;
+  // hold the warrior begins (a skill that does not hold him still may). A charged Fury that AUTO
+  // is still keeping for more foes does not hold the skills back.
+  const furyDue = rt.furyDue();
   for (const entry of entries) {
     if (!rt.ready(entry.id)) continue;
     if (furyDue && SIGNATURES[entry.id].castTime > 0) continue;

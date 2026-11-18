@@ -1096,7 +1096,8 @@ export class World {
         return this.dodge(false);
       }
     }
-    if (this.loadout.ultimateUnlocked && this.energy >= ULTIMATE_ENERGY_COST && (enemies.length >= 3 || this.boss)) {
+    // With signature skills equipped, a Fury charged a while is cast on fewer foes (SIG_FURY_PATIENCE).
+    if (this.loadout.ultimateUnlocked && this.energy >= ULTIMATE_ENERGY_COST && (enemies.length >= 3 || this.boss || (this.sig && this.sig.furyPatient()))) {
       if (this.castAbility(ULTIMATE_ID)) return true;
     }
     const soul = this.slot("soul_burst");

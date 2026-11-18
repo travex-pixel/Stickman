@@ -440,6 +440,22 @@ export const SIG_GLOBAL_LOCKOUT = 1.25;
 export const SIG_CINEMATIC_GAP = 6;
 /** How long an exploiter may hold for marks when a setup skill is about to be ready. */
 export const SIG_EXPLOIT_WAIT = 2.5;
+/**
+ * Patience: a skill ready this many seconds takes any live foe instead of waiting for a group (a
+ * strong warrior farming kills foes one by one as they come, and a skill sitting ready for ages
+ * is worse than one spent on a single foe). King's Judgement waits longer and still never falls
+ * on a lone, nearly dead foe; the Sovereign waits longest.
+ */
+export const SIG_PATIENCE = 4;
+export const SIG_PATIENCE_JUDGEMENT = 6;
+export const SIG_PATIENCE_CROWN = 12;
+/**
+ * With a signature skill equipped, AUTO casts a charged Ascendant Fury on any foe once it has
+ * waited this long for three (the skills thin the field, so three at once come less often).
+ */
+export const SIG_FURY_PATIENCE = 16;
+/** A patient King's Judgement takes a lone foe with at least this much health left (an elite counts triple). */
+export const SIG_PATIENT_JUDGEMENT_WORTH = 0.6;
 /** A skill's first cast in a fight comes after this share of its cooldown (slot order staggers them). */
 export const SIG_OPENING_SHARE = 0.3;
 
