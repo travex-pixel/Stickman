@@ -226,6 +226,39 @@ function play(dir: SignatureDirector, s: Timed[], seconds = 16): void {
 }
 
 describe("the signature director", () => {
+  it("frames a cast aimed away from the warrior: the camera's box takes in a far singularity and what it draws above it", () => {
+    const { host } = fakeHost();
+    const dir = new SignatureDirector(host, false);
+    dir.governor.enabled = false;
+    const far: SigActor[] = [
+      { id: 2, pos: { x: 585, y: 40 }, kind: "enemy", hp: 1 },
+      { id: 3, pos: { x: 592, y: 70 }, kind: "enemy", hp: 1 },
+    ];
+    const d = new SigDriver((ev) => dir.handle(ev));
+    d.play(buildScript({ castId: 9, sig: "void_collapse", evo: null, mastery: 1, caster: CASTER, foes: far, hits: false }));
+    const box = { minX: 140, minY: 150, maxX: 230, maxY: 290 };
+    let widest = { ...box };
+    for (let t = 0; t < 1; t += 1 / 30) {
+      d.update(1 / 30);
+      dir.update(1 / 30, 1 / 30);
+      const b = { ...box };
+      dir.frameInto(b);
+      if (b.maxX > widest.maxX) widest = b;
+    }
+    // The singularity forms over the far pair (x about 588, the projection is 1:1) and high above them.
+    expect(widest.maxX).toBeGreaterThan(560);
+    expect(widest.minY).toBeLessThan(200 + 40 - 100);
+    // Once it is over, the warrior's framing is his own again.
+    for (let t = 0; t < 4; t += 1 / 30) {
+      d.update(1 / 30);
+      dir.update(1 / 30, 1 / 30);
+    }
+    const after = { ...box };
+    dir.frameInto(after);
+    expect(after).toEqual(box);
+    dir.destroy();
+  });
+
   it("stages every skill and evolution and gives back everything it borrowed", () => {
     const { host } = fakeHost();
     const dir = new SignatureDirector(host, true);

@@ -140,6 +140,14 @@ export class VoidStage extends Stage {
     void e;
   }
 
+  override focus(out: { x: number; y: number; top: number }): boolean {
+    if (this.phase === 0 || this.phase >= 4) return false;
+    out.x = this.gx;
+    out.y = this.gy;
+    out.top = this.cy - this.coreR * 2.4;
+    return true;
+  }
+
   override onDeath(id: number, x: number, y: number): void {
     if (this.evo !== "consumption" || this.phase >= 4) return;
     if (!this.cast.targetIds.includes(id) && !this.caught.includes(id)) return;

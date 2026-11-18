@@ -22,6 +22,10 @@ import { glowRingTex, holeTex, starTex } from "../textures";
  * ring turning the other way; Grandmaster gilds the hands.
  */
 export class TimeStage extends Stage {
+  override focus(out: { x: number; y: number; top: number }): boolean {
+    return !this.ended && this.centreFocus(out, 90);
+  }
+
   private gx = 0;
   private gy = 0;
   private cx = 0;

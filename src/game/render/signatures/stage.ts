@@ -122,6 +122,27 @@ export abstract class Stage {
   /** Draw this frame's geometry into the kit's graphics (called after `update`). */
   paint(): void {}
 
+  /**
+   * Where the camera must look while this cast plays (base px: its ground point and the top of what
+   * it draws above it), or false when the warrior's own framing already holds it. Area skills aimed
+   * at a knot of foes far from the warrior (a singularity, a clock, a judgement, a volley) would
+   * otherwise play at, or past, the edge of a portrait screen.
+   */
+  focus(out: { x: number; y: number; top: number }): boolean {
+    void out;
+    return false;
+  }
+
+  /** The default focus: the cast's centre on the ground and `lift` world-scaled px above it. */
+  protected centreFocus(out: { x: number; y: number; top: number }, lift: number): boolean {
+    const pr = this.host.proj;
+    const c = this.cast.center;
+    out.x = pr.sx(c.x);
+    out.y = pr.sy(c.y);
+    out.top = out.y - lift * pr.fs(c.y);
+    return true;
+  }
+
   get finished(): boolean {
     return this.ended && this.sinceEnd >= this.tail;
   }

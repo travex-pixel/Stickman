@@ -563,6 +563,23 @@ export class SignatureDirector {
     }
   }
 
+  private readonly focusOut = { x: 0, y: 0, top: 0 };
+
+  /**
+   * Widen the camera's box (base px) to take in every staged cast that is aimed away from the
+   * warrior (its focus), so nothing a skill draws plays at or past the edge of a portrait screen.
+   */
+  frameInto(box: { minX: number; minY: number; maxX: number; maxY: number }): void {
+    const f = this.focusOut;
+    for (const s of this.stages) {
+      if (s.ended || s.compact || !s.focus(f)) continue;
+      if (f.x < box.minX) box.minX = f.x;
+      if (f.x > box.maxX) box.maxX = f.x;
+      if (f.y > box.maxY) box.maxY = f.y;
+      if (f.top < box.minY) box.minY = f.top;
+    }
+  }
+
   /** Signature effects on screen this frame (casts, marks, the kit's own). */
   get busy(): boolean {
     return this.stages.length > 0 || this.marks.size > 0 || this.kit.busy;

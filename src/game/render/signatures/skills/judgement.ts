@@ -117,6 +117,10 @@ export function clearJudgementCache(): void {
 }
 
 export class JudgementStage extends Stage {
+  override focus(out: { x: number; y: number; top: number }): boolean {
+    return !this.ended && this.centreFocus(out, 150);
+  }
+
   private gx = 0;
   private gy = 0;
   private r = 100;

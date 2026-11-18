@@ -851,6 +851,8 @@ export class BattleRenderer implements ImpactHost {
       if (ey > b.maxY) b.maxY = ey;
       if (ey - et < b.minY) b.minY = ey - et;
     }
+    // A signature cast aimed away from him (a singularity over a far knot of foes) is framed too.
+    this.sig.frameInto(b);
     const pad = FRAME_PAD * u;
     b.minX -= pad;
     b.maxX += pad;

@@ -42,6 +42,10 @@ interface Blade {
 }
 
 export class StormStage extends Stage {
+  override focus(out: { x: number; y: number; top: number }): boolean {
+    return !this.ended && this.centreFocus(out, 80);
+  }
+
   private readonly blades: Blade[] = [];
   private gatherT = -1;
   private gatherD = 0.8;
