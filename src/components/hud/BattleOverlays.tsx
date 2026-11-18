@@ -23,6 +23,7 @@ import type { QuestGoal } from "@/game/progression/quests";
 import { cn } from "@/lib/cn";
 import { fmt } from "@/lib/format";
 import { isBattlefieldModal } from "@/components/sheets/kinds";
+import type { Toast } from "@/game/GameController";
 import { TIER_LABEL } from "@/game/progression/readiness";
 import { useStore } from "@/lib/store";
 import { useSheetRise } from "@/hooks/useSheetLift";
@@ -228,7 +229,7 @@ function ArmyDisc({ defId, hp, alive }: { defId: string; hp: number; alive: bool
 /** One glyph per role, from the interface's own stroke set. */
 const ROLE_GLYPH: Partial<Record<SummonRole, IconName>> = { vanguard: "shield", reaper: "sword", ranger: "arc", arcanist: "nova", sentinel: "guard", caller: "summons", support: "regen", sovereign: "star" };
 
-const TOAST_DOT: Record<string, string> = { info: "bg-t2", gold: "bg-gold", essence: "bg-jade", warn: "bg-crimson", level: "bg-gold" };
+const TOAST_DOT: Record<string, string> = { info: "bg-t2", gold: "bg-gold", essence: "bg-jade", warn: "bg-crimson", level: "bg-gold", synergy: "bg-gold" };
 
 /**
  * The one line of news, on glass under the top controls; the tone is a 6px dot, not a coloured
@@ -239,24 +240,67 @@ function Toasts() {
   return (
     <div className="flex flex-col items-center gap-2 min-w-0" aria-live="polite">
       <AnimatePresence initial={false}>
-        {toasts.map((t) => (
-          <motion.div
-            key={t.id}
-            initial={{ opacity: 0, y: -4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2, ease: EASE_OUT }}
-            className="glass flex max-w-full items-center gap-2 rounded-[16px] px-3.5 py-1.5"
-            data-testid="event-pill"
-            data-count={t.count ?? 1}
-          >
-            <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", TOAST_DOT[t.tone] ?? "bg-t2")} aria-hidden="true" />
-            <span className="t-label text-t1 line-clamp-2 text-balance">{t.text}</span>
-            {(t.count ?? 1) > 1 && <span className="t-label tnum shrink-0 text-t2">×{t.count}</span>}
-          </motion.div>
-        ))}
+        {toasts.map((t) =>
+          isCombination(t) ? (
+            <CombinationBanner key={t.id} text={t.text} />
+          ) : (
+            <motion.div
+              key={t.id}
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2, ease: EASE_OUT }}
+              className="glass flex max-w-full items-center gap-2 rounded-[16px] px-3.5 py-1.5"
+              data-testid="event-pill"
+              data-count={t.count ?? 1}
+            >
+              <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", TOAST_DOT[t.tone] ?? "bg-t2")} aria-hidden="true" />
+              <span className="t-label text-t1 line-clamp-2 text-balance">{t.text}</span>
+              {(t.count ?? 1) > 1 && <span className="t-label tnum shrink-0 text-t2">×{t.count}</span>}
+            </motion.div>
+          ),
+        )}
       </AnimatePresence>
     </div>
+  );
+}
+
+const COMBINATION_PREFIX = "Combination discovered";
+
+/** A first-time signature combination: the `synergy` tone, or a line raised in its words. */
+function isCombination(t: Toast): boolean {
+  return t.tone === "synergy" || t.text.startsWith(COMBINATION_PREFIX);
+}
+
+/**
+ * "Combination discovered": the one line of news, gilded. The eyebrow says what happened and the
+ * combination's name is set in serif; a hairline gilt rim and the sigil mark it as a signature
+ * moment, not a modal. It lives as long as any line of news.
+ */
+function CombinationBanner({ text }: { text: string }) {
+  const rest = text.startsWith(COMBINATION_PREFIX) ? text.slice(COMBINATION_PREFIX.length).replace(/^[:\s·-]+/, "") : text;
+  const [name, ...more] = rest.split(/\.\s+/);
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -4, scale: 0.97 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.32, ease: EASE_OUT }}
+      className="glass relative flex max-w-full items-center gap-3 rounded-[16px] py-2 pl-3 pr-4"
+      data-testid="event-pill"
+      data-combination="true"
+      role="status"
+    >
+      <span className="pointer-events-none absolute inset-0 rounded-[16px] shadow-[inset_0_0_0_1px_rgba(218,184,108,0.42)]" aria-hidden="true" />
+      <Icon name="sigil" size={18} className="shrink-0 text-gold" />
+      <span className="flex min-w-0 flex-col text-left">
+        <span className="t-eyebrow text-gold">{COMBINATION_PREFIX}</span>
+        <span className="font-serif text-[19px] leading-[22px] text-t1 truncate" data-testid="combination-name">
+          {name || rest}
+        </span>
+        {more.length > 0 && <span className="t-caption text-t2 line-clamp-2">{more.join(". ")}</span>}
+      </span>
+    </motion.div>
   );
 }
 

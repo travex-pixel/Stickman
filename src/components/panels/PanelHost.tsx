@@ -5,7 +5,7 @@ import { animate, motion, useMotionValue } from "motion/react";
 import { useController, useUi } from "@/hooks/useGame";
 import { useReducedEffects } from "@/hooks/useReducedEffects";
 import { useSheetLift } from "@/hooks/useSheetLift";
-import { DetentContext, RaiseContext, type Detent } from "@/hooks/usePanelDetent";
+import { DetentContext, LowerContext, RaiseContext, type Detent } from "@/hooks/usePanelDetent";
 import type { PanelId } from "@/game/data/ids";
 
 const HeroPanel = lazy(() => import("./HeroPanel"));
@@ -62,6 +62,16 @@ export function PanelHost() {
   const [, setVersion] = useState(0);
   const [raised, setRaised] = useState(false);
   const raise = useCallback((on: boolean) => setRaised(on), []);
+  // A preview on the battlefield lowers the panel for its length, then lets it rise again.
+  const [lowered, setLowered] = useState(false);
+  const lowerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lower = useCallback((ms: number) => {
+    if (lowerTimer.current) clearTimeout(lowerTimer.current);
+    lowerTimer.current = null;
+    setLowered(ms > 0);
+    if (ms > 0) lowerTimer.current = setTimeout(() => setLowered(false), ms);
+  }, []);
+  useEffect(() => () => void (lowerTimer.current && clearTimeout(lowerTimer.current)), []);
   const [laidOut, setLaidOut] = useState(0);
   const laidRef = useRef(0);
 
@@ -75,7 +85,7 @@ export function PanelHost() {
   }, []);
 
   const canGrow = CAN_GROW[panel] && extraMax > 0;
-  const detent: Detent = canGrow ? (raised ? "tall" : (chosen[panel] ?? DEFAULT_DETENT[panel])) : "base";
+  const detent: Detent = canGrow && !lowered ? (raised ? "tall" : (chosen[panel] ?? DEFAULT_DETENT[panel])) : "base";
   const extra = detent === "tall" ? extraMax : 0;
 
   // The overlays riding the top edge follow the visible edge: laid-out extra minus the slide.
@@ -116,6 +126,7 @@ export function PanelHost() {
   useEffect(() => () => c.renderer?.setViewportInsets({ bottom: 0 }), [c]);
 
   const choose = (d: Detent) => {
+    if (lowered) lower(0);
     if (!canGrow || d === detent) return;
     chosen[panel] = d;
     setRaised(false);
@@ -132,6 +143,7 @@ export function PanelHost() {
     >
       <span className="gilt-edge" aria-hidden="true" />
       {canGrow && <Grabber detent={detent} onChoose={choose} />}
+      <LowerContext.Provider value={lower}>
       <RaiseContext.Provider value={raise}>
         <DetentContext.Provider value={detent}>
           <motion.div key={panel} className="absolute inset-0 flex flex-col min-h-0" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.12, ease: [0.2, 0, 0, 1] }} data-panel={panel}>
@@ -141,6 +153,7 @@ export function PanelHost() {
           </motion.div>
         </DetentContext.Provider>
       </RaiseContext.Provider>
+      </LowerContext.Provider>
     </motion.section>
   );
 }

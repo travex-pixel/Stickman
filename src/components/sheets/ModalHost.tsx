@@ -16,6 +16,7 @@ import { PerkChoiceSheet } from "./PerkChoiceSheet";
 import { PowerSheet } from "./PowerSheet";
 import { RankUpMoment } from "./RankUpMoment";
 import { SettingsSheet } from "./SettingsSheet";
+import { SignatureReveal } from "./SignatureReveal";
 import { SummonReveal } from "./SummonReveal";
 import { TechniqueMoment } from "./TechniqueMoment";
 import { TyrantSheet } from "./TyrantSheet";
@@ -94,8 +95,8 @@ function Route({ modal, open }: { modal: Modal; open: boolean }) {
       // The entrance is staged on the battlefield (banner and canvas); there is no sheet.
       return null;
     case "signature_reveal":
-      // CONTRACT STUB: the menus side replaces this with the signature reveal.
-      return null;
+      // Keyed by the skill: the next reveal in the queue starts its own sequence.
+      return <SignatureReveal key={modal.id} modal={modal} open={open} />;
     default: {
       const never: never = modal;
       return never;

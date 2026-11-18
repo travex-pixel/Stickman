@@ -11,6 +11,7 @@ import type { AbilityId } from "@/game/data/ids";
 import { cn } from "@/lib/cn";
 import { ABILITY_ICON } from "@/components/ui/abilityIcons";
 import { slotForm } from "@/game/progression/techniques";
+import { SIGNATURES, type SignatureId } from "@/game/data/signatures";
 
 /** Unlocks shown in the order they arrive, so the bar fills left to right as the warrior grows. */
 const SLOTS = [...ABILITY_SLOTS].sort((a, b) => ABILITIES[a].unlockLevel - ABILITIES[b].unlockLevel);
@@ -39,7 +40,59 @@ export function AbilityBar() {
         ))}
         <UltimateDisc level={level} />
       </div>
+      <SignatureGems />
     </motion.div>
+  );
+}
+
+/**
+ * The equipped signature skills' cooldowns, as a row of small gems in the seam between the
+ * abilities and the panel: each fills from the foot as its skill recharges, solid in its rarity's
+ * colour when ready, gold while it is being cast. The crown is the larger gem at the left. They
+ * sit in space nothing else uses (the 12px under the discs), so they never crowd the bar or the
+ * quest line at 320px, and they ride the panel's edge with the bar. Looking, not touching: the
+ * skills cast themselves, so the gems are not buttons.
+ */
+function SignatureGems() {
+  // A string key in 5% steps: the row re-renders when a gem visibly changes, not every frame.
+  const key = useHud((s) =>
+    (s?.signatures ?? [])
+      .map((g) => `${g.id}:${g.cooldownMax > 0 ? Math.round((1 - Math.min(1, Math.max(0, g.cooldown) / g.cooldownMax)) * 20) : 20}:${g.casting ? 1 : 0}:${Math.ceil(g.cooldown)}`)
+      .join(","),
+  );
+  if (!key) return null;
+  const gems = key.split(",").map((part) => {
+    const [id, fill, casting, secs] = part.split(":");
+    return { id: id as SignatureId, fill: Number(fill) / 20, casting: casting === "1", secs: Number(secs) };
+  });
+  const label = gems.map((g) => `${SIGNATURES[g.id]?.name ?? g.id} ${g.casting ? "casting" : g.fill >= 1 ? "ready" : `${g.secs} seconds`}`).join(", ");
+  return (
+    <div className="pointer-events-none absolute inset-x-0 top-[calc(100%-2px)] flex h-[14px] items-center justify-center gap-3" role="img" aria-label={`Signature skills: ${label}`} data-testid="signature-gems">
+      {gems.map((g, i) => (
+        <Gem key={`${g.id}-${i}`} id={g.id} fill={g.fill} casting={g.casting} />
+      ))}
+    </div>
+  );
+}
+
+const GEM_RARITY: Record<string, string> = { common: "var(--color-common)", rare: "var(--color-rare)", epic: "var(--color-epic)", legendary: "var(--color-legendary)", mythic: "var(--color-mythic)" };
+
+function Gem({ id, fill, casting }: { id: SignatureId; fill: number; casting: boolean }) {
+  const crown = id === "sovereign_awakening";
+  const colour = GEM_RARITY[SIGNATURES[id]?.rarity ?? "rare"] ?? "var(--color-t1)";
+  const size = crown ? 10 : 8;
+  const ready = fill >= 1;
+  const el = useRef<HTMLSpanElement>(null);
+  const was = useRef(casting);
+  useEffect(() => {
+    if (casting && !was.current) replayClass(el.current, "cast-pop");
+    was.current = casting;
+  }, [casting]);
+  return (
+    <span ref={el} className="relative block shrink-0 rotate-45 overflow-hidden rounded-[1.5px]" style={{ width: size, height: size, boxShadow: `inset 0 0 0 1px ${casting ? "var(--color-gold)" : colour}`, opacity: ready || casting ? 1 : 0.75 }} data-testid={`signature-gem-${id}`} data-ready={ready || undefined} data-casting={casting || undefined}>
+      {/* The fill rises from the gem's foot (its lower point: the square's bottom-right corner, once turned). */}
+      <span className="absolute inset-0 origin-bottom-right" style={{ background: casting ? "var(--color-gold)" : colour, transform: `scale(${casting ? 1 : fill})`, opacity: casting || ready ? 1 : 0.55, transition: "transform 200ms var(--ease)" }} />
+    </span>
   );
 }
 

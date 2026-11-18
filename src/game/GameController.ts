@@ -120,7 +120,8 @@ export type Modal =
 export interface Toast {
   id: number;
   text: string;
-  tone: "info" | "gold" | "essence" | "warn" | "level";
+  /** `synergy`: a signature combination seen for the first time ("Combination discovered: Gravity Feast"); the HUD draws it as a gilt banner. */
+  tone: "info" | "gold" | "essence" | "warn" | "level" | "synergy";
   /** Routine news that yields to anything else. */
   low?: boolean;
   /** Raised this many times while on screen (shown as "x3"). */

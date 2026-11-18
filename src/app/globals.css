@@ -27,6 +27,8 @@
   --color-rare: #74a8ea;
   --color-epic: #a98be8;
   --color-legendary: #e3bd6a;
+  /* Mythic: the crown's rarity alone (Sovereign Awakening), an ember above legendary's gold. */
+  --color-mythic: #f0957a;
   --font-sans: var(--font-instrument-sans), system-ui, sans-serif;
   --font-serif: var(--font-instrument-serif), Georgia, serif;
 }

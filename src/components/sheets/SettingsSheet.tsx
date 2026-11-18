@@ -4,6 +4,8 @@ import { useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/Button";
 import { HoldConfirm } from "@/components/ui/HoldConfirm";
 import { Sheet, SheetHeader } from "@/components/ui/Sheet";
+import { Segment, Segmented } from "@/components/ui/Segmented";
+import type { VisualQuality } from "@/game/data/signatures";
 import { useController, useProfileRef } from "@/hooks/useGame";
 import { useStore } from "@/lib/store";
 import { cn } from "@/lib/cn";
@@ -29,6 +31,7 @@ export function SettingsSheet({ open }: { open: boolean }) {
           <Switch label="Short reveals" detail="Every BIND plays its short form. Your first bind always plays in full; tap to skip works either way." value={s.quickReveals} onChange={(v) => c.updateSettings({ quickReveals: v })} />
           <Switch label="Keep screen on" detail="The screen stays awake while the game is open." value={s.keepAwake} onChange={(v) => c.updateSettings({ keepAwake: v })} />
           <Switch label="Reduced effects" detail="Less motion, shake and flashing." value={s.reducedEffects} onChange={(v) => c.updateSettings({ reducedEffects: v })} />
+          <Quality value={s.visualQuality ?? "full"} onChange={(q) => c.updateSettings({ visualQuality: q })} />
           <Switch label="Diagnostics" value={s.diagnostics} onChange={(v) => c.updateSettings({ diagnostics: v })} />
           {s.diagnostics && <DiagLine />}
         </div>
@@ -82,6 +85,37 @@ function Switch({ label, detail, value, onChange }: { label: string; detail?: Re
         <span className="absolute left-[2px] top-[2px] h-[27px] w-[27px] rounded-full bg-t1 transition-transform duration-200 ease-[var(--ease)]" style={{ transform: `translateX(${value ? 20 : 0}px)` }} />
       </span>
     </button>
+  );
+}
+
+const QUALITY: { id: VisualQuality; label: string; detail: string }[] = [
+  { id: "full", label: "Full spectacle", detail: "Every layer of every signature skill." },
+  { id: "balanced", label: "Balanced", detail: "Fewer particles and lighter layers; every skill still reads." },
+  { id: "performance", label: "Performance", detail: "Each skill's shape and impact only, for older phones." },
+];
+
+/**
+ * How much the battlefield draws for the signature skills. Visual only: the fight is the same at
+ * every setting. Reduced effects (above) is separate and stricter.
+ */
+function Quality({ value, onChange }: { value: VisualQuality; onChange: (q: VisualQuality) => void }) {
+  const cur = QUALITY.find((q) => q.id === value) ?? QUALITY[0]!;
+  return (
+    <div className="flex flex-col gap-1.5 px-5 py-2 shadow-[inset_0_-1px_0_var(--line)]" data-testid="visual-quality">
+      <span className="flex min-w-0 flex-col">
+        <span className="t-body text-t1">Visual quality</span>
+        <span className="t-label text-t2" data-testid="visual-quality-detail">
+          {cur.detail} The fight is the same at every setting.
+        </span>
+      </span>
+      <Segmented value={value} onChange={onChange} label="Visual quality">
+        {QUALITY.map((q) => (
+          <Segment key={q.id} id={q.id} className="max-[359px]:px-2" data-testid={`quality-${q.id}`}>
+            {q.label}
+          </Segment>
+        ))}
+      </Segmented>
+    </div>
   );
 }
 

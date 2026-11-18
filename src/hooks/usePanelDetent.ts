@@ -28,3 +28,14 @@ export function useRaisePanel(on: boolean): void {
     return () => raise(false);
   }, [on, raise]);
 }
+
+/** Set by the panel host: lower the panel to its base for `ms` (0 lets it rise again at once). */
+export const LowerContext = createContext<(ms: number) => void>(() => {});
+
+/**
+ * Lowers the panel for a moment so the battlefield above it can be watched: a signature skill's
+ * preview plays there. The panel returns to the height it had when the moment is over.
+ */
+export function usePanelLower(): (ms: number) => void {
+  return useContext(LowerContext);
+}

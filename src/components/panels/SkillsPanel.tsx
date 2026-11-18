@@ -26,31 +26,39 @@ import { ABILITY_RANK_MAX, RANK_COOLDOWN_STEP, RANK_NUMERALS, RANK_POWER_STEP, a
 import { ABILITY_ICON } from "@/components/ui/abilityIcons";
 import { slotForm } from "@/game/progression/techniques";
 import { usePanelDetent, useRaisePanel } from "@/hooks/usePanelDetent";
+import { signaturesVisible } from "@/game/progression/signatures";
+import { SignaturesView, signatureNews } from "./SignaturesView";
 import { useCompactFit } from "@/hooks/useCompactFit";
 
 const BRANCHES: SkillBranch[] = ["power", "soul", "command"];
 const NUMERALS = ["I", "II", "III", "IV", "V"];
-type View = SkillBranch | "arts" | "apex";
+type View = SkillBranch | "arts" | "apex" | "signatures";
+/** With six views the three paths of seals draw as glyphs (each named in its own view). */
+const BRANCH_ICON: Record<SkillBranch, IconName> = { power: "sword", soul: "soul", command: "summons" };
 
-/** A branch is a path of five seals; Arts ranks each ability; Apex is the late game's road. Tap to read, act from the detail. */
+/** A branch is a path of five seals; Arts ranks each ability; Apex is the late game's road; Signature holds the signature skills. Tap to read, act from the detail. */
 export default function SkillsPanel() {
   const c = useController();
   const profile = useProfileRef();
   const want = useUi((u) => u.skillsView);
-  const [view, setView] = useState<View>(() => (want === "apex" && apexVisible(profile) ? "apex" : "power"));
-  // A request to show Apex (from the Power sheet, the best next step) while the panel is already up.
+  const allowed = (v: View) => (v === "apex" ? apexVisible(profile) : v === "signatures" ? signaturesVisible(profile) : true);
+  const [view, setView] = useState<View>(() => (want && allowed(want) ? want : "power"));
+  // A request to show Apex or the signature skills (the Power sheet, a reveal, the battlefield
+  // strip) while the panel is already up.
   useEffect(() => {
     if (!want) return;
-    if (want === "apex" && apexVisible(profile)) setView("apex");
+    if (allowed(want)) setView(want);
     c.clearSkillsView();
+    // `allowed` reads the live profile; the request is what matters here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [want, c, profile]);
   const short = useShortScreen();
-  useRaisePanel(view === "arts" || view === "apex");
-  const shown: View = view === "apex" && !apexVisible(profile) ? "power" : view;
+  useRaisePanel(view === "arts" || view === "apex" || view === "signatures");
+  const shown: View = allowed(view) ? view : "power";
   return (
     <div className={cn("flex flex-col h-full min-h-0 px-4", short ? "pt-3 pb-2" : "pt-4 pb-3")}>
       <Header view={shown} setView={setView} />
-      {shown === "arts" ? <ArtsView short={short} /> : shown === "apex" ? <ApexView short={short} /> : <SealsView key={shown} branch={shown} short={short} />}
+      {shown === "arts" ? <ArtsView short={short} /> : shown === "apex" ? <ApexView short={short} /> : shown === "signatures" ? <SignaturesView short={short} /> : <SealsView key={shown} branch={shown} short={short} />}
     </div>
   );
 }
@@ -60,17 +68,25 @@ function Header({ view, setView }: { view: View; setView: (v: View) => void }) {
   const artsReady = anyAbilityRankReady(profile);
   const apexShown = apexVisible(profile);
   const apexReady = anyApexReady(profile);
+  const sigShown = signaturesVisible(profile);
+  const sigReady = sigShown && signatureNews(profile);
   const points = profile.player.skillPoints;
   // Points read gold only while they can buy something: a bank with nothing to spend on is not news.
-  const spendable = points > 0 && (apexReady || SKILLS.some((n) => canUnlockSkill(profile, n.id).ok));
+  const spendable = points > 0 && (apexReady || sigReady || SKILLS.some((n) => canUnlockSkill(profile, n.id).ok));
+  const views = 4 + (apexShown ? 1 : 0) + (sigShown ? 1 : 0);
+  // Six views (Apex and the signature skills both open): the three paths of seals become glyphs,
+  // each a full 44px target, so six fit 320px beside the points.
+  const six = views >= 6;
+  const crowded = views >= 5;
   // Five views and the points fit 320px: from 360px up the segments keep their padding.
-  const seg = apexShown ? "max-[359px]:px-2 min-w-11" : undefined;
+  const seg = crowded ? "max-[359px]:px-2 min-w-11" : undefined;
+  const glyphSeg = "min-w-11 !px-0";
   return (
-    <div className={cn("flex items-center justify-between shrink-0", apexShown ? "gap-1 min-[360px]:gap-3" : "gap-3")}>
+    <div className={cn("flex items-center justify-between shrink-0", crowded ? "gap-1 min-[360px]:gap-2 min-[400px]:gap-3" : "gap-3")}>
       <Segmented value={view} onChange={setView} label="Skill paths">
         {BRANCHES.map((b) => (
-          <Segment key={b} id={b} className={seg} data-testid={`branch-${b}`}>
-            {SKILL_BRANCH_INFO[b].label}
+          <Segment key={b} id={b} className={six ? glyphSeg : seg} data-testid={`branch-${b}`} aria-label={six ? SKILL_BRANCH_INFO[b].label : undefined}>
+            {six ? <Icon name={BRANCH_ICON[b]} size={17} className="block" /> : SKILL_BRANCH_INFO[b].label}
           </Segment>
         ))}
         <Segment id="arts" className={seg} badge={artsReady && view !== "arts"} data-testid="branch-arts">
@@ -81,6 +97,11 @@ function Header({ view, setView }: { view: View; setView: (v: View) => void }) {
             Apex
           </Segment>
         )}
+        {sigShown && (
+          <Segment id="signatures" className={glyphSeg} badge={sigReady && view !== "signatures"} data-testid="signatures-tab" aria-label="Signature skills">
+            <Icon name="sigil" size={18} className="block" />
+          </Segment>
+        )}
       </Segmented>
       {view === "arts" ? (
         <span className="flex items-center gap-1.5 t-num-m text-t1 shrink-0">
@@ -89,16 +110,21 @@ function Header({ view, setView }: { view: View; setView: (v: View) => void }) {
         </span>
       ) : (
         <span
-          className={cn("t-label shrink-0 whitespace-nowrap", spendable ? "text-gold" : points > 0 ? "text-t2" : "text-t3", apexShown && "max-[359px]:flex max-[359px]:flex-col max-[359px]:items-end")}
+          className={cn("t-label shrink-0 whitespace-nowrap", spendable ? "text-gold" : points > 0 ? "text-t2" : "text-t3", crowded && "max-[399px]:flex max-[399px]:flex-col max-[399px]:items-end")}
           aria-label={`${points} skill ${points === 1 ? "point" : "points"}`}
         >
-          <span className={cn("t-num-m", apexShown && "max-[359px]:leading-[18px]")} data-testid="skill-points">
+          <span className={cn("t-num-m", crowded && "max-[399px]:leading-[18px]")} data-testid="skill-points">
             {points}
           </span>
-          <span className="hidden min-[360px]:inline"> {points === 1 ? "point" : "points"}</span>
-          {/* Under 360px five views leave no room beside the number: the unit sits under it, small. */}
-          <span className={cn("min-[360px]:hidden", apexShown && "text-[10px] leading-[12px]")} data-testid="skill-points-unit">
-            {apexShown ? (points === 1 ? "pt" : "pts") : " pt"}
+          {/* Five or six views leave no room beside the number under 400px: the unit sits under it, small. */}
+          <span className={cn(crowded ? "hidden min-[400px]:inline" : "hidden min-[360px]:inline")}> {points === 1 ? "point" : "points"}</span>
+          {crowded && (
+            <span className="hidden min-[360px]:max-[399px]:inline text-[10px] leading-[12px]" data-testid="skill-points-word">
+              {points === 1 ? "point" : "points"}
+            </span>
+          )}
+          <span className={cn("min-[360px]:hidden", crowded && "text-[10px] leading-[12px]")} data-testid="skill-points-unit">
+            {crowded ? (points === 1 ? "pt" : "pts") : " pt"}
           </span>
         </span>
       )}
