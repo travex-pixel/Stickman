@@ -67,7 +67,7 @@ function SignatureGems() {
   });
   const label = gems.map((g) => `${SIGNATURES[g.id]?.name ?? g.id} ${g.casting ? "casting" : g.fill >= 1 ? "ready" : `${g.secs} seconds`}`).join(", ");
   return (
-    <div className="pointer-events-none absolute inset-x-0 top-[calc(100%-2px)] flex h-[14px] items-center justify-center gap-3" role="img" aria-label={`Signature skills: ${label}`} data-testid="signature-gems">
+    <div className="pointer-events-none absolute inset-x-0 top-[calc(100%-4px)] flex h-[14px] items-center justify-center gap-3" role="img" aria-label={`Signature skills: ${label}`} data-testid="signature-gems">
       {gems.map((g, i) => (
         <Gem key={`${g.id}-${i}`} id={g.id} fill={g.fill} casting={g.casting} />
       ))}

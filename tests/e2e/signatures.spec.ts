@@ -78,7 +78,10 @@ async function spy(page: Page, names: string[], result?: boolean): Promise<void>
 }
 const calls = (page: Page) => page.evaluate(() => (window as unknown as { __calls: [string, unknown[]][] }).__calls);
 
+/** Opens the view fresh: through another tab first, so nothing picked before is still picked. */
 async function openCollection(page: Page): Promise<void> {
+  await page.getByTestId("tab-hero").click();
+  await page.waitForTimeout(200);
   await page.getByTestId("tab-skills").click();
   await page.waitForTimeout(300);
   await closeAll(page);
@@ -202,7 +205,8 @@ test.describe("Signature skills in the Skills panel", () => {
     await openCollection(page);
     await page.getByTestId("signature-row-shadow_storm").click();
     await expect(page.getByTestId("signature-rank-up")).toContainText("Needs");
-    await page.getByTestId("signature-rank-up").click();
+    // aria-disabled, so it can answer: force the press past Playwright's enabled check.
+    await page.getByTestId("signature-rank-up").click({ force: true });
     expect(await calls(page)).toEqual([]);
   });
 
@@ -213,8 +217,9 @@ test.describe("Signature skills in the Skills panel", () => {
     await openCollection(page);
     await page.getByTestId("signature-row-shadow_storm").click();
     await expect(page.getByTestId("signature-evolution-status")).toContainText("Opens at Adept");
-    await page.getByTestId("evolution-black_tempest").click();
+    await page.getByTestId("evolution-black_tempest").click({ force: true });
     expect(await calls(page), "a locked path is never chosen").toEqual([]);
+    await expect(page.getByTestId("event-pill").first()).toContainText("opens at Adept");
     // Masterful use: the paths open (the simulation decides the tier from casts and kills).
     await seed(page, FULL);
     await spy(page, ["chooseEvolution"]);
