@@ -412,6 +412,8 @@ export interface SignatureLoadout {
   equipped: SignatureLoadoutEntry[];
   /** Sovereign Awakening, when found (it has its own slot). */
   crown: SignatureLoadoutEntry | null;
+  /** Combinations this save has already seen (a first one is announced). Optional: none when absent. */
+  known?: SynergyId[];
 }
 
 export function noSignatures(): SignatureLoadout {
@@ -420,3 +422,154 @@ export function noSignatures(): SignatureLoadout {
 
 /** Visual quality (Settings). Visual only: the simulation never reads it. */
 export type VisualQuality = "full" | "balanced" | "performance";
+
+// ---------------------------------------------------------------------------------------------
+// Simulation numbers beyond the catalogue's (ENGINE-tuned by measurement; see DESIGN.md,
+// "Signature skills"). The renderer may read these for timing; it never needs to.
+// ---------------------------------------------------------------------------------------------
+
+/** Damage of a signature skill at `rank` against rank 1. */
+export function signatureRankMult(rank: number): number {
+  return 1 + SIG_RANK_STEP * (Math.max(1, Math.min(SIGNATURE_RANK_MAX, rank)) - 1);
+}
+/** Each rank past the first adds this much of rank 1's damage (rank 10: x2.08). */
+export const SIG_RANK_STEP = 0.12;
+
+/** Seconds between any two signature casts, and between two cinematic ones. */
+export const SIG_GLOBAL_LOCKOUT = 1.25;
+export const SIG_CINEMATIC_GAP = 6;
+/** How long an exploiter may hold for marks when a setup skill is about to be ready. */
+export const SIG_EXPLOIT_WAIT = 2.5;
+/** A skill's first cast in a fight comes after this share of its cooldown (slot order staggers them). */
+export const SIG_OPENING_SHARE = 0.3;
+
+/** Statuses: how long they last and what they do. */
+export const VOID_MARK = { duration: 6, bonus: 0.25 } as const;
+export const SHADOW_MARK = { duration: 5, bonus: 0.12 } as const;
+
+/** Void Collapse. */
+export const VOID = {
+  formAt: 0.12,
+  pullFor: 0.9,
+  /** World units a second at most that a pulled foe is drawn. */
+  pullSpeed: 170,
+  implodeCore: 0.6,
+  shockwaveDelay: 0.14,
+  shockwaveReach: 1.7,
+  shockwavePower: 0.45,
+  horizon: { pullSpeed: 260, reach: 1.25, trap: 1.0, trapMaster: 1.6, implodeDelay: 0.35 },
+  supernova: { bursts: 3, radius: 55, power: 0.55, gap: 0.14, leapRange: 170 },
+  consumption: { perStack: 0.07, cap: 10, capMaster: 16, radiusPerStack: 0.03, refundMaster: 0.5, refundCap: 4 },
+} as const;
+
+/** Abyssal Devourer. */
+export const DEVOURER = {
+  portalFor: 0.45,
+  passFor: 1.25,
+  /** Bite reach around the head, and how often one foe may be bitten in a pass. */
+  bite: 44,
+  bitesPerFoe: 2,
+  biteGap: 0.22,
+  markedBonus: 0.4,
+  /** Each kill in the pass lets the dragon coil a moment longer at its exit (capped). */
+  extendPerKill: 0.1,
+  extendCap: 0.4,
+  worldEater: { bite: 62, depthBand: 80, bitesPerFoe: 2, bitesPerFoeMaster: 3 },
+  soulFeeder: { perStack: 0.5, cap: 3, capMaster: 5 },
+  ancient: { turn: 0.35, diveFor: 0.45, radius: 80, power: 2.2 },
+  departFor: 0.35,
+} as const;
+
+/** Death Parade. */
+export const PARADE = {
+  vanishFor: 0.15,
+  clones: 4,
+  cloneGap: 0.22,
+  finisherPower: 1.8,
+  executeBelow: 0.15,
+  afterimage: { clones: 6, gap: 0.14 },
+  executioner: { below: 0.34, bonus: 0.8, bonusMaster: 1.2 },
+  hunters: { bonus: 0.35 },
+  bladeParade: { blades: 1, bladesEnhanced: 2, power: 0.3 },
+} as const;
+
+/** King's Judgement. */
+export const JUDGEMENT = {
+  handAt: 0.25,
+  sigilAt: 0.55,
+  meteorAt: 0.95,
+  fallFor: 0.6,
+  bossBonus: 1.0,
+  fallenStar: { stars: 3, starsMaster: 5, gap: 0.22, radius: 60, power: 1.1 },
+  absolute: { bossBonus: 2.2, radius: 0.7, echoPower: 0.5, echoDelay: 0.9 },
+  worldBreaker: { radius: 1.45, delay: 0.4, reach: 2, power: 0.7 },
+  /** Legion Meteor: each risen soldier hurled into the impact. */
+  legion: { power: 0.8, radius: 60 },
+} as const;
+
+/** Legion Awakening. */
+export const LEGION = {
+  riseAt: 0.4,
+  chargeAt: 1.0,
+  soldiers: 5,
+  lifetime: 6,
+  /** The charge's blow on arrival, and the soldiers' strength against the fielded army's average. */
+  chargePower: 0.8,
+  armyShare: 0.6,
+  /** With no army fielded, a soldier's attack against the warrior's. */
+  warriorShare: 0.25,
+  corpseMemory: 6,
+  endless: { soldiers: 8, soldiersMaster: 11 },
+  veteran: { soldiers: 3, hp: 2.4, attack: 1.7, lifetime: 8, lifetimeMaster: 10 },
+  commander: { lifetimeMaster: 2 },
+} as const;
+
+/** Time Fracture. */
+export const FRACTURE = {
+  freezeAt: 0.3,
+  freezeFor: 2,
+  bossSlow: 0.45,
+  /** Share of the damage frozen foes take that time keeps and releases on resume. */
+  store: 0.5,
+  stopTheWorld: { freezeFor: 3, store: 0.4, freezeForMaster: 3.6 },
+  fracturedFuture: { echoes: 1, echoesMaster: 2, delay: 0.28, share: 0.5 },
+  temporal: { bonus: 1.0, executeBelowMaster: 0.2 },
+  delayedGap: 0.06,
+  /** Frozen Singularity: the scaled-down implosion at resume, against Void Collapse's own. */
+  singularity: { power: 0.6, radius: 0.8 },
+} as const;
+
+/** Shadow Storm. */
+export const STORM = {
+  gatherFor: 0.8,
+  blades: 6,
+  gap: 0.12,
+  flight: 0.16,
+  thousand: { blades: 12, gap: 0.07, power: 0.55 },
+  tempest: { growFor: 0.6, power: 0.5, pulsesMaster: 2 },
+  hunters: { executeBelow: 0.15, relaunchMaster: 1 },
+} as const;
+
+/** Sovereign Awakening. */
+export const SOVEREIGN = {
+  kneelFor: 0.6,
+  auraFor: 10,
+  auraForMaster: 12,
+  /** Other signature cooldowns tick this much faster in the aura; summons strike this much harder. */
+  cooldownRate: 0.6,
+  summonBonus: 0.25,
+  /** Combinations' own effects are this much stronger in the aura. */
+  synergyBonus: 0.3,
+  /** The crowned Ascendant Fury throws this many strikes (seven otherwise). */
+  furyStrikes: 9,
+} as const;
+
+/** Combination lockouts (seconds): each fires at most once per its lockout. */
+export const SYNERGY_LOCKOUT: Readonly<Record<SynergyId, number>> = {
+  gravity_feast: 8,
+  hunters_parade: 6,
+  legion_meteor: 10,
+  frozen_singularity: 8,
+  blade_parade: 6,
+  crowned_ultimate: 4,
+};

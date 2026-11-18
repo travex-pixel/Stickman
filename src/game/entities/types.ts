@@ -19,7 +19,11 @@ export interface CombatStats {
   hpRegen: number;
 }
 
-export type StatusKind = "burn" | "slow" | "mark" | "shield" | "invuln" | "opening" | "taunt" | "stun" | "haste" | "submerged" | "rally";
+/**
+ * `void_mark`, `shadow_mark`, `trapped`, `frozen` and `slowed` are signature skills' statuses on foes
+ * (data/signatures.ts, `SignatureStatus`); `vanished` holds the warrior out of reach in Death Parade.
+ */
+export type StatusKind = "burn" | "slow" | "mark" | "shield" | "invuln" | "opening" | "taunt" | "stun" | "haste" | "submerged" | "rally" | "void_mark" | "shadow_mark" | "trapped" | "frozen" | "slowed" | "vanished";
 
 export interface Status {
   kind: StatusKind;

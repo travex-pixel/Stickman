@@ -47,5 +47,8 @@ export function speedMultiplier(target: Combatant): number {
   if (hasStatus(target, "slow")) m *= 1 - statusValue(target, "slow");
   if (hasStatus(target, "haste")) m *= 1 + statusValue(target, "haste");
   if (hasStatus(target, "stun")) m = 0;
+  // Signature statuses: a slowed boss moves slower (its wind-ups keep their time); held foes do not move.
+  if (hasStatus(target, "slowed")) m *= 1 - statusValue(target, "slowed");
+  if (hasStatus(target, "trapped") || hasStatus(target, "frozen")) m = 0;
   return m;
 }

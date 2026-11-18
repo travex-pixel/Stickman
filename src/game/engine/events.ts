@@ -11,7 +11,8 @@ export type GameEvent =
    */
   | { type: "hit"; targetId: number; sourceId: number; amount: number; crit: boolean; pos: Vec2; element: Element; faction: Faction; targetKind: EntityKind; heavy: boolean; echo?: 1 | 2; prismatic?: boolean; sig?: SignatureId }
   | { type: "heal"; targetId: number; amount: number; pos: Vec2 }
-  | { type: "death"; id: number; kind: EntityKind; defId: string; pos: Vec2; killerId: number; elite?: boolean }
+  /** `sig`: the signature skill whose blow (or risen soldier) killed it; on a Legion soldier's own death, that it was one. */
+  | { type: "death"; id: number; kind: EntityKind; defId: string; pos: Vec2; killerId: number; elite?: boolean; sig?: SignatureId }
   /** `cut`: the Ascendant Fury's sword cut (not a swing of his combo; its strikes stay an ability's). */
   | { type: "attack_swing"; id: number; kind: EntityKind; heavy: boolean; pos: Vec2; facing: 1 | -1; cut?: boolean }
   /** `strike`: Ascendant Fury sends one per strike (1 to 7); only the first starts a cast. */

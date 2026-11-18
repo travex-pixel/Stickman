@@ -28,6 +28,7 @@ import { STORMBLADE_CHAIN_CHANCE, INFERNAL_BURN_FRACTION, VOIDFANG_EXECUTE_THRES
 import { generateItem, rollRarity } from "../economy/loot";
 import { ECHO_DELAY, ECHO_POWER, PRISM_MULT, STORM_EVERY, STORM_FORKS, STORM_FORK_POWER, STORM_FORK_RANGE, STORM_POWER, doubleChance, prismChance, tripleChance } from "../data/apex";
 import type { EquipmentItem } from "../progression/profile";
+import { SignatureRuntime, hasSignatures } from "../signatures/runtime";
 
 export const ARENA = { minX: 44, maxX: 596, minY: 8, maxY: 142, width: 640, depth: 150, homeX: 190, homeY: 78 } as const;
 export const FIXED_DT = 1 / 60;
@@ -257,6 +258,17 @@ export class World {
   /** Damage the warrior took this farming cycle, and the last cycle's share of their health. */
   private cycleHurt = 0;
   lastCycleHurt = 0;
+  /**
+   * Signature skills (src/game/signatures). Null until a signature skill is equipped: a world without
+   * one has no runtime, draws nothing and sends nothing more than before.
+   */
+  sig: SignatureRuntime | null = null;
+  /** Set while a signature skill strikes: its hits are tagged and charge nothing (kills charge as before). */
+  sigStrike: SignatureId | null = null;
+  /** World time the boss fight proper began (its entrance over), or -1. */
+  bossEngagedAt = -1;
+  /** Strikes the running Ascendant Fury throws (more when crowned by Sovereign Awakening). */
+  furyStrikeCount = FURY_STRIKES;
 
   constructor(opts: WorldOptions) {
     this.stage = Math.max(1, opts.stage);
@@ -274,6 +286,7 @@ export class World {
     this.entities.set(this.player.id, this.player);
     this.events.push({ type: "spawn", id: this.player.id, kind: "player", defId: "ascendant", pos: { ...this.player.pos } });
     for (const s of opts.loadout.summons) this.deploySummon(s, true);
+    if (hasSignatures(opts.loadout.signatures)) this.sig = new SignatureRuntime(this);
   }
 
   allocId(): number {
@@ -281,6 +294,7 @@ export class World {
   }
 
   dispose(): void {
+    this.sig?.dispose();
     this.timers.length = 0;
     this.entities.clear();
     this.projectiles.length = 0;
@@ -303,6 +317,8 @@ export class World {
       if (before !== after) this.cooldowns[after] = Math.max(this.cooldowns[after], this.cooldowns[before]);
     }
     this.loadout = loadout;
+    if (this.sig) this.sig.setLoadout();
+    else if (hasSignatures(loadout.signatures)) this.sig = new SignatureRuntime(this);
     this.player.stats = { ...loadout.stats };
     this.player.hp = Math.min(this.player.stats.maxHp, Math.max(1, Math.round(this.player.stats.maxHp * frac)));
     this.player.level = loadout.level;
@@ -686,7 +702,7 @@ export class World {
       projectiles: this.projectiles.length,
       ultimateActive: this.ultimate.active,
       chain: this.chain,
-      signatures: [],
+      signatures: this.sig ? this.sig.snapshot() : [],
       timeScale: this.timeScale,
     };
   }
@@ -720,12 +736,20 @@ export class World {
       if (burn.burnDamage > 0) this.applyRawDamage(e, burn.burnDamage, "fire", -1, false);
       if (e.stats.hpRegen > 0 && e.hp < e.stats.maxHp && e.state !== "dead") e.hp = Math.min(e.stats.maxHp, e.hp + e.stats.hpRegen * dt);
       e.hitFlash = Math.max(0, e.hitFlash - dt);
+      // A foe frozen by Time Fracture stands outside time: its wind-up and recovery wait.
+      if (this.sig && hasStatus(e, "frozen")) continue;
       e.attackCooldown = Math.max(0, e.attackCooldown - dt * (1 + statusValue(e, "haste")));
       e.stateTime += dt;
     }
 
     for (const e of this.entities.values()) {
       if (e.dead) continue;
+      if (this.sig && this.sig.holds(e)) {
+        // Frozen, trapped at a singularity's edge, or being drawn into one: it does not act.
+        e.vel.x = 0;
+        e.vel.y = 0;
+        continue;
+      }
       if (e.state === "emerge") {
         if (e.stateTime >= e.stateDuration) this.setState(e, "idle");
         continue;
@@ -737,6 +761,7 @@ export class World {
     }
 
     this.runTimers();
+    this.sig?.update(dt, rawDt);
     this.integrate(dt);
     this.updateProjectiles(dt);
     this.updateHazards(dt);
@@ -833,6 +858,7 @@ export class World {
         this.phaseTimer -= rawDt;
         if (this.phaseTimer <= 0) {
           this.phase = "boss";
+          this.bossEngagedAt = this.time;
           const b = this.entities.get(this.bossId);
           if (b) this.setState(b, "idle");
         }
@@ -1120,7 +1146,7 @@ export class World {
       if (f) return f;
     }
     const current = self.targetId >= 0 ? this.entities.get(self.targetId) : undefined;
-    if (current && !current.dead && current.faction !== self.faction && !hasStatus(current, "submerged")) {
+    if (current && !current.dead && current.faction !== self.faction && !isHidden(current)) {
       const n = nearestHostile(self, this.entities.values());
       if (n && n.id !== current.id && dist(self.pos, n.pos) < dist(self.pos, current.pos) * 0.6) return n;
       return current;
@@ -1395,6 +1421,8 @@ export class World {
     // on-hit effects they set off): at three blows a swing AUTO would otherwise cast the Fury back
     // to back. A kill is a kill, whoever lands it, and charges as before.
     if (this.apexStrike && !kill) return;
+    // Signature skills' hits charge nothing either (their kills charge as any kill does).
+    if (this.sigStrike !== null && !kill) return;
     // Ascendant Fury never pays for the next one: nothing charges it while it runs (its cut, its
     // strikes' crits and kills, the army's kills alike). Charging resumes the moment it ends.
     if (this.ultimate.active) return;
@@ -1416,6 +1444,7 @@ export class World {
     // Court: the bound Crownless King lends the army 3% attack per other deployed shadow.
     if (source.faction === "ally" && this.courtBonus > 0) bonus *= 1 + this.courtBonus;
     if (source.faction === "ally") bonus *= 1 + 0.04 * this.shadeCount();
+    if (this.sig && source.faction === "ally") bonus *= this.sig.allyBonus(source, target);
     const block = this.blockFactor(target, blockFromX ?? source.pos.x, heavy);
     bonus *= block;
     const fx = this.loadout.mods.gearEffects;
@@ -1478,9 +1507,10 @@ export class World {
     return target.faction === "enemy" ? 0.2 : 0.4;
   }
 
+  /** Living shades (a Rift Caller's Chorus counts them; Legion Awakening's soldiers are not shades). */
   shadeCount(): number {
     let n = 0;
-    for (const e of this.entities.values()) if (e.summon?.temporary && !e.dead) n++;
+    for (const e of this.entities.values()) if (e.summon?.temporary && !e.dead && !(this.sig && this.sig.isSoldier(e))) n++;
     return n;
   }
 
@@ -1500,9 +1530,11 @@ export class World {
     target.hp -= remaining;
     if (target.kind === "player") this.cycleHurt += Math.max(0, remaining);
     target.hitFlash = 0.12;
+    const sig = this.sig ? this.sig.tagFor(sourceId) : null;
     if (amount >= 1 && sourceId !== -1) {
-      this.events.push({ type: "hit", targetId: target.id, sourceId, amount: Math.round(amount), crit, pos: { x: target.pos.x, y: target.pos.y }, element, faction: target.faction, targetKind: target.kind, heavy, ...apexTag });
+      this.events.push({ type: "hit", targetId: target.id, sourceId, amount: Math.round(amount), crit, pos: { x: target.pos.x, y: target.pos.y }, element, faction: target.faction, targetKind: target.kind, heavy, ...apexTag, ...(sig ? { sig } : {}) });
     }
+    if (this.sig && amount > 0) this.sig.onDamage(target, amount, sourceId);
     if (target.kind === "player" && heavy && remaining > 0 && target.state !== "dodge" && target.state !== "cast") {
       this.setState(target, "hit", 0.22);
     }
@@ -1521,11 +1553,13 @@ export class World {
     target.state = "dead";
     target.vel.x = 0;
     target.vel.y = 0;
-    this.events.push({ type: "death", id: target.id, kind: target.kind, defId: target.defId, pos: { ...target.pos }, killerId, elite: !!target.enemy?.elite || undefined });
+    const sig = this.sig ? this.sig.deathTag(target, killerId) : null;
+    this.events.push({ type: "death", id: target.id, kind: target.kind, defId: target.defId, pos: { ...target.pos }, killerId, elite: !!target.enemy?.elite || undefined, ...(sig ? { sig } : {}) });
     if (target.faction === "enemy") {
       this.kills += 1;
       if (target.kind === "enemy" && !target.enemy?.minion && this.twist === "volatile") this.volatileBurst(target);
       this.onEnemyKilled(target, killerId);
+      if (this.sig) this.sig.onKill(target, sig);
     }
   }
 
@@ -1843,6 +1877,9 @@ export class World {
   beginUltimate(): void {
     const p = this.player;
     this.ultimate = { active: true, timer: 1.6, strikes: 0, nextStrike: FURY_FIRST, leadId: -1, next: 0, lo: 0, hi: 0, wantSide: 0, side: 0, originX: p.pos.x, originY: p.pos.y, originFacing: p.facing };
+    this.furyStrikeCount = FURY_STRIKES;
+    // Sovereign Awakening's aura crowns the ultimate: more strikes in the same flurry.
+    if (this.sig) this.furyStrikeCount = this.sig.onUltimate();
     this.timeScale = 0.3;
     this.stopPlayerDrift();
     this.events.push({ type: "shake", strength: 6 });
@@ -1863,7 +1900,7 @@ export class World {
     this.stopPlayerDrift();
     u.timer -= rawDt;
     u.nextStrike -= rawDt;
-    if (u.nextStrike <= 0 && u.strikes < FURY_STRIKES) {
+    if (u.nextStrike <= 0 && u.strikes < this.furyStrikeCount) {
       if (FURY_EARLY_END && u.strikes > 0 && this.enemies().length === 0) {
         // Nothing left to cut: the flurry ends here rather than slow time over an empty field.
         this.endUltimate(true);
@@ -1871,7 +1908,7 @@ export class World {
       }
       u.strikes += 1;
       u.nextStrike = FURY_GAP;
-      const final = u.strikes === FURY_STRIKES;
+      const final = u.strikes === this.furyStrikeCount;
       const p = this.player;
       const lead = this.furyLead(final);
       if (lead) {

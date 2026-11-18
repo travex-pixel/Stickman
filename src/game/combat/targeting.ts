@@ -1,8 +1,8 @@
 import type { Combatant } from "../entities/types";
 
-/** Submerged lurkers cannot be seen or targeted until they surface. */
+/** Submerged lurkers cannot be seen or targeted until they surface; nor can a warrior vanished in Death Parade. */
 export function isHidden(c: Combatant): boolean {
-  return c.statuses.some((st) => st.kind === "submerged");
+  return c.statuses.some((st) => st.kind === "submerged" || st.kind === "vanished");
 }
 import { distSq } from "../engine/math";
 
