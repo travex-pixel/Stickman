@@ -1,3 +1,4 @@
+import type { SovereignMechanic } from "../data/sovereigns";
 import type { Vec2 } from "../engine/math";
 import type { AbilityId, EliteAffix, EnemyArchetype, SummonCommand, SummonRole } from "../data/ids";
 
@@ -81,7 +82,7 @@ export interface EnemyState {
 export interface BossState {
   phase: 1 | 2;
   patternTimer: number;
-  pattern: "idle" | "swing" | "charge" | "slam" | "volley" | "undertow" | "riptide" | "blink" | "decree" | "sweep";
+  pattern: "idle" | "swing" | "charge" | "slam" | "volley" | "undertow" | "riptide" | "blink" | "decree" | "sweep" | SovereignMechanic;
   patternStep: number;
   /** Charge: who has already been hit this charge. */
   chargeHit?: Set<number>;

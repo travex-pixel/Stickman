@@ -343,6 +343,59 @@ export const ENEMIES: Record<string, EnemyDef> = {
     palette: { body: 0x1f170f, accent: 0xc9a24f, eye: 0xffe9b0 },
     scale: 1.95,
   },
+  // Rift Sovereigns (data/sovereigns.ts). Stats are provisional: the simulation tunes them by
+  // measurement so each gate asks about what a Warden's gate at the same stage asks.
+  mirror_knight: {
+    id: "mirror_knight",
+    name: "The Mirror Knight",
+    title: "Sovereign of the Ashen Verge",
+    archetype: "boss",
+    lore: "The Verge's last sentinel stood so long at the border of the Rift that it learned to show each enemy its own face.",
+    counter: "While the mirror stands, blows flash back: dodge through it to shatter it. Only the true knight bleeds.",
+    base: { hp: 2800, attack: 20, attackSpeed: 0.7, defense: 7, moveSpeed: 84, range: 80, radius: 30 },
+    xp: 380,
+    gold: 300,
+    // Its shadow (essenceSummonId) comes with the simulation's work: none until then.
+    essenceChance: 1,
+    rarity: "legendary",
+    windup: 0.85,
+    palette: { body: 0x1b1d24, accent: 0xd8dde8, eye: 0xf4f6ff },
+    scale: 1.7,
+  },
+  storm_titan: {
+    id: "storm_titan",
+    name: "The Storm Titan",
+    title: "Sovereign of the Drowned Hollow",
+    archetype: "boss",
+    lore: "Something vast walked out of the drowned sea carrying the storm on its back. It has been looking for a lightning rod ever since.",
+    counter: "Strike its rods down before they charge. When the bolt leaps, spread out.",
+    base: { hp: 3400, attack: 22, attackSpeed: 0.5, defense: 9, moveSpeed: 56, range: 110, radius: 44 },
+    xp: 380,
+    gold: 300,
+    // Its shadow (essenceSummonId) comes with the simulation's work: none until then.
+    essenceChance: 1,
+    rarity: "legendary",
+    windup: 1.05,
+    palette: { body: 0x10202a, accent: 0x6fa8ff, eye: 0xe6f2ff },
+    scale: 2.35,
+  },
+  void_queen: {
+    id: "void_queen",
+    name: "The Void Queen",
+    title: "Sovereign of the Shattered Crown",
+    archetype: "boss",
+    lore: "When the Crown fell, the throne did not stay empty. What sits in it now holds court in the dark, and the court still kneels.",
+    counter: "Keep to the edge of her well. Cut down her courtiers first. In the dark, watch the ground.",
+    base: { hp: 3000, attack: 22, attackSpeed: 0.62, defense: 7, moveSpeed: 72, range: 90, radius: 32 },
+    xp: 380,
+    gold: 300,
+    // Its shadow (essenceSummonId) comes with the simulation's work: none until then.
+    essenceChance: 1,
+    rarity: "legendary",
+    windup: 0.95,
+    palette: { body: 0x140f1c, accent: 0x7a4fc0, eye: 0xf0e2ff },
+    scale: 1.85,
+  },
 };
 
 export function enemyDef(id: string): EnemyDef {

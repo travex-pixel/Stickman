@@ -2,6 +2,7 @@ import type { Vec2 } from "./math";
 import type { AbilityId, Element } from "../data/ids";
 import type { EntityKind, Faction } from "../entities/types";
 import type { EvolutionId, MasteryTier, SignatureBeat, SignatureId, SignatureStatus, SynergyId } from "../data/signatures";
+import type { MechanicStep, SovereignMechanic } from "../data/sovereigns";
 
 export type GameEvent =
   | { type: "spawn"; id: number; kind: EntityKind; defId: string; pos: Vec2 }
@@ -95,7 +96,16 @@ export type GameEvent =
   /** A signature status put on (`on`) or taken off a body. */
   | { type: "sig_status"; targetId: number; status: SignatureStatus; on: boolean; duration: number; pos: Vec2 }
   /** A combination fired (`first`: the first time this save has seen it). Sent before its hits. */
-  | { type: "sig_synergy"; synergy: SynergyId; castId: number; pos: Vec2; targetIds: number[]; first: boolean };
+  | { type: "sig_synergy"; synergy: SynergyId; castId: number; pos: Vec2; targetIds: number[]; first: boolean }
+  /**
+   * Rift Sovereigns (data/sovereigns.ts): one moment of a Sovereign's mechanic, sent at the world
+   * moment it happens (a `strike` before the hits it causes). `id` is the boss; `pos` where the
+   * mechanic stands or begins, `to` where it reaches (a lane's far end, a pull's centre, the line an
+   * echo flies); `radius` its reach; `duration` how long this step lasts (a warning's is the time
+   * until its strike); `targetIds` the bodies it concerns (rods, images, courtiers, chained allies).
+   * `index` counts repeats within one use (rod 1, 2, 3; image 1, 2).
+   */
+  | { type: "boss_mechanic"; id: number; defId: string; mech: SovereignMechanic; step: MechanicStep; index: number; pos: Vec2; to: Vec2; radius: number; duration: number; targetIds: number[] };
 
 /** Whether a `cast` event starts a cast (the ultimate's later strikes repeat its event). */
 export function startsCast(e: Extract<GameEvent, { type: "cast" }>): boolean {
