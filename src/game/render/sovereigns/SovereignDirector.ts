@@ -1596,11 +1596,12 @@ export class SovereignDirector {
       }
       if (e.dead) continue;
       if (dr.kind === "image") {
+        // Cold glass: pale, translucent, its shimmer in its opacity. (A white copy of each image,
+        // its alpha changed every frame, doubled what an image cost to draw for all its life.)
         const md = this.host.mod(id);
         md.tint = dr.ally ? 0xf3dc9a : 0xdfe8ff;
         md.tintK = Math.max(md.tintK, 0.5);
-        md.white = Math.max(md.white, 0.12 + 0.08 * Math.sin(this.now * 6 + id));
-        this.addMod(id, 0, 0, 0.82, 0);
+        this.addMod(id, 0, 0, 0.8 + 0.08 * Math.sin(this.now * 6 + id), 0);
       } else if (dr.kind === "courtier") {
         if (e.state === "idle") this.host.mod(id).kneel = true;
       }
