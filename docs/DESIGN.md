@@ -796,6 +796,160 @@ Parade), King's Judgement's `charge` (Legion Meteor: from the soldier to the imp
 `addMastery`, `masteryUses`, `masteryTierFor`, `chooseEvolution`, `recordSynergy` and
 `signatureDamageMult`; `combatPower` takes the signature multiplier as a third argument.
 
+## Rift Sovereigns
+
+From stage 61 (the third Rift Depth) the last gate of each region is no longer its Warden but its
+Sovereign: the Mirror Knight at 66 (the Ashen Verge), the Storm Titan at 75 (the Drowned Hollow),
+the Void Queen at 90 (the Shattered Crown), and again at every depth (96, 105, 120, 126, ...). The
+contract is `data/sovereigns.ts` (ids, mechanics, counters, `sovereignForStage`); `bossForStage`
+uses it for the campaign and Boss Hunts, Rank Trials keep the Warden. The fights live in
+`bosses/sovereigns.ts`; their shadows in `summons/sovereignShadows.ts`. They take the depth's twist,
+the gate scaling and the forecast like any gate. Offline progress never fights them.
+
+**The frame.** Each fights with a Warden's frame (`hollowWarden.ts`): it walks to its target, picks
+a pattern when its timer runs out, two phases (the second at half health, with the stagger and the
+knock-back every boss has), and three mechanics of its own. Each mechanic sends `boss_mechanic`
+events: `warn` (its `duration` is the time until the strike), `strike` (before the hits it causes),
+`end` (`countered` when its answer was played). Every part of one that hurts stands in the world as a
+hostile telegraph first, so AUTO's dodge (`impendingThreat`, half the time at the last moment) and
+the dash's `escapeFrom` see it. A mechanic cut short (phase 2's stagger, or the Sovereign's fall)
+ends where it stands, nothing more of it lands. Rods, courtiers and images are enemies with a
+`sovPart` mark: no gold, xp, loot or essence, not in the Bestiary, not counted as kills.
+
+**The Mirror Knight** (base 1850 health, attack 20, fast; swing and charge).
+- *Mirror Guard* (every third choice, at most every 8 s): warn 0.4 s, then the mirror stands 1.8 s.
+  Blows on it land at 25%; 30% of each flashes back at the striker (one flash per striker per
+  0.35 s, never more than 4% of its health, never the killing flash from above 30%). AUTO keeps the
+  Fury and the signature skills hold while it stands. A manual dash through the Knight shatters it:
+  the Knight staggers 1.2 s and is exposed 3 s (blows +30%; the `end` says `countered`). A dash into the Knight at the wall stops
+  at the wall instead of turning back.
+- *Mirror Echo* (every third choice, once the warrior has cast an art): warn 0.9 s, a lane through
+  the warrior's depth from the Knight to the field's edge (width by the art copied, 24 to 44), then
+  the art copied at 110% to 160% to every ally in it.
+- *Mirror Split* (phase 2, at most every 14 s, with no images standing): warn 0.6 s, two glass images
+  (2% of its health each, 45% of its attack, its speed) that walk and strike; the true Knight trades
+  places with one of them (or not) by the boss's own draw. Only the Knight bleeds; the images last
+  8 s or until shattered.
+
+**The Storm Titan** (base 2320 health, attack 22, slow; swing, slam and charge).
+- *Storm Rods* (every third choice, none standing, at most every 9 s): two rods (three in phase 2),
+  one beside the warrior's target and the rest spread across the field, each 2.5% of its health; each
+  charges 3 s inside a marked circle of 72, then strikes every ally in it (150%) and storms the
+  Titan up with a shield of 6% of its health (10 s). A rod struck down first calls nothing and its
+  circle goes with it. The warrior's AUTO and the army go for a rod within 130 of them; a tap sends
+  the warrior to any rod, and the Aggressive command sends the army to any.
+- *Chain Storm* (every third choice, at most every 5 s): warn 1.0 s on a spot of 42 under the
+  tightest knot of allies; at the strike the ally on the spot is struck (130%) and the bolt leaps to
+  the nearest ally within 90, up to five leaps, x0.7 each. Leave the mark, spread out.
+- *Storm Tide* (phase 2, every third choice, at most every 6 s): warn 1.2 s on a lane 72 wide through
+  the warrior across the whole field; the wave strikes (140%) and throws everything in it.
+
+**The Void Queen** (base 2550 health, attack 22; sweep and volley).
+- *Void Well* (at 66% and at 33% of her health): warn 0.8 s, then 3 s in which every ally is pulled
+  to the middle of the field at 62 a second (the warrior walks at 160); its marked core of 52 strikes
+  everyone in it every half second (50%). The warrior's own feet carry him out of the core.
+- *Kneeling Court* (every fourth choice, none kneeling, at most every 12 s): warn 0.7 s, two
+  courtiers (three in phase 2) kneeling behind her, away from the warrior, each 3.5% of her health;
+  each spares her 25% of every blow (at least 40% lands) while it kneels. AUTO and the army go for
+  them as for the rods (within 130; a tap or Aggressive for the far ones).
+- *Eclipse* (phase 2, every third choice, at most every 8 s): the field darkens for 2.5 s (`warn`'s
+  duration); 1.2 s before the end her strike's mark (radius 70) shows on the warrior's ground; the
+  strike (200%) lands on whoever is in it.
+
+**Balance, measured.** A Sovereign gate asks what its Warden's gate at the same stage asks. The
+probe (`scratchpad/sov/engine/probe.test.ts`, run once with the Sovereigns and once with
+`ASCEND_SOVEREIGNS=0`, which puts every gate back to its Warden) fights the forecast's own fight
+(AUTO, 150 s) for two profile families, each with `d` levels added to (or taken from) attack,
+health, defence and crit damage: the owner-like save (level 570, ascended, Apex, five 40-level
+shadows; it climbs to stage 81 as it is) and the economy simulator's gate-42 save. Eight seeds per
+point, ten points a gate. `d50` is where half the fights are won (lower is easier):
+
+| Gate | Boss | Owner d50 (Warden / Sovereign) | Owner wins over the window | Simulator d50 | Simulator wins |
+| --- | --- | --- | --- | --- | --- |
+| 66 | Mirror Knight | -82.5 / -82.5 | 56/80 / 56/80 | 176 / 176 | 40/80 / 40/80 |
+| 75 | Storm Titan | -43.3 / -42.5 | 42/80 / 40/80 | 276 / 276 | 40/80 / 40/80 |
+| 90 | Void Queen | 36.7 / 41.0 | 57/80 / 51/80 | 400 / 400 | 16/80 / 16/80 |
+| 96 | Mirror Knight | 71.2 / 67.0 | 50/80 / 57/80 | 442 / 442 | 56/88 / 56/88 |
+
+Every difference is within one step of the grid (5 levels for the owner, 8 to 12 for the
+simulator); the fights flip from lost to won across one step for nearly every seed. Both families
+lose these gates on the clock, not by falling: at the boundary the bosses' blows (Wardens' and
+Sovereigns' alike) barely dent a late warrior, so a gate is a race against the forecast's 150 s.
+
+**Answering them, measured.** The same probe with a manual player beside AUTO (world time, so a
+perfect dodge's slow motion costs nothing): a dash for every marked mechanic about to land, a dash
+through a standing mirror, a tap on each rod or courtier and on the true Knight during a split, the
+Aggressive command while parts stand. Eight seeds, at a winning point near each boundary; damage
+taken is the sum over the fight, in the warrior's health:
+
+| Gate (profile, d) | AUTO: time / damage taken | Manual: time / damage taken |
+| --- | --- | --- |
+| Knight 66 (owner, -70) | 53.5 s / 521% | 47.3 s / 31% (37 mirrors shattered) |
+| Knight 96 (owner, 85) | 62.1 s / 538% | 57.3 s / 46% |
+| Knight 66 (simulator, 190) | 93.4 s / 729% | 80.8 s / 45% |
+| Knight 96 (simulator, 460) | 70.4 s / 522% | 60.9 s / 19% |
+| Titan 75 (owner, -30) | 53.1 s / 111% | 54.6 s / 57% |
+| Titan 75 (simulator, 290) | 70.4 s / 60% | 70.1 s / 25% |
+| Queen 90 (owner, 50) | 95.0 s / 197% | 103.8 s / 131% |
+| Queen 90 (simulator, 410) | 91.9 s / 52% | 90.8 s / 18% |
+
+The Knight is where manual play shows most: 8 to 13% faster and a tenth of the wounds (AUTO wins
+by eating the mirror's flashes). Against the Titan and the Queen manual play halves or thirds the
+wounds and is no faster (AUTO already strikes down the near rods and courtiers; a dash spent on a
+mark is a moment not striking). For reference the same manual player against the Wardens at the
+same points takes 55% to 93% of AUTO's wounds and is no faster.
+
+**Their shadows** (`summons/sovereignShadows.ts`; `sovereign` role, legendary, two actives on their
+own cooldowns, a passive, and an ultimate that fires with the warrior's Ascendant Fury, at most every
+15 s, or every 40 s on its own clock with AUTO off). They send the same `boss_mechanic` events with
+the shadow's id (an ally), and `summon_ability` as every shadow does.
+- The Mirror Knight: *Mirror Guard* (10 s; a mirror before the warrior for 3 s: his wounds land at
+  60% and 60% of each flashes back, at most 1.5 of the Knight's blows a flash), *Mirror Echo* (6 s;
+  the warrior's last art down a lane of foes, 450%, plus a quarter of his last signature blow of the
+  last 6 s); passive *Silvered Oath* (25% of every blow on the warrior flashes back, at most 0.75 of
+  its blows); ultimate *Mirror Split* (two images at half strength fight for 6 s). Codex +15% crit
+  damage.
+- The Storm Titan: *Storm Rods* (11 s; three rods on the thickest knots, 200% after 1.2 s; foes
+  beside a rod count as marked for the signature skills' choices), *Chain Storm* (7 s; up to seven
+  foes, 200%, x0.85 a leap); passive *Thunderous* (its blows strike every foe within 70 of the
+  target for 35%); ultimate *Storm Tide* (300% down the most crowded lane; throws all but a boss).
+  Codex +12% health.
+- The Void Queen: *Void Well* (12 s; for 2.5 s foes within 150 are drawn in, never a boss or a fixed
+  part; its core of 50 strikes 60% each half second; a singularity for Gravity Feast, which then
+  devours the foes in it even without Void Collapse), *Kneeling Court* (15 s; two shadow courtiers
+  at half her strength for 7 s); passive *Dark Majesty* (foes within 150 of her take 12% more from
+  the whole army); ultimate *Eclipse* (250% to every foe on the field). Codex +10% attack.
+
+Measured on the owner-like save (`contrib.test.ts`: one shadow fielded in front, at the strongest
+shadow's level and stars, four seeds; farming at 60, gates at 90 and 96): the damage it and what it
+raises deal a second, against the Crownless King's shadow in the same place, is x1.41 / x2.40 /
+x1.26 for the Knight, x1.42 / x2.00 / x1.55 for the Titan, x1.73 / x2.55 / x1.12 for the Queen;
+summed over the three, x1.56, x1.61 and x1.63. (In a 20 s gate at 72 the King casts one Decree and
+the ratios read x3 to x10.) A late warrior deals all but a millionth of the damage himself, so a
+shadow moves a gate little; fielded in place of the fifth shadow, the levels the forecast needs at
+90 and 96 (d50) are: none 41.0 and 67.0, the King 37.5 and 62.9, the Knight 32.5 and 57.5, the Titan
+40.0 and 66.0, the Queen 34.0 and 57.9, all three 32.5 and 57.5. The owner-like save's climb from
+63 (three forecast wins in four) stops at 81 as it is, with the King or the Titan or the Queen, and
+at 84 with the Knight or all three. Deploy best counts each kit: `kitWorth` (Knight 1.5, Titan 2,
+Queen 1.65) multiplies the attack term of the Army strength, from the measured contribution over the
+King's at equal level.
+
+**Getting them.** Each Sovereign drops its essence on every win, as the King does. While its
+species is not yet bound, a BIND on a Sovereign's boss essence is certain
+(`certainSovereignBind`). A Sovereign's gate can be hunted once the Sovereign has fallen there or at
+a later depth (`progression/hunts.ts`); a won Hunt of it gives its bound shadow 3 shards. The boss
+card, the Hunt list and the Journal show the three mechanics and how to answer each.
+
+**Nothing else changed.** Every rule above is behind a Sovereign (a boss with `boss.sov`, a part
+with `enemy.sovPart`, a fielded Sovereign shadow), and draws nothing otherwise. A harness
+(`scratchpad/sov/ident/ident.test.ts`) run on the contract commit and on this code compares 1,895
+digests (every event, loot drop, snapshot every half second, the RNG's next draw, the clock, phase
+and kills): five warriors (the owner-like save; with four signature skills and the crown; with
+manual dashes, focus taps and a command change; the simulator's save; a new player), nine modes at
+stages 2 to 60, farming and the farm modes at 61 to 96, boss, Hunt and Trial at the Warden gates 63
+to 99, Trials at 66, 75 and 90, offline progress at 38, 66 and 90, the boss forecast at 36 to 87;
+three seeds each. All 1,895 match to the bit. `tests/unit/balance.test.ts` is unchanged.
+
 ## Studio review, round 3 (the always-on loop)
 
 Three independent reviewers (combat, summoning and creative; mobile UX, hostile player and
