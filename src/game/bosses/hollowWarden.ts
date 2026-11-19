@@ -3,6 +3,7 @@ import type { Combatant } from "../entities/types";
 import { dist } from "../engine/math";
 import { ARENA } from "../engine/World";
 import { hasStatus } from "../combat/statuses";
+import { chooseSovereign, interruptMechanic, updateSovereignPattern } from "./sovereigns";
 
 /**
  * THE HOLLOW WARDEN
@@ -25,6 +26,7 @@ export function updateBossAi(world: World, b: Combatant, dt: number): void {
     return;
   }
   if (bs.phase === 1 && b.hp / b.stats.maxHp <= 0.5) {
+    if (bs.sov) interruptMechanic(world, b);
     bs.phase = 2;
     bs.enraged = true;
     bs.pattern = "idle";
@@ -64,7 +66,9 @@ export function updateBossAi(world: World, b: Combatant, dt: number): void {
       if (bs.patternTimer <= 0) {
         bs.patternStep += 1;
         const roll = world.rng.next();
-        if (b.enemy?.defId === "ember_herald") {
+        if (bs.sov) {
+          chooseSovereign(world, b, target, d, roll);
+        } else if (b.enemy?.defId === "ember_herald") {
           if (bs.phase === 2 && bs.patternStep % 4 === 0) heraldCall(world, b);
           else if (d < 120 && bs.patternStep % 2 === 0) startBlink(world, b, target);
           else if (roll < 0.55) startRiptide(world, b);
@@ -294,6 +298,18 @@ export function updateBossAi(world: World, b: Combatant, dt: number): void {
       }
       break;
     }
+    case "mirror_guard":
+    case "mirror_echo":
+    case "mirror_split":
+    case "storm_rods":
+    case "storm_chain":
+    case "storm_tide":
+    case "void_well":
+    case "void_court":
+    case "void_eclipse":
+      if (bs.sov) updateSovereignPattern(world, b, target, dt);
+      else bs.pattern = "idle";
+      break;
     default:
       bs.pattern = "idle";
   }
@@ -343,14 +359,14 @@ function startRiptide(world: World, b: Combatant): void {
   ext.burstCount = 0;
 }
 
-function startSwing(world: World, b: Combatant, target: Combatant, windupOverride?: number): void {
+export function startSwing(world: World, b: Combatant, target: Combatant, windupOverride?: number): void {
   b.boss!.pattern = "swing";
   const windup = windupOverride ?? (b.boss!.phase === 2 ? 0.75 : 1.0);
   world.beginAttack(b, target, windup, 0.18, 0.6);
   world.addTelegraph({ x: b.pos.x + b.facing * 55, y: b.pos.y }, 70, windup, "arc", b.facing, 110, 0x3a8fff);
 }
 
-function startCharge(world: World, b: Combatant, target: Combatant): void {
+export function startCharge(world: World, b: Combatant, target: Combatant): void {
   b.boss!.pattern = "charge";
   b.boss!.patternTimer = 1.9;
   b.facing = target.pos.x >= b.pos.x ? 1 : -1;
@@ -358,13 +374,13 @@ function startCharge(world: World, b: Combatant, target: Combatant): void {
   world.addTelegraph({ x: b.pos.x, y: b.pos.y }, 46, 1.0, "line", b.facing, length, 0x3a8fff);
 }
 
-function startSlam(world: World, b: Combatant): void {
+export function startSlam(world: World, b: Combatant): void {
   b.boss!.pattern = "slam";
   b.boss!.patternTimer = 1.1;
   world.addTelegraph({ ...b.pos }, 150, 1.1, "circle", b.facing, 0, 0x7cf6ff);
 }
 
-function startVolley(world: World, b: Combatant, target: Combatant): void {
+export function startVolley(world: World, b: Combatant, target: Combatant): void {
   b.boss!.pattern = "volley";
   b.boss!.patternTimer = 1.6;
   b.facing = target.pos.x >= b.pos.x ? 1 : -1;
@@ -380,7 +396,7 @@ function heraldRest(b: Combatant): number {
 }
 
 /** Holds a boss in a state whose remaining duration is the true time left until it acts. */
-function hold(b: Combatant, state: Combatant["state"], timeLeft: number): void {
+export function hold(b: Combatant, state: Combatant["state"], timeLeft: number): void {
   if (b.state !== state) {
     b.state = state;
     b.stateTime = 0;
@@ -419,7 +435,7 @@ function startDecree(world: World, b: Combatant, target: Combatant): void {
   });
 }
 
-function startSweep(world: World, b: Combatant, target: Combatant): void {
+export function startSweep(world: World, b: Combatant, target: Combatant): void {
   b.facing = target.pos.x >= b.pos.x ? 1 : -1;
   b.boss!.pattern = "sweep";
   b.boss!.patternTimer = b.boss!.phase === 2 ? 0.7 : 0.9;

@@ -26,6 +26,7 @@ import {
   type SynergyId,
 } from "../data/signatures";
 import { SKILL_IMPLS, type Plan } from "./skills/index";
+import { guardUp } from "../bosses/sovereigns";
 import { chooseCast } from "./ai";
 
 /**
@@ -297,6 +298,8 @@ export class SignatureRuntime {
     const w = this.world;
     if (w.ultimate.active || w.player.dead) return false;
     if (w.phase !== "wave" && w.phase !== "boss") return false;
+    // A Mirror Knight's standing mirror would flash a skill's blows back: the skills wait it out.
+    if (guardUp(w.boss)) return false;
     const s = w.player.state;
     if (s === "cast" || s === "dodge" || s === "hit" || s === "emerge") return false;
     return true;

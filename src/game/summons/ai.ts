@@ -5,6 +5,7 @@ import { summonDef } from "../data/summons";
 import { addStatus } from "../combat/statuses";
 import { factionWithin, hostilesWithin, isHidden, lowestHpFraction, mostDangerous, nearestHostile } from "../combat/targeting";
 import { ARENA } from "../engine/World";
+import { priorityPart } from "../bosses/sovereigns";
 
 /**
  * Summons are first-class combatants with their own AI per role and a shared command layer.
@@ -67,6 +68,11 @@ export function updateSummonAi(world: World, s: Combatant, dt: number): void {
       default:
         target = nearestHostile(s, enemiesNearAnchor);
     }
+  }
+  // A Sovereign's charging rod or kneeling courtier is cut down first, unless holding a guard post.
+  if (world.boss?.boss?.sov && sum.command !== "guard" && sum.role !== "sentinel") {
+    const part = priorityPart(world, s.pos);
+    if (part) target = part;
   }
   // The player's focus overrides role targeting, except for a guard holding its post.
   const focus = world.focusTarget();

@@ -104,8 +104,15 @@ export type GameEvent =
    * echo flies); `radius` its reach; `duration` how long this step lasts (a warning's is the time
    * until its strike); `targetIds` the bodies it concerns (rods, images, courtiers, chained allies).
    * `index` counts repeats within one use (rod 1, 2, 3; image 1, 2).
+   *
+   * `id` may also be an ally: a Sovereign's bound shadow wields the same mechanics against the
+   * warrior's foes, with the same ids and steps (tell the two apart by the entity's faction).
+   * Mirror Guard sends a `strike` with index 0 when the mirror stands and one more for each blow it
+   * flashes back (index 1, 2, ...; `to` is where the flash goes, `targetIds` whom it strikes).
+   * `countered`: on an `end`, the mechanic was answered (the mirror shattered by a dash through it,
+   * a rod struck down before it charged, the court cut down, the images all shattered).
    */
-  | { type: "boss_mechanic"; id: number; defId: string; mech: SovereignMechanic; step: MechanicStep; index: number; pos: Vec2; to: Vec2; radius: number; duration: number; targetIds: number[] };
+  | { type: "boss_mechanic"; id: number; defId: string; mech: SovereignMechanic; step: MechanicStep; index: number; pos: Vec2; to: Vec2; radius: number; duration: number; targetIds: number[]; countered?: boolean };
 
 /** Whether a `cast` event starts a cast (the ultimate's later strikes repeat its event). */
 export function startsCast(e: Extract<GameEvent, { type: "cast" }>): boolean {

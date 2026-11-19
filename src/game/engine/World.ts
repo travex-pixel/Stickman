@@ -21,6 +21,8 @@ import { addStatus, hasStatus, speedMultiplier, statusValue, tickStatuses } from
 import { nearestHostile, hostilesWithin, factionWithin, isHidden, mostDangerous } from "../combat/targeting";
 import { updateEnemyAi } from "../enemies/ai";
 import { updateBossAi } from "../bosses/hollowWarden";
+import { dismissAllParts, guardUp, newSovereignState, onManualDash, onPartFell, priorityPart, sovereignIncoming } from "../bosses/sovereigns";
+import { isSovereign } from "../data/sovereigns";
 import { rankCooldownMult, rankPowerMult } from "../progression/abilityRanks";
 import { updateSummonAi } from "../summons/ai";
 import { castPlayerAbility, resolvePlayerAbility, playerDodge } from "../abilities/execute";
@@ -269,6 +271,10 @@ export class World {
   bossEngagedAt = -1;
   /** Strikes the running Ascendant Fury throws (more when crowned by Sovereign Awakening). */
   furyStrikeCount = FURY_STRIKES;
+  /** The warrior's last ability cast in this world (a Mirror Knight throws it back). */
+  lastArt: AbilityId | null = null;
+  /** Rift Sovereigns: ground the warrior's own feet leave (a Void Well's core) until `until`. */
+  readonly sovZones: { pos: Vec2; radius: number; until: number }[] = [];
 
   constructor(opts: WorldOptions) {
     this.stage = Math.max(1, opts.stage);
@@ -391,6 +397,7 @@ export class World {
     if (id === "shadow_dash") return this.dodge();
     const ok = castPlayerAbility(this, id);
     if (ok) {
+      this.lastArt = id;
       if (def.ultimate) this.energy = 0;
       else this.cooldowns[id] = this.abilityCooldown(id);
     }
@@ -445,7 +452,10 @@ export class World {
     if (this.ultimate.active) return false;
     const p = this.player;
     const perfect = manual && this.impendingThreat(World.PERFECT_WINDOW) !== null;
+    const from = { x: p.pos.x, y: p.pos.y };
     playerDodge(this);
+    // A dash through a Mirror Knight's standing mirror shatters it (the player's own dash only).
+    if (manual && this.bossId >= 0) onManualDash(this, from);
     if (perfect) {
       this.perfectCrit = true;
       this.gainEnergy(15);
@@ -982,6 +992,7 @@ export class World {
     }
     if (this.twist === "frenzy") applyTwist(boss, "frenzy");
     boss.boss = { phase: 1, patternTimer: 1.2, pattern: "idle", patternStep: 0, introTimer: 2.4, enraged: false };
+    if (isSovereign(def.id)) boss.boss.sov = newSovereignState();
     boss.state = "emerge";
     boss.stateDuration = 2.4;
     this.bossId = boss.id;
@@ -1052,6 +1063,8 @@ export class World {
     // A cast AUTO starts this tick stands: its cast (or dodge) state must not be overwritten by the
     // movement and attack logic below, or the ability never resolves and the lock never holds.
     if (this.loadout.autoCast && this.autoCast(dt)) return;
+    // A Void Well's core: his own feet carry him out of it, against the pull.
+    if (this.sovZones.length > 0 && this.leaveZone(dt)) return;
 
     const target = this.acquireTarget(p);
     p.targetId = target ? target.id : -1;
@@ -1078,6 +1091,20 @@ export class World {
     else if (p.state !== "idle") this.setState(p, "idle");
   }
 
+  /** Walks the warrior out of a Sovereign's zone he stands in. Returns whether he is walking out. */
+  private leaveZone(dt: number): boolean {
+    const p = this.player;
+    for (let i = this.sovZones.length - 1; i >= 0; i--) if (this.time >= this.sovZones[i]!.until) this.sovZones.splice(i, 1);
+    const z = this.sovZones.find((o) => dist(o.pos, p.pos) < o.radius + 10);
+    if (!z || p.state === "windup" || p.state === "attack") return false;
+    const dx = p.pos.x - z.pos.x;
+    const dy = p.pos.y - z.pos.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const out = { x: clamp(z.pos.x + (dx / len) * (z.radius + 30), ARENA.minX, ARENA.maxX), y: clamp(z.pos.y + (dy / len) * (z.radius + 30), ARENA.minY, ARENA.maxY) };
+    this.moveToward(p, out, dt, 1);
+    return true;
+  }
+
   /** AUTO's choices, four times a second. Returns whether it cast or dodged this tick. */
   private autoCast(dt: number): boolean {
     this.autoCastTimer -= dt;
@@ -1097,7 +1124,8 @@ export class World {
       }
     }
     // With signature skills equipped, a Fury charged a while is cast on fewer foes (SIG_FURY_PATIENCE).
-    if (this.loadout.ultimateUnlocked && this.energy >= ULTIMATE_ENERGY_COST && (enemies.length >= 3 || this.boss || (this.sig && this.sig.furyPatient()))) {
+    // A Mirror Knight's standing mirror would flash the flurry back: AUTO keeps the Fury for after it.
+    if (this.loadout.ultimateUnlocked && this.energy >= ULTIMATE_ENERGY_COST && (enemies.length >= 3 || this.boss || (this.sig && this.sig.furyPatient())) && !guardUp(this.boss)) {
       if (this.castAbility(ULTIMATE_ID)) return true;
     }
     const soul = this.slot("soul_burst");
@@ -1145,6 +1173,11 @@ export class World {
     if (self.faction === "ally") {
       const f = this.focusTarget();
       if (f) return f;
+      // A Sovereign's charging rod or kneeling courtier is struck down first (as the King's guards).
+      if (this.boss?.boss?.sov) {
+        const part = priorityPart(this, self.pos);
+        if (part) return part;
+      }
     }
     const current = self.targetId >= 0 ? this.entities.get(self.targetId) : undefined;
     if (current && !current.dead && current.faction !== self.faction && !isHidden(current)) {
@@ -1517,6 +1550,8 @@ export class World {
 
   applyRawDamage(target: Combatant, amount: number, element: Element, sourceId: number, crit: boolean, heavy = false, apexTag?: { echo?: 1 | 2; prismatic?: boolean }): void {
     if (target.dead || hasStatus(target, "submerged")) return;
+    // A Sovereign's mirror or court spares it most of a blow (and the mirror flashes some back).
+    if (target.boss?.sov && amount > 0) amount = Math.max(1, Math.round(sovereignIncoming(this, target, amount, sourceId)));
     // The Tyrant's clock starts when it does: no free score during its entrance.
     if (this.mode === "tyrant" && target.kind === "boss" && this.phase !== "boss") return;
     let remaining = amount;
@@ -1556,6 +1591,13 @@ export class World {
     target.vel.y = 0;
     const sig = this.sig ? this.sig.deathTag(target, killerId) : null;
     this.events.push({ type: "death", id: target.id, kind: target.kind, defId: target.defId, pos: { ...target.pos }, killerId, elite: !!target.enemy?.elite || undefined, ...(sig ? { sig } : {}) });
+    if (target.enemy?.sovPart) {
+      // A Sovereign's rod, courtier or image: worth nothing but the blow (no gold, loot or essence).
+      if (!target.enemy.sovPart.dismissed && killerId >= 0) this.gainEnergy(killerId === this.player.id ? 6 : 3, true);
+      onPartFell(this, target);
+      return;
+    }
+    if (target.boss?.sov) dismissAllParts(this, target);
     if (target.faction === "enemy") {
       this.kills += 1;
       if (target.kind === "enemy" && !target.enemy?.minion && this.twist === "volatile") this.volatileBurst(target);
@@ -1654,9 +1696,11 @@ export class World {
     return proj;
   }
 
-  addTelegraph(pos: Vec2, radius: number, duration: number, shape: Telegraph["shape"] = "circle", dir: 1 | -1 = 1, length = 0, color = 0xff4d6d, hostile = true): void {
-    this.telegraphs.push({ id: this.allocId(), pos: { ...pos }, radius, remaining: duration, total: duration, shape, dir, length, color, hostile });
+  addTelegraph(pos: Vec2, radius: number, duration: number, shape: Telegraph["shape"] = "circle", dir: 1 | -1 = 1, length = 0, color = 0xff4d6d, hostile = true): Telegraph {
+    const t: Telegraph = { id: this.allocId(), pos: { ...pos }, radius, remaining: duration, total: duration, shape, dir, length, color, hostile };
+    this.telegraphs.push(t);
     this.events.push({ type: "telegraph", pos: { ...pos }, radius, duration });
+    return t;
   }
 
   /**

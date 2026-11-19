@@ -11,6 +11,11 @@ import { addStatus, hasStatus } from "../combat/statuses";
  * Acolytes lob embers that leave burning ground.
  */
 export function updateEnemyAi(world: World, e: Combatant, dt: number): void {
+  // A Sovereign's rod or courtier stands where it was raised; it neither moves nor strikes.
+  if (e.enemy?.sovPart?.fixture) {
+    world.stop(e);
+    return;
+  }
   if (hasStatus(e, "stun")) {
     world.stop(e);
     return;

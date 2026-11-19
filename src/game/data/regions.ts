@@ -1,5 +1,6 @@
 import type { EliteAffix } from "./ids";
 import { depthRewardMult, localStage } from "./depths";
+import { sovereignForStage } from "./sovereigns";
 
 export interface WaveSpawn {
   enemyId: string;
@@ -221,10 +222,19 @@ export function isBossStage(stage: number): boolean {
 
 export const WAVES_PER_STAGE = 3;
 
-/** The boss guarding a campaign stage. Rank Trials always face the region's Warden. */
+/** Measurement knob: 0 puts every gate back to its Warden (the balance probe compares the two). */
+export const SOVEREIGNS_ON = Number(process.env.ASCEND_SOVEREIGNS ?? 1) !== 0;
+
+/**
+ * The boss guarding a campaign stage. From stage 61 each region's last gate is its Rift Sovereign
+ * (data/sovereigns.ts); Rank Trials always face the region's Warden.
+ */
 export function bossForStage(stage: number, mode: string = "campaign"): string {
   const region = regionForStage(stage);
-  return mode !== "trial" && region.bossFor ? region.bossFor(localStage(stage)) : region.bossId;
+  if (mode === "trial") return region.bossId;
+  const sovereign = SOVEREIGNS_ON ? sovereignForStage(stage) : null;
+  if (sovereign) return sovereign;
+  return region.bossFor ? region.bossFor(localStage(stage)) : region.bossId;
 }
 
 /**

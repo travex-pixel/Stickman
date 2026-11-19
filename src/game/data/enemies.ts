@@ -28,6 +28,8 @@ export interface EnemyDef {
   windup: number;
   palette: { body: number; accent: number; eye: number };
   scale: number;
+  /** A body a Sovereign's mechanic raises (a rod, a courtier, an image): kept out of the Bestiary. */
+  part?: boolean;
 }
 
 export const ENEMIES: Record<string, EnemyDef> = {
@@ -352,10 +354,9 @@ export const ENEMIES: Record<string, EnemyDef> = {
     archetype: "boss",
     lore: "The Verge's last sentinel stood so long at the border of the Rift that it learned to show each enemy its own face.",
     counter: "While the mirror stands, blows flash back: dodge through it to shatter it. Only the true knight bleeds.",
-    base: { hp: 2800, attack: 20, attackSpeed: 0.7, defense: 7, moveSpeed: 84, range: 80, radius: 30 },
+    base: { hp: 2000, attack: 20, attackSpeed: 0.7, defense: 7, moveSpeed: 84, range: 80, radius: 30 },
     xp: 380,
     gold: 300,
-    // Its shadow (essenceSummonId) comes with the simulation's work: none until then.
     essenceChance: 1,
     rarity: "legendary",
     windup: 0.85,
@@ -369,10 +370,9 @@ export const ENEMIES: Record<string, EnemyDef> = {
     archetype: "boss",
     lore: "Something vast walked out of the drowned sea carrying the storm on its back. It has been looking for a lightning rod ever since.",
     counter: "Strike its rods down before they charge. When the bolt leaps, spread out.",
-    base: { hp: 3400, attack: 22, attackSpeed: 0.5, defense: 9, moveSpeed: 56, range: 110, radius: 44 },
+    base: { hp: 2450, attack: 22, attackSpeed: 0.5, defense: 9, moveSpeed: 56, range: 110, radius: 44 },
     xp: 380,
     gold: 300,
-    // Its shadow (essenceSummonId) comes with the simulation's work: none until then.
     essenceChance: 1,
     rarity: "legendary",
     windup: 1.05,
@@ -386,15 +386,64 @@ export const ENEMIES: Record<string, EnemyDef> = {
     archetype: "boss",
     lore: "When the Crown fell, the throne did not stay empty. What sits in it now holds court in the dark, and the court still kneels.",
     counter: "Keep to the edge of her well. Cut down her courtiers first. In the dark, watch the ground.",
-    base: { hp: 3000, attack: 22, attackSpeed: 0.62, defense: 7, moveSpeed: 72, range: 90, radius: 32 },
+    base: { hp: 2600, attack: 22, attackSpeed: 0.62, defense: 7, moveSpeed: 72, range: 90, radius: 32 },
     xp: 380,
     gold: 300,
-    // Its shadow (essenceSummonId) comes with the simulation's work: none until then.
     essenceChance: 1,
     rarity: "legendary",
     windup: 0.95,
     palette: { body: 0x140f1c, accent: 0x7a4fc0, eye: 0xf0e2ff },
     scale: 1.85,
+  },
+  // Bodies the Sovereigns' mechanics raise (bosses/sovereigns.ts sets their health and strength).
+  // They are worth nothing: no gold, no loot, no essence.
+  mirror_image: {
+    id: "mirror_image",
+    name: "Mirror Image",
+    title: "A Reflection With a Blade",
+    archetype: "grunt",
+    lore: "Glass in the Knight's shape. It strikes like the Knight and breaks like glass.",
+    base: { hp: 1, attack: 1, attackSpeed: 0.9, defense: 0, moveSpeed: 96, range: 70, radius: 26 },
+    xp: 0,
+    gold: 0,
+    essenceChance: 0,
+    rarity: "common",
+    windup: 0.55,
+    palette: { body: 0x2a2d36, accent: 0xd8dde8, eye: 0xf4f6ff },
+    scale: 1.55,
+    part: true,
+  },
+  storm_rod: {
+    id: "storm_rod",
+    name: "Storm Rod",
+    title: "Lightning Waiting to Fall",
+    archetype: "grunt",
+    lore: "Iron from the drowned sea, planted to call the storm down.",
+    base: { hp: 1, attack: 0, attackSpeed: 0.1, defense: 0, moveSpeed: 0, range: 0, radius: 14 },
+    xp: 0,
+    gold: 0,
+    essenceChance: 0,
+    rarity: "common",
+    windup: 1,
+    palette: { body: 0x10202a, accent: 0x6fa8ff, eye: 0xe6f2ff },
+    scale: 1,
+    part: true,
+  },
+  void_courtier: {
+    id: "void_courtier",
+    name: "Kneeling Courtier",
+    title: "The Court Still Kneels",
+    archetype: "grunt",
+    lore: "They kneel to the throne and lend it their strength. They have nothing else left to lend.",
+    base: { hp: 1, attack: 0, attackSpeed: 0.1, defense: 0, moveSpeed: 0, range: 0, radius: 16 },
+    xp: 0,
+    gold: 0,
+    essenceChance: 0,
+    rarity: "common",
+    windup: 1,
+    palette: { body: 0x140f1c, accent: 0x7a4fc0, eye: 0xf0e2ff },
+    scale: 0.95,
+    part: true,
   },
 };
 

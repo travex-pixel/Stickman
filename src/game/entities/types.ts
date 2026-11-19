@@ -48,6 +48,8 @@ export interface SummonState {
   /** Shades called by a Rift Caller expire; permanent shadows have Infinity. */
   expiresAt: number;
   temporary: boolean;
+  /** Sovereign shadows only (summons/sovereignShadows.ts): the kit's own clocks. */
+  sov?: { cd1: number; cd2: number; ult: number; guardUntil: number };
 }
 
 export interface EnemyState {
@@ -77,6 +79,39 @@ export interface EnemyState {
   eliteGuarded?: boolean;
   /** Lurker dive: hidden and gliding, then surfacing at a telegraphed spot. */
   dive?: { phase: "hidden" | "surfacing"; timer: number; at: Vec2 };
+  /**
+   * Rift Sovereigns: a body a Sovereign's mechanic raised (a storm rod, a kneeling courtier, a
+   * mirror image). It is worth nothing (no gold, loot or essence) and `fixture` bodies never move.
+   */
+  sovPart?: { kind: "rod" | "courtier" | "image"; fixture: boolean; index: number; ownerId: number; dismissed?: boolean };
+}
+
+/** A Sovereign's own state through its fight (bosses/sovereigns.ts). */
+export interface SovereignBossState {
+  /** World time each mechanic was last used. */
+  lastUsed: Partial<Record<SovereignMechanic, number>>;
+  /** Mirror Guard: world time it falls (-1: down), reflects sent, and when each source last was. */
+  guardUntil: number;
+  guardReflects: number;
+  reflectAt: Map<number, number>;
+  /** Mirror Split: the images' ids while they stand. */
+  images: number[];
+  /** Storm Rods: the rods' ids while they charge. */
+  rods: number[];
+  /** Void Court: the courtiers' ids while they kneel. */
+  court: number[];
+  /** Void Well: the health thresholds already answered (0.66, 0.33). */
+  wells: number;
+  /** The mechanic in flight: its spot (an echo's or tide's lane, the chain's or eclipse's mark), reach and art. */
+  spot: Vec2 | null;
+  spotR: number;
+  art: string | null;
+  /** A part's telegraph (a rod's charge circle), withdrawn when the part falls first. */
+  tele: Map<number, Telegraph>;
+  /** Mechanics begun in this fight. */
+  uses: number;
+  /** Where the coming images or courtiers will rise (shown during the warning). */
+  pending: Vec2[];
 }
 
 export interface BossState {
@@ -91,6 +126,8 @@ export interface BossState {
   burstCount?: number;
   introTimer: number;
   enraged: boolean;
+  /** Rift Sovereigns only. */
+  sov?: SovereignBossState;
 }
 
 export interface Combatant {
