@@ -1,4 +1,4 @@
-import { Graphics, type Container } from "pixi.js";
+import { Graphics, Sprite, type Container } from "pixi.js";
 import { Piece, PiecePool, ShapeBank, q } from "./shapes";
 import { arms, blackSun, chargeArc, chevrons, crack, crescent, dashes, diamond, disc, ellipseFill, ellipseLine, foam, glyphArc, glyphBolt, glyphRing, line, pane, paneGlint, paneLight, paneSheen, pip, rectFill, rod, rodArcs, sheet, sigil, tether, wave, wellRim } from "./marks";
 import type { GameEvent } from "../../engine/events";
@@ -1568,12 +1568,19 @@ export class SovereignDirector {
     const sig = this.host.sig;
     const d = this.dark;
     if (d > 0) {
-      // Foes in the dark sink with it; the warrior and his army keep a rim of light (always readable).
+      // Foes in the dark sink with it; the warrior keeps a rim of light, his army a pale glow at its
+      // back (always readable). A white copy of every soldier doubled what the army cost to draw
+      // for as long as the dark lasted; one soft sprite each costs next to nothing.
       sig.each("enemy", this.sink);
-      sig.each("ally", this.lit);
+      this.glows = 0;
+      sig.each("ally", this.glow);
       this.lit(sig.playerId());
       // The Queen in her own eclipse withdraws into the dark.
       for (const m of this.mechs) if (m.mech === "void_eclipse" && !m.ally && m.step !== "end") this.addMod(m.id, 0, 0, 1 - 0.6 * d, 0);
+    }
+    for (let i = d > 0 ? this.glows : 0; i < this.glowPool.length; i++) {
+      const g = this.glowPool[i]!;
+      if (g.visible) g.visible = false;
     }
     for (const [id, dr] of this.dressed) {
       const e = this.host.entity(id);
@@ -1607,7 +1614,31 @@ export class SovereignDirector {
     md.tintK = Math.max(md.tintK, 0.55 * this.dark);
   };
 
-  /** The warrior and his army keep a rim of light in it. */
+  /** The army's glows in the dark (kept for reuse), and how many show this frame. */
+  private readonly glowPool: Sprite[] = [];
+  private glows = 0;
+
+  /** A soldier of the army keeps a pale glow at its back in the dark (bound once). */
+  private readonly glow = (id: number): void => {
+    if (!this.host.sig.body(id, this.b2)) return;
+    let s = this.glowPool[this.glows];
+    if (!s) {
+      s = new Sprite(softCircle());
+      s.anchor.set(0.5);
+      s.blendMode = "add";
+      s.tint = 0xe4ddf2;
+      this.host.layers.ground.addChild(s);
+      this.glowPool.push(s);
+    }
+    this.glows += 1;
+    const b = this.b2;
+    s.visible = true;
+    s.position.set(b.x, b.y - b.height * 0.48);
+    s.scale.set((b.height * 0.62) / 64, (b.height * 1.15) / 64);
+    s.alpha = 0.34 * this.dark;
+  };
+
+  /** The warrior keeps a rim of light in it. */
   private readonly lit = (id: number): void => {
     const md = this.host.mod(id);
     md.white = Math.max(md.white, 0.14 * this.dark);
@@ -1704,6 +1735,8 @@ export class SovereignDirector {
     this.darkP.destroy();
     this.sunP.destroy();
     this.pool.destroy();
+    for (const g of this.glowPool) g.destroy();
+    this.glowPool.length = 0;
   }
 }
 
