@@ -381,6 +381,28 @@ export class DamageNumbers {
     n.vy = style === "word" ? -36 : style === "label" ? -40 : -60;
     n.gravity = style === "word" ? 0 : 40;
     this.place(n, x, y);
+    if (style === "label" || style === "word") this.unstack(n);
+  }
+
+  /**
+   * Names said in the same breath (the abilities of shadows standing together, ultimates cast with
+   * the Fury) stack one above another instead of printing over each other.
+   */
+  private unstack(n: Num): void {
+    const s = n.holder.scale.x;
+    for (let pass = 0; pass < 8; pass++) {
+      let moved = false;
+      for (const o of this.pool) {
+        if (o === n || !o.active || (o.style !== "label" && o.style !== "word") || o.age > 0.8) continue;
+        const os = o.holder.scale.x;
+        const gapY = (o.h * os + n.h * s) / 2;
+        if (Math.abs(o.holder.x - n.holder.x) < (o.w * os + n.w * s) / 2 && Math.abs(o.holder.y - n.holder.y) < gapY) {
+          n.holder.y = o.holder.y - gapY - 2;
+          moved = true;
+        }
+      }
+      if (!moved) return;
+    }
   }
 
   private take(): Num | null {

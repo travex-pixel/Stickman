@@ -2174,8 +2174,10 @@ export class BattleRenderer implements ImpactHost {
           const lx = src ? this.sx(src.pos.x) : sx;
           const ly = src ? this.sy(src.pos.y) - 105 * this.figureScale(src.pos.y) : sy - 60 * u;
           // The ability's name is shown the first time each is used in a fight; after that the
-          // ring and sparks say it, and the field stays clear of repeated labels.
-          if (!this.namedAbilities.has(e.ability)) {
+          // ring and sparks say it, and the field stays clear of repeated labels. A Sovereign
+          // shadow's ultimate is named by its own moment (SovereignDirector), never twice.
+          const sovUlt = isSovereign(e.defId) && summonDef(e.defId).ultimate?.name === e.ability;
+          if (!sovUlt && !this.namedAbilities.has(e.ability)) {
             this.namedAbilities.add(e.ability);
             this.numbers.spawn(lx, ly, e.ability, 0xf0d9a8, "label");
           }

@@ -48,7 +48,7 @@ export function isUltimate(mech: SovereignMechanic): boolean {
 
 /** The names the field shows the first time a shadow's ultimate fires in a fight. */
 export const ULTIMATE_NAME: Partial<Record<SovereignMechanic, string>> = {
-  mirror_split: "Hall of Mirrors",
+  mirror_split: "Mirror Split",
   storm_tide: "Storm Tide",
   void_eclipse: "Eclipse",
 };

@@ -5,7 +5,8 @@ import type { Combatant } from "../../src/game/entities/types";
 import { SOVEREIGN_IDS, SOVEREIGNS, type SovereignMechanic } from "../../src/game/data/sovereigns";
 import { buildSovScript, SOV_TIMING } from "../../src/game/render/sovereigns/driver";
 import { SovereignDirector, ECLIPSE_MAX, MAX_MECHS, type SovHost } from "../../src/game/render/sovereigns/SovereignDirector";
-import { arenaFor, sovLook } from "../../src/game/render/sovereigns/look";
+import { arenaFor, sovLook, ULTIMATE_NAME } from "../../src/game/render/sovereigns/look";
+import { SUMMONS } from "../../src/game/data/summons";
 import { ARENA_PIECES } from "../../src/game/render/sovereigns/arena";
 import { SignatureDirector } from "../../src/game/render/signatures/SignatureDirector";
 import type { SigBody, SigHost } from "../../src/game/render/signatures/host";
@@ -287,6 +288,13 @@ describe("the Sovereign director", () => {
     for (let k = 0; k < 40; k++) events.push(...script("mirror_echo", false).map((x) => ({ t: x.t, e: { ...(x.e as object), index: k } as GameEvent })));
     play(f, events, 0.3);
     expect(f.sov.live).toBeLessThanOrEqual(MAX_MECHS);
+  });
+
+  it("names a shadow's ultimate as its card does (the BIND reveal and the Army panel)", () => {
+    for (const id of SOVEREIGN_IDS) {
+      const late = SOVEREIGNS[id].mechanics.find((m) => m.late)!.id;
+      expect(ULTIMATE_NAME[late], id).toBe(SUMMONS[id]!.ultimate!.name);
+    }
   });
 
   it("a shadow's ultimate is a moment: it holds the focus and is named the first time", () => {
