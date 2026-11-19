@@ -396,7 +396,8 @@ function stormTide(w: World, s: Combatant): void {
     if (s.dead) return;
     const hit = foes(w).filter((e) => Math.abs(e.pos.y - y) < K.half + e.radius * 0.5);
     mech(w, s, "storm_tide", "strike", { pos: from, to, radius: K.half, duration: 0.6, targets: hit.map((e) => e.id) });
-    for (const e of hit) if (w.dealDamage(s, e, K.power, "void", true)) w.applyKnockback(e, { x: e.pos.x - dir * 40, y: e.pos.y }, 300);
+    // It throws the foes it strikes, but never a boss: the warrior's blade must not chase it.
+    for (const e of hit) if (w.dealDamage(s, e, K.power, "void", true) && e.kind !== "boss") w.applyKnockback(e, { x: e.pos.x - dir * 40, y: e.pos.y }, 300);
     mech(w, s, "storm_tide", "end", { pos: to, radius: K.half });
   });
 }
