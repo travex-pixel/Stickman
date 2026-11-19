@@ -53,6 +53,9 @@ export class ArenaLive {
     readonly arena: SovereignArena,
     private readonly flash: (alpha: number) => boolean,
   ) {
+    // Its own render group: its pieces only move, so Pixi re-packs the few that moved and never
+    // rebuilds them with the rest of the field (which it does on most frames).
+    this.back.isRenderGroup = true;
     const n = ARENA_PIECES[arena].full;
     for (let i = 0; i < n; i++) {
       const s = new Sprite(arena === "storm_sea" ? Texture.WHITE : arena === "mirror_hall" ? shard() : softCircle());
