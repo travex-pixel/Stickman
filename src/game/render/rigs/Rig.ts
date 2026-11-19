@@ -1073,6 +1073,22 @@ export class Rig {
     for (const c of this.parts) whiteOf(c);
   }
 
+  /**
+   * The figure's drawn box in its root's space (rig units, feet at the origin, as it faces now),
+   * its aura's wide glow left out: what must be on screen for the body to be seen whole.
+   */
+  figureBox(out: { minX: number; maxX: number; minY: number; maxY: number }): void {
+    const aura = this.aura;
+    const was = aura ? aura.visible : false;
+    if (aura) aura.visible = false;
+    const b = this.root.getLocalBounds();
+    if (aura) aura.visible = was;
+    out.minX = b.minX;
+    out.maxX = b.maxX;
+    out.minY = b.minY;
+    out.maxY = b.maxY;
+  }
+
   /** A Sovereign's phase: its second form (no effect on other figures). */
   setPhase(p: 1 | 2): void {
     this.regalia?.setPhase(p);

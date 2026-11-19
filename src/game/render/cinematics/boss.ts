@@ -48,6 +48,61 @@ export const ENTRANCE = { length: 2.4, emerge: 0.3, impact: 1.1, release: 2.0, z
 /** The death sequence: inverted frames, then 1.2s of kneel and break. */
 export const DEATH = { inverted: 2 / 60, breakAt: 0.95, length: 2.6, zoom: 1.35 } as const;
 
+/** Base px kept clear between a Sovereign's whole figure and the field's edge in its entrance and death. */
+export const FIT_PAD = 10;
+/** The share of the view's width and height a Sovereign's figure may fill in its entrance and death. */
+const FIT_SHARE = 0.86;
+
+/** A figure's box (rig units, feet at the origin). */
+export interface FigureBox {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+}
+
+/** How a Sovereign is staged for its entrance or its death (see `fitFigure`). */
+export interface FigureFit {
+  /** How far its figure is drawn from where it stands (base px; `dx` positive to the left, `dy` down). */
+  dx: number;
+  dy: number;
+  /** The camera's framing of it: its centre (base px) and zoom. */
+  x: number;
+  y: number;
+  zoom: number;
+}
+
+/**
+ * Where a Sovereign is staged in its entrance or its death so its whole figure is seen. The camera
+ * can show no more than the painted field (the canvas in base px), and a Sovereign rises by its edge:
+ * the Storm Titan's storm alone is wider than the space behind it, and on a small phone taller than
+ * the space above it. So the figure is drawn inside the field (and lower, when the view is short),
+ * and framed whole: its centre, at a zoom no closer than `zoom` that keeps it in view.
+ */
+export function fitFigure(x: number, y: number, scale: number, box: FigureBox, viewW: number, viewH: number, zoom: number, out: FigureFit): void {
+  const left = x + box.minX * scale;
+  const right = x + box.maxX * scale;
+  const top = y + box.minY * scale;
+  const bottom = y + box.maxY * scale;
+  let dx = 0;
+  if (right > viewW - FIT_PAD) dx = right - (viewW - FIT_PAD);
+  if (left - dx < FIT_PAD) dx = left - FIT_PAD;
+  // Lower only as far as the view's foot allows (its head is what a short view cuts).
+  let dy = 0;
+  if (top < FIT_PAD) dy = Math.min(FIT_PAD - top, Math.max(0, viewH - FIT_PAD - bottom));
+  const w = Math.max(1, (box.maxX - box.minX) * scale);
+  const h = Math.max(1, (box.maxY - box.minY) * scale);
+  out.dx = dx;
+  out.dy = dy;
+  out.x = (left + right) / 2 - dx;
+  out.y = (top + bottom) / 2 + dy;
+  out.zoom = Math.max(1, Math.min(zoom, (viewW * FIT_SHARE) / w, (viewH * FIT_SHARE) / h));
+}
+
+function isSovereignKind(kind: BossKind): boolean {
+  return kind === "mirror" || kind === "titan" || kind === "queen";
+}
+
 export interface BossHost {
   readonly camera: Camera;
   readonly particles: ParticleSystem;
@@ -114,6 +169,15 @@ export class BossEntrance {
   private masked: Rig | null = null;
   private rigTop = 100;
   private reducedT = -1;
+  /**
+   * A Sovereign's figure box (rig units, measured as it rises) and how far inside the field it is
+   * drawn so all of it is seen (base px, eased back to its own place as the entrance lets go).
+   */
+  private box: FigureBox | null = null;
+  private insetX = 0;
+  private insetY = 0;
+  private insetK = 1;
+  private readonly fit: FigureFit = { dx: 0, dy: 0, x: 0, y: 0, zoom: 1 };
 
   constructor(host: BossHost, bossId: number, defId: string) {
     this.host = host;
@@ -153,7 +217,7 @@ export class BossEntrance {
     tl.tween(0, 0.4, easeOutCubic, (k) => host.dimOthers(0.3 * k));
     tl.tween(0, 0.6, easeInOutSine, (k) => {
       cam.hold.weight = k;
-      cam.hold.zoom = ENTRANCE.zoom;
+      cam.hold.zoom = this.box ? this.fit.zoom : ENTRANCE.zoom;
       cam.hold.lambda = 7;
     });
     // The emergence, by kind.
@@ -229,28 +293,69 @@ export class BossEntrance {
       }
     });
     tl.tween(e1, e1 + 0.3, null, (k) => (this.open = 1 - k));
-    // Release: the bars retract, the field comes back, the camera returns to the fight.
+    // Release: the bars retract, the field comes back, the camera returns to the fight (and a
+    // Sovereign staged inside the field steps back to its own place).
     tl.at(ENTRANCE.release, () => host.letterbox(0));
+    tl.tween(ENTRANCE.release, ENTRANCE.length, easeInOutSine, (k) => (this.insetK = 1 - k));
     tl.tween(ENTRANCE.release, ENTRANCE.length, easeInOutSine, (k) => {
       host.dimOthers(0.3 * (1 - k));
       cam.hold.weight = 1 - k;
     });
   }
 
+  /** Whether it frames the boss's whole figure (a Sovereign's): the renderer measures it each frame. */
+  get wantsBox(): boolean {
+    return isSovereignKind(this.kind) && !this.tl.disposed;
+  }
+
+  /**
+   * The boss's figure box this frame (rig units, feet at the origin). The entrance keeps the union of
+   * every pose it has shown (a blow wound up, the storm straightening), so its framing only widens.
+   */
+  setBox(box: FigureBox): void {
+    const b = this.box;
+    if (!b) this.box = { minX: box.minX, maxX: box.maxX, minY: box.minY, maxY: box.maxY };
+    else {
+      b.minX = Math.min(b.minX, box.minX);
+      b.maxX = Math.max(b.maxX, box.maxX);
+      b.minY = Math.min(b.minY, box.minY);
+      b.maxY = Math.max(b.maxY, box.maxY);
+    }
+  }
+
   /** Where the boss is drawn (base px, rig scale) this frame; called before `present`. */
   setPlace(x: number, y: number, scale: number, facing: 1 | -1, rigTop: number): void {
     const p = this.place;
-    p.x = x;
-    p.y = y;
     p.scale = scale;
     p.facing = facing;
     this.rigTop = rigTop;
-    if (!this.placed) {
-      this.placed = true;
-      const cam = this.host.camera;
-      cam.hold.x = x;
-      cam.hold.y = y - rigTop * scale * 0.5;
+    const cam = this.host.camera;
+    if (this.box) {
+      // A Sovereign is staged where all of it is seen, and framed whole (never pushed closer than
+      // the entrance's own zoom).
+      // Eased toward where it must stand (a wider pose seen later moves it in smoothly, never with a jump).
+      const f = this.fit;
+      fitFigure(x, y, scale, this.box, this.host.viewWidth(), cam.height - cam.insetBottom, ENTRANCE.zoom, f);
+      this.insetX = this.placed ? this.insetX + (f.dx - this.insetX) * 0.25 : f.dx;
+      this.insetY = this.placed ? this.insetY + (f.dy - this.insetY) * 0.25 : f.dy;
+      f.x += f.dx - this.insetX;
+      f.y += this.insetY - f.dy;
+      p.x = x - this.insetX * this.insetK;
+      p.y = y + this.insetY * this.insetK;
+      if (!this.placed || this.insetK >= 1) {
+        cam.hold.x = this.fit.x;
+        cam.hold.y = this.fit.y;
+        cam.hold.zoom = this.fit.zoom;
+      }
+    } else {
+      p.x = x;
+      p.y = y;
+      if (!this.placed) {
+        cam.hold.x = x;
+        cam.hold.y = y - rigTop * scale * 0.5;
+      }
     }
+    this.placed = true;
   }
 
   /** The pose to animate the boss with while it emerges (the King and the knight walk out). */
@@ -275,6 +380,12 @@ export class BossEntrance {
     const h = this.rigTop * p.scale;
     rig.root.alpha = 1;
     rig.root.tint = 0xffffff;
+    // A Sovereign is staged at its place inside the field (its shadow with it), steady: the army's
+    // blows do not shove it about (and off the screen) while it rises.
+    if (this.box) {
+      rig.root.position.set(p.x, p.y);
+      rig.shadow.position.set(p.x, p.y + 1);
+    }
     switch (this.kind) {
       case "warden":
       case "drowned": {
@@ -609,15 +720,27 @@ export class BossDeath {
     this.kind = bossKind(defId);
     const spec = enemySpec(defId);
     this.glow = spec.glow ?? spec.eye;
+    this.rig = new Rig(spec);
+    // A Sovereign dies in its second form.
+    this.rig.setPhase(2);
+    this.rig.setDeath(DEATH_KNEEL, facing, 1);
+    // A Sovereign dies where all of it is seen (its inverted frame hides the step inside), framed
+    // whole, never closer than the death's own zoom. Its box is measured in its first pose, the
+    // stagger, in its second form (its storm swollen), as it faces.
+    const fit: FigureFit = { dx: 0, dy: 0, x, y: y - this.rig.top * scale * 0.5, zoom: DEATH.zoom };
+    if (isSovereignKind(this.kind)) {
+      this.rig.animate("stagger", 0.1, 0.2, 0, facing, false, 0, 0, 1 / 60);
+      const box: FigureBox = { minX: 0, maxX: 0, minY: 0, maxY: 0 };
+      this.rig.figureBox(box);
+      fitFigure(x, y, scale, box, host.viewWidth(), host.camera.height - host.camera.insetBottom, DEATH.zoom, fit);
+      x -= fit.dx;
+      y += fit.dy;
+    }
     this.x = x;
     this.y = y;
     this.s = scale;
     this.facing = facing;
     this.seed = Math.random();
-    this.rig = new Rig(spec);
-    // A Sovereign dies in its second form.
-    this.rig.setPhase(2);
-    this.rig.setDeath(DEATH_KNEEL, facing, 1);
     this.rig.root.position.set(x, y);
     this.rig.root.scale.set(scale);
     this.rig.shadow.position.set(x, y + 1);
@@ -639,10 +762,12 @@ export class BossDeath {
     });
     tl.disposeOnDone = true;
     const cam = host.camera;
-    cam.hold.x = x;
-    cam.hold.y = y - this.rig.top * scale * 0.5;
-    cam.hold.zoom = DEATH.zoom;
-    cam.hold.lambda = 8;
+    cam.hold.x = fit.x;
+    cam.hold.y = fit.y;
+    cam.hold.zoom = fit.zoom;
+    // A Sovereign's framing is reached under its inverted frame (a cut), then held.
+    cam.hold.lambda = isSovereignKind(this.kind) ? 24 : 8;
+    if (isSovereignKind(this.kind)) tl.at(0.2, () => (cam.hold.lambda = 8));
     cam.hold.weight = 1;
     // The inverted impact frame: two frames, boss white on black.
     if (!host.isReduced()) {

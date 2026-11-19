@@ -921,6 +921,7 @@ export class BattleRenderer implements ImpactHost {
   }
 
   private readonly leadPt = { x: 0, y: 0 };
+  private readonly figBox = { minX: 0, maxX: 0, minY: 0, maxY: 0 };
 
   private syncEntities(world: World, alpha: number, dt: number, fxDt: number, realDt: number): void {
     const seen = this.seen;
@@ -1041,6 +1042,11 @@ export class BattleRenderer implements ImpactHost {
       rig.shadow.scale.set(ds * rig.poolScale, ds * 0.9 * rig.poolScale);
       rig.shadow.zIndex = -1000 + y;
       if (intro) {
+        // A Sovereign's entrance frames its whole figure (measured once, as it begins to rise).
+        if (intro.wantsBox) {
+          rig.figureBox(this.figBox);
+          intro.setBox(this.figBox);
+        }
         intro.setPlace(sx, sy, ds, e.facing, rig.top);
         intro.present(rig);
       } else if (this.dimOthers > 0.005) rig.root.tint = mix(0xffffff, 0x000000, this.dimOthers);
