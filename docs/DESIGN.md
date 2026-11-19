@@ -1361,11 +1361,12 @@ crimson, on the army's own non-hostile telegraphs.
 | Storm Tide | the lane fills with dark water, flow marks running the wave's way; a wall of water rises at its start | the wave sweeps the lane, foam and spray on its crest | the water recedes, a wet sheen |
 | Void Well | an ink core opens with a violet rim (the part that hurts); arms of the pull turn in over the safe edge | the pull: debris spirals in, light smears toward the core, bodies lean toward it | it closes with a ring |
 | Kneeling Court | a sigil opens under her and rings go out to the marked spots | the courtiers kneel, hooded in her violet; chains of void run from each to her, beads flowing toward her, and a ward shimmers on her while any lives | the chains go |
-| Eclipse | the field darkens (the backdrop and a wash under every mark; foes sink with it, the warrior and his army keep a rim of light); a black sun hangs over the field; a bright ring follows whom she hunts until her mark is set | her strike out of the dark on the mark: a crescent, a ring, the flash, one stop, one shake | the light comes back |
+| Eclipse | the field darkens (the backdrop and a wash under every mark; foes sink with it, the warrior and his army keep a rim of light); a black sun hangs over the field; a bright ring follows whom she hunts until her mark is set (the simulation's second warning, index 1, whose `to` is the mark) | her strike out of the dark on the mark: a crescent, a ring, the flash, one stop, one shake | the light comes back |
 
 While the field is dark, every telegraph is drawn with a bright rim over it: the dark never hides a
 threat. A shadow's ultimate (Mirror Split, Storm Tide, Eclipse) is a moment: named the first time in a
-fight, the signature focus (other figures quiet, the army not in it dimmed, the same rules and limits),
+fight (once: the shadow's own ability label stays quiet for it, and names said in the same breath
+stack above each other), the signature focus (other figures quiet, the army not in it dimmed, the same rules and limits),
 a short push-in, a stop and a flash through the budget; when it fires in the same breath as the
 warrior's Ascendant Fury the two crown each other (a gold crown of light on him, "Sovereign's Fury").
 
