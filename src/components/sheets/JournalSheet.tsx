@@ -9,6 +9,7 @@ import { SummonPortrait } from "@/components/ui/Portrait";
 import { useController, useProfileRef } from "@/hooks/useGame";
 import { ACHIEVEMENTS, JOURNAL } from "@/game/data/lore";
 import { ENEMIES } from "@/game/data/enemies";
+import { SOVEREIGNS, isSovereign } from "@/game/data/sovereigns";
 import { cn } from "@/lib/cn";
 import { CloseButton } from "./parts";
 
@@ -62,7 +63,14 @@ export function JournalSheet({ open }: { open: boolean }) {
                 <div className="min-w-0 flex-1">
                   <div className="t-body text-t1">{known ? e.name : "Unknown"}</div>
                   <p className="t-label text-t2 mt-0.5">{known ? e.lore : "Defeat it to learn more."}</p>
-                  {known && e.counter && <p className="t-label text-t1 mt-1">{e.counter}</p>}
+                  {known && e.counter && !isSovereign(e.id) && <p className="t-label text-t1 mt-1">{e.counter}</p>}
+                  {known &&
+                    isSovereign(e.id) &&
+                    SOVEREIGNS[e.id].mechanics.map((m) => (
+                      <p key={m.id} className="t-label text-t1 mt-1" data-testid={`journal-mechanic-${m.id}`}>
+                        <span className="text-gold">{m.name}.</span> {m.counter}
+                      </p>
+                    ))}
                   {known && (
                     <p className="t-label text-t2 mt-1 tnum">
                       Slain {seen[e.id] ?? 0}

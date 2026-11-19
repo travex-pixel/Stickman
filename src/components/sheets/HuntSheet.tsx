@@ -6,6 +6,7 @@ import { Sheet, SheetHeader } from "@/components/ui/Sheet";
 import { SummonPortrait } from "@/components/ui/Portrait";
 import { useController, useProfileRef } from "@/hooks/useGame";
 import { ENEMIES } from "@/game/data/enemies";
+import { SOVEREIGNS, isSovereign } from "@/game/data/sovereigns";
 import { bossForStage } from "@/game/data/regions";
 import { huntStages } from "@/game/progression/hunts";
 
@@ -36,7 +37,7 @@ export function HuntSheet({ open }: { open: boolean }) {
                   </span>
                 }
                 title={ENEMIES[id]?.name ?? "Boss"}
-                detail={`Stage ${s}`}
+                detail={isSovereign(id) ? <span className="whitespace-normal">{`Sovereign · Stage ${s} · ${SOVEREIGNS[id].mechanics.map((m) => m.name).join(", ")}`}</span> : `Stage ${s}`}
                 trailing={<span className="t-label text-threat">Hunt</span>}
                 disabled={keys <= 0}
                 onClick={() => c.startHunt(s)}

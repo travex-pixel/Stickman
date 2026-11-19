@@ -10,6 +10,7 @@ import { useStore } from "@/lib/store";
 import { useShortScreen } from "@/hooks/useShortScreen";
 import type { Modal } from "@/game/GameController";
 import { ENEMIES } from "@/game/data/enemies";
+import { SOVEREIGNS, isSovereign } from "@/game/data/sovereigns";
 import { bossForStage, regionForStage } from "@/game/data/regions";
 import { TWISTS, depthForStage, romanDepth, twistForStage } from "@/game/data/depths";
 import { stageClearCores, stageClearGold } from "@/game/economy/rewards";
@@ -131,7 +132,16 @@ export function BossReadySheet({ modal, open }: { modal: Extract<Modal, { kind: 
             <Row className="px-5" gutter={false} title={<span className="whitespace-normal">{twist.name}</span>} detail={<span className="whitespace-normal">{`${twist.blurb} ${twist.counter}`}</span>} />
           </div>
         )}
-        {boss?.counter && <p className="t-flavour text-t2 mt-4">{boss.counter}</p>}
+        {/* A Rift Sovereign: each of its mechanics and its answer, the late ones marked. */}
+        {isSovereign(bossId) ? (
+          <div className="-mx-5 mt-2" data-testid="boss-mechanics">
+            {SOVEREIGNS[bossId].mechanics.map((m) => (
+              <Row key={m.id} className="px-5" gutter={false} title={<span className="whitespace-normal">{m.late ? `${m.name} · at half health` : m.name}</span>} detail={<span className="whitespace-normal">{m.counter}</span>} data-testid={`boss-mechanic-${m.id}`} />
+            ))}
+          </div>
+        ) : (
+          boss?.counter && <p className="t-flavour text-t2 mt-4">{boss.counter}</p>
+        )}
 
         <div className="mt-5 flex items-center gap-3">
           <Button variant="plain" className="shrink-0 px-4" onClick={() => c.closeModal()} data-testid="boss-later">

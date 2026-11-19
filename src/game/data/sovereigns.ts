@@ -75,9 +75,9 @@ export const SOVEREIGNS: Readonly<Record<SovereignId, SovereignDef>> = {
     region: "ashen_verge",
     arena: "mirror_hall",
     mechanics: [
-      { id: "mirror_guard", name: "Mirror Guard", counter: "While the mirror stands, blows flash back: dodge through it to shatter it.", late: false },
-      { id: "mirror_echo", name: "Mirror Echo", counter: "It throws your own art back at you along a line: step off the line.", late: false },
-      { id: "mirror_split", name: "Mirror Split", counter: "Only the true knight bleeds: the cracked one.", late: true },
+      { id: "mirror_guard", name: "Mirror Guard", counter: "While the mirror stands, blows flash back: dash through the Knight to shatter it.", late: false },
+      { id: "mirror_echo", name: "Mirror Echo", counter: "It throws your last art back down a marked lane: step or dash out of the lane.", late: false },
+      { id: "mirror_split", name: "Mirror Split", counter: "Only the true Knight bleeds, the cracked one: tap it. The images shatter in a few blows.", late: true },
     ],
   },
   storm_titan: {
@@ -85,8 +85,8 @@ export const SOVEREIGNS: Readonly<Record<SovereignId, SovereignDef>> = {
     region: "drowned_hollow",
     arena: "storm_sea",
     mechanics: [
-      { id: "storm_rods", name: "Storm Rods", counter: "Strike the rods down before they charge, or stand clear when they call.", late: false },
-      { id: "storm_chain", name: "Chain Storm", counter: "The bolt leaps between allies who stand close: spread out.", late: false },
+      { id: "storm_rods", name: "Storm Rods", counter: "Strike the rods down before they charge (tap one to send everyone), or stand clear when they call.", late: false },
+      { id: "storm_chain", name: "Chain Storm", counter: "The bolt lands on the marked spot and leaps between allies who stand close: leave the mark, spread out.", late: false },
       { id: "storm_tide", name: "Storm Tide", counter: "A wave sweeps the marked lane: get out of it.", late: true },
     ],
   },
@@ -95,9 +95,9 @@ export const SOVEREIGNS: Readonly<Record<SovereignId, SovereignDef>> = {
     region: "shattered_crown",
     arena: "void_throne",
     mechanics: [
-      { id: "void_well", name: "Void Well", counter: "Its pull draws all to the centre: keep to the edge, out of the core.", late: false },
-      { id: "void_court", name: "Kneeling Court", counter: "Her courtiers shield her: cut them down first.", late: false },
-      { id: "void_eclipse", name: "Eclipse", counter: "In the dark, watch the ground: her strike is still marked.", late: true },
+      { id: "void_well", name: "Void Well", counter: "Its pull draws all to the centre: keep to the edge, out of the marked core, and dash if it holds you.", late: false },
+      { id: "void_court", name: "Kneeling Court", counter: "Her kneeling courtiers shield her: cut them down first (tap one).", late: false },
+      { id: "void_eclipse", name: "Eclipse", counter: "In the dark, watch the ground: her strike is still marked. Dash out of it.", late: true },
     ],
   },
 };
