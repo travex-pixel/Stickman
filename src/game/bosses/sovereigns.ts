@@ -627,6 +627,8 @@ function tickEclipse(w: World, b: Combatant, target: Combatant): void {
     // In the dark, her strike's mark still shows on the ground.
     s.spot = { x: clamp(target.pos.x, ARENA.minX, ARENA.maxX), y: clamp(target.pos.y, ARENA.minY, ARENA.maxY) };
     s.tele.set(-1, w.addTelegraph(s.spot, ECLIPSE_RADIUS, bs.patternTimer, "circle", 1, 0, C_VOID));
+    // The mark is a warning of its own (index 1): `to` is where the strike will fall.
+    sendMechanic(w, b, "void_eclipse", "warn", { index: 1, pos: b.pos, to: s.spot, radius: ECLIPSE_RADIUS, duration: bs.patternTimer, targets: [target.id] });
   }
   if (bs.patternTimer > 0) return;
   const spot = s.spot ?? { ...target.pos };

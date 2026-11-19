@@ -5,6 +5,7 @@ import { createDefaultProfile, type Profile } from "@/game/progression/profile";
 import type { GameEvent } from "@/game/engine/events";
 import type { Combatant } from "@/game/entities/types";
 import { SHADOW_KIT } from "@/game/summons/sovereignShadows";
+import { ECLIPSE_MARK, ECLIPSE_RADIUS, forceMechanic } from "@/game/bosses/sovereigns";
 
 type Mech = Extract<GameEvent, { type: "boss_mechanic" }>;
 
@@ -117,5 +118,45 @@ describe("the bodies a Sovereign shadow raises", () => {
     expect(faded, "courtiers rose and faded").toBeGreaterThan(0);
     expect(c.run.summonsLost).toBe(0);
     expect(said.some((t) => t.startsWith("A shadow has fallen"))).toBe(false);
+  });
+});
+
+describe("the Void Queen's Eclipse", () => {
+  it("sends a warning with index 1 the moment her strike's mark is set: its `to` is the mark, where the strike falls", () => {
+    const p = createDefaultProfile(0);
+    const w = new World({ stage: 90, loadout: buildLoadout(p), seed: 1, mode: "boss" });
+    const log: GameEvent[] = [];
+    step(w, 3, log);
+    const b = w.boss!;
+    expect(b.defId).toBe("void_queen");
+    w.player.stats.maxHp = 1e12;
+    b.boss!.phase = 2;
+    forceMechanic(w, b, "void_eclipse");
+    let markAt = -1;
+    let strikeAt = -1;
+    let teleAt = -1;
+    for (let i = 0; i < 3 / FIXED_DT; i++) {
+      w.player.hp = w.player.stats.maxHp;
+      w.update(FIXED_DT);
+      for (const e of w.drainEvents()) {
+        log.push(e);
+        if (e.type === "boss_mechanic" && e.mech === "void_eclipse" && e.step === "warn" && e.index === 1) markAt = w.time;
+        if (e.type === "boss_mechanic" && e.mech === "void_eclipse" && e.step === "strike") strikeAt = w.time;
+      }
+      if (teleAt < 0 && w.telegraphs.some((t) => t.hostile && t.radius === ECLIPSE_RADIUS)) teleAt = w.time;
+    }
+    const own = log.filter((e): e is Mech => e.type === "boss_mechanic" && e.id === b.id && e.mech === "void_eclipse");
+    const warns = own.filter((e) => e.step === "warn");
+    expect(warns.map((e) => e.index)).toEqual([0, 1]);
+    const mark = warns[1]!;
+    const strike = own.find((e) => e.step === "strike")!;
+    // Sent with the world's telegraph, about ECLIPSE_MARK before the strike (its duration says how
+    // long), inside the dark's own warning; and the strike falls on it.
+    expect(markAt).toBeCloseTo(teleAt, 5);
+    expect(mark.duration).toBeCloseTo(ECLIPSE_MARK, 1);
+    expect(strikeAt - markAt).toBeCloseTo(mark.duration, 1);
+    expect(mark.duration).toBeLessThan(warns[0]!.duration);
+    expect(mark.radius).toBe(ECLIPSE_RADIUS);
+    expect(mark.to).toEqual(strike.to);
   });
 });

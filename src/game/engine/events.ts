@@ -109,6 +109,9 @@ export type GameEvent =
    * warrior's foes, with the same ids and steps (tell the two apart by the entity's faction).
    * Mirror Guard sends a `strike` with index 0 when the mirror stands and one more for each blow it
    * flashes back (index 1, 2, ...; `to` is where the flash goes, `targetIds` whom it strikes).
+   * Mirror Split also sends a `strike` with the image's index (1, 2) when an image is struck down.
+   * Eclipse sends a second `warn` with index 1 when its strike's mark is set on the ground: `to` is
+   * where the strike will fall, `duration` the time left until it does.
    * `countered`: on an `end`, the mechanic was answered (the mirror shattered by a dash through it,
    * a rod struck down before it charged, the court cut down, the images all shattered).
    */
