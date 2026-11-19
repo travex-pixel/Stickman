@@ -353,7 +353,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
     title: "Sovereign of the Ashen Verge",
     archetype: "boss",
     lore: "The Verge's last sentinel stood so long at the border of the Rift that it learned to show each enemy its own face.",
-    counter: "While the mirror stands, blows flash back: dodge through it to shatter it. Only the true knight bleeds.",
+    counter: "While the mirror stands, blows flash back: dash through the Knight to shatter it. Only the true Knight bleeds.",
     base: { hp: 1850, attack: 20, attackSpeed: 0.7, defense: 7, moveSpeed: 84, range: 80, radius: 30 },
     xp: 380,
     gold: 300,
