@@ -827,16 +827,17 @@ ends where it stands, nothing more of it lands. Rods, courtiers and images are e
   the warrior's depth from the Knight to the field's edge (width by the art copied, 24 to 44), then
   the art copied at 110% to 160% to every ally in it.
 - *Mirror Split* (phase 2, at most every 14 s, with no images standing): warn 0.6 s, two glass images
-  (2% of its health each, 45% of its attack, its speed) that walk and strike; the true Knight trades
+  (2% of its health each but never more than 8 of the warrior's blows, 45% of its attack, its speed) that walk and strike; the true Knight trades
   places with one of them (or not) by the boss's own draw. Only the Knight bleeds; the images last
   8 s or until shattered.
 
 **The Storm Titan** (base 2320 health, attack 22, slow; swing, slam and charge).
 - *Storm Rods* (every third choice, none standing, at most every 9 s): two rods (three in phase 2),
-  one beside the warrior's target and the rest spread across the field, each 2.5% of its health; each
-  charges 3 s inside a marked circle of 72, then strikes every ally in it (150%) and storms the
-  Titan up with a shield of 6% of its health (10 s). A rod struck down first calls nothing and its
-  circle goes with it. The warrior's AUTO and the army go for a rod within 130 of them; a tap sends
+  one beside the warrior's target and the rest spread across the field, each 2.5% of its health but
+  never more than 10 of the warrior's expected blows; each charges 3 s inside a marked circle of 72,
+  then strikes every ally in it (150%) and storms the Titan up with a shield of 6% of its health,
+  never more than 10 of his blows, topped up and never stacked (10 s). A rod struck down first calls
+  nothing and its circle goes with it. The warrior's AUTO and the army go for a rod within 130 of them; a tap sends
   the warrior to any rod, and the Aggressive command sends the army to any.
 - *Chain Storm* (every third choice, at most every 5 s): warn 1.0 s on a spot of 42 under the
   tightest knot of allies; at the strike the ally on the spot is struck (130%) and the bolt leaps to
@@ -849,12 +850,13 @@ ends where it stands, nothing more of it lands. Rods, courtiers and images are e
   to the middle of the field at 62 a second (the warrior walks at 160); its marked core of 52 strikes
   everyone in it every half second (50%). The warrior's own feet carry him out of the core.
 - *Kneeling Court* (every fourth choice, none kneeling, at most every 12 s): warn 0.7 s, two
-  courtiers (three in phase 2) kneeling behind her, away from the warrior, each 3.5% of her health;
+  courtiers (three in phase 2) kneeling behind her, away from the warrior, each 3.5% of her health
+  but never more than 16 of the warrior's expected blows;
   each spares her 25% of every blow (at least 40% lands) while it kneels. AUTO and the army go for
   them as for the rods (within 130; a tap or Aggressive for the far ones).
 - *Eclipse* (phase 2, every third choice, at most every 8 s): the field darkens for 2.5 s (`warn`'s
-  duration); 1.2 s before the end her strike's mark (radius 70) shows on the warrior's ground; the
-  strike (200%) lands on whoever is in it.
+  duration); 1.2 s before the end her strike's mark (radius 70) shows on the warrior's ground, and
+  a second `warn` (index 1) carries it as `to`; the strike (200%) lands on whoever is in it.
 
 **Balance, measured.** A Sovereign gate asks what its Warden's gate at the same stage asks. The
 probe (`scratchpad/sov/engine/probe.test.ts`, run once with the Sovereigns and once with
@@ -902,37 +904,64 @@ same points takes 55% to 93% of AUTO's wounds and is no faster.
 **Their shadows** (`summons/sovereignShadows.ts`; `sovereign` role, legendary, two actives on their
 own cooldowns, a passive, and an ultimate that fires with the warrior's Ascendant Fury, at most every
 15 s, or every 40 s on its own clock with AUTO off). They send the same `boss_mechanic` events with
-the shadow's id (an ally), and `summon_ability` as every shadow does.
+the shadow's id (an ally), and `summon_ability` as every shadow does. Their clocks run whatever the
+shadow is doing (striking, casting, staggered), so each active comes round at its cooldown.
+
+*A Sovereign's might and endurance.* A late warrior out-hits any shadow by millions to one, and his
+foes fell any shadow with a blow. So a bound Sovereign's kit (both actives, its passive, its
+ultimate, the bodies it raises) is reckoned in the warrior's expected blow (his attack with his crit
+chance and crit damage; `SOVEREIGN_MIGHT` = 1 blow to one point of power) when that is more than
+its own attack; its plain blows stay its own. On the field it stands with at least 30% of his
+health and his defence (`sovereignEndurance`, `SOVEREIGN_ENDURANCE`). Deploy best and the Army
+strength count it as it fights (the same stats, its attack at his blow), so a Sovereign bound today
+is fielded over a long-raised Crownless King.
 - The Mirror Knight: *Mirror Guard* (10 s; a mirror before the warrior for 3 s: his wounds land at
   60% and 60% of each flashes back, at most 1.5 of the Knight's blows a flash), *Mirror Echo* (6 s;
-  the warrior's last art down a lane of foes, 450%, plus a quarter of his last signature blow of the
+  the warrior's last art down a lane of foes, 30 blows, plus half his last signature blow of the
   last 6 s); passive *Silvered Oath* (25% of every blow on the warrior flashes back, at most 0.75 of
-  its blows); ultimate *Mirror Split* (two images at half strength fight for 6 s). Codex +15% crit
-  damage.
-- The Storm Titan: *Storm Rods* (11 s; three rods on the thickest knots, 200% after 1.2 s; foes
-  beside a rod count as marked for the signature skills' choices), *Chain Storm* (7 s; up to seven
-  foes, 200%, x0.85 a leap); passive *Thunderous* (its blows strike every foe within 70 of the
-  target for 35%); ultimate *Storm Tide* (300% down the most crowded lane; throws all but a boss).
-  Codex +12% health.
+  its blows); ultimate *Mirror Split* (two images at half its might and health fight for 6 s).
+  Codex +15% crit damage. Its way: burst on one lane, and the lightest wounds.
+- The Storm Titan: *Storm Rods* (11 s; three rods on the thickest knots, 8 blows each after 1.2 s;
+  foes beside a rod count as marked for the signature skills' choices), *Chain Storm* (7 s; up to
+  seven foes, 7 blows, x0.85 a leap); passive *Thunderous* (each of its blows strikes its target and
+  every foe within 70 for 1.5 blows); ultimate *Storm Tide* (12 blows down the most crowded lane;
+  throws all but a boss). Codex +12% health. Its way: storm over crowds.
 - The Void Queen: *Void Well* (12 s; for 2.5 s foes within 150 are drawn in, never a boss or a fixed
-  part; its core of 50 strikes 60% each half second; a singularity for Gravity Feast, which then
+  part; its core of 50 strikes 2 blows each half second; a singularity for Gravity Feast, which then
   devours the foes in it even without Void Collapse), *Kneeling Court* (15 s; two shadow courtiers
-  at half her strength for 7 s); passive *Dark Majesty* (foes within 150 of her take 12% more from
-  the whole army); ultimate *Eclipse* (250% to every foe on the field). Codex +10% attack.
+  at her full might for 7 s); passive *Dark Majesty* (foes within 150 of her take 15% more from the
+  warrior and the whole army); ultimate *Eclipse* (8 blows to every foe on the field). Codex +10%
+  attack. Its way: the whole army's blows made heavier.
 
-Measured on the owner-like save (`contrib.test.ts`: one shadow fielded in front, at the strongest
-shadow's level and stars, four seeds; farming at 60, gates at 90 and 96): the damage it and what it
-raises deal a second, against the Crownless King's shadow in the same place, is x1.41 / x2.40 /
-x1.26 for the Knight, x1.42 / x2.00 / x1.55 for the Titan, x1.73 / x2.55 / x1.12 for the Queen;
-summed over the three, x1.56, x1.61 and x1.63. (In a 20 s gate at 72 the King casts one Decree and
-the ratios read x3 to x10.) A late warrior deals all but a millionth of the damage himself, so a
-shadow moves a gate little; fielded in place of the fifth shadow, the levels the forecast needs at
-90 and 96 (d50) are: none 41.0 and 67.0, the King 37.5 and 62.9, the Knight 32.5 and 57.5, the Titan
-40.0 and 66.0, the Queen 34.0 and 57.9, all three 32.5 and 57.5. The owner-like save's climb from
-63 (three forecast wins in four) stops at 81 as it is, with the King or the Titan or the Queen, and
-at 84 with the Knight or all three. Deploy best counts each kit: `kitWorth` (Knight 1.5, Titan 2,
-Queen 1.65) multiplies the attack term of the Army strength, from the measured contribution over the
-King's at equal level.
+Measured (`scratchpad/sov/review/tools`: the owner-like save and the simulator's, one shadow in the
+fifth place at the strongest shadow's level and stars, all three Sovereigns owned in every case so
+their Codex counts alike; boss fights the forecast's, eight seeds). Before this, a Sovereign's kit
+was a millionth of a fight, its shadow was dead two thirds of every gate, and the gates "gained"
+came from the Knight's and the Queen's Codex (the Titan's is health, which a race against the clock
+does not use): fielded, each did a little worse than the King (x0.92 to x1.01 of the damage a
+second with the King in its place). Now:
+
+| Gate (profile, d) | King: time | Knight | Titan | Queen |
+| --- | --- | --- | --- | --- |
+| 66 (owner, -80) | 94.3 s | 79.8 s (x1.21) | 83.8 s (x1.12) | 79.5 s (x1.19) |
+| 75 (owner, -40) | 69.4 s | 57.4 s (x1.14) | 57.5 s (x1.12) | 57.2 s (x1.14) |
+| 81 (owner, 0) | 79.1 s | 65.8 s (x1.23) | 68.0 s (x1.17) | 65.2 s (x1.21) |
+| 90 (owner, 40) | 112.9 s | 90.4 s (x1.20) | 94.4 s (x1.16) | 90.0 s (x1.20) |
+| 96 (owner, 70) | 112.7 s | 95.7 s (x1.18) | 99.6 s (x1.11) | 94.6 s (x1.17) |
+| 75 (simulator, 276) | 76.2 s | 53.6 s (x1.32) | 54.6 s (x1.30) | 58.7 s (x1.21) |
+| 90 (simulator, 400) | 97.2 s | 65.6 s (x1.33) | 68.5 s (x1.28) | 75.4 s (x1.19) |
+
+(x: the army's damage a second against the King's.) Each casts every mechanic a few times a minute
+in a gate (guard 4.2 to 4.6, echo 6.4 to 7.0, rods 3.9 to 4.4, chain 5.6 to 6.0, well 3.6 to 4.0,
+court 2.8 to 3.2, and the ultimates 2.5 to 3.2 with the Fury) and in farming (echo 7.5 to 8.7, chain
+6.4 to 7.3, rods 4.7 to 5.1). Farming is bound by how fast foes come, so it shows as a share of the
+kills: 8 to 17% the Knight's, 14 to 20% the Titan's, 10 to 15% the Queen's. At the owner's next gate
+(87, as the save is) the Crownless King leaves 40% of the boss after the forecast's 150 s; the
+Knight 27.5%, the Titan 26.9%, the Queen 26.5%. The climb (three forecast wins in four from 63): the
+owner-like save stops at 84 with any one of them and at 87 with all three (it stops at 84 with the
+King); without their Codex counted (as the first one bound finds it) at 81 alone, 84 with any one,
+87 with all three. The simulator's save at d 300: 78 alone or with the King, 81 with any one, 84
+with all three.
 
 **Getting them.** Each Sovereign drops its essence on every win, as the King does. While its
 species is not yet bound, a BIND on a Sovereign's boss essence is certain
@@ -941,7 +970,10 @@ a later depth (`progression/hunts.ts`); a won Hunt of it gives its bound shadow 
 card, the Hunt list and the Journal show the three mechanics and how to answer each.
 
 **Nothing else changed.** Every rule above is behind a Sovereign (a boss with `boss.sov`, a part
-with `enemy.sovPart`, a fielded Sovereign shadow), and draws nothing otherwise. A harness
+with `enemy.sovPart`, a fielded Sovereign shadow), and draws nothing otherwise. The review that gave
+the shadows their might re-proved it on the same harness (all 1,895 identical) and on a sweep of
+every stage 1 to 60 farmed, every non-Sovereign gate 3 to 150 fought and offline progress at 61 to
+105, for the owner-like save, the simulator's and a new player (all 327 identical). A harness
 (`scratchpad/sov/ident/ident.test.ts`) run on the contract commit and on this code compares 1,895
 digests (every event, loot drop, snapshot every half second, the RNG's next draw, the clock, phase
 and kills): five warriors (the owner-like save; with four signature skills and the crown; with
