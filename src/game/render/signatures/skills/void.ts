@@ -243,6 +243,9 @@ export class VoidStage extends Stage {
     }
     k.ring(this.cx, this.cy, this.coreR * 0.5, this.coreR * 5.5 * this.grow, 0.3, pal.deep, light, 3.5, { ground: false, squash: 1 });
     if (!this.compact) k.ring(this.cx, this.cy, this.coreR, this.coreR * 3.5 * this.grow, 0.42, -1, pal.glow, 2, { ground: false, squash: 0.85, delay: 0.05 });
+    // Supernova: the collapse goes off. A wide white shell outruns the violet ring, and the star is
+    // larger and hotter, so it reads as an explosion, not an implosion.
+    if (this.evo === "supernova") k.ring(this.cx, this.cy, this.coreR, this.coreR * 8.5 * this.grow, 0.5, pal.mid, light, 5, { ground: false, squash: 0.9, delay: 0.04 });
     // Light thrown out from the point, and ink debris after it.
     const o = k.o(this.cx, this.cy, softCircle(), light);
     o.speed[0] = 120;
@@ -324,12 +327,23 @@ export class VoidStage extends Stage {
     const k = this.kit;
     const light = this.gilded ? GILT_HOT : this.pal.core;
     const rays = chain ? 6 : 8;
-    const len = r * (chain ? 0.8 : 1.1);
+    const len = r * (chain ? 1 : 1.4);
+    // Thick rays, long and short alternating, so each burst reads as a star among the bodies.
     for (let i = 0; i < rays; i++) {
       const a = (i / rays) * Math.PI * 2 + 0.2;
-      k.slash(x + Math.cos(a) * len * 0.15, y + Math.sin(a) * len * 0.15, x + Math.cos(a) * len, y + Math.sin(a) * len * 0.8, this.pal.deep, light, 2.2, 0.22);
+      const l = i % 2 === 0 ? len : len * 0.6;
+      k.slash(x + Math.cos(a) * l * 0.12, y + Math.sin(a) * l * 0.12, x + Math.cos(a) * l, y + Math.sin(a) * l * 0.8, this.pal.deep, light, chain ? 2.8 : 3.6, 0.26);
     }
-    k.ring(x, y, 4, len * 1.1, 0.3, this.pal.deep, light, 2.5, { ground: false, squash: 0.8 });
+    k.ring(x, y, 4, len * 1.1, 0.3, this.pal.deep, light, 3, { ground: false, squash: 0.8 });
+    // A white-hot heart at the burst.
+    const h = k.o(x, y, softCircle(), light);
+    h.speed[0] = 0;
+    h.speed[1] = 0;
+    h.life[0] = 0.18;
+    h.life[1] = 0.24;
+    h.scale[0] = chain ? 0.45 : 0.6;
+    h.scale[1] = chain ? 0.5 : 0.7;
+    k.emit(1);
     const o = k.o(x, y, softCircle(), this.pal.glow);
     o.speed[0] = 60;
     o.speed[1] = 200;
@@ -455,15 +469,18 @@ export class VoidStage extends Stage {
     if (this.horizonG) {
       const g = this.horizonG;
       g.clear();
-      if (this.horizon >= 0 && this.horizon < this.horizonD + 0.3) {
-        const fade = this.horizon > this.horizonD ? 1 - (this.horizon - this.horizonD) / 0.3 : 1;
+      // The horizon is marked faintly on the ground from the pull (ticks turning), and locks bright
+      // when the trap closes.
+      const pre = this.horizon < 0 && (this.phase === 1 || this.phase === 2);
+      if (pre || (this.horizon >= 0 && this.horizon < this.horizonD + 0.3)) {
+        const fade = pre ? 0.35 + 0.25 * this.intensity : this.horizon > this.horizonD ? 1 - (this.horizon - this.horizonD) / 0.3 : 1;
         const rr = this.radius * this.u * 0.9;
         const flick = 0.85 + 0.15 * Math.sin(this.t * 40);
         g.ellipse(0, 0, rr, rr * this.squash).stroke({ width: 5, color: this.pal.accent, alpha: 0.45 * fade });
         g.ellipse(0, 0, rr, rr * this.squash).stroke({ width: 1.6, color: 0xffffff, alpha: 0.95 * fade * flick });
         // Tick marks pinning the horizon, turning slowly.
         for (let i = 0; i < 16; i++) {
-          const a = (i / 16) * Math.PI * 2 + this.horizon * 0.8;
+          const a = (i / 16) * Math.PI * 2 + (pre ? this.spin * 0.1 : this.horizon * 0.8);
           const x0 = Math.cos(a) * rr;
           const y0 = Math.sin(a) * rr * this.squash;
           g.moveTo(x0 * 0.92, y0 * 0.92).lineTo(x0 * 1.06, y0 * 1.06);
@@ -476,7 +493,7 @@ export class VoidStage extends Stage {
       const k = span01(this.phaseT, 0.06, 0.4);
       const grow = this.phaseT < 0.06 ? 0 : easeOutCubic(span01(this.phaseT, 0.06, 0.16));
       s.visible = this.phase >= 3 && this.phaseT >= 0.06;
-      s.scale.set((0.3 + 3.6 * grow * this.grow) * this.u * (1 - k * 0.5));
+      s.scale.set((0.3 + 3.6 * grow * this.grow * (this.evo === "supernova" ? 1.45 : 1)) * this.u * (1 - k * 0.5));
       s.alpha = 1 - k;
       s.rotation = 0.2 * k;
     }
@@ -517,9 +534,18 @@ export class VoidStage extends Stage {
     }
     const pal = this.pal;
     const R = this.coreR * (this.phase === 1 ? easeOutCubic(span01(this.phaseT, 0, this.formD)) : 1 + 0.35 * this.intensity);
-    // The photon ring's electric hint at the edge of the horizon (Event Horizon burns it brighter).
-    const hz = this.evo === "event_horizon" ? 1 : 0.45;
-    back.circle(0, 0, R * 1.4).stroke({ width: 1.2, color: pal.accent, alpha: 0.5 * hz * this.intensity });
+    // The photon ring's electric hint at the edge of the horizon.
+    if (this.evo !== "event_horizon") back.circle(0, 0, R * 1.4).stroke({ width: 1.2, color: pal.accent, alpha: 0.22 * this.intensity });
+    else {
+      // Event Horizon: the edge of the dark burns. A thick white-hot ring hugs the core (over the
+      // rings, so it reads through a crowd), an electric-blue band outside it, a second thin ring
+      // beyond, flickering: a black hole drawn the way it is photographed, not a plain black disc.
+      const flick = 0.88 + 0.12 * Math.sin(this.t * 37);
+      const light = this.gilded ? GILT_HOT : 0xffffff;
+      front.circle(0, 0, R * 1.22).stroke({ width: 8, color: pal.accent, alpha: 0.45 * flick });
+      front.circle(0, 0, R * 1.18).stroke({ width: 3.6, color: light, alpha: 0.95 * flick });
+      front.circle(0, 0, R * 1.62).stroke({ width: 1.4, color: light, alpha: 0.55 * this.intensity * flick });
+    }
     // Consumption: the souls it carries orbit the core, close in, bright.
     const souls = this.carried + this.fed;
     for (let i = 0; i < souls; i++) {
