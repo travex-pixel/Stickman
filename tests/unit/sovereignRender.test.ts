@@ -259,6 +259,22 @@ describe("the Sovereign director", () => {
     expect(f.sov.darkness).toBe(0);
   });
 
+  it("a frame whose clock ran backwards never darkens the field (the backdrop's tint stays a colour)", () => {
+    const f = field();
+    f.sov.update(0, -0.5);
+    expect(f.sov.darkness).toBe(0);
+    expect(f.state.eclipse).toBe(0);
+    const s = script("void_eclipse", false);
+    const d = new SigDriver((ev) => f.sov.handle(ev));
+    d.play(s);
+    for (let t = 0; t < 1; t += 1 / 30) {
+      d.update(1 / 30);
+      f.step(1 / 30);
+    }
+    f.sov.update(0, -0.5);
+    expect(f.sov.darkness).toBeLessThanOrEqual(ECLIPSE_MAX + 1e-9);
+  });
+
   it("every flash goes through the budget: never more than three a second, none with reduced effects", () => {
     for (const reduced of [false, true]) {
       const f = field(reduced);

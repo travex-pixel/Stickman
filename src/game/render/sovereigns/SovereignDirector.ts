@@ -792,6 +792,10 @@ export class SovereignDirector {
 
   /** `dt` world seconds (zero in a stop), `real` real seconds. Call after the signature director. */
   update(dt: number, real: number): void {
+    // A frame whose clock ran backwards (a stale animation frame after a reload or a hidden tab)
+    // moves nothing: the dark must never deepen without an eclipse, nor past its own depth.
+    dt = Math.max(0, dt);
+    real = Math.max(0, real);
     this.now += real;
     this.restoreMods();
     let dark = 0;
