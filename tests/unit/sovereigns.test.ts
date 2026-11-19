@@ -18,12 +18,14 @@ import {
   REFLECT_CAP,
   ROD_RADIUS,
   ROD_SHIELD,
+  ROD_SHIELD_BLOWS,
   TIDE_HALF,
   WELL_CORE,
   chainFrom,
   courtShield,
   forceMechanic,
   guardUp,
+  warriorBlow,
   wellCenter,
 } from "@/game/bosses/sovereigns";
 import { SHADOW_KIT, nearAllyRod } from "@/game/summons/sovereignShadows";
@@ -296,13 +298,15 @@ describe("the Storm Titan", () => {
     expect(w.acquireTarget(w.player)?.id).toBe(rods[0]!.id);
   });
 
-  it("a rod that calls its lightning storms the Titan up with a shield", () => {
+  it("a rod that calls its lightning storms the Titan up with a shield: one at most, never stacked, and a few of the warrior's blows at most", () => {
     const { w, b, log } = gate(75);
     forceMechanic(w, b, "storm_rods");
     expect(b.shield).toBe(0);
     step(w, 3.2, log);
     expect(mechs(log, "storm_rods", "strike").length).toBe(2);
-    expect(b.shield).toBe(2 * Math.round(b.stats.maxHp * ROD_SHIELD));
+    const one = Math.round(Math.min(b.stats.maxHp * ROD_SHIELD, ROD_SHIELD_BLOWS * warriorBlow(w)));
+    expect(one).toBeGreaterThan(0);
+    expect(b.shield).toBe(one);
   });
 
   it("Chain Storm: lands on its mark and leaps only between allies standing close", () => {

@@ -58,6 +58,8 @@ export const SPLIT_WARN = 0.6;
 export const IMAGE_LIFE = 8;
 /** An image's health, as a share of the Knight's (a few blows shatter it). */
 export const IMAGE_HP = 0.02;
+/** ...but never more than this many of the warrior's expected blows (see `partHp`). */
+export const IMAGE_BLOWS = 8;
 export const IMAGE_ATTACK = 0.45;
 
 export const ROD_CHARGE = 3.0;
@@ -65,8 +67,14 @@ export const ROD_RADIUS = 72;
 export const ROD_POWER = 1.5;
 /** A rod's health, as a share of the Titan's. */
 export const ROD_HP = 0.025;
-/** A rod that calls its lightning also storms the Titan up: a shield of this share of its health. */
+export const ROD_BLOWS = 10;
+/**
+ * A rod that calls its lightning also storms the Titan up: a shield of this share of its health,
+ * but never more than ROD_SHIELD_BLOWS of the warrior's expected blows, nor more than one such
+ * shield standing at once.
+ */
 export const ROD_SHIELD = 0.06;
+export const ROD_SHIELD_BLOWS = 10;
 export const ROD_SHIELD_TIME = 10;
 /** The warrior's own AUTO goes for a rod or courtier only this close to him (a tap sends him to any). */
 export const PART_REACH = 130;
@@ -94,6 +102,7 @@ export const WELL_THRESHOLDS = [0.66, 0.33] as const;
 export const COURT_WARN = 0.7;
 /** A courtier's health, as a share of the Queen's. */
 export const COURT_HP = 0.035;
+export const COURT_BLOWS = 16;
 /** Damage the Queen is spared per kneeling courtier, and the least she can take. */
 export const COURT_DR = 0.25;
 export const COURT_FLOOR = 0.4;
@@ -114,6 +123,22 @@ const C_VOID = 0x9a6fe0;
 
 export function newSovereignState(): SovereignBossState {
   return { lastUsed: {}, guardUntil: -1, exposedUntil: -1, guardReflects: 0, reflectAt: new Map(), images: [], rods: [], court: [], wells: 0, spot: null, spotR: 0, art: null, tele: new Map(), uses: 0, pending: [] };
+}
+
+/** The warrior's expected blow: his attack, with his crit chance and crit damage. */
+export function warriorBlow(w: World): number {
+  const p = w.player.stats;
+  return p.attack * (1 + Math.min(1, Math.max(0, p.critChance)) * (Math.max(1, p.critDamage) - 1));
+}
+
+/**
+ * A part's health (a rod, a courtier, an image): its share of the Sovereign's, but never more than
+ * `blows` of the warrior's expected blows. Answering a part then costs a few blows at any strength;
+ * as a share of the boss alone it cost a weaker warrior ever more of his fight, until rods and
+ * courtiers outpaced him and the gate became a wall his Warden never was.
+ */
+export function partHp(w: World, b: Combatant, share: number, blows: number): number {
+  return Math.max(1, Math.round(Math.min(b.stats.maxHp * share, blows * warriorBlow(w))));
 }
 
 function since(w: World, s: SovereignBossState, m: SovereignMechanic): number {
@@ -372,7 +397,7 @@ function strikeSplit(w: World, b: Combatant): void {
   spots.forEach((at, i) => {
     const img = w.spawnEnemy("mirror_image", { pos: at, minion: true, ownerId: b.id });
     img.enemy!.sovPart = { kind: "image", fixture: false, index: i + 1, ownerId: b.id };
-    img.stats.maxHp = Math.max(1, Math.round(b.stats.maxHp * IMAGE_HP));
+    img.stats.maxHp = partHp(w, b, IMAGE_HP, IMAGE_BLOWS);
     img.hp = img.stats.maxHp;
     img.stats.attack = Math.round(b.stats.attack * IMAGE_ATTACK * 10) / 10;
     img.stats.defense = 0;
@@ -421,7 +446,7 @@ function startRods(w: World, b: Combatant, target: Combatant): void {
   spots.forEach((at, i) => {
     const rod = w.spawnEnemy("storm_rod", { pos: at, minion: true, ownerId: b.id });
     rod.enemy!.sovPart = { kind: "rod", fixture: true, index: i + 1, ownerId: b.id };
-    rod.stats.maxHp = Math.max(1, Math.round(b.stats.maxHp * ROD_HP));
+    rod.stats.maxHp = partHp(w, b, ROD_HP, ROD_BLOWS);
     rod.hp = rod.stats.maxHp;
     rod.stats.attack = 0;
     rod.stats.defense = 0;
@@ -436,9 +461,12 @@ function startRods(w: World, b: Combatant, target: Combatant): void {
       sendMechanic(w, b, "storm_rods", "strike", { index: i + 1, pos: rod.pos, to: { x: rod.pos.x, y: ARENA.minY - 120 }, radius: ROD_RADIUS, targets: hit.map((e) => e.id) });
       w.events.push({ type: "shake", strength: 6 });
       for (const e of hit) w.dealDamage(b, e, ROD_POWER, "lightning", true);
-      // The storm it called feeds the Titan.
-      addStatus(b, { kind: "shield", remaining: ROD_SHIELD_TIME, value: Math.round(b.stats.maxHp * ROD_SHIELD), sourceId: b.id });
-      w.events.push({ type: "shield", id: b.id, pos: { ...b.pos } });
+      // The storm it called feeds the Titan: its shield is topped up, never stacked past one.
+      const add = Math.round(partHp(w, b, ROD_SHIELD, ROD_SHIELD_BLOWS) - b.shield);
+      if (add > 0) {
+        addStatus(b, { kind: "shield", remaining: ROD_SHIELD_TIME, value: add, sourceId: b.id });
+        w.events.push({ type: "shield", id: b.id, pos: { ...b.pos } });
+      }
       dismissPart(w, rod);
       sendMechanic(w, b, "storm_rods", "end", { index: i + 1, pos: rod.pos, radius: ROD_RADIUS });
     });
@@ -598,7 +626,7 @@ function strikeCourt(w: World, b: Combatant): void {
   spots.forEach((at, i) => {
     const c = w.spawnEnemy("void_courtier", { pos: at, minion: true, ownerId: b.id });
     c.enemy!.sovPart = { kind: "courtier", fixture: true, index: i + 1, ownerId: b.id };
-    c.stats.maxHp = Math.max(1, Math.round(b.stats.maxHp * COURT_HP));
+    c.stats.maxHp = partHp(w, b, COURT_HP, COURT_BLOWS);
     c.hp = c.stats.maxHp;
     c.stats.attack = 0;
     c.stats.defense = 0;

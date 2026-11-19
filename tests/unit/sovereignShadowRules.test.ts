@@ -5,7 +5,7 @@ import { createDefaultProfile, type Profile } from "@/game/progression/profile";
 import type { GameEvent } from "@/game/engine/events";
 import type { Combatant } from "@/game/entities/types";
 import { SHADOW_KIT } from "@/game/summons/sovereignShadows";
-import { ECLIPSE_MARK, ECLIPSE_RADIUS, forceMechanic } from "@/game/bosses/sovereigns";
+import { COURT_BLOWS, COURT_HP, ECLIPSE_MARK, ECLIPSE_RADIUS, IMAGE_BLOWS, IMAGE_HP, ROD_BLOWS, ROD_HP, forceMechanic, warriorBlow } from "@/game/bosses/sovereigns";
 
 type Mech = Extract<GameEvent, { type: "boss_mechanic" }>;
 
@@ -158,5 +158,44 @@ describe("the Void Queen's Eclipse", () => {
     expect(mark.duration).toBeLessThan(warns[0]!.duration);
     expect(mark.radius).toBe(ECLIPSE_RADIUS);
     expect(mark.to).toEqual(strike.to);
+  });
+});
+
+describe("a Sovereign's parts are a few blows' work at any strength", () => {
+  function engaged(stage: number, attack: number) {
+    const p = createDefaultProfile(0);
+    p.player.autoCast = false;
+    p.player.level = 200;
+    p.player.statLevels = { attack, maxHp: 400, attackSpeed: 1, critChance: 1, critDamage: 1, defense: 250 };
+    const w = new World({ stage, loadout: buildLoadout(p), seed: 1, mode: "boss" });
+    const log: GameEvent[] = [];
+    step(w, 3, log);
+    w.player.stats.maxHp = 1e15;
+    w.player.hp = 1e15;
+    return { w, b: w.boss!, log };
+  }
+  const parts = (w: World, kind: string) => [...w.entities.values()].filter((e) => !e.dead && e.enemy?.sovPart?.kind === kind);
+
+  it("a rod, a courtier and an image hold no more than a few of the warrior's expected blows (a weak warrior's), and never more than their share of the boss (a strong one's)", () => {
+    for (const attack of [1, 400]) {
+      for (const [stage, mech, kind, share, blows] of [
+        [75, "storm_rods", "rod", ROD_HP, ROD_BLOWS],
+        [90, "void_court", "courtier", COURT_HP, COURT_BLOWS],
+        [66, "mirror_split", "image", IMAGE_HP, IMAGE_BLOWS],
+      ] as const) {
+        const { w, b, log } = engaged(stage, attack);
+        b.boss!.phase = 2;
+        forceMechanic(w, b, mech);
+        step(w, 1, log);
+        const got = parts(w, kind);
+        expect(got.length, `${kind} raised`).toBeGreaterThan(0);
+        const cap = Math.round(Math.min(b.stats.maxHp * share, blows * warriorBlow(w)));
+        for (const e of got) {
+          expect(e.stats.maxHp, `${kind} at attack ${attack}`).toBe(Math.max(1, cap));
+          expect(e.stats.maxHp).toBeLessThanOrEqual(b.stats.maxHp * share + 1);
+        }
+        if (attack === 1) expect(cap, `a weak warrior's ${kind}`).toBeLessThan(b.stats.maxHp * share);
+      }
+    }
   });
 });
