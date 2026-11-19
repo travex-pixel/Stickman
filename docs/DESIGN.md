@@ -1317,7 +1317,8 @@ the world; a synthetic driver (`sovereigns/driver.ts`, `renderer.sovDebug(mech, 
 fights existed.
 
 **Three silhouettes.** Each is the procedural rig with its own regalia (`rigs/regalia.ts`), shared parts
-drawn once per kind like every body, so a Sovereign costs no more per frame than a Warden:
+drawn once per kind like every body; their circles have only the sides their size needs, since every
+point of a moving figure is packed again each frame (the Titan's figure is still nearly twice a Warden's):
 
 | | Figure and motion | Phase two | Entrance (2.4 s, a tap skips it) | Death |
 |---|---|---|---|---|
@@ -1355,13 +1356,13 @@ crimson, on the army's own non-hostile telegraphs.
 |---|---|---|---|
 | Mirror Guard | a gilt-framed mirror rises before the knight, toward the warrior | it stands, a sheen crossing it, its frame draining as its time runs out; each blow flashed back is a line of light from the glass to the striker and a glint (a small screen flash through the budget) | sinks; broken by a dash through it, it shatters |
 | Mirror Echo | a pale ghost of the warrior stands in the lane casting, the art he last used gathering in its hand as its glyph; ticks march down the lane | the ghost lunges; the art races down the lane as a pale crescent wave | the ghost breaks into glass |
-| Mirror Split | gold light gathers in the knight's crack | the images stand, cold glass (pale, translucent, a white shimmer, rims at their feet); the true knight keeps its crack of gold light, pulsing, and a gilt diamond over its head | the images left shatter; each struck down breaks into glass where it stood |
+| Mirror Split | gold light gathers in the knight's crack | the images stand, cold glass (pale, translucent, shimmering, rims at their feet); the true knight keeps its crack of gold light, pulsing, and a gilt diamond over its head | the images left shatter; each struck down breaks into glass where it stood |
 | Storm Rods | each rod is driven in by a bolt from the sky; its reach on the ground fills as it charges, arcs crawl up it faster, sparks at its tip, a health pip over it | lightning from the sky onto the tip, a ring to its reach, scorched ground, one stop and one shake | struck down in time, it topples and its charge spills out as sparks |
 | Chain Storm | a crackling chain runs through every body it will leap between, each ringed on the ground and joined to the next | the bolt falls on the marked spot and leaps link by link, each thinner (its damage falls) | fades |
 | Storm Tide | the lane fills with dark water, flow marks running the wave's way; a wall of water rises at its start | the wave sweeps the lane, foam and spray on its crest | the water recedes, a wet sheen |
 | Void Well | an ink core opens with a violet rim (the part that hurts); arms of the pull turn in over the safe edge | the pull: debris spirals in, light smears toward the core, bodies lean toward it | it closes with a ring |
 | Kneeling Court | a sigil opens under her and rings go out to the marked spots | the courtiers kneel, hooded in her violet; chains of void run from each to her, beads flowing toward her, and a ward shimmers on her while any lives | the chains go |
-| Eclipse | the field darkens (the backdrop and a wash under every mark; foes sink with it, the warrior and his army keep a rim of light); a black sun hangs over the field; a bright ring follows whom she hunts until her mark is set (the simulation's second warning, index 1, whose `to` is the mark) | her strike out of the dark on the mark: a crescent, a ring, the flash, one stop, one shake | the light comes back |
+| Eclipse | the field darkens (the backdrop and a wash under every mark; foes sink with it, the warrior keeps a rim of light and his army a pale glow at its back); a black sun hangs over the field; a bright ring follows whom she hunts until her mark is set (the simulation's second warning, index 1, whose `to` is the mark) | her strike out of the dark on the mark: a crescent, a ring, the flash, one stop, one shake | the light comes back |
 
 While the field is dark, every telegraph is drawn with a bright rim over it: the dark never hides a
 threat. A shadow's ultimate (Mirror Split, Storm Tide, Eclipse) is a moment: named the first time in a
@@ -1369,6 +1370,26 @@ fight (once: the shadow's own ability label stays quiet for it, and names said i
 stack above each other), the signature focus (other figures quiet, the army not in it dimmed, the same rules and limits),
 a short push-in, a stop and a flash through the budget; when it fires in the same breath as the
 warrior's Ascendant Fury the two crown each other (a gold crown of light on him, "Sovereign's Fury").
+
+**Built once.** A mechanic's shapes are built when it begins and then only moved, scaled, turned and
+faded (`sovereigns/shapes.ts`, `sovereigns/marks.ts`): Pixi tessellates a graphics again every frame its
+geometry changes, and drawing each mechanic from scratch every frame was most of what the staging cost.
+A shape that depends only on its size and colours (a pane, a well's core and its arms at each of 48
+steps of their turn, a sigil, a rim, a rod's charge arc in 72 steps) is built once for the fight and
+shared; one that follows a body or grows (a tether, a rod, a wave rising) is rebuilt only when what it
+depends on moves a pixel. Beads, glints and dots are moved, not redrawn; the eclipse's dark is one
+sheet. Only a chain's crackle and the hunted ring under the eclipse are still drawn each frame (short,
+and small). The arena's moving pieces are their own render group, so they are moved, never rebuilt
+with the field.
+
+**Framed whole.** A Sovereign rises at the field's edge, and the camera can show no more than the
+painted field: the Titan's storm alone is wider than the space behind it, and on a small phone taller
+than the space above. So a Sovereign's entrance stages it inside the field (and lower on a short view)
+by just as much as its widest pose needs, steady under the army's blows, the camera framing all of it no
+closer than the entrance's own zoom; as the entrance lets go it steps back to its place with the
+camera's return to the fight. Its death is staged the same way, the step hidden under the inverted
+frame, and the camera reaches its framing under that frame. Reduced effects keeps the staging and the
+pan but no zoom.
 
 **Quality and reduced effects** follow the signature skills' tiers (`signatures/quality.ts`, the same
 automatic step-down): the arena's moving pieces (mirror shards 12/6/3, rain 36/18/8, void motes
@@ -1385,16 +1406,25 @@ echo drawn in, the split's bells, a rod driven in and its crack, the chain's buz
 well drawing in, the court's bell, the eclipse draining the light and her strike). A shadow's mechanics
 sound the same, softer. Nothing above 150 Hz slides.
 
-**Measured** (`?perf=1`, production build, software WebGL so noisy, the owner's save, each gate fight
-kept going for its whole 20 s window, two interleaved rounds per scene, `scratchpad/sov/fx/perf-*.json`):
-simulate plus render JS at the 50th percentile was 2.6 ms in a Warden's gate (the Ember Herald at 63) and
-3.1 to 3.5 ms in the Sovereigns' (balanced and full alike), 15 to 35% more. Most of that is the fight
-itself: the simulation's Sovereign rules cost 0.2 to 0.3 ms a frame more, and the same Sovereign fights
-drawn as a plain Warden (no regalia, no arena; their mechanics still staged) cost 3.0 to 3.6 ms, so the
-arenas and figures add 6 to 13% over their own fights. The staging section (signatures and Sovereigns)
-stays at 0.1 to 0.2 ms at the 50th percentile and 0.5 to 0.7 ms at the 95th. Trimming the arenas' moving
-pieces by a third at balanced moved nothing measurable; what remains is the mechanics' shapes redrawn
-each frame while they run and the Sovereigns' larger figures.
+**Measured** (production build, software WebGL, the owner's save, 412x915; `scratchpad/sov/perf/`,
+method in its `METHOD.txt`). The world is seeded per stage, so each gate fight is replayed frame for
+frame with the loop stopped and a fixed step, timed in the page with 5 us timers; every variant runs in
+its own browser and they step one frame each in turn, so whatever else loads the machine loads them
+alike. A Sovereign's fight is set against the same fight drawn bare (the boss as a Warden, no arena, no
+staging); two bare runs, one per build, are the noise floor (within 5%). Before this work, the
+simulate-plus-render cost at the 50th percentile was 3.6, -2.0 and -5.0% over bare for the queen, titan
+and knight at full (13.7, 3.2, -1.5% at balanced; 9.2, 2.9, 1.2% at performance); now it is 1.0, 3.2 and
+0.6% (3.1, -2.9, 2.4%; -0.3, -1.0, -3.7%), all within the floor. What changed is measured directly: the
+geometry Pixi tessellates each frame for the staging fell from 6.3 shapes and 0.56 ms a frame on average
+in the queen's fight, 5.4 and 0.31 ms in the titan's, 3.8 and 0.09 ms in the knight's, to 0.17, 0.43 and
+0.03 shapes (0.01, 0.04 and 0 ms); the figures pack 29, 23 and 12% fewer points (the titan's 2171, a
+Warden's 1202); the eclipse's white army (6% of the queen's fight on its own) is gone. The 95th percentile
+on this machine is set by other work on it (it moves by 20% between runs of the same build), so it was
+read through the tessellation instead: at its worst frame a mechanic now builds a few hundredths of a
+millisecond of geometry where it built 0.3 to 0.6. Farming with a Sovereign's shadow is not yet as cheap
+as with the Crownless King's: 0 to 27% more at the 50th percentile across runs (a shadow's own mechanics
+change the fight, so these runs do not replay alike), of which the staging is 0.1 to 0.3 ms and the rest
+the bodies its mechanics raise (images, courtiers, rods); a split's images no longer carry a white copy.
 
 ## Testing
 
