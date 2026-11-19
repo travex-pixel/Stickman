@@ -706,8 +706,9 @@ export class GameController {
               if (s.level > before && s.deployed) this.toast(`${summonDef(s.defId).name} reached level ${s.level}`, "level", true);
             }
             dirty = true;
-          } else if (e.kind === "summon" && !e.sig) {
-            // (A Legion soldier's end is not a shadow lost.)
+          } else if (e.kind === "summon" && !e.sig && this.world?.entities.get(e.id)?.summon?.sovOwnerId === undefined) {
+            // (A Legion soldier's end is not a shadow lost, nor that of an image or courtier a
+            // Sovereign shadow raised for a few seconds.)
             this.run.summonsLost += 1;
             if (this.run.summonsLost === 1) this.toast("A shadow has fallen. It will return.", "warn", true);
           }

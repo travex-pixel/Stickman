@@ -78,3 +78,44 @@ describe("Storm Titan shadow's rods", () => {
     expect(w.allyRods.length).toBeLessThanOrEqual(SHADOW_KIT.storm_titan.rods.n);
   });
 });
+
+describe("the bodies a Sovereign shadow raises", () => {
+  it("an image or courtier that fades is not a shadow lost (no toast, nothing on the defeat card)", async () => {
+    const { GameController } = await import("@/game/GameController");
+    const c = new GameController() as unknown as {
+      profile: Profile;
+      world: World;
+      run: { summonsLost: number };
+      startRun(stage: number, mode?: string): void;
+      simulate(dt: number): void;
+      toast(text: string, tone?: string, weight?: boolean | number): void;
+    };
+    const p = c.profile;
+    p.tutorial.finished = true;
+    p.progress.bestStage = 12;
+    p.progress.currentStage = 12;
+    p.player.level = 120;
+    p.player.statLevels = { attack: 1, maxHp: 400, attackSpeed: 1, critChance: 1, critDamage: 1, defense: 250 };
+    p.summons.firstSummonSeen = true;
+    p.summons.collection.push({ instanceId: "q1", defId: "void_queen", level: 30, xp: 0, bond: 1, shards: 0, stars: 0, deployed: true, recruitedAt: 0 });
+    const said: string[] = [];
+    const toast = c.toast.bind(c);
+    c.toast = (text, tone, weight) => {
+      said.push(text);
+      toast(text, tone, weight);
+    };
+    c.startRun(12, "campaign");
+    const queen = c.world.summonEntities().find((e) => e.defId === "void_queen")!;
+    queen.stats.maxHp = 1e9;
+    let faded = 0;
+    for (let i = 0; i < 40 / FIXED_DT; i++) {
+      queen.hp = queen.stats.maxHp;
+      c.world.player.hp = c.world.player.stats.maxHp;
+      for (const e of c.world.summonEntities()) if (e.summon?.sovOwnerId !== undefined && e.summon.expiresAt - c.world.time < FIXED_DT * 1.5) faded++;
+      c.simulate(FIXED_DT);
+    }
+    expect(faded, "courtiers rose and faded").toBeGreaterThan(0);
+    expect(c.run.summonsLost).toBe(0);
+    expect(said.some((t) => t.startsWith("A shadow has fallen"))).toBe(false);
+  });
+});
