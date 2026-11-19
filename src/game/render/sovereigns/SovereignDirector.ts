@@ -1,4 +1,6 @@
 import { Graphics, type Container } from "pixi.js";
+import { Piece, PiecePool, ShapeBank, q } from "./shapes";
+import { arms, blackSun, chargeArc, chevrons, crack, crescent, dashes, diamond, disc, ellipseFill, ellipseLine, foam, glyphArc, glyphBolt, glyphRing, line, pane, paneGlint, paneLight, paneSheen, pip, rectFill, rod, rodArcs, sheet, sigil, tether, wave, wellRim } from "./marks";
 import type { GameEvent } from "../../engine/events";
 import type { Combatant } from "../../entities/types";
 import type { MechanicStep, SovereignId, SovereignMechanic } from "../../data/sovereigns";
@@ -116,6 +118,8 @@ interface Mech {
   flash: number;
   /** The eclipse: her strike's mark is set (its second warning came; `to` is the mark). */
   marked: boolean;
+  /** Its shapes, built once and moved (`shapes.ts`), by slot. */
+  pieces: (Piece | undefined)[];
 }
 
 /** How long a strike plays before an end that came with it takes over (world seconds). */
@@ -149,8 +153,22 @@ export class SovereignDirector {
   private readonly b: SigBody = { x: 0, y: 0, chestY: 0, height: 0, scale: 1, wx: 0, wy: 0, facing: 1, boss: false, ally: false, player: false, rig: null };
   private readonly b2: SigBody = { x: 0, y: 0, chestY: 0, height: 0, scale: 1, wx: 0, wy: 0, facing: 1, boss: false, ally: false, player: false, rig: null };
   private readonly pt = { x: 0, y: 0 };
-  private readonly darkG = new Graphics();
-  private readonly sunG = new Graphics();
+  /** The eclipse's dark sheet and its black sun (shapes built once, moved and faded). */
+  private readonly darkP = new Piece();
+  private readonly sunP = new Piece();
+  /** Shapes shared by every mechanic in the fight, and the pieces that show them. */
+  private readonly bank = new ShapeBank();
+  private readonly pool = new PiecePool();
+  /** The frame being drawn (a piece not drawn in it is hidden). */
+  private stamp = 0;
+  /** My share of a body's modifiers, kept for reuse (nothing is made per frame). */
+  private readonly modPool: { dx: number; dy: number; alpha: number; stretch: number }[] = [];
+  /** The box `frameInto` widens. */
+  private frameBox: { minX: number; minY: number; maxX: number; maxY: number } | null = null;
+  /** The well whose pull bodies are leaning toward now, and its reach. */
+  private leanM: Mech | null = null;
+  private leanR = 0;
+  private leanReach = 0;
   private dark = 0;
   private darkAlly = false;
   private now = 0;
@@ -165,7 +183,7 @@ export class SovereignDirector {
   readonly counters = { mechs: 0, dropped: 0, reflects: 0, strikes: 0, together: 0 };
 
   constructor(private readonly host: SovHost) {
-    host.layers.dark.addChild(this.darkG, this.sunG);
+    host.layers.dark.addChild(this.darkP.g, this.sunP.g);
   }
 
   private get kit(): SigKit {
@@ -196,6 +214,11 @@ export class SovereignDirector {
     return this.mechs.length;
   }
 
+  /** Diagnostics: shapes built for the fight, and pieces showing them. */
+  get shapes(): { built: number; kept: number; pieces: number } {
+    return { built: this.bank.built, kept: this.bank.size, pieces: this.pool.lent };
+  }
+
   /** Any Sovereign staging on screen this frame. */
   get busy(): boolean {
     return this.mechs.length > 0 || this.dark > 0.01;
@@ -207,23 +230,28 @@ export class SovereignDirector {
    */
   frameInto(box: { minX: number; minY: number; maxX: number; maxY: number }): void {
     const pr = this.host.sig.proj;
-    const take = (x: number, y: number, top: number): void => {
-      if (x < box.minX) box.minX = x;
-      if (x > box.maxX) box.maxX = x;
-      if (y > box.maxY) box.maxY = y;
-      if (y - top < box.minY) box.minY = y - top;
-    };
+    this.frameBox = box;
     for (const m of this.mechs) {
       if (m.ally || m.step === "end") continue;
-      if (m.mech === "storm_rods") take(pr.sx(m.pos.x), pr.sy(m.pos.y), 80 * pr.fs(m.pos.y));
+      if (m.mech === "storm_rods") this.take(pr.sx(m.pos.x), pr.sy(m.pos.y), 80 * pr.fs(m.pos.y));
       else if (m.mech === "void_well") {
         const r = m.radius * pr.unit();
-        take(pr.sx(m.pos.x) - r, pr.sy(m.pos.y), 0);
-        take(pr.sx(m.pos.x) + r, pr.sy(m.pos.y), 0);
+        this.take(pr.sx(m.pos.x) - r, pr.sy(m.pos.y), 0);
+        this.take(pr.sx(m.pos.x) + r, pr.sy(m.pos.y), 0);
       } else if (m.mech === "void_court" || m.mech === "mirror_split") {
-        for (const id of m.raised) if (this.host.sig.body(id, this.b2)) take(this.b2.x, this.b2.y, this.b2.height);
+        for (const id of m.raised) if (this.host.sig.body(id, this.b2)) this.take(this.b2.x, this.b2.y, this.b2.height);
       }
     }
+    this.frameBox = null;
+  }
+
+  private take(x: number, y: number, top: number): void {
+    const box = this.frameBox;
+    if (!box) return;
+    if (x < box.minX) box.minX = x;
+    if (x > box.maxX) box.maxX = x;
+    if (y > box.maxY) box.maxY = y;
+    if (y - top < box.minY) box.minY = y - top;
   }
 
   /** A body it raised still stands (a courtier kneeling, an image fighting): it is not over. */
@@ -422,6 +450,7 @@ export class SovereignDirector {
       endHeld: null,
       flash: 0,
       marked: false,
+      pieces: [],
     };
     this.mechs.push(m);
     this.onWarn(m);
@@ -434,6 +463,8 @@ export class SovereignDirector {
     kit.freeGraphics(m.gl);
     kit.freeGraphics(m.f);
     kit.freeGraphics(m.fl);
+    for (const p of m.pieces) if (p) this.pool.give(p);
+    m.pieces.length = 0;
     if (m.rig) kit.freeRig(m.rig);
     m.rig = null;
     if (m.push) kit.releasePush(m.push);
@@ -797,6 +828,7 @@ export class SovereignDirector {
     dt = Math.max(0, dt);
     real = Math.max(0, real);
     this.now += real;
+    this.stamp += 1;
     this.restoreMods();
     let dark = 0;
     let darkAlly = false;
@@ -834,7 +866,8 @@ export class SovereignDirector {
       if (m.ally && isUltimate(m.mech) && m.step !== "end") {
         const k = m.step === "warn" ? Math.min(1, m.t / 0.25) : Math.max(0, 1 - m.t / 0.6);
         if (k > focusK) focusK = k;
-        this.focusIds.push(m.id, ...m.targets);
+        this.focusIds.push(m.id);
+        for (const id of m.targets) this.focusIds.push(id);
       }
     }
     this.host.focus(focusK, true, this.focusIds);
@@ -845,10 +878,12 @@ export class SovereignDirector {
   // ------------------------------------------------------------------ drawing
 
   private draw(m: Mech, dt: number): void {
-    m.g.clear();
-    m.gl.clear();
-    m.f.clear();
-    m.fl.clear();
+    // What is still drawn from scratch (a chain's crackle, the hunted ring) is cleared only when
+    // there is something to clear: clearing an empty graphics still makes Pixi look at it again.
+    clearIf(m.g);
+    clearIf(m.gl);
+    clearIf(m.f);
+    clearIf(m.fl);
     switch (m.mech) {
       case "mirror_guard":
         this.drawGuard(m);
@@ -878,6 +913,26 @@ export class SovereignDirector {
         this.drawEclipse(m);
         break;
     }
+    // A shape this frame did not draw is hidden (never cleared: it is shown again as it was).
+    for (const p of m.pieces) if (p && p.stamp !== this.stamp && p.g.visible) p.hide();
+  }
+
+  /**
+   * A mechanic's shape in slot `i`, made on first use: `where` 0 on the ground, 1 on the ground in
+   * added light, 2 over the figures, 3 over the figures in added light (in that order of drawing).
+   */
+  private piece(m: Mech, i: number, where: 0 | 1 | 2 | 3): Piece {
+    let p = m.pieces[i];
+    if (!p) {
+      const ground = where < 2;
+      const layer = ground ? this.host.layers.ground : this.host.layers.fx;
+      const ref = ground ? m.gl : m.fl;
+      const at = layer.children.indexOf(ref);
+      p = this.pool.take(layer, where === 1 || where === 3, at < 0 ? -1 : at + (where === 1 || where === 3 ? 1 : 0));
+      m.pieces[i] = p;
+    }
+    p.stamp = this.stamp;
+    return p;
   }
 
   /** How far through its life a mechanic is drawn (0 to 1 in, 1 standing, falling to 0 in its outro). */
@@ -929,26 +984,24 @@ export class SovereignDirector {
       }
     }
     if (alpha <= 0.01 || rise <= 0.01) return;
-    const ph = h * 0.95 * Math.min(1.05, rise);
-    const pw = h * 0.3;
-    const top = y - ph;
-    const g = m.f;
-    // The frame: gilt, an ink edge so it reads on a pale floor.
-    g.roundRect(x - pw / 2 - 2, top - 2, pw + 4, ph + 2, pw * 0.42).fill({ color: L.ink, alpha: 0.85 * alpha });
-    g.roundRect(x - pw / 2, top, pw, ph, pw * 0.4).fill({ color: L.main, alpha: (0.24 + 0.4 * m.flash) * alpha });
-    g.roundRect(x - pw / 2, top, pw, ph, pw * 0.4).stroke({ width: 2.2, color: m.ally ? L.main : L.trim, alpha: 0.95 * alpha });
-    // The glass: a sheen that sweeps across it while it stands.
-    const fl = m.fl;
+    // The pane is built at its full height once and risen by its scale.
+    const ph = q(h * 0.95);
+    const pw = q(h * 0.3);
+    const sy = Math.min(1.05, rise);
+    const bank = this.bank;
+    // The frame: gilt, an ink edge so it reads on a pale floor; lit by each blow it throws back.
+    this.piece(m, 0, 2).shared(bank, "pane", pane, pw, ph, L.ink, L.main, m.ally ? L.main : L.trim).at(x, y, 1, sy, 0, alpha);
+    if (m.flash > 0.01) this.piece(m, 1, 2).shared(bank, "paneLight", paneLight, pw, ph, L.main).at(x, y, 1, sy, 0, m.flash * alpha);
+    // The glass: a sheen that sweeps across it while it stands, and a fixed glint.
     const sweep = ((m.age * 0.9) % 1.6) / 1.6;
-    const sx = x - pw / 2 + pw * sweep;
-    fl.moveTo(sx - pw * 0.25, top + ph * 0.92).lineTo(sx + pw * 0.15, top + ph * 0.08).stroke({ width: pw * 0.16, color: L.hot, alpha: 0.35 * alpha });
-    fl.moveTo(x - pw * 0.28, top + ph * 0.3).lineTo(x - pw * 0.05, top + ph * 0.12).stroke({ width: 1.4, color: L.hot, alpha: 0.85 * alpha });
+    this.piece(m, 2, 3).shared(bank, "paneSheen", paneSheen, pw, ph, L.hot).at(x - pw / 2 + pw * sweep, y, 1, sy, 0, alpha);
+    this.piece(m, 3, 3).shared(bank, "paneGlint", paneGlint, pw, ph, L.hot).at(x, y, 1, sy, 0, alpha);
     // A ground line where it meets the floor (its reach along the ground).
-    m.gl.ellipse(x, y, pw * 0.9, pw * 0.22).fill({ color: L.hot, alpha: 0.18 * alpha });
+    this.piece(m, 4, 1).shared(bank, "ellipseFill", ellipseFill, q(pw * 0.9), q(pw * 0.22), L.hot, 0.18).at(x, y, 1, 1, 0, alpha);
     if (m.step === "strike" && m.dur > 0) {
       // Its time running out: the gilt frame drains from the top.
       const left = Math.max(0, 1 - m.t / m.dur);
-      g.moveTo(x - pw / 2 - 4, y).lineTo(x - pw / 2 - 4, y - ph * left).stroke({ width: 2, color: L.trim, alpha: 0.8 });
+      if (left > 0.002) this.piece(m, 5, 2).shared(bank, "line", line, 0, -ph, 2, L.trim, 0.8).at(x - pw / 2 - 4, y, 1, left);
     }
   }
 
@@ -970,39 +1023,43 @@ export class SovereignDirector {
   private drawEcho(m: Mech): void {
     const pr = this.host.sig.proj;
     const L = m.look;
+    const bank = this.bank;
     const x0 = pr.sx(m.pos.x);
     const y0 = pr.sy(m.pos.y);
     const x1 = pr.sx(m.to.x);
     const y1 = pr.sy(m.to.y);
     const k = this.presence(m, 0.3);
-    // The line the art will fly: a pale dashed path under the telegraph, ticks marching along it.
+    // The line the art will fly: a pale dashed path under the telegraph, ticks marching along it
+    // (the dashes are built once along the lane and slid; the last drops out at the lane's end).
     if (m.step === "warn") {
       const n = 10;
       const march = (m.age * 2.2) % 1;
-      for (let i = 0; i < n; i++) {
-        const a = (i + march) / n;
-        const b = (i + march + 0.45) / n;
-        if (b > 1) continue;
-        m.gl.moveTo(x0 + (x1 - x0) * a, y0 + (y1 - y0) * a).lineTo(x0 + (x1 - x0) * b, y0 + (y1 - y0) * b);
-      }
-      m.gl.stroke({ width: 2, color: L.hot, alpha: 0.55 * k });
+      const len = Math.hypot(x1 - x0, y1 - y0);
+      const rot = Math.atan2(y1 - y0, x1 - x0);
+      const off = (march / n) * len;
+      const ox = x0 + Math.cos(rot) * off;
+      const oy = y0 + Math.sin(rot) * off;
+      const ql = q(len, 1);
+      this.piece(m, 0, 1).shared(bank, "dashes", dashes, ql, n, 0, n - 1, 2, L.hot).at(ox, oy, 1, 1, rot, 0.55 * k);
+      if (march + 0.45 <= 1) this.piece(m, 1, 1).shared(bank, "dashes", dashes, ql, n, n - 1, n, 2, L.hot).at(ox, oy, 1, 1, rot, 0.55 * k);
       // The art gathering in the ghost's hand: its own glyph, pale, growing as the warning runs out.
       const ch = 50 * pr.fs(m.pos.y);
       const w = Math.min(1, m.t / m.warn);
       const dir = x1 >= x0 ? 1 : -1;
-      this.artGlyph(m.fl, x0 + dir * 26 * pr.unit(), y0, ch, w, L);
+      this.artGlyph(m, x0 + dir * 26 * pr.unit(), y0, ch, w, L);
     } else if (m.step === "strike") {
       // The art flies down the lane: a pale crescent wave racing to its end.
       const k2 = Math.min(1, m.t / 0.3);
       const x = x0 + (x1 - x0) * easeOutCubic(k2);
       const y = y0 + (y1 - y0) * k2;
-      const ch = 50 * pr.fs(m.pos.y);
-      const r = Math.max(14, m.radius) * pr.dy();
+      const ch = q(50 * pr.fs(m.pos.y));
+      const r = q(Math.max(14, m.radius) * pr.dy());
       const dir = x1 >= x0 ? 1 : -1;
       const a = 1 - k2 * 0.6;
-      m.f.moveTo(x - dir * 4, y - ch * 1.4).quadraticCurveTo(x + dir * r * 0.9, y - ch * 0.6, x - dir * 4, y + r * 0.2).stroke({ width: 7, color: L.ink, alpha: 0.6 * a });
-      m.fl.moveTo(x - dir * 4, y - ch * 1.4).quadraticCurveTo(x + dir * r * 0.9, y - ch * 0.6, x - dir * 4, y + r * 0.2).stroke({ width: 2.6, color: L.hot, alpha: a });
-      m.gl.moveTo(x0, y0).lineTo(x, y).stroke({ width: r * 0.8, color: L.hot, alpha: 0.12 * a });
+      this.piece(m, 2, 2).shared(bank, "crescent", crescent, dir, ch, r, 7, L.ink, 0.6).at(x, y, 1, 1, 0, a);
+      this.piece(m, 3, 3).shared(bank, "crescent", crescent, dir, ch, r, 2.6, L.hot, 1).at(x, y, 1, 1, 0, a);
+      const len = Math.hypot(x - x0, y - y0);
+      if (len > 0.5) this.piece(m, 4, 1).shared(bank, "line", line, 100, 0, q(r * 0.8), L.hot, 0.12).at(x0, y0, len / 100, 1, Math.atan2(y - y0, x - x0), a);
     }
     // The ghost: the warrior's figure, mirrored, casting toward him.
     const rig = m.rig;
@@ -1017,26 +1074,28 @@ export class SovereignDirector {
       rig.root.alpha = (m.step === "end" ? Math.max(0, 1 - m.t / 0.12) : 0.62) * (m.step === "warn" ? Math.min(1, m.t / 0.2) : 1);
       rig.setWhite(m.step === "warn" ? 0.35 + 0.2 * Math.sin(m.age * 14) : 0.5);
       // A cold rim under the ghost so it reads as a reflection, not a second warrior.
-      m.gl.ellipse(this.pt.x, this.pt.y, 18 * s, 5 * s).stroke({ width: 1.5, color: L.hot, alpha: 0.6 * rig.root.alpha });
+      this.piece(m, 5, 1).shared(bank, "ellipseLine", ellipseLine, q(18 * s), q(5 * s), 1.5, L.hot, 0.6).at(this.pt.x, this.pt.y, 1, 1, 0, rig.root.alpha);
     }
   }
 
   /** The echoed art's glyph at its landing point (pale for the knight's, gold for the shadow's). */
-  private artGlyph(g: Graphics, x: number, y: number, ch: number, w: number, L: SovLook): void {
+  private artGlyph(m: Mech, x: number, y: number, ch: number, w: number, L: SovLook): void {
     const art = this.host.lastArt();
     const u = this.host.sig.proj.unit();
     const a = 0.25 + 0.6 * w;
+    // Grown in steps of a twentieth (built at its size: a stroke keeps its width as it grows).
+    const qw = Math.round(w * 20) / 20;
     switch (art) {
       case "thunder_strike":
-        g.moveTo(x, y - ch * 2.4).lineTo(x - 6 * u, y - ch * 1.6).lineTo(x + 4 * u, y - ch * 1.2).lineTo(x, y).stroke({ width: 1.5, color: L.hot, alpha: a });
+        this.piece(m, 6, 3).shared(this.bank, "glyphBolt", glyphBolt, q(ch), q(u, 0.01), L.hot).at(x, y, 1, 1, 0, a);
         break;
       case "void_nova":
       case "soul_burst":
-        g.circle(x, y - ch * 0.6, (10 + 30 * w) * u).stroke({ width: 1.6, color: L.hot, alpha: a });
+        this.piece(m, 6, 3).own("glyphRing", glyphRing, (10 + 30 * qw) * u, L.hot).at(x, y - ch * 0.6, 1, 1, 0, a);
         break;
       default:
         // A crescent: the arc of a cut, opening toward him.
-        g.arc(x, y - ch * 0.6, (18 + 20 * w) * u, -1.2, 1.2).stroke({ width: 2, color: L.hot, alpha: a });
+        this.piece(m, 6, 3).own("glyphArc", glyphArc, (18 + 20 * qw) * u, L.hot).at(x, y - ch * 0.6, 1, 1, 0, a);
         break;
     }
   }
@@ -1056,6 +1115,7 @@ export class SovereignDirector {
     const L = m.look;
     const sig = this.host.sig;
     const u = sig.proj.unit();
+    const bank = this.bank;
     const k = this.presence(m, 0.25);
     if (k <= 0) return;
     // The true knight: a crack of gold light down its breast that pulses (its images have none).
@@ -1066,21 +1126,17 @@ export class SovereignDirector {
       const cy = b.y - b.chestY;
       const pulse = 0.75 + 0.25 * Math.sin(m.age * 7);
       const amp = m.step === "warn" ? Math.min(1, m.t / m.warn) : 1;
-      const f = m.fl;
-      f.circle(cx, cy, 16 * s * amp).fill({ color: L.trim, alpha: 0.22 * k * pulse });
-      f.moveTo(cx + 3 * s, cy - 16 * s).lineTo(cx - 2 * s, cy - 6 * s).lineTo(cx + 4 * s, cy + 2 * s).lineTo(cx - 3 * s, cy + 12 * s).stroke({ width: 2.4, color: 0xfff1c9, alpha: k * pulse });
-      f.moveTo(cx - 2 * s, cy - 6 * s).lineTo(cx - 9 * s, cy - 3 * s).stroke({ width: 1.6, color: 0xfff1c9, alpha: 0.9 * k * pulse });
+      if (amp > 0.01) this.piece(m, 0, 3).shared(bank, "disc", disc, 16, L.trim, 0.22).at(cx, cy, s * amp, s * amp, 0, k * pulse);
+      this.piece(m, 1, 3).shared(bank, "crack", crack, q(s, 0.02), 0xfff1c9).at(cx, cy, 1, 1, 0, k * pulse);
       // A gilt diamond over its head: the one to strike.
-      if (m.step !== "warn") {
-        const hy = b.y - b.height - 14 * u;
-        f.poly([cx, hy - 6 * u, cx + 4 * u, hy, cx, hy + 6 * u, cx - 4 * u, hy]).fill({ color: 0xfff1c9, alpha: 0.95 * k });
-      }
+      if (m.step !== "warn") this.piece(m, 2, 3).shared(bank, "diamond", diamond, q(u, 0.01), 0xfff1c9).at(cx, b.y - b.height - 14 * u, 1, 1, 0, k);
     }
     // The images: cold glass rims at their feet.
+    let i = 3;
     for (const id of m.raised) {
       if (!sig.body(id, this.b2)) continue;
       const s = this.b2.scale;
-      m.gl.ellipse(this.b2.x, this.b2.y, 20 * s, 6 * s).stroke({ width: 1.4, color: L.hot, alpha: 0.6 * k });
+      this.piece(m, i++, 1).shared(bank, "ellipseLine", ellipseLine, q(20 * s), q(6 * s), 1.4, L.hot, 0.6).at(this.b2.x, this.b2.y, 1, 1, 0, k);
     }
   }
 
@@ -1107,6 +1163,7 @@ export class SovereignDirector {
     const pr = this.host.sig.proj;
     const L = m.look;
     const u = pr.unit();
+    const bank = this.bank;
     const rodId = m.raised[0];
     // The rod stands where its body is (it may be shoved), else where it was planted.
     let x = pr.sx(m.pos.x);
@@ -1126,49 +1183,36 @@ export class SovereignDirector {
       if (m.early) topple = easeInCubic(Math.min(1, m.t / (m.outro * 0.8)));
     }
     if (alpha <= 0.01) return;
-    const h = 70 * s * grow;
-    const tipX = x + Math.sin(topple * 1.3) * h;
-    const tipY = y - Math.cos(topple * 1.3) * h;
+    const qs = q(s, 0.01);
+    const h = q(70 * s * grow);
+    const qt = q(topple, 0.01);
+    const tipX = x + Math.sin(qt * 1.3) * h;
+    const tipY = y - Math.cos(qt * 1.3) * h;
     // Its reach: the ground it will strike, filling as it charges (the telegraph is the threat).
-    const rx = m.radius * u;
-    const ry = m.radius * pr.dy();
+    const rx = q(m.radius * u);
+    const ry = q(m.radius * pr.dy());
     if (m.step === "warn") {
-      m.g.ellipse(x, y, rx, ry).fill({ color: L.main, alpha: 0.05 + 0.08 * charge });
-      const a0 = -Math.PI / 2;
-      const steps = 28;
-      const a1 = a0 + Math.PI * 2 * charge;
-      for (let i = 0; i <= steps; i++) {
-        const a = a0 + ((a1 - a0) * i) / steps;
-        if (i === 0) m.gl.moveTo(x + Math.cos(a) * rx * 0.92, y + Math.sin(a) * ry * 0.92);
-        else m.gl.lineTo(x + Math.cos(a) * rx * 0.92, y + Math.sin(a) * ry * 0.92);
-      }
-      m.gl.stroke({ width: 3, color: L.main, alpha: 0.85 });
+      this.piece(m, 0, 0).shared(bank, "ellipseFill", ellipseFill, rx, ry, L.main, 1).at(x, y, 1, 1, 0, 0.05 + 0.08 * charge);
+      // The arc round it fills in seventy-two steps (each built once and kept for every rod).
+      const steps = Math.round(charge * 72);
+      if (steps > 0) this.piece(m, 1, 1).shared(bank, "chargeArc", chargeArc, rx, ry, steps, 72, L.main).at(x, y);
     } else if (m.step === "strike") {
       // Scorched ground where it struck.
       const k = Math.min(1, m.t / 0.4);
-      m.g.ellipse(x, y, rx * 0.7, ry * 0.7).fill({ color: 0x0a0c10, alpha: 0.35 * (1 - k * 0.5) });
+      this.piece(m, 2, 0).shared(bank, "ellipseFill", ellipseFill, q(rx * 0.7), q(ry * 0.7), 0x0a0c10, 1).at(x, y, 1, 1, 0, 0.35 * (1 - k * 0.5));
     }
     // The rod: dark iron, a lit tip, a gilt band (a shadow's is slate and gold).
     const iron = m.ally ? 0x5b6272 : 0x1f262e;
-    const w = 3.2 * s;
-    m.f.moveTo(x, y).lineTo(tipX, tipY).stroke({ width: w * 1.6, color: L.ink, alpha: alpha });
-    m.f.moveTo(x, y).lineTo(tipX, tipY).stroke({ width: w, color: iron, alpha: alpha });
-    m.f.moveTo(x - 7 * s, y).lineTo(x + 7 * s, y).stroke({ width: 2 * s, color: iron, alpha });
-    const bandY = y - h * 0.62;
-    m.f.moveTo(x - w * 0.9, bandY).lineTo(x + w * 0.9, bandY).stroke({ width: 1.6 * s, color: m.ally ? 0xe9c97a : L.trim, alpha });
+    this.piece(m, 3, 2).own("rod", rod, qs, h, qt, L.ink, iron, m.ally ? 0xe9c97a : L.trim).at(x, y, 1, 1, 0, alpha);
     const glow = m.step === "warn" ? 0.3 + 0.7 * charge * charge : m.step === "strike" ? Math.max(0, 1 - m.t / 0.5) : 0;
-    m.fl.circle(tipX, tipY, (4 + 8 * glow) * s).fill({ color: L.main, alpha: (0.25 + 0.4 * glow) * alpha });
-    m.fl.circle(tipX, tipY, 2.6 * s).fill({ color: L.hot, alpha: alpha });
+    const gr = ((4 + 8 * glow) * s) / 8;
+    this.piece(m, 4, 3).shared(bank, "disc", disc, 8, L.main, 1).at(tipX, tipY, gr, gr, 0, (0.25 + 0.4 * glow) * alpha);
+    this.piece(m, 5, 3).shared(bank, "disc", disc, q(2.6 * s, 0.1), L.hot, 1).at(tipX, tipY, 1, 1, 0, alpha);
     // Arcs crawling up it while it charges, faster and brighter toward the strike.
     if (m.step === "warn" && !this.reduced) {
       const n = 1 + Math.floor(charge * 3);
       const seed = Math.floor(m.age * 18);
-      for (let i = 0; i < n; i++) {
-        const t0 = frac(seed * 0.618 + i * 0.37);
-        const yA = y - h * t0 * 0.8;
-        const yB = yA - h * 0.22;
-        m.fl.moveTo(x, yA).lineTo(x + (frac(seed * 0.71 + i) - 0.5) * 12 * s, (yA + yB) / 2).lineTo(x, yB).stroke({ width: 1.2, color: L.hot, alpha: 0.5 + 0.5 * charge });
-      }
+      this.piece(m, 6, 3).own("rodArcs", rodArcs, h, qs, seed, n, L.hot).at(x, y, 1, 1, 0, 0.5 + 0.5 * charge);
       m.coolB -= dt;
       if (charge > 0.6 && m.coolB <= 0) {
         m.coolB = 0.12;
@@ -1186,10 +1230,7 @@ export class SovereignDirector {
       const ent = this.host.entity(rodId);
       if (ent && !ent.dead && ent.stats.maxHp > 0) {
         const hpk = Math.max(0, ent.hp / ent.stats.maxHp);
-        const bw = 22 * s;
-        const by = tipY - 12 * s;
-        m.f.rect(x - bw / 2 - 1, by - 1, bw + 2, 4).fill({ color: 0x0a0a0c, alpha: 0.85 });
-        m.f.rect(x - bw / 2, by, bw * hpk, 2).fill({ color: m.ally ? 0xe9c97a : 0xcc3f4b, alpha: 1 });
+        this.piece(m, 7, 2).own("pip", pip, q(22 * s), Math.round(hpk * 100) / 100, m.ally ? 0xe9c97a : 0xcc3f4b).at(x, tipY - 12 * s);
       }
     }
   }
@@ -1268,32 +1309,30 @@ export class SovereignDirector {
     const pr = this.host.sig.proj;
     const L = m.look;
     const u = pr.unit();
+    const bank = this.bank;
     const x0 = pr.sx(m.pos.x);
     const x1 = pr.sx(m.to.x);
     const yc = pr.sy((m.pos.y + m.to.y) / 2);
-    const half = Math.max(10, m.radius) * pr.dy();
+    const half = q(Math.max(10, m.radius) * pr.dy());
     const dir = x1 >= x0 ? 1 : -1;
     const water = m.ally ? 0x4a5466 : 0x1d4a55;
-    const foam = m.ally ? 0xfff1c9 : 0xd8f4ff;
+    const foamC = m.ally ? 0xfff1c9 : 0xd8f4ff;
     const k = this.presence(m, 0.3);
     if (k <= 0) return;
     const lo = Math.min(x0, x1);
-    const hi = Math.max(x0, x1);
-    // The lane: dark water rising in it, flow lines marching the way the wave will go.
+    const span = q(Math.max(x0, x1) - lo);
+    // The lane: dark water rising in it, flow lines marching the way the wave will go (built once
+    // along the lane and slid by a seventh of it per beat).
     if (m.step === "warn" || m.step === "strike") {
       const w = m.step === "warn" ? Math.min(1, m.t / m.warn) : 1;
-      m.g.rect(lo, yc - half, hi - lo, half * 2).fill({ color: water, alpha: (0.1 + 0.14 * w) * k });
+      this.piece(m, 0, 0).shared(bank, "rectFill", rectFill, span, half * 2, water, 1).at(lo, yc - half, 1, 1, 0, (0.1 + 0.14 * w) * k);
       const march = (m.age * 1.6) % 1;
-      for (let i = 0; i < 7; i++) {
-        const t = (i + march) / 7;
-        const x = x0 + (x1 - x0) * t;
-        const cy = yc + (i % 2 ? half * 0.35 : -half * 0.35);
-        m.gl.moveTo(x - dir * 10 * u, cy - half * 0.18).lineTo(x, cy).lineTo(x - dir * 10 * u, cy + half * 0.18).stroke({ width: 1.6, color: foam, alpha: 0.5 * k });
-      }
+      const len = q(x1 - x0);
+      this.piece(m, 1, 1).shared(bank, "chevrons", chevrons, len, half, dir, q(u, 0.01), foamC).at(x0 + (len * march) / 7, yc, 1, 1, 0, k);
     } else {
       // Receding: a wet sheen along the lane.
-      m.g.rect(lo, yc - half, hi - lo, half * 2).fill({ color: water, alpha: 0.14 * k });
-      m.gl.rect(lo, yc - half * 0.15, hi - lo, half * 0.3).fill({ color: foam, alpha: 0.08 * k });
+      this.piece(m, 0, 0).shared(bank, "rectFill", rectFill, span, half * 2, water, 1).at(lo, yc - half, 1, 1, 0, 0.14 * k);
+      this.piece(m, 2, 1).shared(bank, "rectFill", rectFill, span, q(half * 0.3), foamC, 1).at(lo, yc - half * 0.15, 1, 1, 0, 0.08 * k);
     }
     // The wall of water: rising at the lane's start in the warning, sweeping across in the strike.
     let front = x0;
@@ -1309,34 +1348,18 @@ export class SovereignDirector {
       rise = Math.max(0, 1 - m.t / (m.outro * 0.5));
     }
     if (rise <= 0.01) return;
-    const H = 110 * pr.fs(m.pos.y) * rise;
-    const W = 110 * u;
+    // A breaking wave, built at its height (in steps of a pixel and a half as it rises) and
+    // carried across the lane by its position.
+    const H = q(110 * pr.fs(m.pos.y) * rise, 1.5);
+    const W = q(110 * u);
     const top = yc - half;
-    const bot = yc + half;
-    const back = front - dir * W;
-    const g = m.f;
-    // A breaking wave: a long back sloping up to a crest that curls forward over its face.
-    const body = [
-      back - dir * W * 0.6, bot,
-      back - dir * W * 0.4, top - H * 0.15,
-      back, top - H * 0.55,
-      front - dir * W * 0.35, top - H * 0.95,
-      front - dir * W * 0.05, top - H,
-      front + dir * W * 0.22, top - H * 0.86,
-      front + dir * W * 0.12, top - H * 0.66,
-      front - dir * W * 0.02, top - H * 0.72,
-      front, top - H * 0.4,
-      front + dir * W * 0.04, bot,
-    ];
     // A shadow's wave runs through the army's own field: thinner, so the warrior shows through it.
-    g.poly(body).fill({ color: water, alpha: (m.ally ? 0.62 : 0.85) * k });
-    g.poly(body).stroke({ width: 1.6, color: L.trim, alpha: 0.6 * k });
+    this.piece(m, 3, 2).own("wave", wave, H, W, half, dir, water, L.trim, m.ally ? 0.62 : 0.85).at(front, top, 1, 1, 0, k);
     // Foam on the crest and running down its face.
-    m.fl.moveTo(back, top - H * 0.55).quadraticCurveTo(front - dir * W * 0.3, top - H * 1.1, front + dir * W * 0.22, top - H * 0.86).stroke({ width: 3.2, color: foam, alpha: 0.9 * k });
-    m.fl.moveTo(front + dir * W * 0.12, top - H * 0.66).lineTo(front, top - H * 0.4).lineTo(front + dir * W * 0.03, bot).stroke({ width: 2, color: foam, alpha: 0.55 * k });
+    this.piece(m, 4, 3).own("foam", foam, H, W, half, dir, foamC).at(front, top, 1, 1, 0, k);
     if (m.step === "strike" && dt > 0 && m.coolB <= 0) {
       m.coolB = 0.05;
-      const o = this.kit.o(front, top - H * 0.8, softCircle(), foam);
+      const o = this.kit.o(front, top - H * 0.8, softCircle(), foamC);
       o.speed[0] = 60;
       o.speed[1] = 200;
       o.angle[0] = dir === 1 ? -Math.PI * 0.5 : -Math.PI * 0.95;
@@ -1357,35 +1380,27 @@ export class SovereignDirector {
     const sig = this.host.sig;
     const L = m.look;
     const u = pr.unit();
+    const bank = this.bank;
     const x = pr.sx(m.pos.x);
     const y = pr.sy(m.pos.y);
-    const rx = m.radius * u;
-    const ry = m.radius * pr.dy();
+    const rx = q(m.radius * u);
+    const ry = q(m.radius * pr.dy());
     const k = this.presence(m, 0.4);
     if (k <= 0) return;
     const open = m.step === "warn" ? easeOutCubic(Math.min(1, m.t / m.warn)) : 1;
+    if (open <= 0.001) return;
     // The core that hurts: an ink disc with a violet rim (the telegraph's crimson rim sits over it).
-    m.g.ellipse(x, y, rx * open, ry * open).fill({ color: L.ink, alpha: 0.75 * k });
-    m.gl.ellipse(x, y, rx * open, ry * open).stroke({ width: 2.5, color: L.main, alpha: 0.9 * k });
-    m.gl.ellipse(x, y, rx * 0.35 * open, ry * 0.35 * open).fill({ color: L.hot, alpha: 0.25 * k });
+    this.piece(m, 0, 0).shared(bank, "ellipseFill", ellipseFill, rx, ry, L.ink, 0.75).at(x, y, open, open, 0, k);
+    this.piece(m, 1, 1).shared(bank, "wellRim", wellRim, rx, ry, L.main, L.hot).at(x, y, open, open, 0, k);
     // Spiral arms turning inward over the safe edge (the pull, which does not hurt), to about where
-    // it reaches (the whole field for the queen's: drawn to a few cores out).
-    const reach = Math.min(2.4, Math.max(1.8, m.reach > 0 ? m.reach / Math.max(1, m.radius) : 2.2));
+    // it reaches (the whole field for the queen's: drawn to a few cores out). The arms come back to
+    // themselves every quarter turn: each of its 48 steps is built once and kept for the fight.
+    const reach = Math.round(Math.min(2.4, Math.max(1.8, m.reach > 0 ? m.reach / Math.max(1, m.radius) : 2.2)) * 20) / 20;
     const spin = m.age * (m.step === "strike" ? 2.4 : 1.2);
-    for (let arm = 0; arm < 4; arm++) {
-      const a0 = spin + (arm / 4) * Math.PI * 2;
-      for (let i = 0; i <= 14; i++) {
-        const t = i / 14;
-        const r = reach - (reach - 1) * t;
-        const a = a0 + t * 2.2;
-        const px = x + Math.cos(a) * rx * r * open;
-        const py = y + Math.sin(a) * ry * r * open;
-        if (i === 0) m.gl.moveTo(px, py);
-        else m.gl.lineTo(px, py);
-      }
-      m.gl.stroke({ width: 1.4, color: L.main, alpha: 0.3 * k });
-    }
-    m.g.ellipse(x, y, rx * reach * open, ry * reach * open).stroke({ width: 1, color: L.main, alpha: 0.18 * k });
+    const steps = 48;
+    const step = Math.floor((spin / (Math.PI / 2)) * steps) % steps;
+    this.piece(m, 2, 1).shared(bank, "arms", arms, rx, ry, reach, step, steps, L.main).at(x, y, open, open, 0, k);
+    this.piece(m, 3, 0).shared(bank, "ellipseLine", ellipseLine, q(rx * reach), q(ry * reach), 1, L.main, 0.18).at(x, y, open, open, 0, k);
     if (m.step !== "strike") return;
     // The pull: debris spirals in, the light smears toward the core, bodies lean.
     const kit = this.kit;
@@ -1396,28 +1411,37 @@ export class SovereignDirector {
       if (kit.profile.secondary) kit.smear(x, y, rx * 2.4, ry / Math.max(1, rx), 6, L.main, 0.5);
     }
     if (this.reduced) return;
-    const lean = (id: number): void => {
-      if (!sig.body(id, this.b2) || id === m.id) return;
-      const dx = m.pos.x - this.b2.wx;
-      const dy = m.pos.y - this.b2.wy;
-      const d = Math.hypot(dx, dy);
-      const R = m.reach > 0 ? m.reach : m.radius * reach * 1.15;
-      if (d > R || d < 1) return;
-      const f = (1 - d / R) * Math.min(1, m.t / 0.3);
-      this.addMod(id, (dx / d) * 5 * this.b2.scale * f, 0, 1, 0.35 * f);
-      this.host.mod(id).lean = dx >= 0 ? 1 : -1;
-    };
-    if (m.ally) sig.each("enemy", lean);
+    this.leanM = m;
+    this.leanR = m.reach > 0 ? m.reach : m.radius * reach * 1.15;
+    this.leanReach = reach;
+    if (m.ally) sig.each("enemy", this.lean);
     else {
-      sig.each("ally", lean);
-      lean(sig.playerId());
+      sig.each("ally", this.lean);
+      this.lean(sig.playerId());
     }
+    this.leanM = null;
   }
+
+  /** A body in the current well's pull leans toward it (bound once: no closure per frame). */
+  private readonly lean = (id: number): void => {
+    const m = this.leanM;
+    const sig = this.host.sig;
+    if (!m || !sig.body(id, this.b2) || id === m.id) return;
+    const dx = m.pos.x - this.b2.wx;
+    const dy = m.pos.y - this.b2.wy;
+    const d = Math.hypot(dx, dy);
+    const R = this.leanR;
+    if (d > R || d < 1) return;
+    const f = (1 - d / R) * Math.min(1, m.t / 0.3);
+    this.addMod(id, (dx / d) * 5 * this.b2.scale * f, 0, 1, 0.35 * f);
+    this.host.mod(id).lean = dx >= 0 ? 1 : -1;
+  };
 
   private drawCourt(m: Mech): void {
     const sig = this.host.sig;
     const L = m.look;
     const u = sig.proj.unit();
+    const bank = this.bank;
     const k = this.presence(m, 0.3);
     if (k <= 0) return;
     const queen = sig.body(m.id, this.b);
@@ -1429,12 +1453,16 @@ export class SovereignDirector {
       // simulation marks the spots on the ground).
       const w = Math.min(1, m.t / m.warn);
       if (queen) {
-        this.sigil(m.gl, this.b.x, this.b.y, 40 * this.b.scale * (0.6 + 0.4 * w), L, k);
-        m.gl.ellipse(this.b.x, this.b.y, 70 * u * w, 22 * u * w).stroke({ width: 1.4, color: L.main, alpha: 0.6 * (1 - w) * k });
+        const g = 0.6 + 0.4 * w;
+        this.piece(m, 0, 1).shared(bank, "sigil", sigil, q(40 * this.b.scale), L.main, L.trim).at(this.b.x, this.b.y, g, g, 0, k);
+        // The call going out, built at its size as it grows (a ring keeps its stroke).
+        if (w < 0.999) this.piece(m, 1, 1).own("ellipseLine", ellipseLine, q(70 * u * w, 1.5), q(22 * u * w, 0.5), 1.4, L.main, 0.6).at(this.b.x, this.b.y, 1, 1, 0, (1 - w) * k);
       }
       return;
     }
-    // The tethers: a chain of void from each courtier to her, beads running toward her.
+    // The tethers: a chain of void from each courtier to her, beads running toward her. A tether
+    // is rebuilt only when either end moves a pixel; the beads and sigils are only moved.
+    let i = 7;
     for (const id of m.raised) {
       if (!sig.body(id, this.b2) || !queen) continue;
       const e = this.host.entity(id);
@@ -1442,37 +1470,38 @@ export class SovereignDirector {
       live += 1;
       const cx = this.b2.x;
       const cy = this.b2.y - this.b2.chestY;
-      const mx = (cx + qx) / 2;
-      const my = Math.max(cy, qy) + 18 * u;
-      m.f.moveTo(cx, cy).quadraticCurveTo(mx, my, qx, qy).stroke({ width: 3.6, color: L.ink, alpha: 0.7 * k });
-      m.fl.moveTo(cx, cy).quadraticCurveTo(mx, my, qx, qy).stroke({ width: 1.4, color: L.main, alpha: 0.95 * k });
+      const mx = q((cx + qx) / 2 - cx, 1);
+      const my = q(Math.max(cy, qy) + 18 * u - cy, 1);
+      const ex = q(qx - cx, 1);
+      const ey = q(qy - cy, 1);
+      this.piece(m, i, 2).own("tether", tether, mx, my, ex, ey, 3.6, L.ink).at(cx, cy, 1, 1, 0, 0.7 * k);
+      this.piece(m, i + 1, 3).own("tether", tether, mx, my, ex, ey, 1.4, L.main).at(cx, cy, 1, 1, 0, 0.95 * k);
+      const br = q(2.4 * u, 0.1);
+      const bead = m.ally ? 0xfff1c9 : L.trim;
       for (let j = 0; j < 3; j++) {
         const t = frac(m.age * 0.8 + j / 3);
-        const bx = (1 - t) * (1 - t) * cx + 2 * (1 - t) * t * mx + t * t * qx;
-        const by = (1 - t) * (1 - t) * cy + 2 * (1 - t) * t * my + t * t * qy;
-        m.fl.circle(bx, by, 2.4 * u).fill({ color: m.ally ? 0xfff1c9 : L.trim, alpha: k });
+        const bx = 2 * (1 - t) * t * mx + t * t * ex;
+        const by = 2 * (1 - t) * t * my + t * t * ey;
+        this.piece(m, i + 2 + j, 3).shared(bank, "disc", disc, br, bead, 1).at(cx + bx, cy + by, 1, 1, 0, k);
       }
-      this.sigil(m.gl, this.b2.x, this.b2.y, 18 * this.b2.scale, L, 0.6 * k);
+      this.piece(m, i + 5, 1).shared(bank, "sigil", sigil, q(18 * this.b2.scale), L.main, L.trim).at(this.b2.x, this.b2.y, 1, 1, 0, 0.6 * k);
+      i += 6;
     }
     // While any courtier lives, a ward shimmers on her: blows on her are softened.
     if (queen && live > 0) {
       const s = this.b.scale;
+      const hh = this.b.height;
       const pulse = 0.7 + 0.3 * Math.sin(m.age * 5);
-      m.fl.ellipse(this.b.x, this.b.y - this.b.height * 0.5, this.b.height * 0.32, this.b.height * 0.55).stroke({ width: 1.6, color: L.main, alpha: 0.55 * k * pulse });
-      for (let i = 0; i < 6; i++) {
-        const a = m.age * 0.8 + (i / 6) * Math.PI * 2;
-        m.fl.circle(this.b.x + Math.cos(a) * this.b.height * 0.32, this.b.y - this.b.height * 0.5 + Math.sin(a) * this.b.height * 0.55, 1.6 * s).fill({ color: L.hot, alpha: 0.8 * k });
+      const cy = this.b.y - hh * 0.5;
+      this.piece(m, 0, 3).shared(bank, "ellipseLine", ellipseLine, q(hh * 0.32), q(hh * 0.55), 1.6, L.main, 0.55).at(this.b.x, cy, 1, 1, 0, k * pulse);
+      const dr = q(1.6 * s, 0.1);
+      for (let d = 0; d < 6; d++) {
+        const a = m.age * 0.8 + (d / 6) * Math.PI * 2;
+        this.piece(m, 1 + d, 3).shared(bank, "disc", disc, dr, L.hot, 0.8).at(this.b.x + Math.cos(a) * hh * 0.32, cy + Math.sin(a) * hh * 0.55, 1, 1, 0, k);
       }
     }
   }
 
-  private sigil(g: Graphics, x: number, y: number, r: number, L: SovLook, a: number): void {
-    if (r <= 0.5) return;
-    g.ellipse(x, y, r, r * 0.32).stroke({ width: 1.6, color: L.main, alpha: 0.8 * a });
-    g.ellipse(x, y, r * 0.7, r * 0.22).stroke({ width: 1, color: L.trim, alpha: 0.7 * a });
-    // A small crown in the circle.
-    g.moveTo(x - r * 0.3, y).lineTo(x - r * 0.3, y - r * 0.18).lineTo(x - r * 0.12, y - r * 0.08).lineTo(x, y - r * 0.24).lineTo(x + r * 0.12, y - r * 0.08).lineTo(x + r * 0.3, y - r * 0.18).lineTo(x + r * 0.3, y).stroke({ width: 1, color: L.trim, alpha: 0.85 * a });
-  }
 
   private eclipseLevel(m: Mech): number {
     const max = this.reduced ? ECLIPSE_REDUCED : ECLIPSE_MAX;
@@ -1512,27 +1541,27 @@ export class SovereignDirector {
     if (this.dark < 0.004) this.dark = 0;
     this.darkAlly = ally;
     this.host.eclipse(this.dark, ECLIPSE_INK);
-    const g = this.darkG;
-    const sun = this.sunG;
-    g.clear();
-    sun.clear();
-    if (this.dark <= 0) return;
+    if (this.dark <= 0) {
+      if (this.darkP.g.visible) this.darkP.hide();
+      if (this.sunP.g.visible) this.sunP.hide();
+      return;
+    }
     const pr = this.host.sig.proj;
     const l = pr.left();
     const r = pr.right();
     const t = pr.top();
     const w = r - l;
-    g.rect(l - w, t - w, w * 3, w * 4).fill({ color: ECLIPSE_INK, alpha: 0.5 * this.dark });
-    // The black sun: an ink disc ringed in a corona, high over the field.
-    const cx = (l + r) / 2 + w * 0.18;
-    const cy = t + w * 0.16;
+    // One sheet over the whole painted field and past it (the camera never leaves the field),
+    // built once per canvas size.
+    const cam = this.host.sig.camera;
+    this.darkP.shared(this.bank, "sheet", sheet, q(cam.width, 8), q(cam.height, 8), ECLIPSE_INK).at(0, 0, 1, 1, 0, 0.5 * this.dark);
+    // The black sun: an ink disc ringed in a corona, high over the field (built at one size and
+    // scaled with the view).
     const R = w * 0.08;
     const cor = this.darkAlly ? 0xfff1c9 : 0xd8c4ff;
-    sun.circle(cx, cy, R * 1.7).fill({ color: cor, alpha: 0.08 * this.dark });
-    sun.circle(cx, cy, R * 1.2).fill({ color: cor, alpha: 0.3 * this.dark });
-    sun.circle(cx, cy, R).fill({ color: 0x020104, alpha: this.dark });
-    sun.circle(cx, cy, R).stroke({ width: 1.4, color: cor, alpha: 0.9 * this.dark });
+    this.sunP.shared(this.bank, "blackSun", blackSun, 40, cor).at((l + r) / 2 + w * 0.18, t + w * 0.16, R / 40, R / 40, 0, this.dark);
   }
+
 
   /** Bodies: the dark on the field, the images' glass, the rods hidden, the courtiers kneeling. */
   private dressBodies(): void {
@@ -1540,18 +1569,9 @@ export class SovereignDirector {
     const d = this.dark;
     if (d > 0) {
       // Foes in the dark sink with it; the warrior and his army keep a rim of light (always readable).
-      const foeK = 0.55 * d;
-      sig.each("enemy", (id) => {
-        const md = this.host.mod(id);
-        md.tint = mix(md.tintK > 0 ? md.tint : 0xffffff, 0x1a1226, 1);
-        md.tintK = Math.max(md.tintK, foeK);
-      });
-      const lit = (id: number): void => {
-        const md = this.host.mod(id);
-        md.white = Math.max(md.white, 0.14 * d);
-      };
-      sig.each("ally", lit);
-      lit(sig.playerId());
+      sig.each("enemy", this.sink);
+      sig.each("ally", this.lit);
+      this.lit(sig.playerId());
       // The Queen in her own eclipse withdraws into the dark.
       for (const m of this.mechs) if (m.mech === "void_eclipse" && !m.ally && m.step !== "end") this.addMod(m.id, 0, 0, 1 - 0.6 * d, 0);
     }
@@ -1580,6 +1600,19 @@ export class SovereignDirector {
     }
   }
 
+  /** A foe sinks into the eclipse's dark (bound once: no closure per frame). */
+  private readonly sink = (id: number): void => {
+    const md = this.host.mod(id);
+    md.tint = mix(md.tintK > 0 ? md.tint : 0xffffff, 0x1a1226, 1);
+    md.tintK = Math.max(md.tintK, 0.55 * this.dark);
+  };
+
+  /** The warrior and his army keep a rim of light in it. */
+  private readonly lit = (id: number): void => {
+    const md = this.host.mod(id);
+    md.white = Math.max(md.white, 0.14 * this.dark);
+  };
+
   // ------------------------------------------------------------------ body modifiers
 
   /** Add my share of a body's offset, alpha and stretch (taken back next frame). */
@@ -1587,7 +1620,11 @@ export class SovereignDirector {
     const md = this.host.mod(id);
     let mine = this.myMods.get(id);
     if (!mine) {
-      mine = { dx: 0, dy: 0, alpha: 1, stretch: 0 };
+      mine = this.modPool.pop() ?? { dx: 0, dy: 0, alpha: 1, stretch: 0 };
+      mine.dx = 0;
+      mine.dy = 0;
+      mine.alpha = 1;
+      mine.stretch = 0;
       this.myMods.set(id, mine);
     }
     md.dx += dx;
@@ -1615,6 +1652,7 @@ export class SovereignDirector {
         md.lean = 0;
       }
       if (Math.abs(md.alpha - 1) < 1e-6) md.alpha = 1;
+      this.modPool.push(mine);
     }
     this.myMods.clear();
     this.touched.clear();
@@ -1653,21 +1691,28 @@ export class SovereignDirector {
     this.shattered.clear();
     this.named.clear();
     this.dark = 0;
-    this.darkG.clear();
-    this.sunG.clear();
+    this.darkP.reset();
+    this.sunP.reset();
+    // The shapes of the old fight go with it (a new arena, other sizes).
+    this.bank.clear();
     this.host.eclipse(0, ECLIPSE_INK);
     this.host.focus(0, false, this.focusIds);
   }
 
   destroy(): void {
     this.reset();
-    this.darkG.destroy();
-    this.sunG.destroy();
+    this.darkP.destroy();
+    this.sunP.destroy();
+    this.pool.destroy();
   }
 }
 
 function frac(v: number): number {
   return v - Math.floor(v);
+}
+
+function clearIf(g: Graphics): void {
+  if (g.context.instructions.length > 0) g.clear();
 }
 
 void lighten;

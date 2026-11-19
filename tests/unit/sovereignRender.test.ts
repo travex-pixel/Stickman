@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { Container } from "pixi.js";
+import { Container, GraphicsContext } from "pixi.js";
 import type { GameEvent } from "../../src/game/engine/events";
 import type { Combatant } from "../../src/game/entities/types";
 import { SOVEREIGN_IDS, SOVEREIGNS, type SovereignMechanic } from "../../src/game/data/sovereigns";
@@ -310,6 +310,93 @@ describe("the Sovereign director", () => {
     for (const id of SOVEREIGN_IDS) {
       const late = SOVEREIGNS[id].mechanics.find((m) => m.late)!.id;
       expect(ULTIMATE_NAME[late], id).toBe(SUMMONS[id]!.ultimate!.name);
+    }
+  });
+
+  it("builds a mechanic's shapes once: while it stands they are only moved and faded", () => {
+    // Every fill and stroke is geometry Pixi tessellates again; count them while each mechanic stands.
+    const proto = GraphicsContext.prototype as unknown as { fill: (...a: unknown[]) => unknown; stroke: (...a: unknown[]) => unknown };
+    const fill = proto.fill;
+    const stroke = proto.stroke;
+    let built = 0;
+    proto.fill = function (this: unknown, ...a: unknown[]) {
+      built += 1;
+      return fill.apply(this, a);
+    };
+    proto.stroke = function (this: unknown, ...a: unknown[]) {
+      built += 1;
+      return stroke.apply(this, a);
+    };
+    try {
+      for (const ally of [false, true]) {
+        for (const mech of ["mirror_guard", "mirror_split", "void_well", "void_court"] as SovereignMechanic[]) {
+          const f = field();
+          const s = script(mech, ally);
+          const strikeAt = s.find((x) => (x.e as { step?: string }).step === "strike")!.t;
+          // The first use builds what it needs (the well's turning arms among them) and keeps it.
+          play(f, s, s[s.length - 1]!.t + 1);
+          const kept = f.sov.shapes.kept;
+          expect(kept, `${mech} keeps its shapes`).toBeGreaterThan(0);
+          // The second use in the same fight builds nothing new while it stands.
+          const d = new SigDriver((ev) => f.sov.handle(ev));
+          d.play(script(mech, ally));
+          let during = 0;
+          for (let t = 0; t < s[s.length - 1]!.t + 1.5; t += 1 / 30) {
+            const before = built;
+            d.update(1 / 30);
+            f.step(1 / 30);
+            if (t > strikeAt + 0.6 && t < strikeAt + 1.2) during += built - before;
+          }
+          expect(during, `${mech}${ally ? " (shadow)" : ""}: geometry built while it stands`).toBe(0);
+          expect(f.sov.shapes.kept, `${mech}: no new shared shape on its second use`).toBe(kept);
+          expect(f.sov.live).toBe(0);
+          expect(f.sov.shapes.pieces, `${mech}: every piece given back`).toBe(0);
+        }
+      }
+    } finally {
+      proto.fill = fill;
+      proto.stroke = stroke;
+    }
+  });
+
+  it("never writes to the world: every body it reads is read-only and unchanged after every mechanic", () => {
+    // A deep read-only view of each body: any write through it throws.
+    const frozen = <T extends object>(o: T): T =>
+      new Proxy(o, {
+        get: (t, k) => {
+          const v = Reflect.get(t, k) as unknown;
+          return v !== null && typeof v === "object" ? frozen(v as object) : v;
+        },
+        set: (_t, k) => {
+          throw new Error(`the renderer wrote ${String(k)} into the world`);
+        },
+        deleteProperty: (_t, k) => {
+          throw new Error(`the renderer deleted ${String(k)} from the world`);
+        },
+        defineProperty: (_t, k) => {
+          throw new Error(`the renderer defined ${String(k)} in the world`);
+        },
+      });
+    for (const ally of [false, true]) {
+      for (const mech of ALL) {
+        const f = field();
+        const before = JSON.stringify([...f.entities]);
+        const host = f.host as { entity: SovHost["entity"] };
+        const read = host.entity;
+        (f.host as unknown as { entity: SovHost["entity"] }).entity = (id) => {
+          const e = read(id);
+          return e ? frozen(e) : e;
+        };
+        const s = script(mech, ally);
+        const deaths: { t: number; e: GameEvent }[] = [20, 21, 11].map((id, i) => ({ t: s[s.length - 1]!.t * 0.7 + i * 0.05, e: { type: "death", id, kind: "enemy", pos: { x: 400, y: 100 } } as unknown as GameEvent }));
+        expect(() => {
+          play(f, [...s, ...deaths].sort((a, b) => a.t - b.t), s[s.length - 1]!.t + 2);
+          f.sov.transform(1, SOVEREIGN_IDS[ALL.indexOf(mech) % 3]!);
+          f.sov.essence(SOVEREIGN_IDS[ALL.indexOf(mech) % 3]!, { x: 300, y: 100 });
+          play(f, [], 1);
+        }, `${mech}${ally ? " (shadow)" : ""}`).not.toThrow();
+        expect(JSON.stringify([...f.entities]), `${mech}${ally ? " (shadow)" : ""}: the world as it was`).toBe(before);
+      }
     }
   });
 
