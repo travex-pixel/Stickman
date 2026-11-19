@@ -1275,6 +1275,94 @@ before it: simulate plus render JS at 15.8 ms (50th percentile) and 47.3 ms (95t
 ms after, within the rounds' own spread (12 to 20 ms at the 50th); the signature section's 95th
 percentile went from 2.0 to 3.2 ms.
 
+## How the Sovereigns look and sound
+
+The three Rift Sovereigns (`src/game/data/sovereigns.ts`) are staged in `src/game/render/sovereigns/`
+from the simulation's `boss_mechanic` events alone (a warning, the strike, its end), the same way for a
+Sovereign and for its bound shadow (told apart by the caster's faction). The renderer never writes to
+the world; a synthetic driver (`sovereigns/driver.ts`, `renderer.sovDebug(mech, { ally })` under
+`?debug=1`) plays the same events on a live fight, which is how every mechanic was staged before the
+fights existed.
+
+**Three silhouettes.** Each is the procedural rig with its own regalia (`rigs/regalia.ts`), shared parts
+drawn once per kind like every body, so a Sovereign costs no more per frame than a Warden:
+
+| | Figure and motion | Phase two | Entrance (2.4 s, a tap skips it) | Death |
+|---|---|---|---|---|
+| The Mirror Knight | a mid-size duelist (150, the warrior's frame and sword, its three-swing combo): ink under silver mirror plate and gilt, a helm with a mirror visor and a swept gilt crest, a mirror buckler | gold light breaks through cracks in the visor, breastplate and buckler; its shards orbit it | a mirror rises at its place; it steps out of the glass, pale as a reflection until it is through; the glass shatters behind it on the impact | breaks into mirror glass and gilt |
+| The Storm Titan | a hunched colossus (206, the heaviest frame, slow single blows) under a thunderhead whose lightning lives in it, a crown of drowned coral, an anchor for a weapon | the storm swells and burns white at its edge, arcs crawl on its arms | a black shape in the dark, shown by three strikes of lightning; it straightens to its height on the impact | its storm discharges into the ground in four bolts as it breaks |
+| The Void Queen | a floating sovereign (176, robed, a scepter) under a gilt halo, a crown of tall ink spikes, a high collar, a veil and a train | the halo collapses into a black sun with a violet corona, the crown grows, the hem frays into tendrils | a seam of the void opens upright at her place; she floats out of it while two of her court bow either side; it closes | folds into a point of void that rings outward once |
+
+The essence each leaves rises in its mark (a mirror's glint, a bolt of its storm, a void spiral).
+
+**Their shadows** (`summonSpec`, ids the boss ids) are the same figures, smaller (112, 138, 120: the
+army's bound bosses stand a little over the warrior), in the army's slate with a gilt edge, the
+Sovereign's own colour as the accent, gold-white eyes and a crown of light over the head; the Titan
+keeps its storm, the Queen two kneeling court shadows at her back. Each BIND is the full legendary rite
+with the Sovereign's own over it (`sovereigns/rite.ts`): four mirrors rise round the pool and catch the
+figure as it rises, then shatter outward at the oath; a storm gathers and rains on the pool, lightning
+forks into it, a bolt strikes at the oath and the storm settles on its back; the pool turns to a void
+well, a throne rises behind it, the court rises and kneels at the oath as a black sun blooms.
+
+**Three arenas**, each only for its Sovereign's fight (a gate or a hunt; never farming), painted once
+over the region's palette (`Background.ts`) with what moves pooled and tiered (`sovereigns/arena.ts`):
+the mirror hall (the Ashen Verge's ash and gold: a colonnade of mirrors in gilt frames, a polished floor
+with gilt inlay and long pale reflections; shards of glass light in the air; every body's reflection on
+the floor), the storm sea (the Drowned Hollow under the Titan's storm: a black sky, a running sea and
+its crests, wet stone; rain slanting through the field, a wet sheen sliding on the ground, sheet
+lightning far off, only when the flash budget grants it), the void throne (the Shattered Crown gone to
+the Queen's dark: broken pillars, a throne on its dais under the Rift, a kneeling court in the dark whose
+eyes open, a void pooled at the centre with gilt cracks running from it; motes drawn to the centre).
+
+**The mechanics.** The threat is always the simulation's own telegraph (crimson, true size, AUTO's to
+read); everything here is drawn under it, in the Sovereign's colour, and says what is coming and from
+where. A shadow's version is drawn in slate and gold with the Sovereign's colour as the accent, never
+crimson, on the army's own non-hostile telegraphs.
+
+| Mechanic | Warning | Strike | End |
+|---|---|---|---|
+| Mirror Guard | a gilt-framed mirror rises before the knight, toward the warrior | it stands, a sheen crossing it, its frame draining as its time runs out; each blow flashed back is a line of light from the glass to the striker and a glint (a small screen flash through the budget) | sinks; broken by a dash through it, it shatters |
+| Mirror Echo | a pale ghost of the warrior stands in the lane casting, the art he last used gathering in its hand as its glyph; ticks march down the lane | the ghost lunges; the art races down the lane as a pale crescent wave | the ghost breaks into glass |
+| Mirror Split | gold light gathers in the knight's crack | the images stand, cold glass (pale, translucent, a white shimmer, rims at their feet); the true knight keeps its crack of gold light, pulsing, and a gilt diamond over its head | the images left shatter; each struck down breaks into glass where it stood |
+| Storm Rods | each rod is driven in by a bolt from the sky; its reach on the ground fills as it charges, arcs crawl up it faster, sparks at its tip, a health pip over it | lightning from the sky onto the tip, a ring to its reach, scorched ground, one stop and one shake | struck down in time, it topples and its charge spills out as sparks |
+| Chain Storm | a crackling chain runs through every body it will leap between, each ringed on the ground and joined to the next | the bolt falls on the marked spot and leaps link by link, each thinner (its damage falls) | fades |
+| Storm Tide | the lane fills with dark water, flow marks running the wave's way; a wall of water rises at its start | the wave sweeps the lane, foam and spray on its crest | the water recedes, a wet sheen |
+| Void Well | an ink core opens with a violet rim (the part that hurts); arms of the pull turn in over the safe edge | the pull: debris spirals in, light smears toward the core, bodies lean toward it | it closes with a ring |
+| Kneeling Court | a sigil opens under her and rings go out to the marked spots | the courtiers kneel, hooded in her violet; chains of void run from each to her, beads flowing toward her, and a ward shimmers on her while any lives | the chains go |
+| Eclipse | the field darkens (the backdrop and a wash under every mark; foes sink with it, the warrior and his army keep a rim of light); a black sun hangs over the field; a bright ring follows whom she hunts until her mark is set | her strike out of the dark on the mark: a crescent, a ring, the flash, one stop, one shake | the light comes back |
+
+While the field is dark, every telegraph is drawn with a bright rim over it: the dark never hides a
+threat. A shadow's ultimate (Mirror Split, Storm Tide, Eclipse) is a moment: named the first time in a
+fight, the signature focus (other figures quiet, the army not in it dimmed, the same rules and limits),
+a short push-in, a stop and a flash through the budget; when it fires in the same breath as the
+warrior's Ascendant Fury the two crown each other (a gold crown of light on him, "Sovereign's Fury").
+
+**Quality and reduced effects** follow the signature skills' tiers (`signatures/quality.ts`, the same
+automatic step-down): the arena's moving pieces (mirror shards 12/6/3, rain 36/18/8, void motes
+14/7/3 at full/balanced/performance; the court's eyes at full only), the reflections (every body, the army and bosses, the warrior and
+the boss), particles, the void's smear (secondary layers) and camera moves scale down; every shape stays.
+Reduced effects: no flashes, shakes, stops, pushes or sheet lightning; no leaning bodies; slower rain;
+the eclipse goes less deep (0.6) and comes on slower; the entrances land on their release.
+
+**Sounds** (procedural, `audio/synth.ts`, through the mix budget in their own `sov` category, three in
+any 600 ms): an entrance each (glass bells gathering and the pane breaking; three cracks of lightning
+over rolling thunder; a held low D minor chord and a tolled bell), and a voice per mechanic's moment
+(the mirror rising, a fixed-pitch ping for each flash back, glass breaking when a dash shatters it, the
+echo drawn in, the split's bells, a rod driven in and its crack, the chain's buzz, the tide's roar, the
+well drawing in, the court's bell, the eclipse draining the light and her strike). A shadow's mechanics
+sound the same, softer. Nothing above 150 Hz slides.
+
+**Measured** (`?perf=1`, production build, software WebGL so noisy, the owner's save, each gate fight
+kept going for its whole 20 s window, two interleaved rounds per scene, `scratchpad/sov/fx/perf-*.json`):
+simulate plus render JS at the 50th percentile was 2.6 ms in a Warden's gate (the Ember Herald at 63) and
+3.1 to 3.5 ms in the Sovereigns' (balanced and full alike), 15 to 35% more. Most of that is the fight
+itself: the simulation's Sovereign rules cost 0.2 to 0.3 ms a frame more, and the same Sovereign fights
+drawn as a plain Warden (no regalia, no arena; their mechanics still staged) cost 3.0 to 3.6 ms, so the
+arenas and figures add 6 to 13% over their own fights. The staging section (signatures and Sovereigns)
+stays at 0.1 to 0.2 ms at the 50th percentile and 0.5 to 0.7 ms at the 95th. Trimming the arenas' moving
+pieces by a third at balanced moved nothing measurable; what remains is the mechanics' shapes redrawn
+each frame while they run and the Sovereigns' larger figures.
+
 ## Testing
 
 - `npm run test`: unit tests for every rule, plus a balance harness that simulates whole runs with

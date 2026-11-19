@@ -156,6 +156,8 @@ export class SovereignDirector {
   private now = 0;
   private shakeAt = -10;
   private readonly named = new Set<string>();
+  private labelAt = -10;
+  private labelStack = 0;
   /** Images already broken into glass (the strike that says so and the death may both come). */
   private readonly shattered = new Set<number>();
   private readonly focusIds: number[] = [];
@@ -744,7 +746,12 @@ export class SovereignDirector {
     const name = ULTIMATE_NAME[m.mech];
     if (name && !this.named.has(name) && this.host.sig.body(m.id, this.b)) {
       this.named.add(name);
-      this.host.label(name, this.b.x, this.b.y - this.b.height - 30 * pr.unit(), m.look.label);
+      // Ultimates fired in the same breath (they all answer the Fury) stack their names, never overlap.
+      if (this.now - this.labelAt > 0.4) this.labelStack = 0;
+      this.labelAt = this.now;
+      const lift = this.labelStack * 26 * pr.unit();
+      this.labelStack += 1;
+      this.host.label(name, this.b.x, this.b.y - this.b.height - 30 * pr.unit() - lift, m.look.label);
     }
     const fx = pr.sx((m.pos.x + m.to.x) / 2);
     const fy = pr.sy((m.pos.y + m.to.y) / 2) - 40 * pr.unit();
@@ -1305,7 +1312,8 @@ export class SovereignDirector {
       front, top - H * 0.4,
       front + dir * W * 0.04, bot,
     ];
-    g.poly(body).fill({ color: water, alpha: 0.88 * k });
+    // A shadow's wave runs through the army's own field: thinner, so the warrior shows through it.
+    g.poly(body).fill({ color: water, alpha: (m.ally ? 0.62 : 0.85) * k });
     g.poly(body).stroke({ width: 1.6, color: L.trim, alpha: 0.6 * k });
     // Foam on the crest and running down its face.
     m.fl.moveTo(back, top - H * 0.55).quadraticCurveTo(front - dir * W * 0.3, top - H * 1.1, front + dir * W * 0.22, top - H * 0.86).stroke({ width: 3.2, color: foam, alpha: 0.9 * k });

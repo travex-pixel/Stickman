@@ -29,9 +29,9 @@ interface Piece {
 
 /** Pieces per arena at each tier (full, balanced, performance); reduced effects takes the lowest. */
 export const ARENA_PIECES: Record<SovereignArena, Record<VisualQuality, number>> = {
-  mirror_hall: { full: 14, balanced: 9, performance: 4 },
-  storm_sea: { full: 44, balanced: 28, performance: 12 },
-  void_throne: { full: 18, balanced: 11, performance: 5 },
+  mirror_hall: { full: 12, balanced: 6, performance: 3 },
+  storm_sea: { full: 36, balanced: 18, performance: 8 },
+  void_throne: { full: 14, balanced: 7, performance: 3 },
 };
 
 export class ArenaLive {
@@ -157,9 +157,13 @@ export class ArenaLive {
       // The void at the centre breathes; the court's eyes open and close in the dark.
       this.glow.alpha = 0.16 + 0.08 * Math.sin(t * 0.8);
       this.sheen.alpha = 0.35;
+      // The court's eyes are a full-quality touch (a few more sprites for the batcher).
+      const eyes = this.quality === "full" && !this.reduced;
       for (let i = 0; i < this.eyes.length; i++) {
         const k = Math.sin(t * 0.35 + i * 1.9);
-        this.eyes[i]!.alpha = k > 0.6 ? (k - 0.6) * 2 : 0;
+        const e = this.eyes[i]!;
+        e.visible = eyes && k > 0.6;
+        e.alpha = k > 0.6 ? (k - 0.6) * 2 : 0;
       }
     } else {
       this.sheen.alpha = 0.05 + 0.03 * Math.sin(t * 0.5);

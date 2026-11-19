@@ -108,7 +108,7 @@ export class SovereignRite {
   }
 
   private storm(b: Graphics, f: Graphics, t: number, draw: number, rise: number, dt: number): void {
-    const top = -this.figH * 1.35;
+    const top = -this.figH * 1.12;
     // The storm gathers over the pool, then settles down onto the figure's back after the oath.
     const settle = this.oathT >= 0 ? easeInCubic(clamp01(this.oathT / 0.7)) : 0;
     const k = draw * (1 - settle * 0.6);

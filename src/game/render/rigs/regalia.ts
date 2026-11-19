@@ -82,6 +82,7 @@ export class Regalia {
   private readonly orbit = new Container();
   private readonly shards: Graphics[] = [];
   private cloud: Container | null = null;
+  private cloudScale = 1;
   private crownLight: Graphics | null = null;
   private court: Container | null = null;
   private seedT = 0;
@@ -133,7 +134,7 @@ export class Regalia {
       }
       if (this.cloud) {
         // The thunderhead roils: a slow breath of its scale.
-        const k = this.phase === 2 ? 1.22 : 1;
+        const k = (this.phase === 2 ? 1.22 : 1) * this.cloudScale;
         this.cloud.scale.set(k * (1 + Math.sin(clock * 1.3) * 0.03), k * (1 + Math.sin(clock * 1.7 + 1) * 0.04));
       }
     }
@@ -245,6 +246,9 @@ export class Regalia {
     const cloud = new Container();
     cloud.label = NO_WHITE;
     cloud.position.set(-w * 0.25, -h * 1.05);
+    // In the army the storm is carried, not worn as a wall: smaller and thinner, never hiding the warrior.
+    this.cloudScale = a.shadow ? 0.68 : 1;
+    if (a.shadow) cloud.alpha = 0.8;
     const cloudBody = a.shadow ? 0x555d6c : 0x1a2733;
     const cloudRim = a.shadow ? 0x8a93a3 : 0x3b5266;
     const mass = a.part((g) => {
