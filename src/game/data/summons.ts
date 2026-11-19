@@ -53,6 +53,19 @@ export interface SummonDef {
   aura: number;
 }
 
+/**
+ * A bound Rift Sovereign endures with its oath-bearer: on the field its health is never below this
+ * share of the warrior's, nor its defence below his (progression/loadout.ts, `sovereignEndurance`).
+ */
+export const SOVEREIGN_ENDURANCE = { hp: 0.3, defense: 1 } as const;
+
+/**
+ * A bound Rift Sovereign's might: its kit (both actives, its passive and ultimate, the bodies it
+ * raises) is reckoned in the warrior's expected blows, this many to one, when that is more than its
+ * own attack (summons/sovereignShadows.ts); its plain blows stay its own.
+ */
+export const SOVEREIGN_MIGHT = 1;
+
 export const SUMMONS: Record<string, SummonDef> = {
   husk_blade: {
     id: "husk_blade",
@@ -259,9 +272,9 @@ export const SUMMONS: Record<string, SummonDef> = {
     base: { hp: 240, attack: 21, attackSpeed: 0.85, defense: 6, moveSpeed: 96, range: 64, radius: 21 },
     growth: 0.14,
     active: { name: "Mirror Guard", description: "Raises a mirror before the warrior for 3 s: his wounds land 40% lighter and 60% of each flashes back at whoever struck.", cooldown: 10 },
-    active2: { name: "Mirror Echo", description: "Throws a mirrored copy of the warrior's last art down a lane of foes (320% damage), carrying a quarter of his last signature blow.", cooldown: 7 },
-    passive: { name: "Silvered Oath", description: "A quarter of every blow the warrior takes flashes back at its striker.", cooldown: 0 },
-    ultimate: { name: "Mirror Split", description: "With the Ascendant Fury: two images of the Knight step out and fight for 8 s.", cooldown: 40 },
+    active2: { name: "Mirror Echo", description: "Throws a mirrored copy of the warrior's last art down a lane of foes (30× your blow), carrying half of his last signature blow.", cooldown: 6 },
+    passive: { name: "Silvered Oath", description: "A quarter of every blow the warrior takes flashes back at its striker. Sworn to you, it strikes with your might and stands with 30% of your health.", cooldown: 0 },
+    ultimate: { name: "Mirror Split", description: "With the Ascendant Fury: two images of the Knight step out and fight for 6 s at half its might.", cooldown: 40 },
     palette: { body: 0x4a5160, accent: 0xd8dde8, eye: 0xf4f6ff, glow: 0xe8ecf6 },
     scale: 1.2,
     aura: 30,
@@ -277,10 +290,10 @@ export const SUMMONS: Record<string, SummonDef> = {
     lore: "It found its lightning rod at last. It is you, and it has decided to share.",
     base: { hp: 330, attack: 24, attackSpeed: 0.5, defense: 8, moveSpeed: 70, range: 80, radius: 26 },
     growth: 0.14,
-    active: { name: "Storm Rods", description: "Plants three rods among the thickest foes; after a breath each calls lightning on all around it (260% damage). Foes by a rod count as marked.", cooldown: 11 },
-    active2: { name: "Chain Storm", description: "A bolt that leaps between foes standing close, up to seven (240% damage, a little less each leap).", cooldown: 7 },
-    passive: { name: "Thunderous", description: "Its blows crash on every foe around its target for half their strength.", cooldown: 0 },
-    ultimate: { name: "Storm Tide", description: "With the Ascendant Fury: a wave down the most crowded lane (450% damage, thrown back).", cooldown: 40 },
+    active: { name: "Storm Rods", description: "Plants three rods among the thickest foes; after a breath each calls lightning on all around it (8× your blow). Foes by a rod count as marked.", cooldown: 11 },
+    active2: { name: "Chain Storm", description: "A bolt that leaps between foes standing close, up to seven (7× your blow, a little less each leap).", cooldown: 7 },
+    passive: { name: "Thunderous", description: "Each of its blows crashes on its target and every foe around it (1.5× your blow). Sworn to you, it strikes with your might and stands with 30% of your health.", cooldown: 0 },
+    ultimate: { name: "Storm Tide", description: "With the Ascendant Fury: a wave down the most crowded lane (12× your blow) throws back all but a boss.", cooldown: 40 },
     palette: { body: 0x4a5160, accent: 0x6fa8ff, eye: 0xe6f2ff, glow: 0x9cc4ff },
     scale: 1.45,
     aura: 34,
@@ -296,10 +309,10 @@ export const SUMMONS: Record<string, SummonDef> = {
     lore: "She held court in the dark for so long that the dark began to kneel. Now it kneels to you.",
     base: { hp: 230, attack: 22, attackSpeed: 0.65, defense: 6, moveSpeed: 84, range: 70, radius: 21 },
     growth: 0.14,
-    active: { name: "Void Well", description: "Opens a well among the thickest foes for 2.5 s: they are drawn together and its core tears at them. A singularity for Gravity Feast.", cooldown: 12 },
-    active2: { name: "Kneeling Court", description: "Two shadow courtiers rise and fight for 7 s at half her strength.", cooldown: 15 },
-    passive: { name: "Dark Majesty", description: "Foes near her take 12% more from the whole army.", cooldown: 0 },
-    ultimate: { name: "Eclipse", description: "With the Ascendant Fury: the field goes dark and every foe on it is struck (450% damage).", cooldown: 40 },
+    active: { name: "Void Well", description: "Opens a well among the thickest foes for 2.5 s: they are drawn together and its core tears at them (2× your blow each half second). A singularity for Gravity Feast.", cooldown: 12 },
+    active2: { name: "Kneeling Court", description: "Two shadow courtiers rise and fight for 7 s with her full might.", cooldown: 15 },
+    passive: { name: "Dark Majesty", description: "Foes near her take 15% more from you and the whole army. Sworn to you, she strikes with your might and stands with 30% of your health.", cooldown: 0 },
+    ultimate: { name: "Eclipse", description: "With the Ascendant Fury: the field goes dark and every foe on it is struck (8× your blow).", cooldown: 40 },
     palette: { body: 0x4a5160, accent: 0x9a6fe0, eye: 0xf0e2ff, glow: 0xc4a8ff },
     scale: 1.25,
     aura: 30,

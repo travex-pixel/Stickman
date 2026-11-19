@@ -1,26 +1,36 @@
-import { summonDef } from "../data/summons";
+import { SOVEREIGN_MIGHT, summonDef } from "../data/summons";
+import { isSovereign } from "../data/sovereigns";
+import { expectedBlow } from "../combat/damage";
+import type { CombatStats } from "../entities/types";
 import { activeSynergies, synergyTotals, type SynergyDef } from "../data/synergies";
 import { summonStats } from "../summons/progression";
 import type { Profile, SummonInstance } from "./profile";
-import { fieldedSummons } from "./loadout";
-import { computeModifiers, type PlayerModifiers } from "./stats";
+import { fieldedSummons, sovereignEndurance } from "./loadout";
+import { computeModifiers, computePlayerStats, type PlayerModifiers } from "./stats";
 
 /**
  * Army strength: one number for a line-up, in the terms the Army panel uses. Each fielded shadow's
  * stats are taken as they fight (its level, bond and stars; the warrior's army bonuses from skills,
  * perks and gear; the line-up's own synergies), then scored the way a shadow's power always has
  * been (`summonPower`: attack × speed × 5, health × 0.5, defence × 6), and summed. Synergies count
- * because they change every fielded shadow's stats.
+ * because they change every fielded shadow's stats. A bound Sovereign is taken as it fights too: with
+ * its endurance, and its kit's blows at the warrior's might (`warrior`: his stats, when known).
  */
-export function armyStrength(profile: Profile, lineup: readonly SummonInstance[], mods: PlayerModifiers = computeModifiers(profile)): number {
+export function armyStrength(profile: Profile, lineup: readonly SummonInstance[], mods: PlayerModifiers = computeModifiers(profile), warrior?: CombatStats): number {
   const syn = synergyTotals(activeSynergies(lineup.map((s) => summonDef(s.defId).role)));
   const m = { damageMult: mods.summonDamageMult + syn.attack, defenseMult: mods.summonDefenseMult + syn.defense, hpMult: mods.summonHpMult + syn.hp };
   let total = 0;
   for (const inst of lineup) {
-    const s = summonStats(inst, m);
+    let s = summonStats(inst, m);
+    let attack = s.attack;
+    if (isSovereign(inst.defId)) {
+      warrior ??= computePlayerStats(profile);
+      s = sovereignEndurance(s, warrior);
+      attack = Math.max(s.attack, SOVEREIGN_MIGHT * expectedBlow(warrior));
+    }
     // A Sovereign's kit multiplies what its blows are worth (kitWorth; 1 for every other shadow).
     const kit = summonDef(inst.defId).kitWorth ?? 1;
-    total += s.attack * s.attackSpeed * 5 * kit + s.maxHp * 0.5 + s.defense * 6;
+    total += attack * s.attackSpeed * 5 * kit + s.maxHp * 0.5 + s.defense * 6;
   }
   return total;
 }
@@ -59,15 +69,16 @@ export interface BestLineup {
 export function bestLineup(profile: Profile): BestLineup {
   // The warrior's bonuses are the same for every line-up: work them out once, not 792 times.
   const mods = computeModifiers(profile);
+  const warrior = profile.summons.collection.some((s) => isSovereign(s.defId)) ? computePlayerStats(profile) : undefined;
   const slots = mods.deploySlots;
   const all = profile.summons.collection;
   const cur = fieldedSummons(profile, slots);
-  const now = armyStrength(profile, cur, mods);
+  const now = armyStrength(profile, cur, mods, warrior);
   const k = Math.min(slots, all.length);
   let best = cur.length === k ? cur : [];
   let bestScore = cur.length === k ? now : -1;
   for (const c of combos(all, k)) {
-    const v = armyStrength(profile, c, mods);
+    const v = armyStrength(profile, c, mods, warrior);
     if (v > bestScore * (1 + 1e-9) + 1e-9) {
       best = c;
       bestScore = v;

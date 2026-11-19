@@ -17,6 +17,11 @@ export interface DamageResult {
   crit: boolean;
 }
 
+/** A blow's expected worth before defence: attack, with the crit chance and crit damage. */
+export function expectedBlow(s: { attack: number; critChance: number; critDamage: number }): number {
+  return s.attack * (1 + Math.min(1, Math.max(0, s.critChance)) * (Math.max(1, s.critDamage) - 1));
+}
+
 /** Defence reduces damage with diminishing returns: 10 defence ~ 25%, 30 ~ 50%, never below 15% of raw. */
 export function defenseMultiplier(defense: number): number {
   const d = Math.max(0, defense);

@@ -5,7 +5,8 @@ import { clamp, dist, type Vec2 } from "../engine/math";
 import { createSummon } from "../entities/factory";
 import { factionWithin, isHidden } from "../combat/targeting";
 import { isSovereign, type SovereignMechanic } from "../data/sovereigns";
-import { ECHO_HALF, sendMechanic } from "../bosses/sovereigns";
+import { SOVEREIGN_MIGHT } from "../data/summons";
+import { ECHO_HALF, sendMechanic, warriorBlow } from "../bosses/sovereigns";
 
 /**
  * SOVEREIGN SHADOWS: a Rift Sovereign bound to the army wields its own mechanics against the
@@ -30,27 +31,50 @@ import { ECHO_HALF, sendMechanic } from "../bosses/sovereigns";
  * struck from the dark).
  */
 
+/**
+ * Each kit's numbers. A `power` is in the shadow's might (SOVEREIGN_MIGHT): 1 is one of the
+ * warrior's expected blows. A raised body's `share` is of the shadow's health and of its might.
+ */
 export const SHADOW_KIT = {
   mirror_knight: {
-    /** `cap`: the most one flash can carry, in the Knight's own blows (so it scales with the shadow). */
+    /** `cap`: the most one flash can carry, in blows of the Knight's might. */
     guard: { cooldown: 10, warn: 0.3, time: 3, taken: 0.6, reflect: 0.6, cap: 1.5 },
-    echo: { cooldown: 6, warn: 0.45, power: 4.5, sigShare: 0.25 },
+    echo: { cooldown: 6, warn: 0.45, power: 30, sigShare: 0.5 },
     passive: { reflect: 0.25, cap: 0.75 },
     ult: { images: 2, warn: 0.3, life: 6, share: 0.5 },
   },
   storm_titan: {
-    rods: { cooldown: 11, n: 3, charge: 1.2, radius: 70, power: 2.0 },
-    chain: { cooldown: 7, warn: 0.35, range: 110, leaps: 6, power: 2.0, falloff: 0.85 },
-    passive: { radius: 70, share: 0.35 },
-    ult: { warn: 0.6, half: 40, power: 3.0 },
+    rods: { cooldown: 11, n: 3, charge: 1.2, radius: 70, power: 8 },
+    chain: { cooldown: 7, warn: 0.35, range: 110, leaps: 6, power: 7, falloff: 0.85 },
+    passive: { radius: 70, share: 1.5 },
+    ult: { warn: 0.6, half: 40, power: 12 },
   },
   void_queen: {
-    well: { cooldown: 12, warn: 0.4, time: 2.5, reach: 150, pull: 90, core: 50, power: 0.6 },
-    court: { cooldown: 15, n: 2, warn: 0.3, life: 7, share: 0.5 },
-    passive: { radius: 150, bonus: 0.12 },
-    ult: { warn: 1.5, power: 2.5 },
+    well: { cooldown: 12, warn: 0.4, time: 2.5, reach: 150, pull: 90, core: 50, power: 2 },
+    court: { cooldown: 15, n: 2, warn: 0.3, life: 7, share: 1 },
+    passive: { radius: 150, bonus: 0.15 },
+    ult: { warn: 1.5, power: 8 },
   },
 } as const;
+
+/**
+ * A Sovereign's might: a bound Sovereign strikes with its oath-bearer's strength. Its kit (both
+ * actives, its passive and its ultimate, and the bodies it raises) is reckoned in the warrior's
+ * expected blow (his attack with his crits; SOVEREIGN_MIGHT of them to one `power`) when that is
+ * more than its own attack; its plain blows stay its own. A late warrior out-hits any shadow by
+ * millions to one: without it a Sovereign's kit landed as a scratch, a millionth of a fight.
+ */
+export { SOVEREIGN_MIGHT };
+
+/** How much harder than its own attack a Sovereign shadow's mechanic lands (at least 1). */
+export function sovereignMight(w: World, s: Combatant): number {
+  return Math.max(1, (SOVEREIGN_MIGHT * warriorBlow(w)) / Math.max(1, s.stats.attack));
+}
+
+/** A blow of the shadow's kit: `power` of its might. */
+function kitHit(w: World, s: Combatant, e: Combatant, power: number, element: "void" | "lightning", heavy: boolean) {
+  return w.dealDamage(s, e, power, element, heavy, sovereignMight(w, s));
+}
 
 /** With AUTO off, a Sovereign's ultimate comes on this cooldown of its own. */
 export const SHADOW_ULT_COOLDOWN = 40;
@@ -245,8 +269,8 @@ export function mirrorShadowIncoming(w: World, amount: number, sourceId: number)
     const K = SHADOW_KIT.mirror_knight;
     const share = K.passive.reflect + (guard ? K.guard.reflect : 0);
     if (guard) landed *= K.guard.taken;
-    // A flash carries a share of the blow, but never more than a few of the Knight's own.
-    const r = Math.round(Math.min(amount * share, s.stats.attack * (guard ? K.guard.cap : K.passive.cap)));
+    // A flash carries a share of the blow, but never more than a few of the Knight's own (with its might).
+    const r = Math.round(Math.min(amount * share, s.stats.attack * sovereignMight(w, s) * (guard ? K.guard.cap : K.passive.cap)));
     if (r >= 1) {
       if (guard) mech(w, s, "mirror_guard", "strike", { index: 1, pos: w.player.pos, to: src.pos, radius: w.player.radius + 16, targets: [src.id] });
       w.applyRawDamage(src, r, "void", s.id, false);
@@ -278,7 +302,7 @@ function mirrorEcho(w: World, s: Combatant, target: Combatant): void {
     const hit = foes(w).filter((e) => (e.pos.x - fromX) * dir >= -e.radius && Math.abs(e.pos.y - y) < half + e.radius * 0.5);
     mech(w, s, "mirror_echo", "strike", { pos: { x: fromX, y }, to, radius: half, targets: hit.map((e) => e.id) });
     for (const e of hit) {
-      w.dealDamage(s, e, K.power, "void", true);
+      kitHit(w, s, e, K.power, "void", true);
       if (sig && !e.dead) w.applyRawDamage(e, Math.max(1, Math.round(sig.amount * K.sigShare)), "void", s.id, false);
     }
     mech(w, s, "mirror_echo", "end", { pos: to, radius: half });
@@ -300,7 +324,8 @@ function mirrorSplit(w: World, s: Combatant): void {
 
 /** A body a Sovereign shadow raises: a temporary summon at `share` of its strength. */
 function raise(w: World, s: Combatant, defId: string, at: Vec2, life: number, share: number, index: number): Combatant {
-  const stats = { ...s.stats, maxHp: Math.round(s.stats.maxHp * share), attack: Math.round(s.stats.attack * share * 10) / 10 };
+  // It strikes with its share of the Sovereign's might (and lasts with its share of its health).
+  const stats = { ...s.stats, maxHp: Math.round(s.stats.maxHp * share), attack: Math.round(s.stats.attack * sovereignMight(w, s) * share * 10) / 10 };
   const ent = createSummon(w.allocId(), { instanceId: `sov_${s.id}_${w.time.toFixed(3)}_${index}`, defId, level: s.level, stats }, at, w.loadout.command);
   ent.summon!.temporary = true;
   ent.summon!.expiresAt = w.time + life;
@@ -340,7 +365,7 @@ function stormRods(w: World, s: Combatant, list: Combatant[]): void {
       if (s.dead) return;
       const hit = factionWithin(at, "enemy", w.entities.values(), K.radius);
       mech(w, s, "storm_rods", "strike", { index: i + 1, pos: at, to: { x: at.x, y: ARENA.minY - 120 }, radius: K.radius, targets: hit.map((e) => e.id) });
-      for (const e of hit) w.dealDamage(s, e, K.power, "lightning", true);
+      for (const e of hit) kitHit(w, s, e, K.power, "lightning", true);
       mech(w, s, "storm_rods", "end", { index: i + 1, pos: at, radius: K.radius });
     });
   });
@@ -370,16 +395,16 @@ function stormChain(w: World, s: Combatant, target: Combatant, list: Combatant[]
     const live = path.filter((e) => !e.dead);
     mech(w, s, "storm_chain", "strike", { pos: s.pos, to: target.pos, radius: K.range, targets: live.map((e) => e.id) });
     path.forEach((e, k) => {
-      if (!e.dead) w.dealDamage(s, e, K.power * Math.pow(K.falloff, k), "lightning", k === 0);
+      if (!e.dead) kitHit(w, s, e, K.power * Math.pow(K.falloff, k), "lightning", k === 0);
     });
     mech(w, s, "storm_chain", "end", { pos: target.pos, radius: K.range });
   });
 }
 
-/** Thunderous: the Titan's blow crashes on the foes around its target too. */
+/** Thunderous: the Titan's blow crashes with its might on its target and on every foe around it. */
 export function titanBlow(w: World, s: Combatant, target: Combatant): void {
   const K = SHADOW_KIT.storm_titan.passive;
-  for (const o of factionWithin(target.pos, "enemy", w.entities.values(), K.radius)) if (o.id !== target.id) w.dealDamage(s, o, K.share, "lightning", false);
+  for (const o of factionWithin(target.pos, "enemy", w.entities.values(), K.radius)) kitHit(w, s, o, K.share, "lightning", false);
 }
 
 function stormTide(w: World, s: Combatant): void {
@@ -407,7 +432,7 @@ function stormTide(w: World, s: Combatant): void {
     const hit = foes(w).filter((e) => Math.abs(e.pos.y - y) < K.half + e.radius * 0.5);
     mech(w, s, "storm_tide", "strike", { pos: from, to, radius: K.half, duration: 0.6, targets: hit.map((e) => e.id) });
     // It throws the foes it strikes, but never a boss: the warrior's blade must not chase it.
-    for (const e of hit) if (w.dealDamage(s, e, K.power, "void", true) && e.kind !== "boss") w.applyKnockback(e, { x: e.pos.x - dir * 40, y: e.pos.y }, 300);
+    for (const e of hit) if (kitHit(w, s, e, K.power, "void", true) && e.kind !== "boss") w.applyKnockback(e, { x: e.pos.x - dir * 40, y: e.pos.y }, 300);
     mech(w, s, "storm_tide", "end", { pos: to, radius: K.half });
   });
 }
@@ -458,7 +483,7 @@ export function tickAllyWells(w: World, dt: number): void {
     well.next -= dt;
     if (well.next <= 0) {
       well.next = 0.5;
-      for (const e of factionWithin(well.pos, "enemy", w.entities.values(), K.core)) w.dealDamage(owner, e, K.power, "void", false);
+      for (const e of factionWithin(well.pos, "enemy", w.entities.values(), K.core)) kitHit(w, owner, e, K.power, "void", false);
     }
   }
 }
@@ -492,7 +517,7 @@ function eclipse(w: World, s: Combatant): void {
     if (s.dead) return;
     const hit = foes(w);
     mech(w, s, "void_eclipse", "strike", { pos: s.pos, radius: ARENA.maxX - ARENA.minX, targets: hit.map((e) => e.id) });
-    for (const e of hit) w.dealDamage(s, e, K.power, "void", true);
+    for (const e of hit) kitHit(w, s, e, K.power, "void", true);
     mech(w, s, "void_eclipse", "end", { pos: s.pos, radius: 0 });
   });
 }

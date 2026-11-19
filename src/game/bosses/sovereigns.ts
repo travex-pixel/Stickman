@@ -4,6 +4,7 @@ import type { Combatant, SovereignBossState } from "../entities/types";
 import type { MechanicStep, SovereignMechanic } from "../data/sovereigns";
 import { clamp, dist, type Vec2 } from "../engine/math";
 import { addStatus, hasStatus } from "../combat/statuses";
+import { expectedBlow } from "../combat/damage";
 import { hold, startCharge, startSlam, startSweep, startSwing, startVolley } from "./hollowWarden";
 
 /**
@@ -127,8 +128,7 @@ export function newSovereignState(): SovereignBossState {
 
 /** The warrior's expected blow: his attack, with his crit chance and crit damage. */
 export function warriorBlow(w: World): number {
-  const p = w.player.stats;
-  return p.attack * (1 + Math.min(1, Math.max(0, p.critChance)) * (Math.max(1, p.critDamage) - 1));
+  return expectedBlow(w.player.stats);
 }
 
 /**

@@ -11,6 +11,8 @@ import { activeSynergies, synergyTotals, type SynergyDef } from "../data/synergi
 import { noApex, type ApexRanks } from "../data/apex";
 import type { SignatureLoadout } from "../data/signatures";
 import { signatureLoadout } from "./signatures";
+import { isSovereign } from "../data/sovereigns";
+import { SOVEREIGN_ENDURANCE } from "../data/summons";
 
 export interface DeployedSummonLoadout {
   instanceId: string;
@@ -60,8 +62,9 @@ export function buildLoadout(profile: Profile): PlayerLoadout {
   const deployed = fieldedSummons(profile, mods.deploySlots);
   const syn = synergyTotals(activeSynergies(deployed.map((s) => summonDef(s.defId).role)));
   const armyMods = { damageMult: mods.summonDamageMult + syn.attack, defenseMult: mods.summonDefenseMult + syn.defense, hpMult: mods.summonHpMult + syn.hp };
+  const stats = computePlayerStats(profile);
   return {
-    stats: computePlayerStats(profile),
+    stats,
     abilities: ABILITY_SLOTS.filter((id) => ABILITIES[id].unlockLevel <= profile.player.level).map((id) => slotForm(profile, id)),
     slots: Object.fromEntries(ABILITY_SLOTS.map((id) => [id, slotForm(profile, id)])),
     ultimateUnlocked: ABILITIES[ULTIMATE_ID].unlockLevel <= profile.player.level,
@@ -71,7 +74,7 @@ export function buildLoadout(profile: Profile): PlayerLoadout {
       instanceId: s.instanceId,
       defId: s.defId,
       level: s.level,
-      stats: summonStats(s, armyMods),
+      stats: isSovereign(s.defId) ? sovereignEndurance(summonStats(s, armyMods), stats) : summonStats(s, armyMods),
     })),
     command: profile.summons.command,
     autoCast: profile.player.autoCast,
@@ -87,4 +90,14 @@ export function buildLoadout(profile: Profile): PlayerLoadout {
 
 export function summonRole(defId: string) {
   return summonDef(defId).role;
+}
+
+/**
+ * A bound Sovereign endures with its oath-bearer: on the field its health and defence are never
+ * below their shares of the warrior's (SOVEREIGN_ENDURANCE). A late warrior's foes would otherwise
+ * fell it with any blow, and its kit would never be seen.
+ */
+export function sovereignEndurance(own: CombatStats, warrior: CombatStats): CombatStats {
+  const maxHp = Math.max(own.maxHp, Math.round(warrior.maxHp * SOVEREIGN_ENDURANCE.hp));
+  return { ...own, maxHp, defense: Math.max(own.defense, warrior.defense * SOVEREIGN_ENDURANCE.defense), hpRegen: Math.max(own.hpRegen, warrior.hpRegen * SOVEREIGN_ENDURANCE.hp) };
 }

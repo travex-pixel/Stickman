@@ -4,7 +4,10 @@ import { buildLoadout } from "@/game/progression/loadout";
 import { createDefaultProfile, type Profile } from "@/game/progression/profile";
 import type { GameEvent } from "@/game/engine/events";
 import type { Combatant } from "@/game/entities/types";
-import { SHADOW_KIT } from "@/game/summons/sovereignShadows";
+import { SHADOW_KIT, SHADOW_ULT_COOLDOWN, SOVEREIGN_MIGHT, sovereignMight } from "@/game/summons/sovereignShadows";
+import { defenseMultiplier } from "@/game/combat/damage";
+import { bestLineup } from "@/game/progression/army";
+import { SOVEREIGN_ENDURANCE, SUMMONS } from "@/game/data/summons";
 import { COURT_BLOWS, COURT_HP, ECLIPSE_MARK, ECLIPSE_RADIUS, IMAGE_BLOWS, IMAGE_HP, ROD_BLOWS, ROD_HP, forceMechanic, warriorBlow } from "@/game/bosses/sovereigns";
 
 type Mech = Extract<GameEvent, { type: "boss_mechanic" }>;
@@ -196,6 +199,120 @@ describe("a Sovereign's parts are a few blows' work at any strength", () => {
         }
         if (attack === 1) expect(cap, `a weak warrior's ${kind}`).toBeLessThan(b.stats.maxHp * share);
       }
+    }
+  });
+});
+
+describe("what the Army panel and the BIND reveal say a Sovereign shadow does", () => {
+  const blow = (n: number) => `${n}× your blow`;
+  const pct = (n: number) => `${Math.round(n * 100)}%`;
+  it("matches its kit: every power, share, time and cooldown it names", () => {
+    const K = SHADOW_KIT;
+    const d = (id: string) => SUMMONS[id]!;
+    const oath = `${pct(SOVEREIGN_ENDURANCE.hp)} of your health`;
+    const knight = d("mirror_knight");
+    expect(knight.active.cooldown).toBe(K.mirror_knight.guard.cooldown);
+    expect(knight.active.description).toContain(`for ${K.mirror_knight.guard.time} s`);
+    expect(knight.active.description).toContain(`${pct(1 - K.mirror_knight.guard.taken)} lighter`);
+    expect(knight.active.description).toContain(`${pct(K.mirror_knight.guard.reflect)} of each flashes back`);
+    expect(knight.active2!.cooldown).toBe(K.mirror_knight.echo.cooldown);
+    expect(knight.active2!.description).toContain(blow(K.mirror_knight.echo.power));
+    expect(K.mirror_knight.echo.sigShare).toBe(0.5);
+    expect(knight.active2!.description).toContain("half of his last signature blow");
+    expect(K.mirror_knight.passive.reflect).toBe(0.25);
+    expect(knight.passive.description).toContain("A quarter of every blow");
+    expect(knight.ultimate!.description).toContain(`fight for ${K.mirror_knight.ult.life} s`);
+    expect(K.mirror_knight.ult.share).toBe(0.5);
+    expect(knight.ultimate!.description).toContain("half its might");
+
+    const titan = d("storm_titan");
+    expect(titan.active.cooldown).toBe(K.storm_titan.rods.cooldown);
+    expect(titan.active.description).toContain(blow(K.storm_titan.rods.power));
+    expect(K.storm_titan.rods.n).toBe(3);
+    expect(titan.active2!.cooldown).toBe(K.storm_titan.chain.cooldown);
+    expect(titan.active2!.description).toContain(blow(K.storm_titan.chain.power));
+    expect(titan.active2!.description).toContain(`up to ${K.storm_titan.chain.leaps + 1}`.replace("7", "seven"));
+    expect(titan.passive.description).toContain(blow(K.storm_titan.passive.share));
+    expect(titan.ultimate!.description).toContain(blow(K.storm_titan.ult.power));
+
+    const queen = d("void_queen");
+    expect(queen.active.cooldown).toBe(K.void_queen.well.cooldown);
+    expect(queen.active.description).toContain(`for ${K.void_queen.well.time} s`);
+    expect(queen.active.description).toContain(`${blow(K.void_queen.well.power)} each half second`);
+    expect(queen.active2!.cooldown).toBe(K.void_queen.court.cooldown);
+    expect(queen.active2!.description).toContain(`fight for ${K.void_queen.court.life} s`);
+    expect(K.void_queen.court.share).toBe(1);
+    expect(queen.active2!.description).toContain("her full might");
+    expect(queen.passive.description).toContain(`${pct(K.void_queen.passive.bonus)} more`);
+    expect(queen.ultimate!.description).toContain(blow(K.void_queen.ult.power));
+
+    for (const def of [knight, titan, queen]) {
+      expect(def.passive.description).toContain(oath);
+      expect(def.ultimate!.cooldown).toBe(SHADOW_ULT_COOLDOWN);
+    }
+  });
+});
+
+describe("a bound Sovereign fights with its oath-bearer's might", () => {
+  /** A strong warrior (his blow far above any shadow's attack) with one Sovereign shadow fielded. */
+  function strong(defId: string, mode: "campaign" | "boss" = "campaign") {
+    const p = fielded(defId, (q) => {
+      q.player.level = 400;
+      q.player.statLevels = { attack: 300, maxHp: 300, attackSpeed: 1, critChance: 40, critDamage: 60, defense: 200 };
+    });
+    const w = new World({ stage: 30, loadout: buildLoadout(p), seed: 9, mode });
+    const s = w.summonEntities().find((e) => e.defId === defId)!;
+    return { p, w, s };
+  }
+
+  it("stands with a share of the warrior's health and his defence; other shadows keep their own", () => {
+    const { w, s } = strong("storm_titan");
+    expect(s.stats.maxHp).toBe(Math.round(w.player.stats.maxHp * SOVEREIGN_ENDURANCE.hp));
+    expect(s.stats.defense).toBe(w.player.stats.defense);
+    const king = new World({ stage: 30, loadout: buildLoadout(fielded("crownless_king", (q) => (q.player.statLevels = { attack: 300, maxHp: 300, attackSpeed: 1, critChance: 40, critDamage: 60, defense: 200 }))), seed: 9, mode: "campaign" });
+    const k = king.summonEntities().find((e) => e.defId === "crownless_king")!;
+    expect(k.stats.maxHp).toBeLessThan(king.player.stats.maxHp * 0.05);
+  });
+
+  it("its kit strikes in the warrior's blows: a rod's lightning lands as `power` of them", () => {
+    const { w, s } = strong("storm_titan");
+    const p = w.player.stats;
+    const blow = p.attack * (1 + Math.min(1, p.critChance) * (p.critDamage - 1));
+    expect(sovereignMight(w, s)).toBeCloseTo((SOVEREIGN_MIGHT * blow) / s.stats.attack, 6);
+    // Each rod strike's lightning on a foe, against that foe's defence (read as it lands).
+    const seen: number[] = [];
+    let open = false;
+    for (let i = 0; i < 14 / FIXED_DT; i++) {
+      w.player.hp = w.player.stats.maxHp;
+      w.update(FIXED_DT);
+      for (const e of w.drainEvents()) {
+        if (e.type === "boss_mechanic" && e.id === s.id && e.mech === "storm_rods") open = e.step === "strike";
+        if (open && e.type === "hit" && e.sourceId === s.id && e.element === "lightning" && e.heavy) {
+          const def = w.entities.get(e.targetId)!.stats.defense;
+          seen.push(e.amount / defenseMultiplier(def));
+        }
+      }
+    }
+    expect(seen.length).toBeGreaterThan(0);
+    seen.sort((a, b) => a - b);
+    const rods = SHADOW_KIT.storm_titan.rods.power;
+    // `power` blows through the foe's defence (a shieldbearer's guard can take some off; the shadow's
+    // own crit and the field's bonuses add).
+    expect(seen[Math.floor(seen.length / 2)]!).toBeGreaterThan(rods * blow * 0.9);
+    expect(seen[0]!).toBeGreaterThan(rods * blow * 0.4);
+  });
+
+  it("Deploy best fields a Sovereign the day it is bound, over a long-raised Crownless King", () => {
+    const p = createDefaultProfile(0);
+    p.player.level = 300;
+    p.player.statLevels = { attack: 200, maxHp: 200, attackSpeed: 1, critChance: 20, critDamage: 20, defense: 100 };
+    p.summons.firstSummonSeen = true;
+    p.summons.collection.push({ instanceId: "king", defId: "crownless_king", level: 40, xp: 0, bond: 50, shards: 0, stars: 5, deployed: true, recruitedAt: 0 });
+    for (let i = 0; i < 6; i++) p.summons.collection.push({ instanceId: `g${i}`, defId: "gravewalker", level: 40, xp: 0, bond: 50, shards: 0, stars: 5, deployed: i < 4, recruitedAt: 0 });
+    for (const id of ["mirror_knight", "storm_titan", "void_queen"]) {
+      p.summons.collection.push({ instanceId: `new_${id}`, defId: id, level: 1, xp: 0, bond: 1, shards: 0, stars: 0, deployed: false, recruitedAt: 0 });
+      expect(bestLineup(p).lineup.some((x) => x.defId === id), id).toBe(true);
+      p.summons.collection.pop();
     }
   });
 });
