@@ -6,6 +6,7 @@ import { clamp, dist } from "../engine/math";
 import { addStatus, hasStatus } from "../combat/statuses";
 import { factionWithin, hostilesWithin, mostDangerous, nearestHostile } from "../combat/targeting";
 import { ARENA } from "../engine/World";
+import { guardUp } from "../bosses/sovereigns";
 
 /**
  * Player abilities. Casting locks the warrior into a cast animation; the effect lands at the
@@ -237,6 +238,8 @@ export function playerDodge(world: World): void {
     distance = Math.max(110, Math.min(170, d + target.radius + 40));
   }
   let nx = p.pos.x + dir * distance;
+  // Into a Mirror Knight's standing mirror the dash goes through it even at the wall (stopping there).
+  if (target && target === world.boss && guardUp(target)) nx = clamp(nx, ARENA.minX + 10, ARENA.maxX - 10);
   if (nx > ARENA.maxX - 10 || nx < ARENA.minX + 10) {
     dir = (dir * -1) as 1 | -1;
     nx = clamp(p.pos.x + dir * distance, ARENA.minX + 10, ARENA.maxX - 10);

@@ -5,7 +5,7 @@ import { summonDef } from "../data/summons";
 import { addStatus } from "../combat/statuses";
 import { factionWithin, hostilesWithin, isHidden, lowestHpFraction, mostDangerous, nearestHostile } from "../combat/targeting";
 import { ARENA } from "../engine/World";
-import { priorityPart } from "../bosses/sovereigns";
+import { PART_REACH, priorityPart } from "../bosses/sovereigns";
 import { isSovereignShadow, sovereignShadowTurn } from "./sovereignShadows";
 
 /**
@@ -70,9 +70,10 @@ export function updateSummonAi(world: World, s: Combatant, dt: number): void {
         target = nearestHostile(s, enemiesNearAnchor);
     }
   }
-  // A Sovereign's charging rod or kneeling courtier is cut down first, unless holding a guard post.
+  // A Sovereign's charging rod or kneeling courtier is cut down first: anywhere on the field under
+  // the Aggressive command, close by otherwise, never by a guard holding its post.
   if (world.boss?.boss?.sov && sum.command !== "guard" && sum.role !== "sentinel") {
-    const part = priorityPart(world, s.pos);
+    const part = priorityPart(world, s.pos, sum.command === "aggressive" ? Infinity : PART_REACH);
     if (part) target = part;
   }
   // The player's focus overrides role targeting, except for a guard holding its post.

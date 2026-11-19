@@ -3,7 +3,7 @@ import { ARENA } from "../engine/World";
 import type { Combatant, SovereignBossState } from "../entities/types";
 import type { MechanicStep, SovereignMechanic } from "../data/sovereigns";
 import { clamp, dist, type Vec2 } from "../engine/math";
-import { hasStatus } from "../combat/statuses";
+import { addStatus, hasStatus } from "../combat/statuses";
 import { hold, startCharge, startSlam, startSweep, startSwing, startVolley } from "./hollowWarden";
 
 /**
@@ -35,15 +35,17 @@ import { hold, startCharge, startSlam, startSweep, startSwing, startVolley } fro
 export const GUARD_WARN = 0.4;
 export const GUARD_TIME = 1.8;
 /** Share of damage the Knight takes while its mirror stands. */
-export const GUARD_TAKEN = 0.35;
+export const GUARD_TAKEN = 0.25;
 /** Share of a blow the mirror flashes back at whoever struck it... */
 export const REFLECT_SHARE = 0.3;
 /** ...never more than this share of the striker's own health per flash... */
 export const REFLECT_CAP = 0.04;
 /** ...and at most one flash per striker in this many seconds. */
 export const REFLECT_GAP = 0.35;
-/** Stagger when a dash shatters the mirror. */
+/** Stagger when a dash shatters the mirror, and the Knight exposed after it: blows land harder. */
 export const SHATTER_STAGGER = 1.2;
+export const EXPOSED_TIME = 3;
+export const EXPOSED_BONUS = 0.3;
 /** A dash passing this close to the Knight (beyond its body) goes through the mirror. */
 export const SHATTER_REACH = 34;
 
@@ -63,6 +65,11 @@ export const ROD_RADIUS = 72;
 export const ROD_POWER = 1.5;
 /** A rod's health, as a share of the Titan's. */
 export const ROD_HP = 0.025;
+/** A rod that calls its lightning also storms the Titan up: a shield of this share of its health. */
+export const ROD_SHIELD = 0.06;
+export const ROD_SHIELD_TIME = 10;
+/** The warrior's own AUTO goes for a rod or courtier only this close to him (a tap sends him to any). */
+export const PART_REACH = 130;
 
 export const CHAIN_WARN = 1.0;
 /** The bolt lands on a marked spot of this radius, then leaps between allies this close. */
@@ -88,7 +95,7 @@ export const COURT_WARN = 0.7;
 /** A courtier's health, as a share of the Queen's. */
 export const COURT_HP = 0.035;
 /** Damage the Queen is spared per kneeling courtier, and the least she can take. */
-export const COURT_DR = 0.22;
+export const COURT_DR = 0.25;
 export const COURT_FLOOR = 0.4;
 
 export const ECLIPSE_TIME = 2.5;
@@ -106,7 +113,7 @@ const C_VOID = 0x9a6fe0;
 // ---------------------------------------------------------------------------------------------
 
 export function newSovereignState(): SovereignBossState {
-  return { lastUsed: {}, guardUntil: -1, guardReflects: 0, reflectAt: new Map(), images: [], rods: [], court: [], wells: 0, spot: null, spotR: 0, art: null, tele: new Map(), uses: 0, pending: [] };
+  return { lastUsed: {}, guardUntil: -1, exposedUntil: -1, guardReflects: 0, reflectAt: new Map(), images: [], rods: [], court: [], wells: 0, spot: null, spotR: 0, art: null, tele: new Map(), uses: 0, pending: [] };
 }
 
 function since(w: World, s: SovereignBossState, m: SovereignMechanic): number {
@@ -298,7 +305,8 @@ export function onManualDash(w: World, from: Vec2): void {
   const bs = b.boss!;
   const s = bs.sov!;
   s.guardUntil = -1;
-  sendMechanic(w, b, "mirror_guard", "end", { to: { ...from }, radius: b.radius + 14, targets: [p.id], countered: true });
+  s.exposedUntil = w.time + EXPOSED_TIME;
+  sendMechanic(w, b, "mirror_guard", "end", { to: { ...from }, radius: b.radius + 14, duration: EXPOSED_TIME, targets: [p.id], countered: true });
   w.events.push({ type: "guard_break", id: b.id, pos: { ...b.pos } });
   w.events.push({ type: "shake", strength: 8 });
   bs.pattern = "idle";
@@ -428,6 +436,9 @@ function startRods(w: World, b: Combatant, target: Combatant): void {
       sendMechanic(w, b, "storm_rods", "strike", { index: i + 1, pos: rod.pos, to: { x: rod.pos.x, y: ARENA.minY - 120 }, radius: ROD_RADIUS, targets: hit.map((e) => e.id) });
       w.events.push({ type: "shake", strength: 6 });
       for (const e of hit) w.dealDamage(b, e, ROD_POWER, "lightning", true);
+      // The storm it called feeds the Titan.
+      addStatus(b, { kind: "shield", remaining: ROD_SHIELD_TIME, value: Math.round(b.stats.maxHp * ROD_SHIELD), sourceId: b.id });
+      w.events.push({ type: "shield", id: b.id, pos: { ...b.pos } });
       dismissPart(w, rod);
       sendMechanic(w, b, "storm_rods", "end", { index: i + 1, pos: rod.pos, radius: ROD_RADIUS });
     });
@@ -566,11 +577,12 @@ function tickWell(w: World, b: Combatant, dt: number): void {
 function startCourt(w: World, b: Combatant): void {
   const s = begin(w, b, "void_court", COURT_WARN);
   const n = b.boss!.phase === 2 ? 3 : 2;
-  const back = b.pos.x > (ARENA.minX + ARENA.maxX) / 2 ? 1 : -1;
+  // They kneel behind her, away from the warrior: the far ones are a tap's (or Aggressive's) work.
+  const back = b.pos.x >= w.player.pos.x ? 1 : -1;
   const spots: Vec2[] = [];
   for (let i = 0; i < n; i++) {
     const k = n === 2 ? (i === 0 ? -1 : 1) : i - 1;
-    spots.push({ x: clamp(b.pos.x + back * (40 + Math.abs(k) * 10) - (k === 0 ? back * 70 : 0), ARENA.minX + 20, ARENA.maxX - 20), y: clamp(b.pos.y + k * 48, ARENA.minY + 6, ARENA.maxY - 6) });
+    spots.push({ x: clamp(b.pos.x + back * (70 + (k === 0 ? 40 : 0)), ARENA.minX + 20, ARENA.maxX - 20), y: clamp(b.pos.y + k * 50, ARENA.minY + 6, ARENA.maxY - 6) });
   }
   s.pending = spots;
   for (const at of spots) w.addTelegraph(at, 22, COURT_WARN, "circle", 1, 0, C_VOID, false);
@@ -642,7 +654,7 @@ export function sovereignIncoming(w: World, b: Combatant, amount: number, source
   if (s.guardUntil >= 0) {
     m *= GUARD_TAKEN;
     reflect(w, b, s, amount, sourceId);
-  }
+  } else if (w.time < s.exposedUntil) m *= 1 + EXPOSED_BONUS;
   if (s.court.length > 0) m *= courtShield(s.court.length);
   return amount * m;
 }
@@ -733,10 +745,13 @@ export function dismissAllParts(w: World, b: Combatant): void {
   for (const e of w.entities.values()) if (!e.dead && e.enemy?.sovPart?.ownerId === b.id) dismissPart(w, e);
 }
 
-/** Parts the warrior and the army go for first (a rod charging, a courtier kneeling), nearest first. */
-export function priorityPart(w: World, from: Vec2): Combatant | null {
+/**
+ * Parts the warrior and the army go for first (a rod charging, a courtier kneeling), the nearest
+ * within `reach` of `from`.
+ */
+export function priorityPart(w: World, from: Vec2, reach = Infinity): Combatant | null {
   let best: Combatant | null = null;
-  let bd = Infinity;
+  let bd = reach;
   for (const e of w.entities.values()) {
     const k = e.enemy?.sovPart?.kind;
     if (e.dead || (k !== "rod" && k !== "courtier")) continue;

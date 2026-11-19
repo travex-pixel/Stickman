@@ -94,6 +94,8 @@ export interface SovereignBossState {
   lastUsed: Partial<Record<SovereignMechanic, number>>;
   /** Mirror Guard: world time it falls (-1: down), reflects sent, and when each source last was. */
   guardUntil: number;
+  /** A shattered mirror leaves the Knight exposed until this world time. */
+  exposedUntil: number;
   guardReflects: number;
   reflectAt: Map<number, number>;
   /** Mirror Split: the images' ids while they stand. */

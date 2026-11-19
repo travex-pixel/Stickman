@@ -21,7 +21,7 @@ import { addStatus, hasStatus, speedMultiplier, statusValue, tickStatuses } from
 import { nearestHostile, hostilesWithin, factionWithin, isHidden, mostDangerous } from "../combat/targeting";
 import { updateEnemyAi } from "../enemies/ai";
 import { updateBossAi } from "../bosses/hollowWarden";
-import { dismissAllParts, guardUp, newSovereignState, onManualDash, onPartFell, priorityPart, sovereignIncoming } from "../bosses/sovereigns";
+import { PART_REACH, dismissAllParts, guardUp, newSovereignState, onManualDash, onPartFell, priorityPart, sovereignIncoming } from "../bosses/sovereigns";
 import { isSovereign } from "../data/sovereigns";
 import { majesty, mirrorShadowIncoming, onFury, tickAllyWells, titanBlow } from "../summons/sovereignShadows";
 import { rankCooldownMult, rankPowerMult } from "../progression/abilityRanks";
@@ -1120,9 +1120,14 @@ export class World {
     for (let i = this.sovZones.length - 1; i >= 0; i--) if (this.time >= this.sovZones[i]!.until) this.sovZones.splice(i, 1);
     const z = this.sovZones.find((o) => dist(o.pos, p.pos) < o.radius + 10);
     if (!z || p.state === "windup" || p.state === "attack") return false;
-    const dx = p.pos.x - z.pos.x;
-    const dy = p.pos.y - z.pos.y;
-    const len = Math.hypot(dx, dy) || 1;
+    // Straight out from the middle; from the very middle, back toward his own side of the field.
+    let dx = p.pos.x - z.pos.x;
+    let dy = p.pos.y - z.pos.y;
+    if (Math.hypot(dx, dy) < 1) {
+      dx = ARENA.homeX - z.pos.x || -1;
+      dy = 0;
+    }
+    const len = Math.hypot(dx, dy);
     const out = { x: clamp(z.pos.x + (dx / len) * (z.radius + 30), ARENA.minX, ARENA.maxX), y: clamp(z.pos.y + (dy / len) * (z.radius + 30), ARENA.minY, ARENA.maxY) };
     this.moveToward(p, out, dt, 1);
     return true;
@@ -1196,9 +1201,10 @@ export class World {
     if (self.faction === "ally") {
       const f = this.focusTarget();
       if (f) return f;
-      // A Sovereign's charging rod or kneeling courtier is struck down first (as the King's guards).
+      // A Sovereign's charging rod or kneeling courtier close by is struck down first (as the
+      // King's guards); one farther off waits for a tap (or the army's Aggressive command).
       if (this.boss?.boss?.sov) {
-        const part = priorityPart(this, self.pos);
+        const part = priorityPart(this, self.pos, PART_REACH);
         if (part) return part;
       }
     }

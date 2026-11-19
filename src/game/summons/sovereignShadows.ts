@@ -36,7 +36,7 @@ export const SHADOW_KIT = {
     guard: { cooldown: 10, warn: 0.3, time: 3, taken: 0.6, reflect: 0.6, cap: 1.5 },
     echo: { cooldown: 6, warn: 0.45, power: 4.5, sigShare: 0.25 },
     passive: { reflect: 0.25, cap: 0.75 },
-    ult: { images: 2, life: 6, share: 0.5 },
+    ult: { images: 2, warn: 0.3, life: 6, share: 0.5 },
   },
   storm_titan: {
     rods: { cooldown: 11, n: 3, charge: 1.2, radius: 70, power: 2.0 },
@@ -46,7 +46,7 @@ export const SHADOW_KIT = {
   },
   void_queen: {
     well: { cooldown: 12, warn: 0.4, time: 2.5, reach: 150, pull: 90, core: 50, power: 0.6 },
-    court: { cooldown: 15, n: 2, life: 7, share: 0.5 },
+    court: { cooldown: 15, n: 2, warn: 0.3, life: 7, share: 0.5 },
     passive: { radius: 150, bonus: 0.12 },
     ult: { warn: 1.5, power: 2.5 },
   },
@@ -280,11 +280,14 @@ function mirrorEcho(w: World, s: Combatant, target: Combatant): void {
 function mirrorSplit(w: World, s: Combatant): void {
   const K = SHADOW_KIT.mirror_knight.ult;
   const spots = [-1, 1].map((d) => ({ x: clamp(s.pos.x + 26, ARENA.minX, ARENA.maxX), y: clamp(s.pos.y + d * 40, ARENA.minY, ARENA.maxY) }));
-  mech(w, s, "mirror_split", "warn", { radius: 40, duration: 0.3 });
+  mech(w, s, "mirror_split", "warn", { radius: 40, duration: K.warn });
   announce(w, s, "Mirror Split");
-  const ids = spots.map((at, i) => raise(w, s, s.defId, at, K.life, K.share, i + 1).id);
-  mech(w, s, "mirror_split", "strike", { radius: 40, duration: K.life, targets: ids });
-  w.schedule(K.life, () => mech(w, s, "mirror_split", "end", { radius: 40 }));
+  w.schedule(K.warn, () => {
+    if (s.dead) return;
+    const ids = spots.map((at, i) => raise(w, s, s.defId, at, K.life, K.share, i + 1).id);
+    mech(w, s, "mirror_split", "strike", { radius: 40, duration: K.life, targets: ids });
+    w.schedule(K.life, () => mech(w, s, "mirror_split", "end", { radius: 40 }));
+  });
 }
 
 /** A body a Sovereign shadow raises: a temporary summon at `share` of its strength. */
@@ -452,12 +455,15 @@ export function tickAllyWells(w: World, dt: number): void {
 function voidCourt(w: World, s: Combatant): void {
   const K = SHADOW_KIT.void_queen.court;
   const spots = Array.from({ length: K.n }, (_, i) => ({ x: clamp(s.pos.x + 20, ARENA.minX, ARENA.maxX), y: clamp(s.pos.y + (i % 2 === 0 ? -34 : 34), ARENA.minY, ARENA.maxY) }));
-  mech(w, s, "void_court", "warn", { radius: 50, duration: 0.3 });
+  mech(w, s, "void_court", "warn", { radius: 50, duration: K.warn });
   announce(w, s, "Kneeling Court");
   w.setState(s, "cast", 0.4);
-  const ids = spots.map((at, i) => raise(w, s, COURTIER, at, K.life, K.share, i + 1).id);
-  mech(w, s, "void_court", "strike", { radius: 50, duration: K.life, targets: ids });
-  w.schedule(K.life, () => mech(w, s, "void_court", "end", { radius: 50 }));
+  w.schedule(K.warn, () => {
+    if (s.dead) return;
+    const ids = spots.map((at, i) => raise(w, s, COURTIER, at, K.life, K.share, i + 1).id);
+    mech(w, s, "void_court", "strike", { radius: 50, duration: K.life, targets: ids });
+    w.schedule(K.life, () => mech(w, s, "void_court", "end", { radius: 50 }));
+  });
 }
 
 /** Dark Majesty: a blow from the army on a foe near a fielded Void Queen shadow lands harder. */
