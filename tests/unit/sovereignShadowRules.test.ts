@@ -62,3 +62,19 @@ describe("Sovereign shadows' clocks", () => {
     }
   });
 });
+
+describe("Storm Titan shadow's rods", () => {
+  it("rods that have struck are let go: a long farming world keeps only those still charging", () => {
+    const w = new World({ stage: 10, loadout: buildLoadout(fielded("storm_titan")), seed: 3, mode: "campaign" });
+    const log: GameEvent[] = [];
+    const shadow = w.summonEntities().find((e) => e.defId === "storm_titan")!;
+    shadow.stats.maxHp = 1e9;
+    step(w, 300, log, () => {
+      shadow.hp = shadow.stats.maxHp;
+      w.player.hp = w.player.stats.maxHp;
+    });
+    const planted = log.filter((e): e is Mech => e.type === "boss_mechanic" && e.id === shadow.id && e.mech === "storm_rods" && e.step === "warn").length;
+    expect(planted).toBeGreaterThan(30);
+    expect(w.allyRods.length).toBeLessThanOrEqual(SHADOW_KIT.storm_titan.rods.n);
+  });
+});

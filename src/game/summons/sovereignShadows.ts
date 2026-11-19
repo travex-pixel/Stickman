@@ -330,6 +330,8 @@ function stormRods(w: World, s: Combatant, list: Combatant[]): void {
   while (spots.length < K.n && spots[0]) spots.push({ x: clamp(spots[0].x + (spots.length % 2 ? 60 : -60), ARENA.minX, ARENA.maxX), y: spots[0].y });
   announce(w, s, "Storm Rods", spots[0]);
   w.setState(s, "cast", 0.5);
+  // Rods that have called their lightning are gone (a farming world runs for hours).
+  for (let i = w.allyRods.length - 1; i >= 0; i--) if (w.time >= w.allyRods[i]!.until) w.allyRods.splice(i, 1);
   spots.forEach((at, i) => {
     w.allyRods.push({ pos: { ...at }, radius: K.radius, until: w.time + K.charge });
     w.addTelegraph(at, K.radius, K.charge, "circle", 1, 0, 0x6fa8ff, false);
