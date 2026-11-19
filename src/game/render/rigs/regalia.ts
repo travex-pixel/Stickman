@@ -171,19 +171,19 @@ export class Regalia {
     a.head.addChildAt(crest, 0);
     // The helm and its mirror visor (under the eyes, so the glare shows through the slit).
     const helm = a.part((g) => {
-      g.circle(0, -r * 0.05, r * 1.08).fill(c.plate);
+      orb(g, 0, -r * 0.05, r * 1.08).fill(c.plate);
       g.poly([-r * 1.05, r * 0.1, r * 1.1, r * 0.1, r * 0.85, r * 1.05, -r * 0.6, r * 1.05]).fill(darken(c.plate, 0.18));
       // Visor: a mirror pane across the face, a pale sheen and a dark slit.
       g.roundRect(-r * 0.1, -r * 0.42, r * 1.12, r * 0.86, r * 0.3).fill(c.light);
       g.poly([r * 0.05, -r * 0.38, r * 0.35, -r * 0.38, r * 0.05, r * 0.3]).fill({ color: 0xffffff, alpha: 0.9 });
       g.rect(r * 0.12, -r * 0.08, r * 0.98, r * 0.16).fill({ color: c.deep, alpha: 0.95 });
-      g.circle(0, -r * 0.05, r * 1.08).stroke({ width: 0.9 * u, color: c.trim, alpha: 0.85 });
+      orb(g, 0, -r * 0.05, r * 1.08).stroke({ width: 0.9 * u, color: c.trim, alpha: 0.85 });
     });
     a.head.addChildAt(helm, a.head.getChildIndex(a.eyes));
     // Phase two: the visor cracks and gold light breaks through.
     const visorCrack = a.part((g) => {
       g.moveTo(r * 0.9, -r * 0.4).lineTo(r * 0.55, -r * 0.05).lineTo(r * 0.75, r * 0.2).lineTo(r * 0.4, r * 0.5).stroke({ width: 1.1 * u, color: 0xfff1c9, alpha: 1 });
-      g.circle(r * 0.6, 0, r * 0.75).fill({ color: 0xe9c97a, alpha: 0.22 });
+      orb(g, r * 0.6, 0, r * 0.75).fill({ color: 0xe9c97a, alpha: 0.22 });
     });
     this.phase2(a.head, visorCrack);
     // Breastplate: a mirror cuirass with a gilt edge and a sheen.
@@ -197,24 +197,24 @@ export class Regalia {
     const plateCrack = a.part((g) => {
       g.moveTo(w * 0.1, -h * 0.95).lineTo(-w * 0.05, -h * 0.7).lineTo(w * 0.15, -h * 0.55).lineTo(-w * 0.1, -h * 0.32).stroke({ width: 1.3 * u, color: 0xfff1c9, alpha: 1 });
       g.moveTo(-w * 0.05, -h * 0.7).lineTo(-w * 0.32, -h * 0.62).stroke({ width: 0.9 * u, color: 0xfff1c9, alpha: 0.9 });
-      g.circle(0, -h * 0.62, w * 0.45).fill({ color: 0xe9c97a, alpha: 0.18 });
+      orb(g, 0, -h * 0.62, w * 0.45).fill({ color: 0xe9c97a, alpha: 0.18 });
     });
     this.phase2(a.torso, plateCrack);
     // Pauldrons on both shoulders (they move with the arms).
     for (const side of [a.armL, a.armR]) {
       const pd = a.part((g) => {
-        g.ellipse(0, 1 * u, 7.2 * u, 6 * u).fill(c.plate);
-        g.ellipse(0, 1 * u, 7.2 * u, 6 * u).stroke({ width: 0.9 * u, color: c.trim, alpha: 0.9 });
-        g.ellipse(-1.5 * u, -1 * u, 3 * u, 1.6 * u).fill({ color: c.light, alpha: 0.6 });
+        oval(g, 0, 1 * u, 7.2 * u, 6 * u).fill(c.plate);
+        oval(g, 0, 1 * u, 7.2 * u, 6 * u).stroke({ width: 0.9 * u, color: c.trim, alpha: 0.9 });
+        oval(g, -1.5 * u, -1 * u, 3 * u, 1.6 * u).fill({ color: c.light, alpha: 0.6 });
       });
       side.upper.addChild(pd);
     }
     // The mirror buckler on the guard forearm.
     const buckler = a.part((g) => {
-      g.circle(0, 0, 11 * u).fill(c.plate);
-      g.circle(0, 0, 9 * u).fill(c.light);
+      orb(g, 0, 0, 11 * u).fill(c.plate);
+      orb(g, 0, 0, 9 * u).fill(c.light);
       g.poly([-6 * u, -6 * u, -2 * u, -8.5 * u, 5 * u, 6 * u, 1 * u, 8 * u]).fill({ color: 0xffffff, alpha: 0.55 });
-      g.circle(0, 0, 11 * u).stroke({ width: 1.4 * u, color: c.trim, alpha: 1 });
+      orb(g, 0, 0, 11 * u).stroke({ width: 1.4 * u, color: c.trim, alpha: 1 });
     });
     buckler.position.set(0, a.lowerArm * 0.55);
     a.armL.lower.addChild(buckler);
@@ -261,8 +261,8 @@ export class Regalia {
         [w * 0.05, -h * 0.95, w * 0.5],
         [-w * 0.7, -h * 0.85, w * 0.42],
       ];
-      for (const [x, y, rr] of puffs) g.circle(x, y, rr * 1.06).fill({ color: cloudRim, alpha: 0.9 });
-      for (const [x, y, rr] of puffs) g.circle(x + rr * 0.06, y + rr * 0.08, rr).fill(cloudBody);
+      for (const [x, y, rr] of puffs) orb(g, x, y, rr * 1.06).fill({ color: cloudRim, alpha: 0.9 });
+      for (const [x, y, rr] of puffs) orb(g, x + rr * 0.06, y + rr * 0.08, rr).fill(cloudBody);
       // Rain hanging from its belly.
       for (let i = 0; i < 9; i++) {
         const x = -w * 1.3 + (i / 8) * w * 2.4;
@@ -284,7 +284,7 @@ export class Regalia {
         g.moveTo(path[0]![0], path[0]![1]);
         for (const [x, y] of path.slice(1)) g.lineTo(x, y);
         g.stroke({ width: 1.3 * u, color: c.light, alpha: 1 });
-        g.circle(path[1]![0], path[1]![1], w * 0.35).fill({ color: c.trim, alpha: 0.18 });
+        orb(g, path[1]![0], path[1]![1], w * 0.35).fill({ color: c.trim, alpha: 0.18 });
       });
       b.visible = false;
       this.bolts.push(b);
@@ -292,8 +292,8 @@ export class Regalia {
     }
     // Phase two: the storm burns white at its edges.
     const burn = a.part((g) => {
-      g.circle(-w * 0.35, -h * 0.35, w * 1.25).stroke({ width: 1.6 * u, color: c.light, alpha: 0.35 });
-      g.circle(w * 0.35, -h * 0.5, w * 0.8).stroke({ width: 1.2 * u, color: c.trim, alpha: 0.5 });
+      orb(g, -w * 0.35, -h * 0.35, w * 1.25).stroke({ width: 1.6 * u, color: c.light, alpha: 0.35 });
+      orb(g, w * 0.35, -h * 0.5, w * 0.8).stroke({ width: 1.2 * u, color: c.trim, alpha: 0.5 });
     });
     this.phase2(cloud, burn);
     a.torso.addChildAt(cloud, 0);
@@ -301,16 +301,16 @@ export class Regalia {
     // A hunched yoke of drowned stone over the shoulders, a chain across the chest.
     const yoke = a.part((g) => {
       g.poly([-w * 0.75, -h * 0.85, -w * 0.4, -h * 1.12, w * 0.45, -h * 1.12, w * 0.8, -h * 0.85, w * 0.5, -h * 0.72, -w * 0.5, -h * 0.72]).fill(c.plate);
-      for (let i = 0; i < 6; i++) g.circle(-w * 0.45 + i * w * 0.18, -h * (0.62 - 0.07 * Math.sin((i / 5) * Math.PI)), 1.7 * u).stroke({ width: 1 * u, color: lighten(c.plate, 0.35), alpha: 0.9 });
-      g.circle(0, -h * 0.58, w * 0.13).fill({ color: c.light, alpha: 0.95 });
-      g.circle(0, -h * 0.58, w * 0.26).fill({ color: c.trim, alpha: 0.25 });
+      for (let i = 0; i < 6; i++) orb(g, -w * 0.45 + i * w * 0.18, -h * (0.62 - 0.07 * Math.sin((i / 5) * Math.PI)), 1.7 * u).stroke({ width: 1 * u, color: lighten(c.plate, 0.35), alpha: 0.9 });
+      orb(g, 0, -h * 0.58, w * 0.13).fill({ color: c.light, alpha: 0.95 });
+      orb(g, 0, -h * 0.58, w * 0.26).fill({ color: c.trim, alpha: 0.25 });
     });
     a.torso.addChild(yoke);
     // A crown of drowned coral.
     const coral = a.part((g) => {
       const base = -r * 0.7;
       g.poly([-r * 1.0, base, -r * 1.25, base - r * 1.1, -r * 0.7, base - r * 0.45, -r * 0.45, base - r * 1.5, -r * 0.1, base - r * 0.5, r * 0.3, base - r * 1.25, r * 0.6, base - r * 0.4, r * 1.15, base - r * 0.95, r * 1.0, base]).fill(c.plate);
-      for (const [x, y] of [[-r * 1.25, base - r * 1.1], [-r * 0.45, base - r * 1.5], [r * 0.3, base - r * 1.25], [r * 1.15, base - r * 0.95]] as const) g.circle(x, y, 1.4 * u).fill({ color: c.trim, alpha: 0.95 });
+      for (const [x, y] of [[-r * 1.25, base - r * 1.1], [-r * 0.45, base - r * 1.5], [r * 0.3, base - r * 1.25], [r * 1.15, base - r * 0.95]] as const) orb(g, x, y, 1.4 * u).fill({ color: c.trim, alpha: 0.95 });
     });
     a.head.addChildAt(coral, 0);
     // Phase two: arcs crawl up both arms.
@@ -341,8 +341,8 @@ export class Regalia {
     const violet = a.shadow ? a.accent : 0x7a4fc0;
     // The halo behind the head (phase one) and the black sun (phase two).
     const halo = a.part((g) => {
-      g.circle(-r * 0.2, -r * 0.6, r * 2.3).stroke({ width: 1.2 * u, color: c.trim, alpha: 0.95 });
-      g.circle(-r * 0.2, -r * 0.6, r * 2.05).stroke({ width: 0.6 * u, color: c.trim, alpha: 0.55 });
+      orb(g, -r * 0.2, -r * 0.6, r * 2.3).stroke({ width: 1.2 * u, color: c.trim, alpha: 0.95 });
+      orb(g, -r * 0.2, -r * 0.6, r * 2.05).stroke({ width: 0.6 * u, color: c.trim, alpha: 0.55 });
       for (let i = 0; i < 12; i++) {
         const ang = (i / 12) * Math.PI * 2;
         g.moveTo(-r * 0.2 + Math.cos(ang) * r * 2.3, -r * 0.6 + Math.sin(ang) * r * 2.3).lineTo(-r * 0.2 + Math.cos(ang) * r * 2.75, -r * 0.6 + Math.sin(ang) * r * 2.75);
@@ -350,10 +350,10 @@ export class Regalia {
       g.stroke({ width: 0.8 * u, color: c.trim, alpha: 0.8 });
     });
     const sun = a.part((g) => {
-      g.circle(-r * 0.2, -r * 0.6, r * 2.9).fill({ color: violet, alpha: 0.22 });
-      g.circle(-r * 0.2, -r * 0.6, r * 2.45).fill({ color: lighten(violet, 0.35), alpha: 0.55 });
-      g.circle(-r * 0.2, -r * 0.6, r * 2.2).fill(0x050308);
-      g.circle(-r * 0.2, -r * 0.6, r * 2.2).stroke({ width: 1 * u, color: c.light, alpha: 0.95 });
+      orb(g, -r * 0.2, -r * 0.6, r * 2.9).fill({ color: violet, alpha: 0.22 });
+      orb(g, -r * 0.2, -r * 0.6, r * 2.45).fill({ color: lighten(violet, 0.35), alpha: 0.55 });
+      orb(g, -r * 0.2, -r * 0.6, r * 2.2).fill(0x050308);
+      orb(g, -r * 0.2, -r * 0.6, r * 2.2).stroke({ width: 1 * u, color: c.light, alpha: 0.95 });
     });
     this.phase1(a.head, halo, 0);
     this.phase2(a.head, sun, 0);
@@ -377,7 +377,7 @@ export class Regalia {
         g.poly(pts).fill(a.shadow ? 0x3a3f4c : 0x0d0a14);
         g.poly(pts).stroke({ width: 0.8 * u, color: c.trim, alpha: 0.9 });
         g.rect(-r * 0.95, base - r * 0.1, r * 1.9, r * 0.28).fill(c.trim);
-        g.circle(0, base - r * 0.55, r * 0.2).fill({ color: lighten(violet, 0.3), alpha: 1 });
+        orb(g, 0, base - r * 0.55, r * 0.2).fill({ color: lighten(violet, 0.3), alpha: 1 });
       });
     this.phase1(a.head, spikes(1));
     this.phase2(a.head, spikes(1.45));
@@ -414,9 +414,9 @@ export class Regalia {
     const holder = new Container();
     holder.label = NO_WHITE;
     const glow = a.part((g) => {
-      g.ellipse(0, 0, 9 * u, 3.2 * u).stroke({ width: 1.4 * u, color: 0xfff1c9, alpha: 0.95 });
-      g.ellipse(0, 0, 12 * u, 4.6 * u).fill({ color: a.accent, alpha: 0.16 });
-      for (let i = 0; i < 5; i++) g.circle(-8 * u + i * 4 * u, -2.5 * u - (i === 2 ? 2 : 0) * u, 0.9 * u).fill({ color: 0xfff1c9, alpha: 1 });
+      oval(g, 0, 0, 9 * u, 3.2 * u).stroke({ width: 1.4 * u, color: 0xfff1c9, alpha: 0.95 });
+      oval(g, 0, 0, 12 * u, 4.6 * u).fill({ color: a.accent, alpha: 0.16 });
+      for (let i = 0; i < 5; i++) orb(g, -8 * u + i * 4 * u, -2.5 * u - (i === 2 ? 2 : 0) * u, 0.9 * u).fill({ color: 0xfff1c9, alpha: 1 });
     });
     holder.addChild(glow);
     holder.position.set(0, -a.headR * 2.4);
@@ -428,10 +428,10 @@ export class Regalia {
       court.label = NO_WHITE;
       const kneel = (x: number) =>
         a.part((g) => {
-          g.circle(x, -26 * u, 5 * u).fill(lighten(a.body0, 0.05));
+          orb(g, x, -26 * u, 5 * u).fill(lighten(a.body0, 0.05));
           g.poly([x - 6 * u, -21 * u, x + 6 * u, -21 * u, x + 9 * u, -2 * u, x - 9 * u, -2 * u]).fill(lighten(a.body0, 0.05));
           g.poly([x - 6 * u, -21 * u, x + 6 * u, -21 * u, x + 9 * u, -2 * u, x - 9 * u, -2 * u]).stroke({ width: 0.8 * u, color: a.accent, alpha: 0.7 });
-          g.circle(x + 2 * u, -26 * u, 1.2 * u).fill({ color: 0xfff1c9, alpha: 0.9 });
+          orb(g, x + 2 * u, -26 * u, 1.2 * u).fill({ color: 0xfff1c9, alpha: 0.9 });
         });
       court.addChild(kneel(-30 * u), kneel(30 * u));
       a.root.addChildAt(court, 0);
@@ -454,6 +454,26 @@ export class Regalia {
     else parent.addChild(holder);
     this.p1.push(holder);
   }
+}
+
+/**
+ * A circle as a polygon with only the sides its size needs. Pixi's own circle spends about thirteen
+ * points per square root of its radius; a figure's parts are small, and every point of them is
+ * packed again each frame the figure moves. Five per root (and four more) keeps the edge within a
+ * device pixel of round at the camera's closest and a phone's density.
+ */
+function orb(g: GraphicsContext, x: number, y: number, r: number): GraphicsContext {
+  return oval(g, x, y, r, r);
+}
+
+function oval(g: GraphicsContext, x: number, y: number, rx: number, ry: number): GraphicsContext {
+  const n = Math.max(8, Math.min(40, Math.round(5 * Math.sqrt(Math.max(rx, ry))) + 4));
+  const pts: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    pts.push(x + Math.cos(a) * rx, y + Math.sin(a) * ry);
+  }
+  return g.poly(pts);
 }
 
 function frac(v: number): number {
