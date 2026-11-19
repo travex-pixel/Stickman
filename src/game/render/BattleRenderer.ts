@@ -16,7 +16,7 @@ import { ParticleSystem } from "./Particles";
 import { DamageNumbers, fmtNum } from "./DamageNumbers";
 import { Background, backdropResolution } from "./Background";
 import { destroyTextures, hardCircle, shard, softCircle, spark, vignette } from "./textures";
-import { regionForStage } from "../data/regions";
+import { bossForStage, regionForStage } from "../data/regions";
 import { TWISTS, depthForStage, twistForDepth } from "../data/depths";
 import { ABILITIES } from "../data/abilities";
 import { RARITY_COLOR, lighten, mix } from "./colors";
@@ -42,6 +42,10 @@ import { clearSovereignCache } from "./signatures/skills/sovereign";
 import { clearVoidCache } from "./signatures/skills/void";
 import type { EvolutionId, MasteryTier, SignatureId, SynergyId, VisualQuality } from "../data/signatures";
 import { DEATH_KNEEL } from "./rigs/Rig";
+import { SovereignDirector, type SovHost } from "./sovereigns/SovereignDirector";
+import { buildSovScript, type SovActor } from "./sovereigns/driver";
+import { arenaFor, sovereignOf } from "./sovereigns/look";
+import { isSovereign, type SovereignArena, type SovereignMechanic } from "../data/sovereigns";
 
 interface EntityView extends ImpactState {
   id: number;
@@ -71,6 +75,8 @@ interface EntityView extends ImpactState {
   /** Last drawn ground position (base px), where a hold freezes it. */
   drawX: number;
   drawY: number;
+  /** Its reflection on the mirror hall's floor (made when first needed). */
+  reflect?: Sprite;
 }
 
 type FxKind = "slash" | "bolt" | "ring" | "beam" | "afterimage" | "star" | "crescent" | "disc" | "line";
@@ -308,6 +314,20 @@ export class BattleRenderer implements ImpactHost {
   private readonly bossDeaths: BossDeath[] = [];
   private dimOthers = 0;
   private bossTint = 0;
+  /** The Rift Sovereigns' mechanics on the field (render/sovereigns/), and their layers. */
+  sov!: SovereignDirector;
+  private readonly sovDark = new Container();
+  private readonly sovGround = new Container();
+  private readonly sovFx = new Container();
+  /** The bodies' faint reflections on a mirror floor (the Mirror Knight's hall). */
+  private readonly reflectLayer = new Container();
+  /** Synthetic Sovereign mechanics on the live fight (development, `?debug=1`): the same events, dealing nothing. */
+  readonly sovDriver = new SigDriver((ev) => this.sigSynthetic(ev));
+  /** The eclipse's hold on the backdrop (0 to 1) and its ink. */
+  private eclipseK = 0;
+  private eclipseColor = 0x000000;
+  /** The warrior's most recent ability (the Mirror Knight echoes it). */
+  private lastArt: string | null = null;
   private bossTintColor = 0xffffff;
   private letterboxTarget = 0;
   /** The warrior holds the raised-hand claim pose. */
@@ -378,6 +398,7 @@ export class BattleRenderer implements ImpactHost {
     this.apex = new ApexDirector(this.apexHost, this.entityLayer);
     this.apex.prism.reduced = this.reduced;
     this.sig = new SignatureDirector(this.sigHost);
+    this.sov = new SovereignDirector(this.sovHost);
     this.sig.setQuality(this.quality);
     this.sig.setReduced(this.reduced);
     this.sandbox = new Sandbox(
@@ -399,7 +420,7 @@ export class BattleRenderer implements ImpactHost {
       this.decalLayer.addChild(s);
       this.decalPool.push({ sprite: s, rx: 0, ry: 0, life: 0, total: 1, live: false });
     }
-    this.cameraLayer.addChild(this.decalLayer, this.sigGround, this.groundFx, this.entityLayer, this.projectileLayer, this.orbLayer, this.trails.graphics, this.fxGraphics, this.apex.fx, this.sigFx, this.particles.container, this.numbers.container, this.apex.prism.container, this.cinematicLayer);
+    this.cameraLayer.addChild(this.reflectLayer, this.decalLayer, this.sovDark, this.sigGround, this.sovGround, this.groundFx, this.entityLayer, this.projectileLayer, this.orbLayer, this.trails.graphics, this.fxGraphics, this.apex.fx, this.sigFx, this.sovFx, this.particles.container, this.numbers.container, this.apex.prism.container, this.cinematicLayer);
     this.entityLayer.sortableChildren = true;
     this.entityLayer.addChild(this.focusTicks);
     this.focusTicks.zIndex = 9000;
@@ -437,6 +458,8 @@ export class BattleRenderer implements ImpactHost {
     this.trails.destroy();
     this.numbers?.destroy();
     this.apex?.destroy();
+    this.sov?.destroy();
+    this.sovDriver.clear();
     this.sig?.destroy();
     this.sandbox?.destroy();
     this.sandbox = null;
@@ -484,6 +507,9 @@ export class BattleRenderer implements ImpactHost {
     this.apex?.reset();
     // Every signature cast, mark and body modifier belongs to the old world.
     this.sig?.reset();
+    this.sov?.reset();
+    this.sovDriver.clear();
+    this.lastArt = null;
     this.sigDriver.clear();
     this.sigTinted.clear();
     this.lastWorldTime = world.time;
@@ -519,15 +545,34 @@ export class BattleRenderer implements ImpactHost {
     if (!world) return;
     const region = regionForStage(world.stage);
     const depth = depthForStage(world.stage);
-    if (!this.background || this.background.regionId !== region.id || this.background.depth !== depth) {
+    const arena = this.arenaFor(world);
+    if (!this.background || this.background.regionId !== region.id || this.background.depth !== depth || this.background.arena !== arena) {
       this.background?.destroy();
       const twist = twistForDepth(depth);
-      this.background = new Background(region, depth, twist ? TWISTS[twist].tint : null);
+      this.background = new Background(region, depth, twist ? TWISTS[twist].tint : null, arena, (a) => this.flashes.request(this.time, a, 0xcfe6ff) !== null);
       this.cameraLayer.addChildAt(this.background.container, 0);
       this.root.addChildAt(this.background.foreground, 1);
       this.layout();
     }
     this.background.setReduced(this.reduced);
+    this.background.setQuality(this.sig?.drawnQuality ?? this.quality);
+  }
+
+  /**
+   * The arena this world's fight is staged in: a Sovereign's, for its fight only (a gate, a hunt),
+   * never for farming. Known from the boss on the field, or the one this fight will raise.
+   */
+  private arenaFor(world: World): SovereignArena | null {
+    if (!world.hasBoss) return null;
+    for (const e of world.entities.values()) if (e.kind === "boss" && e.faction === "enemy") return arenaFor(this.viewDef(e));
+    if (this.debugBoss) return arenaFor(this.debugBoss);
+    let def: string;
+    try {
+      def = world.mode === "tyrant" && world.tyrant ? world.tyrant.bossId : bossForStage(world.stage, world.mode);
+    } catch {
+      return null;
+    }
+    return arenaFor(def);
   }
 
   setReducedEffects(v: boolean): void {
@@ -557,6 +602,7 @@ export class BattleRenderer implements ImpactHost {
   setVisualQuality(q: VisualQuality): void {
     this.quality = q;
     this.sig?.setQuality(q);
+    this.background?.setQuality(q);
     this.sandbox?.setQuality(q);
   }
 
@@ -743,6 +789,8 @@ export class BattleRenderer implements ImpactHost {
     this.lastWorldTime = wt;
     if (this.sigDriver.pending > 0) this.sigDriver.update(wdt);
     this.sig.update(frozen ? 0 : wdt, dt);
+    if (this.sovDriver.pending > 0) this.sovDriver.update(wdt);
+    this.sov.update(frozen ? 0 : wdt, dt);
     this.applySigMods();
     this.applySigFocus(world);
     if (perf) this.sec(9);
@@ -756,6 +804,7 @@ export class BattleRenderer implements ImpactHost {
     this.syncView();
     this.camera.visible(this.vis);
     this.background?.setCamera((this.camera.cx - this.width / 2) / Math.max(1, this.width / 2));
+    this.background?.setQuality(this.sig.drawnQuality);
     this.applySky(dt);
     this.drawFocus(world, alpha, dt);
     this.syncProjectiles(world, alpha);
@@ -874,11 +923,12 @@ export class BattleRenderer implements ImpactHost {
   private syncEntities(world: World, alpha: number, dt: number, fxDt: number, realDt: number): void {
     const seen = this.seen;
     seen.clear();
+    const mirrorFloor = this.background?.arena === "mirror_hall";
     const player = world.player;
     for (const e of world.entities.values()) {
       seen.add(e.id);
       let v = this.views.get(e.id);
-      if (!v || v.defId !== e.defId || (e.kind === "player" && this.playerPath !== world.loadout.weaponPath)) {
+      if (!v || v.defId !== this.viewDef(e) || (e.kind === "player" && this.playerPath !== world.loadout.weaponPath)) {
         if (e.kind === "player") this.playerPath = world.loadout.weaponPath;
         if (v) this.dropView(v);
         v = this.createView(e);
@@ -1011,6 +1061,7 @@ export class BattleRenderer implements ImpactHost {
         }
       }
       if (!held) this.syncTrail(v, e, e.id === player.id);
+      if (mirrorFloor || v.reflect) this.syncReflection(v, e, sx + v.slide * ds, sy, ds, mirrorFloor);
       this.drawBar(v, e, sx, sy, ds);
       if (e.id === player.id) {
         // The warrior's box: damage numbers keep out of it.
@@ -1027,7 +1078,53 @@ export class BattleRenderer implements ImpactHost {
     }
   }
 
+  /**
+   * The figure a body is drawn as: its own kind, unless development dressed it as another
+   * (`debugDefs`, `?debug=1` only: staging a Sovereign or its shadow before the fight exists).
+   */
+  private viewDef(e: Combatant): string {
+    const dressed = this.sov?.dressDef(e.id);
+    if (dressed) return dressed;
+    if (this.debugBoss && e.kind === "boss") return this.debugBoss;
+    return this.debugDefs.size > 0 ? (this.debugDefs.get(e.id) ?? e.defId) : e.defId;
+  }
+
+  /** Development: draw a body as another kind (see `viewDef`). */
+  readonly debugDefs = new Map<number, string>();
+  /** Development: draw every boss as this one (its entrance, arena and figure). */
+  debugBoss: string | null = null;
+
+  /**
+   * A body's reflection on the mirror floor: a soft vertical smear of its colour under its feet,
+   * fading with depth into the floor. Every body at full quality, the warrior, the army and bosses
+   * at balanced, the warrior and the boss at performance.
+   */
+  private syncReflection(v: EntityView, e: Combatant, x: number, y: number, ds: number, on: boolean): void {
+    const q = this.sig.drawnQuality;
+    const wanted = on && !e.dead && (q === "full" || e.kind === "player" || e.kind === "boss" || (q === "balanced" && e.kind === "summon"));
+    if (!wanted) {
+      if (v.reflect) v.reflect.visible = false;
+      return;
+    }
+    let r = v.reflect;
+    if (!r) {
+      r = new Sprite(softCircle());
+      r.anchor.set(0.5, 0.08);
+      r.blendMode = e.kind === "enemy" || e.kind === "boss" ? "normal" : "add";
+      r.tint = e.kind === "player" ? 0xf3ecdc : e.kind === "summon" ? 0x9aa6c0 : 0x0c0d12;
+      this.reflectLayer.addChild(r);
+      v.reflect = r;
+    }
+    const top = v.rig.top * ds;
+    r.visible = true;
+    r.position.set(x, y + 1);
+    r.scale.set((top * 0.3) / 64, (top * 0.62) / 64);
+    r.alpha = (e.kind === "player" ? 0.2 : e.kind === "boss" ? 0.32 : 0.16) * v.rig.root.alpha;
+  }
+
   private dropView(v: EntityView): void {
+    v.reflect?.destroy();
+    v.reflect = undefined;
     if (v.trail) this.trails.release(v.trail);
     v.trail = null;
     v.rig.destroy();
@@ -1056,10 +1153,12 @@ export class BattleRenderer implements ImpactHost {
 
   private createView(e: Combatant): EntityView {
     // A body a signature cast raised wears that cast's figure (the Legion's soldiers are its own).
-    let spec = e.kind === "player" ? playerSpec(this.world?.loadout.weaponPath ?? "none") : e.kind === "summon" ? (this.sig.dress.get(e.id) ?? summonSpec(e.defId)) : enemySpec(e.defId);
+    const defId = this.viewDef(e);
+    let spec = e.kind === "player" ? playerSpec(this.world?.loadout.weaponPath ?? "none") : e.kind === "summon" ? (this.sig.dress.get(e.id) ?? summonSpec(defId)) : enemySpec(defId);
     const affix = e.enemy?.elite;
     if (affix) spec = eliteSpec(spec, ELITES[affix].color);
     const rig = new Rig(spec);
+    if (e.boss?.phase === 2) rig.setPhase(2);
     // The white impact copies of this kind are prepared now, not on the first blow.
     rig.prewarmWhite();
     this.entityLayer.addChild(rig.shadow);
@@ -1072,7 +1171,7 @@ export class BattleRenderer implements ImpactHost {
       rig,
       bar,
       lastHp: -1,
-      defId: e.defId,
+      defId,
       kind: e.kind,
       swings: 0,
       swungThisBatch: false,
@@ -1607,6 +1706,7 @@ export class BattleRenderer implements ImpactHost {
     let tint = this.skyDarken > 0.01 ? mix(0xffffff, this.skyColor, this.skyDarken) : 0xffffff;
     if (this.bossTint > 0) tint = mix(tint, this.bossTintColor, this.bossTint);
     if (this.cineTint > 0.005) tint = mix(tint, this.cineTintColor, this.cineTint);
+    if (this.eclipseK > 0.004) tint = mix(tint, this.eclipseColor, this.eclipseK);
     const dim = Math.max(this.furyDim, this.focusDim);
     if (dim > 0) tint = mix(tint, FURY_DIM_COLOR, dim);
     // Setting a tint dirties the whole backdrop subtree, so only when it changes.
@@ -1887,6 +1987,7 @@ export class BattleRenderer implements ImpactHost {
     let stormBatch = false;
     // Signature casts first: a cast's stage exists before the hits it causes in the same batch.
     this.sig.handle(events);
+    this.sov.handle(events);
     for (const e of events) {
       switch (e.type) {
         case "attack_swing": {
@@ -1958,7 +2059,7 @@ export class BattleRenderer implements ImpactHost {
             // The death sequence takes over the body: it owns a copy of the rig from here on.
             const v = this.views.get(e.id);
             if (v) {
-              this.bossDeaths.push(new BossDeath(this.bossHost, e.defId, v.drawX + v.slide * this.figureScale(e.pos.y), v.drawY, this.figureScale(e.pos.y), world.entities.get(e.id)?.facing ?? -1));
+              this.bossDeaths.push(new BossDeath(this.bossHost, v.defId, v.drawX + v.slide * this.figureScale(e.pos.y), v.drawY, this.figureScale(e.pos.y), world.entities.get(e.id)?.facing ?? -1));
               v.rig.root.visible = false;
               v.rig.shadow.visible = false;
               if (v.trail) this.trails.release(v.trail);
@@ -1974,6 +2075,7 @@ export class BattleRenderer implements ImpactHost {
           break;
         }
         case "cast": {
+          if (e.id === world.player.id) this.lastArt = e.ability;
           this.castFx(e.ability, e.id, e.pos, e.facing, e.targetPos);
           break;
         }
@@ -2014,6 +2116,8 @@ export class BattleRenderer implements ImpactHost {
           const sy = this.sy(e.pos.y) - 28 * u;
           this.ringFx(sx, this.sy(e.pos.y), 4, 60 * u, 0.8, e.isBoss ? 0xe9c56f : 0xf0e6d0, 3, 0.42);
           this.particles.emit({ x: sx, y: sy, count: 18, texture: softCircle(), color: e.isBoss ? 0xe9c97a : 0xf0e6d0, speed: [20, 80], life: [0.6, 1.2], scale: [0.2, 0.5], endScale: 0, alpha: 0.9 });
+          // A Sovereign's essence carries its mark: a mirror's glint, a spark of its storm, a black sun.
+          if (isSovereign(e.summonId)) this.sov.essence(e.summonId, e.pos);
           break;
         }
         case "projectile_hit": {
@@ -2077,7 +2181,10 @@ export class BattleRenderer implements ImpactHost {
         }
         case "boss_intro": {
           this.bossIntro?.dispose();
-          this.bossIntro = new BossEntrance(this.bossHost, e.id, e.defId);
+          const boss = world.entities.get(e.id);
+          this.bossIntro = new BossEntrance(this.bossHost, e.id, boss ? this.viewDef(boss) : e.defId);
+          // The arena belongs to the boss that rose (normally painted when the fight began).
+          this.syncBackground();
           break;
         }
         case "tyrant_break": {
@@ -2155,8 +2262,12 @@ export class BattleRenderer implements ImpactHost {
           // A 350ms stop, one white frame, a shock ring to full width, and the backdrop shifts 20%
           // toward the boss's glow for the rest of the fight.
           const b = world.entities.get(e.id);
-          const spec = b ? enemySpec(b.defId) : null;
+          const bdef = b ? this.viewDef(b) : "";
+          const spec = b ? enemySpec(bdef) : null;
           const glow = spec ? (spec.glow ?? spec.eye) : 0xa9d0e6;
+          // A Sovereign changes form: its second regalia, and its own transformation.
+          this.views.get(e.id)?.rig.setPhase(2);
+          if (b && isSovereign(bdef)) this.sov.transform(e.id, bdef);
           if (!this.reduced) {
             this.impact.onAuthoredFreeze(PHASE.stop);
             this.freeze(PHASE.stop);
@@ -2827,7 +2938,13 @@ export class BattleRenderer implements ImpactHost {
     ring: (x, y, r0, r1, life, color, width) => this.ringFx(x, y, r0, r1, life, color, width, 0.42),
     viewWidth: () => this.width,
     cue: (name) => this.controller.bossCue(name),
+    flash: (color, alpha, duration) => this.flash(color, alpha, duration),
   };
+
+  /** A tap during a boss's entrance skips it to its release. True when one was skipped. */
+  skipBossEntrance(): boolean {
+    return this.bossIntro?.skip() ?? false;
+  }
 
   private readonly apexHost: ApexHost = {
     particles: this.particles,
@@ -2963,6 +3080,23 @@ export class BattleRenderer implements ImpactHost {
     },
   };
 
+  private readonly sovHost: SovHost = {
+    sig: this.sigHost,
+    kit: () => this.sig.kit,
+    mod: (id) => this.sig.mod(id),
+    entity: (id) => this.world?.entities.get(id),
+    layers: { dark: this.sovDark, ground: this.sovGround, fx: this.sovFx },
+    furyOn: () => this.fury.on || (this.world?.ultimate.active ?? false),
+    lastArt: () => this.lastArt,
+    focus: (k, army, ids) => this.sig.holdExternalFocus(k, army, ids),
+    eclipse: (level, color) => {
+      this.eclipseK = level;
+      this.eclipseColor = color;
+    },
+    playerSpec: () => playerSpec(this.world?.loadout.weaponPath ?? "none"),
+    label: (text, x, y, color) => this.numbers?.spawn(x, y, text, color, "word"),
+  };
+
   /** Apply the signature presentation's body modifiers (space bending, vanishing, tints, glass). */
   private applySigMods(): void {
     const mods = this.sig.mods;
@@ -3058,6 +3192,47 @@ export class BattleRenderer implements ImpactHost {
     for (const e of w.entities.values()) if (!e.dead && e.kind === "summon") allies.push({ id: e.id, pos: { x: e.pos.x, y: e.pos.y }, kind: "summon" });
     const p = w.player;
     this.sigDriver.play(buildScript({ castId: this.sigDriver.newCastId(), sig: id, evo, mastery: opts.mastery ?? 1, caster: { id: p.id, pos: { x: p.pos.x, y: p.pos.y }, kind: "player" }, foes, allies, enhanced: opts.enhanced, synergies: opts.synergy ? [opts.synergy] : [], hits: opts.hits ?? true, power: Math.round(p.stats.attack * 2.2) }));
+    return true;
+  }
+
+  /**
+   * Development: stage a Sovereign's mechanic on the live fight from synthetic `boss_mechanic`
+   * events (dealing nothing). The boss's version is cast by the boss on the field (or the first foe,
+   * drawn as the Sovereign) at the warrior and his army; `ally` casts the shadow's version from the
+   * first of the army (drawn as the Sovereign's shadow) at the foes. Bodies it raises are stood in by
+   * others on the field. `?debug=1` only.
+   */
+  sovDebug(mech: SovereignMechanic, opts: { ally?: boolean; delay?: number } = {}): boolean {
+    const w = this.world;
+    if (!w) return false;
+    const sov = sovereignOf(mech);
+    const act = (e: Combatant): SovActor => ({ id: e.id, pos: { x: e.pos.x, y: e.pos.y } });
+    const foes = [...w.entities.values()].filter((e) => !e.dead && e.faction === "enemy");
+    const army = [...w.entities.values()].filter((e) => !e.dead && e.kind === "summon");
+    let caster: Combatant | undefined;
+    let targets: Combatant[];
+    let raised: Combatant[];
+    if (opts.ally) {
+      caster = army[0];
+      if (!caster) return false;
+      if (caster.defId !== sov) this.debugDefs.set(caster.id, sov);
+      targets = foes.slice().sort((a, b) => Math.abs(a.pos.x - caster!.pos.x) - Math.abs(b.pos.x - caster!.pos.x));
+      raised = mech === "storm_rods" ? [] : army.slice(1);
+    } else {
+      caster = foes.find((e) => e.kind === "boss") ?? foes[0];
+      if (!caster) return false;
+      if (caster.defId !== sov) this.debugDefs.set(caster.id, sov);
+      targets = [w.player, ...army];
+      raised = foes.filter((e) => e !== caster);
+    }
+    // Rods stand round the targets (stand-in bodies for the boss's; the targets' ground for a shadow's).
+    let rodActors: SovActor[] = raised.map(act);
+    if (mech === "storm_rods") {
+      const base = targets[0] ?? w.player;
+      const spots = [-90, 70, 150];
+      rodActors = (opts.ally ? targets : raised).slice(0, 3).map((e, i) => ({ id: opts.ally ? -100 - i : e.id, pos: { x: clamp(base.pos.x + spots[i]!, 30, WORLD_W - 30), y: clamp(base.pos.y + (i - 1) * 40, 20, WORLD_D - 20) } }));
+    }
+    this.sovDriver.play(buildSovScript({ mech, caster: act(caster), targets: targets.map(act), raised: rodActors, centre: { x: WORLD_W / 2, y: WORLD_D / 2 } }), opts.delay ?? 0);
     return true;
   }
 

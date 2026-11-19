@@ -677,7 +677,7 @@ export class GameController {
     let kills = 0;
     let cleared: Extract<GameEvent, { type: "stage_cleared" }> | null = null;
     this.renderer?.handleEvents(events);
-    for (const c of this.cues.events(events, this.world?.player.id)) this.audio.playCue(c);
+    for (const c of this.cues.events(events, this.world?.player.id, this.allyOf)) this.audio.playCue(c);
     this.signatureDucks(events);
     for (const e of events) {
       switch (e.type) {
@@ -1542,6 +1542,8 @@ export class GameController {
 
   /** Tap on the battlefield: an enemy under the finger becomes the focus target (tap again to clear). */
   focusAt(clientX: number, clientY: number): void {
+    // A tap during a boss's entrance skips it (the fight itself starts on its own clock).
+    if (this.renderer?.skipBossEntrance()) return;
     const world = this.world;
     const id = this.renderer?.pickEnemy(clientX, clientY) ?? null;
     if (!world || id === null) return;
@@ -1560,6 +1562,9 @@ export class GameController {
   }
 
   private seenFocus = false;
+
+  /** Whether a body fights for the warrior (a Sovereign's shadow casting its mechanic sounds softer). */
+  private readonly allyOf = (id: number): boolean => this.world?.entities.get(id)?.faction === "ally";
 
   dodge(): boolean {
     this.userGesture();
@@ -1858,7 +1863,7 @@ export class GameController {
    * development casts): the same cues as a real cast.
    */
   signatureSound(events: GameEvent[]): void {
-    for (const c of this.cues.events(events, this.world?.player.id)) this.audio.playCue(c);
+    for (const c of this.cues.events(events, this.world?.player.id, this.allyOf)) this.audio.playCue(c);
     this.signatureDucks(events);
   }
 

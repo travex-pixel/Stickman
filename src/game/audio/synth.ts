@@ -74,7 +74,25 @@ export type SfxName =
   | "sig_blade"
   | "sig_crown"
   | "sig_synergy"
-  | "sig_hit";
+  | "sig_hit"
+  // Rift Sovereigns: an entrance each, and a voice per mechanic's moment (the reflected ping is
+  // frequent and held at a fixed pitch like the rest).
+  | "sov_knight_enter"
+  | "sov_titan_enter"
+  | "sov_queen_enter"
+  | "sov_mirror_rise"
+  | "sov_reflect"
+  | "sov_shatter"
+  | "sov_echo"
+  | "sov_split"
+  | "sov_rod_plant"
+  | "sov_rod_strike"
+  | "sov_chain"
+  | "sov_tide"
+  | "sov_well"
+  | "sov_court"
+  | "sov_eclipse"
+  | "sov_eclipse_strike";
 
 const SAMPLE_RATE = 22050;
 
@@ -251,7 +269,10 @@ const D7 = 2349.32;
 const A7 = 3520;
 
 /** Sounds that can play more than about once a second in a fight: no pitch glides, small rate changes. */
-export const FREQUENT_SFX: readonly SfxName[] = ["swing_1", "swing_2", "swing_3", "hit_light", "hit_heavy", "army_hit", "crit", "enemy_death", "block", "fury_strike", "echo_tick", "echo_tick_3", "prism", "storm_bolt", "sig_bite", "sig_clone", "sig_blade", "sig_hit"];
+export const FREQUENT_SFX: readonly SfxName[] = ["swing_1", "swing_2", "swing_3", "hit_light", "hit_heavy", "army_hit", "crit", "enemy_death", "block", "fury_strike", "echo_tick", "echo_tick_3", "prism", "storm_bolt", "sig_bite", "sig_clone", "sig_blade", "sig_hit", "sov_reflect", "sov_rod_strike"];
+
+/** The Rift Sovereigns' sounds (their entrances and mechanics). */
+export const SOVEREIGN_SFX: readonly SfxName[] = ["sov_knight_enter", "sov_titan_enter", "sov_queen_enter", "sov_mirror_rise", "sov_reflect", "sov_shatter", "sov_echo", "sov_split", "sov_rod_plant", "sov_rod_strike", "sov_chain", "sov_tide", "sov_well", "sov_court", "sov_eclipse", "sov_eclipse_strike"];
 
 const RECIPES: Record<SfxName, Voice[] | Recipe> = {
   // The warrior's three swings: filtered-noise whooshes. The forehand falls, the backhand rises,
@@ -792,6 +813,171 @@ const RECIPES: Record<SfxName, Voice[] | Recipe> = {
     ],
   },
   // A boss lands: a deep thud with a dust tail.
+  // ---------------------------------------------------------------- Rift Sovereigns
+  // The Mirror Knight steps out of its mirror: a glass shimmer gathering (struck bells of D minor,
+  // entering one by one over a soft hiss), then a ringing cut as the pane breaks behind it.
+  sov_knight_enter: {
+    peak: 0.8,
+    voices: [
+      N({ duration: 1.1, attack: 0.8, tau: 0.2, gain: 0.25, filter: { type: "bp", hz: 5200, q: 2.5 } }),
+      ...struck(D6, [[1, 0.18, 0.6], [2.76, 0.05, 0.3]], { delay: 0.15 }),
+      ...struck(A6, [[1, 0.15, 0.55], [2.76, 0.04, 0.25]], { delay: 0.4 }),
+      ...struck(F5, [[1, 0.16, 0.6], [2, 0.06, 0.3]], { delay: 0.65 }),
+      ...struck(D7, [[1, 0.12, 0.5]], { delay: 0.85 }),
+      N({ duration: 0.4, attack: 0.001, tau: 0.08, gain: 0.7, delay: 1.1, filter: { type: "hp", hz: 3000 } }),
+      ...struck(A7, [[1, 0.1, 0.3], [1.5, 0.06, 0.2]], { delay: 1.1 }),
+      ...struck(D7, [[1, 0.1, 0.35]], { delay: 1.13 }),
+    ],
+  },
+  // The Storm Titan in the dark: three cracks of lightning, thunder rolling under them, and a sub
+  // as it straightens.
+  sov_titan_enter: {
+    peak: 0.95,
+    voices: [
+      N({ duration: 2.2, attack: 0.3, tau: 0.8, gain: 0.7, filter: { type: "lp", hz: 160 } }),
+      N({ duration: 0.05, attack: 0.0004, tau: 0.01, gain: 1, delay: 0.05, filter: { type: "hp", hz: 1400 } }),
+      N({ duration: 0.05, attack: 0.0004, tau: 0.01, gain: 0.9, delay: 0.42, filter: { type: "hp", hz: 1400 } }),
+      N({ duration: 0.06, attack: 0.0004, tau: 0.012, gain: 1, delay: 0.68, filter: { type: "hp", hz: 1200 } }),
+      N({ duration: 1.2, attack: 0.04, tau: 0.4, gain: 0.8, delay: 0.12, filter: { type: "lp", hz: 240 } }),
+      N({ duration: 1.2, attack: 0.04, tau: 0.4, gain: 0.8, delay: 0.75, filter: { type: "lp", hz: 220 } }),
+      S(D2 / 2, { duration: 1.6, attack: 0.4, tau: 0.5, gain: 0.5, delay: 0.5 }),
+    ],
+  },
+  // The Void Queen through her seam: a low chord of D minor swelling in like a held breath, a hiss
+  // drawn into the dark, a deep tolled bell as she is through.
+  sov_queen_enter: {
+    peak: 0.85,
+    voices: [
+      { type: "triangle", freqStart: D4 / 2, freqEnd: D4 / 2, duration: 2.2, attack: 0.8, decay: 0.4, gain: 0.22 },
+      { type: "triangle", freqStart: F5 / 4, freqEnd: F5 / 4, duration: 2.2, attack: 0.9, decay: 0.4, gain: 0.18 },
+      { type: "triangle", freqStart: A3, freqEnd: A3, duration: 2.2, attack: 1.0, decay: 0.4, gain: 0.14 },
+      N({ duration: 1.1, attack: 0.9, tau: 0.15, gain: 0.35, filter: { type: "lp", hz: 400, hzEnd: 2400, q: 1.4 } }),
+      ...struck(D2 * 2, [[1, 0.5, 0.45], [2.4, 0.18, 0.3], [3.9, 0.08, 0.2]], { delay: 1.0 }),
+    ],
+  },
+  // A mirror rises: glass rung softly from below, two notes.
+  sov_mirror_rise: {
+    peak: 0.6,
+    voices: [
+      N({ duration: 0.35, attack: 0.2, tau: 0.08, gain: 0.3, filter: { type: "bp", hz: 4200, q: 2 } }),
+      ...struck(A5, [[1, 0.25, 0.5], [2.76, 0.06, 0.2]], { delay: 0.05 }),
+      ...struck(E5 * 2, [[1, 0.2, 0.45]], { delay: 0.18 }),
+    ],
+  },
+  // A blow flashes back off the glass: a short bright ping, fixed in pitch.
+  sov_reflect: {
+    peak: 0.55,
+    voices: [
+      N({ duration: 0.02, attack: 0.0005, tau: 0.004, gain: 0.5, filter: { type: "hp", hz: 3500 } }),
+      ...struck(A6, [[1, 0.35, 0.12], [2.76, 0.1, 0.05]]),
+    ],
+  },
+  // Glass breaking: a bright burst and high struck shards, scattered.
+  sov_shatter: {
+    peak: 0.8,
+    voices: [
+      N({ duration: 0.3, attack: 0.0006, tau: 0.06, gain: 0.9, filter: { type: "hp", hz: 2600 } }),
+      N({ duration: 0.12, attack: 0.001, tau: 0.03, gain: 0.4, filter: { type: "bp", hz: 1500, q: 0.8 } }),
+      ...struck(D7, [[1, 0.12, 0.12]], { delay: 0.01 }),
+      ...struck(A7, [[1, 0.1, 0.1]], { delay: 0.03 }),
+      ...struck(B5 * 2, [[1, 0.1, 0.12]], { delay: 0.05 }),
+      ...struck(A6, [[1, 0.09, 0.14]], { delay: 0.08 }),
+    ],
+  },
+  // The echo gathers: air drawn backwards toward the ghost, a pale tone held under it.
+  sov_echo: {
+    peak: 0.6,
+    voices: [
+      N({ duration: 0.8, attack: 0.65, tau: 0.08, gain: 0.7, filter: { type: "bp", hz: 1800, hzEnd: 3200, q: 1.3 } }),
+      { type: "triangle", freqStart: A4, freqEnd: A4, duration: 0.85, attack: 0.6, decay: 0.2, gain: 0.12 },
+      { type: "triangle", freqStart: D5, freqEnd: D5, duration: 0.85, attack: 0.7, decay: 0.2, gain: 0.08 },
+    ],
+  },
+  // The knight splits: a cluster of glass bells struck together, and a crack.
+  sov_split: {
+    peak: 0.8,
+    voices: [
+      N({ duration: 0.06, attack: 0.0006, tau: 0.012, gain: 0.8, filter: { type: "hp", hz: 2000 } }),
+      ...struck(D6, [[1, 0.2, 0.7], [2.76, 0.05, 0.3]]),
+      ...struck(F5 * 2, [[1, 0.17, 0.65]], { delay: 0.02 }),
+      ...struck(A6, [[1, 0.15, 0.6]], { delay: 0.04 }),
+      N({ duration: 0.6, attack: 0.05, tau: 0.2, gain: 0.2, delay: 0.05, filter: { type: "bp", hz: 6000, q: 2.5 } }),
+    ],
+  },
+  // A rod driven in by a bolt: a metallic strike, then its charge crackling up through it.
+  sov_rod_plant: {
+    peak: 0.75,
+    voices: [
+      N({ duration: 0.04, attack: 0.0005, tau: 0.008, gain: 0.9, filter: { type: "hp", hz: 1500 } }),
+      ...struck(A3, [[1, 0.3, 0.3], [2.76, 0.15, 0.2], [5.4, 0.08, 0.1]]),
+      N({ duration: 1.6, attack: 1.2, tau: 0.3, gain: 0.25, delay: 0.1, filter: { type: "bp", hz: 2200, q: 4 } }),
+    ],
+  },
+  // A rod calls its lightning: a dry crack and a short low roll (fixed: several may strike at once).
+  sov_rod_strike: {
+    peak: 0.95,
+    voices: [
+      N({ duration: 0.05, attack: 0.0004, tau: 0.008, gain: 1, filter: { type: "hp", hz: 1200 } }),
+      N({ duration: 0.1, attack: 0.001, tau: 0.03, gain: 0.6, filter: { type: "bp", hz: 2600, q: 0.9 } }),
+      N({ duration: 0.8, attack: 0.02, tau: 0.22, gain: 0.8, delay: 0.05, filter: { type: "lp", hz: 200 } }),
+      S(55, { duration: 0.5, attack: 0.01, tau: 0.16, gain: 0.35, delay: 0.04 }),
+    ],
+  },
+  // The chain charges between bodies: a dry buzz of sparks (filtered noise, no tone).
+  sov_chain: {
+    peak: 0.6,
+    voices: [
+      N({ duration: 0.9, attack: 0.5, tau: 0.15, gain: 0.6, filter: { type: "bp", hz: 3400, q: 5 } }),
+      N({ duration: 0.9, attack: 0.6, tau: 0.15, gain: 0.3, filter: { type: "bp", hz: 1300, q: 3 } }),
+    ],
+  },
+  // The tide: a wave's roar rising and breaking (noise through an opening filter), a low body.
+  sov_tide: {
+    peak: 0.85,
+    voices: [
+      N({ duration: 2.0, attack: 0.9, tau: 0.5, gain: 0.9, filter: { type: "lp", hz: 280, hzEnd: 1800, q: 0.9 } }),
+      N({ duration: 1.4, attack: 1.0, tau: 0.3, gain: 0.25, filter: { type: "hp", hz: 2500 } }),
+      S(D2, { duration: 2.0, attack: 0.8, tau: 0.6, gain: 0.35 }),
+    ],
+  },
+  // The well opens: a deep drawing-in, a sub and a fifth under a dark hiss.
+  sov_well: {
+    peak: 0.8,
+    voices: [
+      N({ duration: 1.6, attack: 0.7, tau: 0.5, gain: 0.7, filter: { type: "lp", hz: 900, hzEnd: 180, q: 1.3 } }),
+      S(D2, { duration: 1.8, attack: 0.5, tau: 0.6, gain: 0.6 }),
+      S(D2 * 1.5, { duration: 1.8, attack: 0.6, tau: 0.6, gain: 0.16 }),
+    ],
+  },
+  // The court is called: a low bell tolled twice, a whisper under it.
+  sov_court: {
+    peak: 0.8,
+    voices: [
+      ...struck(D4 / 2, [[1, 0.4, 0.7], [2.4, 0.15, 0.35], [3.9, 0.06, 0.2]]),
+      ...struck(D4 / 2, [[1, 0.3, 0.7], [2.4, 0.1, 0.35]], { delay: 0.45 }),
+      N({ duration: 1.2, attack: 0.4, tau: 0.3, gain: 0.2, filter: { type: "bp", hz: 1600, q: 1.5 } }),
+    ],
+  },
+  // The eclipse: the light drains (a falling filter over a held low D minor), a long hush.
+  sov_eclipse: {
+    peak: 0.8,
+    voices: [
+      N({ duration: 1.6, attack: 0.3, tau: 0.6, gain: 0.5, filter: { type: "lp", hz: 2200, hzEnd: 160, q: 1.1 } }),
+      { type: "triangle", freqStart: D4 / 2, freqEnd: D4 / 2, duration: 2.0, attack: 0.6, decay: 0.5, gain: 0.2 },
+      { type: "triangle", freqStart: F5 / 4, freqEnd: F5 / 4, duration: 2.0, attack: 0.7, decay: 0.5, gain: 0.15 },
+      S(D2, { duration: 2.0, attack: 0.6, tau: 0.8, gain: 0.4 }),
+    ],
+  },
+  // Her strike out of the dark: a hard cut, a sub drop, a ringing tail.
+  sov_eclipse_strike: {
+    peak: 0.95,
+    voices: [
+      N({ duration: 0.03, attack: 0.0005, tau: 0.006, gain: 1, filter: { type: "hp", hz: 2000 } }),
+      { type: "sine", freqStart: 110, freqEnd: 45, glide: 0.05, duration: 0.7, attack: 0.002, tau: 0.2, gain: 0.9 },
+      N({ duration: 0.4, attack: 0.002, tau: 0.1, gain: 0.5, filter: { type: "lp", hz: 500 } }),
+      ...struck(D5, [[1, 0.15, 0.6], [2.76, 0.04, 0.2]], { delay: 0.02 }),
+    ],
+  },
   boss_impact: {
     peak: 0.9,
     voices: [

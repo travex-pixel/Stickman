@@ -3,6 +3,7 @@ import type { ActionState } from "../../entities/types";
 import { darken, lighten } from "../colors";
 import { clamp } from "../../engine/math";
 import { damp, easeInCubic, easeOutCubic, rand2, span } from "../anim/ease";
+import { NO_WHITE, Regalia, type RegaliaKind } from "./regalia";
 import { CHANNELS, Ch, computePose, meleeKit, snapsOnEnter, stateLambda, strikeWindow, type BodyStyle, type IdleRole, type MeleeKit, type Pose, type PoseInput, type WeaponType } from "./pose";
 
 export type { BodyStyle, WeaponType } from "./pose";
@@ -32,10 +33,12 @@ export interface RigSpec {
   rim?: number;
   /** The army's role idle. */
   idle?: IdleRole;
+  /** A Rift Sovereign's regalia (rigs/regalia.ts): the boss, or its shadow in the army. */
+  regalia?: RegaliaKind;
 }
 
 /** Blade length (rig units at scale 1) by weapon, for trails. */
-const BLADE: Record<WeaponType, number> = { sword: 50, greatsword: 70, dagger: 25, twin: 31, scythe: 62, banner: 76, club: 62, mace_shield: 53, tower: 36, staff: 64, bow: 34, none: 18 };
+const BLADE: Record<WeaponType, number> = { anchor: 74, sword: 50, greatsword: 70, dagger: 25, twin: 31, scythe: 62, banner: 76, club: 62, mace_shield: 53, tower: 36, staff: 64, bow: 34, none: 18 };
 
 /**
  * Drawn parts are shared by every rig of the same spec: the first rig of a kind draws its parts
@@ -157,6 +160,8 @@ export class Rig {
   private hitAmount = 0;
   private pushed: 1 | -1 | 0 = 0;
   private capeWhite: Graphics | null = null;
+  /** A Sovereign's regalia (null for every other figure). */
+  private regalia: Regalia | null = null;
 
   constructor(spec: RigSpec) {
     this.spec = spec;
@@ -383,6 +388,30 @@ export class Rig {
     this.buildWeapon(limbW);
     this.armR.lower.addChild(this.weapon);
 
+    if (s.regalia) {
+      this.regalia = new Regalia(s.regalia, {
+        part: (draw) => this.part(draw),
+        u,
+        headR,
+        torsoW,
+        torsoH,
+        upperArm,
+        lowerArm,
+        root: this.root,
+        body: this.body,
+        hips: this.hips,
+        torso: this.torso,
+        head: this.head,
+        armL: this.armL,
+        armR: this.armR,
+        weapon: this.weapon,
+        eyes: this.eyes,
+        shadow: finish === "shadow",
+        body0: body,
+        accent: s.accent,
+        eye: s.eye,
+      });
+    }
 
     this.applyPose();
   }
@@ -405,6 +434,19 @@ export class Rig {
         g.rect(-1.4 * u, 2 * u, 2.8 * u, 7 * u).fill(0x2a2d3a);
         glow.rect(-4 * u, -46 * u, 8 * u, 48 * u).fill({ color: accent, alpha: 0.35 });
         break;
+      case "anchor": {
+        // The Storm Titan's drowned anchor: a long shank, a stock across the top, curved flukes.
+        const iron = s.finish === "shadow" ? 0x5b6272 : 0x26323c;
+        g.rect(-2.6 * u, -70 * u, 5.2 * u, 76 * u).fill(iron);
+        g.rect(-11 * u, -6 * u, 22 * u, 3.4 * u).fill(iron);
+        g.circle(0, 8 * u, 3.6 * u).stroke({ width: 2 * u, color: iron });
+        g.moveTo(-18 * u, -58 * u).quadraticCurveTo(-15 * u, -72 * u, 0, -74 * u).quadraticCurveTo(15 * u, -72 * u, 18 * u, -58 * u).stroke({ width: 4.4 * u, color: iron });
+        g.poly([-18 * u, -58 * u, -22 * u, -52 * u, -14 * u, -55 * u]).fill(iron);
+        g.poly([18 * u, -58 * u, 22 * u, -52 * u, 14 * u, -55 * u]).fill(iron);
+        g.rect(-0.8 * u, -64 * u, 1.6 * u, 70 * u).fill({ color: accent, alpha: 0.7 });
+        glow.rect(-6 * u, -72 * u, 12 * u, 84 * u).fill({ color: accent, alpha: 0.3 });
+        break;
+      }
       case "greatsword":
         g.rect(-3 * u, -62 * u, 6 * u, 64 * u).fill(steel);
         g.rect(-1 * u, -58 * u, 2 * u, 56 * u).fill({ color: accent, alpha: 0.9 });
@@ -513,7 +555,7 @@ export class Rig {
   private buildFlash(node: Container): void {
     const kids = node.children.slice();
     for (const child of kids) {
-      if (child === this.weaponGlow || child === this.aura || child === this.eyes) continue;
+      if (child === this.weaponGlow || child === this.aura || child === this.eyes || child.label === NO_WHITE) continue;
       if (child instanceof Graphics) {
         const white = new Graphics(whiteOf(child.context));
         white.position.copyFrom(child.position);
@@ -623,6 +665,7 @@ export class Rig {
     this.plantLeadFoot(state, t, duration, dt);
     this.applyPose();
     this.secondary(dt, state, speedFrac, moving);
+    this.regalia?.update(dt, this.clock, state);
 
     const body = this.body;
     if (s.aura) {
@@ -1028,6 +1071,19 @@ export class Rig {
   /** Prepare the white impact copies of this kind's parts (cached per kind; cheap after the first). */
   prewarmWhite(): void {
     for (const c of this.parts) whiteOf(c);
+  }
+
+  /** A Sovereign's phase: its second form (no effect on other figures). */
+  setPhase(p: 1 | 2): void {
+    this.regalia?.setPhase(p);
+  }
+
+  get phase(): 1 | 2 {
+    return this.regalia?.currentPhase ?? 1;
+  }
+
+  get regaliaKind(): RegaliaKind | null {
+    return this.regalia?.kind ?? null;
   }
 
   /** Eye alpha, applied after `animate` (a silhouette rising from its pool keeps them dark). */

@@ -3,6 +3,7 @@ import type { AbilityId } from "../data/ids";
 import type { SignatureBeat, SynergyId } from "../data/signatures";
 import type { SfxName } from "./synth";
 import type { SfxCategory } from "./mix";
+import type { MechanicStep, SovereignMechanic } from "../data/sovereigns";
 
 /** One sound to try to play. If the mix budget turns it down, `fallback` is tried instead. */
 export interface Cue {
@@ -74,6 +75,7 @@ export class SoundCues {
   }
 
   reset(): void {
+    this.guarding.clear();
     this.swings = 0;
     this.rest = 0;
     this.figure = -1;
@@ -91,8 +93,14 @@ export class SoundCues {
     return { name: SWINGS[v] as SfxName, category: "swing", volume: SWING_VOLUME[v] as number, rate: this.jitter(0.03), minInterval: 110, voice: "swing" };
   }
 
-  /** The sounds of one batch of simulation events. */
-  events(events: GameEvent[], playerId: number | undefined): Cue[] {
+  /** Sovereigns whose mirror stands (a blow on them rings off it), and whether a dodge broke it. */
+  private readonly guarding = new Map<number, { guarded: number; broken: boolean }>();
+
+  /**
+   * The sounds of one batch of simulation events. `isAlly` tells a Sovereign's shadow from the
+   * Sovereign (its mechanics sound the same, softer).
+   */
+  events(events: GameEvent[], playerId: number | undefined, isAlly?: (id: number) => boolean): Cue[] {
     const out: Cue[] = [];
     let gold = false;
     // A Fury strike carries its own impact: the hits it lands in the same batch stay quiet.
@@ -121,6 +129,15 @@ export class SoundCues {
           }
           break;
         case "hit":
+          // A blow on a body behind a standing mirror rings off the glass (under the hit itself).
+          if (e.amount > 0 && this.guarding.size > 0) {
+            for (const g of this.guarding.values()) {
+              if (g.guarded === e.targetId && e.sourceId !== e.targetId) {
+                out.push({ name: "sov_reflect", category: "sov", volume: 0.38, rate: 1, minInterval: 150, voice: "sov_reflect" });
+                break;
+              }
+            }
+          }
           if (e.sig && e.faction === "enemy") {
             // A signature skill's blows sit under its moments: a quiet tick, budgeted, never the
             // warrior's hit on top (a dragon's pass would otherwise be a wall of impacts).
@@ -171,9 +188,25 @@ export class SoundCues {
         case "command":
           out.push({ name: "command", category: "event", volume: 0.6, rate: 1 });
           break;
-        case "boss_intro":
-          out.push({ name: "boss_intro", category: "event", volume: 1, rate: 1 });
+        case "boss_intro": {
+          const enter = SOV_ENTER[e.defId];
+          out.push(enter ? { name: enter, category: "event", volume: 0.95, rate: 1 } : { name: "boss_intro", category: "event", volume: 1, rate: 1 });
           break;
+        }
+        case "boss_mechanic": {
+          const ally = isAlly?.(e.id) ?? false;
+          if (e.mech === "mirror_guard") {
+            // The knight guards itself; its shadow guards the warrior (or whom the guard names).
+            if (e.step === "strike") this.guarding.set(e.id, { guarded: ally ? (e.targetIds[0] ?? playerId ?? -1) : e.id, broken: false });
+            else if (e.step === "end") {
+              if (this.guarding.get(e.id)?.broken) out.push({ name: "sov_shatter", category: "sov", volume: 0.7, rate: 1, minInterval: 150 });
+              this.guarding.delete(e.id);
+            }
+          }
+          const c = sovereignCue(e.mech, e.step, ally);
+          if (c) out.push(c);
+          break;
+        }
         case "boss_phase":
           out.push({ name: "void_nova", category: "event", volume: 0.9, rate: 1 });
           break;
@@ -191,6 +224,8 @@ export class SoundCues {
           break;
         case "perfect_dodge":
           out.push({ name: "crit", category: "event", volume: 0.6, rate: 1, voice: "perfect" });
+          // A dodge through a standing mirror breaks it.
+          for (const g of this.guarding.values()) g.broken = true;
           break;
         case "kill_streak":
           // A streak steps up the scale (D minor, from A4 to D5 and above), never a slide.
@@ -271,6 +306,34 @@ const SIG_BEAT: Partial<Record<SignatureBeat, Cue>> = {
   crown: { name: "sig_crown", category: "sig", volume: 0.85, rate: 1, minInterval: 400 },
   sovereign_end: { name: "apex_rank", category: "sig", volume: 0.35, rate: semitoneRate(-5), minInterval: 400, voice: "sov_end" },
 };
+
+/** Each Sovereign's entrance. */
+const SOV_ENTER: Partial<Record<string, SfxName>> = { mirror_knight: "sov_knight_enter", storm_titan: "sov_titan_enter", void_queen: "sov_queen_enter" };
+
+/** A Sovereign mechanic's moment: its sound (null: the moment rides on another's). */
+const SOV_CUES: Partial<Record<`${SovereignMechanic}:${MechanicStep}`, Cue>> = {
+  "mirror_guard:warn": { name: "sov_mirror_rise", category: "sov", volume: 0.65, rate: 1, minInterval: 300 },
+  "mirror_echo:warn": { name: "sov_echo", category: "sov", volume: 0.6, rate: 1, minInterval: 300 },
+  "mirror_echo:strike": { name: "arc_slash", category: "sov", volume: 0.5, rate: 1.25, minInterval: 200, voice: "sov_echo_strike" },
+  "mirror_split:warn": { name: "sov_split", category: "sov", volume: 0.75, rate: 1, minInterval: 400 },
+  "mirror_split:end": { name: "sov_shatter", category: "sov", volume: 0.55, rate: 1, minInterval: 150 },
+  "storm_rods:warn": { name: "sov_rod_plant", category: "sov", volume: 0.55, rate: 1, minInterval: 160 },
+  "storm_rods:strike": { name: "sov_rod_strike", category: "sov", volume: 0.7, rate: 1, minInterval: 120 },
+  "storm_chain:warn": { name: "sov_chain", category: "sov", volume: 0.55, rate: 1, minInterval: 300 },
+  "storm_chain:strike": { name: "storm_bolt", category: "sov", volume: 0.6, rate: 0.85, minInterval: 200, voice: "sov_chain_strike" },
+  "storm_tide:warn": { name: "sov_tide", category: "sov", volume: 0.8, rate: 1, minInterval: 400 },
+  "void_well:warn": { name: "sov_well", category: "sov", volume: 0.75, rate: 1, minInterval: 400 },
+  "void_court:warn": { name: "sov_court", category: "sov", volume: 0.7, rate: 1, minInterval: 400 },
+  "void_eclipse:warn": { name: "sov_eclipse", category: "sov", volume: 0.75, rate: 1, minInterval: 400 },
+  "void_eclipse:strike": { name: "sov_eclipse_strike", category: "sov", volume: 0.85, rate: 1, minInterval: 300 },
+};
+
+/** A Sovereign mechanic's sound; a shadow's own is the same voice, softer. */
+export function sovereignCue(mech: SovereignMechanic, step: MechanicStep, ally = false): Cue | null {
+  const c = SOV_CUES[`${mech}:${step}`];
+  if (!c) return null;
+  return ally ? { ...c, volume: c.volume * 0.7, voice: `${c.voice ?? c.name}_ally` } : c;
+}
 
 export function sigBeatCue(beat: SignatureBeat): Cue | null {
   return SIG_BEAT[beat] ?? null;

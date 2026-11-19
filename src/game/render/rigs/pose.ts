@@ -29,7 +29,7 @@ export const CHANNELS = 15;
 export type Pose = Float32Array;
 
 export type BodyStyle = "warrior" | "lean" | "bulky" | "robed" | "archer" | "warden" | "reaper";
-export type WeaponType = "sword" | "greatsword" | "dagger" | "bow" | "staff" | "scythe" | "club" | "mace_shield" | "twin" | "tower" | "banner" | "none";
+export type WeaponType = "anchor" | "sword" | "greatsword" | "dagger" | "bow" | "staff" | "scythe" | "club" | "mace_shield" | "twin" | "tower" | "banner" | "none";
 
 /** A shadow's idle character, by army role ("" for everything else). */
 export type IdleRole = "" | "vanguard" | "reaper" | "ranger" | "arcanist" | "sentinel" | "support" | "sovereign" | "caller";

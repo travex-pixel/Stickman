@@ -32,6 +32,10 @@ export function enemySpec(defId: string): RigSpec {
   const eye = d?.palette.eye ?? 0xe8c98a;
   const accent = d?.palette.accent ?? 0x5a5a66;
   const base = { body: INK, accent, eye, finish: "ink" as const };
+  // What the Sovereigns raise, whatever the simulation names them: the Queen's kneeling court
+  // (hooded, in her violet), the Titan's rods (drawn as rods; this figure is never shown).
+  if (defId === "void_courtier") return { ...base, accent: 0x7a4fc0, eye: 0xd8c4ff, style: "robed", weapon: "none", height: 92, hood: true, cape: true };
+  if (defId === "storm_rod") return { ...base, style: "lean", weapon: "none", height: 70 };
   switch (d?.archetype) {
     case "brute":
       return { ...base, style: "bulky", weapon: "club", height: 130, horns: true };
@@ -48,6 +52,9 @@ export function enemySpec(defId: string): RigSpec {
     case "bannerman":
       return { ...base, style: "lean", weapon: "banner", height: 104, cape: true };
     case "boss":
+      if (defId === "mirror_knight") return sovereignSpec("mirror_knight", base);
+      if (defId === "storm_titan") return sovereignSpec("storm_titan", base);
+      if (defId === "void_queen") return sovereignSpec("void_queen", base);
       if (defId === "crownless_king") return { ...base, style: "warden", weapon: "greatsword", glow: eye, height: 182, crown: true, cape: true, aura: 46 };
       if (defId === "ember_herald") return { ...base, style: "robed", weapon: "staff", glow: eye, height: 158, hood: true, floating: true, cape: true, aura: 40 };
       return { ...base, style: "warden", weapon: "greatsword", glow: eye, height: 178, horns: true, cape: true, aura: 46 };
@@ -55,6 +62,25 @@ export function enemySpec(defId: string): RigSpec {
       return { ...base, style: "lean", weapon: "dagger", height: 94 };
   }
 }
+
+/**
+ * The Rift Sovereigns as bosses (rigs/regalia.ts dresses them). Three silhouettes that cannot be
+ * mistaken for one another or for a Warden: a mid-size duelist in mirror plate, a hunched colossus
+ * half again a Warden's height under its storm, a floating queen under a halo with a train.
+ */
+function sovereignSpec(id: "mirror_knight" | "storm_titan" | "void_queen", base: { body: number; accent: number; eye: number; finish: "ink" }): RigSpec {
+  switch (id) {
+    case "mirror_knight":
+      return { ...base, accent: 0xd8dde8, style: "warrior", weapon: "sword", glow: 0xf4f6ff, height: 150, cape: true, aura: 34, regalia: id };
+    case "storm_titan":
+      return { ...base, accent: 0x6fa8ff, style: "bulky", weapon: "anchor", glow: 0x9cc6ff, height: 206, aura: 58, regalia: id };
+    default:
+      return { ...base, accent: 0x9a6fe0, style: "robed", weapon: "staff", glow: 0xc9a6ff, height: 176, floating: true, cape: true, aura: 44, regalia: id };
+  }
+}
+
+/** A Sovereign's own colour, as its shadow carries it (and its mechanics' accent). */
+export const SOVEREIGN_ACCENT: Record<"mirror_knight" | "storm_titan" | "void_queen", number> = { mirror_knight: 0xd8dde8, storm_titan: 0x8fbfff, void_queen: 0xb18cff };
 
 /**
  * Each species carries its own sigil colour on its weapon, eyes and ability effects, so an army
@@ -73,6 +99,9 @@ export const SPECIES_ACCENT: Record<string, number> = {
   hollow_warden: 0xf0d48a,
   banner_bearer: 0xe8a07a,
   crownless_king: 0xe9c97a,
+  mirror_knight: SOVEREIGN_ACCENT.mirror_knight,
+  storm_titan: SOVEREIGN_ACCENT.storm_titan,
+  void_queen: SOVEREIGN_ACCENT.void_queen,
   shade: 0xb8b0a0,
 };
 
@@ -86,6 +115,12 @@ export function summonSpec(defId: string): RigSpec {
   const accent = speciesAccent(defId);
   const eye = legendary ? 0xfff0c2 : lightenHex(accent, 0.35);
   const base = { body: legendary ? 0x404657 : SHADOW_BODY, accent, eye, glow: SHADOW_GLOW, finish: "shadow" as const, idle: (d?.role ?? "") as IdleRole };
+  // The Sovereigns' shadows: the same figures, smaller, in the army's slate and gold with their own
+  // colour as the accent and a crown of light (whatever role the army files them under).
+  if (defId === "void_courtier") return { ...base, accent: SOVEREIGN_ACCENT.void_queen, style: "robed", weapon: "none", height: 90, hood: true, cape: true };
+  if (defId === "mirror_knight") return { ...base, body: 0x404657, eye: 0xfff0c2, idle: "sovereign", style: "warrior", weapon: "sword", height: 112, cape: true, aura: 26, regalia: defId };
+  if (defId === "storm_titan") return { ...base, body: 0x404657, eye: 0xfff0c2, idle: "sovereign", style: "bulky", weapon: "anchor", height: 138, aura: 30, regalia: defId };
+  if (defId === "void_queen") return { ...base, body: 0x404657, eye: 0xfff0c2, idle: "sovereign", style: "robed", weapon: "staff", height: 120, floating: true, cape: true, aura: 28, regalia: defId };
   switch (d?.role) {
     case "vanguard":
       return { ...base, style: "bulky", weapon: "mace_shield", height: 126, horns: true };

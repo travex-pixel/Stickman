@@ -17,13 +17,26 @@ import type { EmitOptions, ParticleSystem } from "../Particles";
  *  Herald descends in a column of embers, the Crownless King walks out of a gold horizon flare
  *  as two banners unfurl); an impact beat at 1.1s; release to fight framing by 2.4s.
  *
+ *  The Rift Sovereigns each enter their own way, in the same 2.4s and skippable with a tap:
+ *   - the Mirror Knight steps out of a tall mirror that rises at its place, pale as a reflection
+ *     until it is through, and the glass shatters behind it on the impact;
+ *   - the Storm Titan is only a black shape in the dark, lit by three strikes of lightning, and
+ *     straightens to its full height on the impact as the ground takes its weight;
+ *   - the Void Queen floats out of a seam of the void that opens upright at her place, while two of
+ *     her court bow either side; the seam closes on the impact.
+ *
  *  Death: an inverted impact frame (the boss white on black), then the boss kneels, cracks of its
- *  glow spread over it and it breaks upward into shards; a slow full-width ring; motes drift.
+ *  glow spread over it and it breaks upward into shards; a slow full-width ring; motes drift. A
+ *  Sovereign breaks its own way: the knight into mirror shards, the titan's storm discharging into
+ *  the ground, the queen collapsing into a point of void that rings outward once.
  */
 
-export type BossKind = "warden" | "drowned" | "herald" | "king";
+export type BossKind = "warden" | "drowned" | "herald" | "king" | "mirror" | "titan" | "queen";
 
 export function bossKind(defId: string): BossKind {
+  if (defId === "mirror_knight") return "mirror";
+  if (defId === "storm_titan") return "titan";
+  if (defId === "void_queen") return "queen";
   if (defId === "drowned_warden") return "drowned";
   if (defId === "ember_herald") return "herald";
   if (defId === "crownless_king") return "king";
@@ -52,6 +65,8 @@ export interface BossHost {
   /** The view's drawn width (CSS px) and the base px per world unit. */
   viewWidth(): number;
   cue(name: "impact" | "shatter"): void;
+  /** A screen flash through the flash budget (false when refused). */
+  flash(color: number, alpha: number, duration: number): boolean;
 }
 
 /** The boss's drawn place and scale this frame (the renderer fills it in). */
@@ -86,6 +101,14 @@ export class BossEntrance {
   private flareK = 0;
   private waterT = -1;
   private columnK = 0;
+  /** The Sovereigns: the mirror (0 to 1 risen, then shattered), the lightning's light on the titan, the queen's seam. */
+  private paneK = 0;
+  private paneGone = false;
+  private strikeT = -1;
+  private litK = 0;
+  private seamK = 0;
+  private bowK = 0;
+  private boltSeed = 0;
   private place: BossPlace = { x: 0, y: 0, scale: 1, facing: -1 };
   private placed = false;
   private masked: Rig | null = null;
@@ -146,6 +169,30 @@ export class BossEntrance {
       tl.tween(e0 - 0.1, e0 + 0.3, easeOutCubic, (k) => (this.columnK = k));
       tl.tween(e0, e1, easeOutCubic, (k) => (this.emerge = k));
       tl.tween(e1, e1 + 0.5, null, (k) => (this.columnK = 1 - k));
+    } else if (this.kind === "mirror") {
+      // The mirror rises; the knight walks out of the glass; the glass shatters on the impact.
+      tl.tween(e0 - 0.15, e0 + 0.25, easeOutBack, (k) => (this.paneK = Math.min(1, k)));
+      tl.tween(e0 + 0.2, e1, easeInOutSine, (k) => (this.emerge = k));
+      tl.at(e1, () => {
+        this.paneGone = true;
+        if (!tl.skipping) this.shatterPane();
+      });
+    } else if (this.kind === "titan") {
+      // Darkness, three strikes that show it, then it straightens on the impact.
+      for (const at of [e0 + 0.05, e0 + 0.42, e1 - 0.12]) {
+        tl.at(at, () => {
+          this.strikeT = 0;
+          this.boltSeed += 1;
+          if (!tl.skipping) host.flash(0xd8e8ff, 0.14, 0.12);
+        });
+      }
+      tl.tween(e0, e1, null, (k) => (this.emerge = k));
+    } else if (this.kind === "queen") {
+      // A seam of the void opens upright; she floats out of it; her court bows; it closes.
+      tl.tween(e0 - 0.15, e0 + 0.3, easeOutCubic, (k) => (this.seamK = k));
+      tl.tween(e0 + 0.15, e1, easeInOutSine, (k) => (this.emerge = k));
+      tl.tween(e0 + 0.3, e1 + 0.2, easeOutCubic, (k) => (this.bowK = k));
+      tl.tween(e1, e1 + 0.4, easeInCubic, (k) => (this.seamK = 1 - k));
     } else {
       tl.tween(e0 - 0.1, e0 + 0.35, easeOutCubic, (k) => (this.flareK = k));
       tl.tween(e0 + 0.1, e1, easeInOutSine, (k) => (this.emerge = k));
@@ -206,9 +253,19 @@ export class BossEntrance {
     }
   }
 
-  /** The pose to animate the boss with while it emerges (the King walks out). */
+  /** The pose to animate the boss with while it emerges (the King and the knight walk out). */
   get poseState(): "idle" | "move" {
-    return this.kind === "king" && this.emerge < 0.98 ? "move" : "idle";
+    return (this.kind === "king" || this.kind === "mirror") && this.emerge < 0.98 ? "move" : "idle";
+  }
+
+  /** A tap skips the entrance to its release (the boss stands, the camera returns). */
+  skip(): boolean {
+    if (this.tl.disposed || this.tl.t >= ENTRANCE.release) return false;
+    this.tl.skipTo(ENTRANCE.release);
+    this.emerge = 1;
+    this.paneGone = true;
+    this.seamK = 0;
+    return true;
   }
 
   /** Stage the boss's rig for this frame (after it is posed and placed): offset, mask, alpha, tint. */
@@ -232,6 +289,31 @@ export class BossEntrance {
         // Descends in the column of embers.
         rig.root.y -= (1 - k) * h * 1.6;
         rig.root.alpha = Math.min(1, k * 2.5);
+        rig.shadow.alpha = k;
+        break;
+      }
+      case "mirror": {
+        // Steps out of the glass: from inside the pane, pale as a reflection until it is through.
+        rig.root.x += (1 - k) * 40 * p.scale * -p.facing;
+        rig.root.alpha = k < 0.02 ? 0.25 : Math.min(1, 0.35 + k * 1.2);
+        rig.root.tint = k < 1 ? lighten(0xc8d2e6, k) : 0xffffff;
+        rig.shadow.alpha = k;
+        break;
+      }
+      case "titan": {
+        // A black shape in the dark, shown by the lightning; it straightens on the impact.
+        const lit = this.litK;
+        rig.root.tint = k >= 1 ? 0xffffff : lighten(0x05070a, Math.max(lit * 0.9, k >= 1 ? 1 : 0));
+        rig.root.alpha = k >= 1 ? 1 : Math.max(0.55, lit);
+        rig.root.scale.y *= 0.9 + 0.1 * (k >= 1 ? 1 : k * 0.6);
+        rig.shadow.alpha = Math.max(0.3, k);
+        break;
+      }
+      case "queen": {
+        // Out of the seam: from narrow to whole, violet until she is through.
+        rig.root.alpha = k < 0.03 ? 0 : Math.min(1, k * 1.6);
+        rig.root.scale.x *= 0.35 + 0.65 * k;
+        rig.root.tint = k < 1 ? lighten(0x7a4fc0, k) : 0xffffff;
         rig.shadow.alpha = k;
         break;
       }
@@ -352,6 +434,9 @@ export class BossEntrance {
         this.host.particles.emit(o);
       }
     }
+    if (this.kind === "mirror") this.drawMirror(g, p.x, p.y, s);
+    if (this.kind === "titan") this.drawTitan(g, p.x, p.y, s, dt);
+    if (this.kind === "queen") this.drawQueen(g, p.x, p.y, s);
     if (this.kind === "king") {
       // A gold flare on the horizon behind the spawn point, and two banners unfurling.
       if (this.flareK > 0.01) {
@@ -375,6 +460,96 @@ export class BossEntrance {
         }
       }
       if (this.tl.t > ENTRANCE.release) g.alpha = 1 - (this.tl.t - ENTRANCE.release) / (ENTRANCE.length - ENTRANCE.release);
+    }
+  }
+
+  /** The mirror the knight steps out of: a tall pane in a gilt frame, a sheen crossing it. */
+  private drawMirror(g: Graphics, x: number, y: number, s: number): void {
+    if (this.paneGone || this.paneK <= 0.01) return;
+    const h = this.rigTop * s * 1.12 * this.paneK;
+    const w = this.rigTop * s * 0.42;
+    const cx = x - this.place.facing * 22 * s;
+    g.roundRect(cx - w / 2 - 3, y - h - 3, w + 6, h + 3, w * 0.45).fill({ color: 0x14151a, alpha: 0.9 });
+    g.roundRect(cx - w / 2, y - h, w, h, w * 0.42).fill({ color: 0xcfd6e4, alpha: 0.5 });
+    g.roundRect(cx - w / 2, y - h, w, h, w * 0.42).stroke({ width: 2.4, color: 0xe2c27a, alpha: 1 });
+    const sweep = (this.tl.t * 1.4) % 1;
+    const sx = cx - w / 2 + w * sweep;
+    g.moveTo(sx - w * 0.2, y - h * 0.1).lineTo(sx + w * 0.15, y - h * 0.9).stroke({ width: w * 0.14, color: 0xffffff, alpha: 0.35 });
+  }
+
+  private shatterPane(): void {
+    if (!this.placed) return;
+    const p = this.place;
+    const s = p.scale;
+    const cx = p.x - p.facing * 22 * s;
+    const o = this.emit;
+    o.x = cx;
+    o.y = p.y - this.rigTop * s * 0.55;
+    o.count = this.host.isReduced() ? 12 : 34;
+    o.texture = shard();
+    o.color = 0xdfe6f5;
+    o.colors = [0xdfe6f5, 0xffffff, 0xe2c27a];
+    o.speed = [120, 340];
+    o.angle = [-Math.PI, 0];
+    o.life = [0.5, 1.0];
+    o.scale = [0.3, 0.8];
+    o.endScale = 0;
+    o.alpha = 1;
+    o.gravity = 420;
+    o.spin = 10;
+    o.additive = false;
+    o.spread = this.rigTop * s * 0.3;
+    this.host.particles.emit(o);
+    o.spread = 0;
+    o.colors = undefined;
+    o.spin = 0;
+  }
+
+  /** The titan in the dark: a jagged bolt for each strike, its light dying away. */
+  private drawTitan(g: Graphics, x: number, y: number, s: number, dt: number): void {
+    if (this.strikeT >= 0) {
+      this.strikeT += dt;
+      this.litK = Math.max(0, 1 - this.strikeT / 0.28);
+      if (this.strikeT < 0.16) {
+        const top = y - this.rigTop * s * 3;
+        const n = 7;
+        let px = x + 30 * s * (this.boltSeed % 2 ? 1 : -1);
+        let py = top;
+        for (let i = 1; i <= n; i++) {
+          const t = i / n;
+          const nx = i === n ? x + 10 * s : x + Math.sin(this.boltSeed * 7.1 + i * 2.3) * 26 * s * (1 - t);
+          const ny = top + (y - this.rigTop * s * 0.8 - top) * t;
+          g.moveTo(px, py).lineTo(nx, ny).stroke({ width: 5 * s, color: 0x6fa8ff, alpha: 0.4 });
+          g.moveTo(px, py).lineTo(nx, ny).stroke({ width: 1.8 * s, color: 0xeef6ff, alpha: 1 });
+          px = nx;
+          py = ny;
+        }
+      }
+    }
+    if (this.emerge >= 1) this.litK = 0;
+  }
+
+  /** The seam of void the queen comes through, and two of her court bowing either side. */
+  private drawQueen(g: Graphics, x: number, y: number, s: number): void {
+    const k = this.seamK;
+    if (k > 0.01) {
+      const h = this.rigTop * s * 1.35;
+      const w = this.rigTop * s * 0.34 * k;
+      const top = y - h;
+      g.moveTo(x, top).quadraticCurveTo(x + w, top + h * 0.5, x, y).quadraticCurveTo(x - w, top + h * 0.5, x, top).fill({ color: 0x07040c, alpha: 0.95 });
+      g.moveTo(x, top).quadraticCurveTo(x + w, top + h * 0.5, x, y).quadraticCurveTo(x - w, top + h * 0.5, x, top).stroke({ width: 2, color: 0xb18cff, alpha: 0.95 });
+      g.moveTo(x, top - 10 * s * k).lineTo(x, y + 4 * s).stroke({ width: 1, color: 0xf3e8ff, alpha: 0.8 * k });
+    }
+    const b = this.bowK;
+    if (b > 0.01) {
+      for (const side of [-1, 1]) {
+        const cx = x + side * 70 * s;
+        const bow = 0.4 + 0.6 * b;
+        const hh = 34 * s * (1 - 0.25 * bow);
+        g.poly([cx - 11 * s, y, cx - 8 * s, y - hh, cx + 8 * s, y - hh, cx + 12 * s, y]).fill({ color: 0x0d0912, alpha: 0.9 * b });
+        g.circle(cx + side * -4 * s * bow, y - hh - 5 * s + 4 * s * bow, 6 * s).fill({ color: 0x0d0912, alpha: 0.9 * b });
+        g.poly([cx - 11 * s, y, cx - 8 * s, y - hh, cx + 8 * s, y - hh, cx + 12 * s, y]).stroke({ width: 1, color: 0x9a6fe0, alpha: 0.7 * b });
+      }
     }
   }
 
@@ -424,9 +599,14 @@ export class BossDeath {
   private moteUntil = 0;
   private readonly emit: EmitOptions = { x: 0, y: 0, count: 1, texture: softCircle(), color: 0xffffff, speed: [0, 0], life: [0.4, 0.8], scale: [0.2, 0.4] };
   private readonly crackSeed: number[] = [];
+  private readonly kind: BossKind;
+  /** The queen's collapse into a point (0 to 1). */
+  private collapse = 0;
+  private readonly bolts = new Graphics();
 
   constructor(host: BossHost, defId: string, x: number, y: number, scale: number, facing: 1 | -1) {
     this.host = host;
+    this.kind = bossKind(defId);
     const spec = enemySpec(defId);
     this.glow = spec.glow ?? spec.eye;
     this.x = x;
@@ -435,6 +615,8 @@ export class BossDeath {
     this.facing = facing;
     this.seed = Math.random();
     this.rig = new Rig(spec);
+    // A Sovereign dies in its second form.
+    this.rig.setPhase(2);
     this.rig.setDeath(DEATH_KNEEL, facing, 1);
     this.rig.root.position.set(x, y);
     this.rig.root.scale.set(scale);
@@ -445,7 +627,8 @@ export class BossDeath {
     this.black.visible = false;
     this.cracks.blendMode = "add";
     this.rig.root.addChild(this.cracks);
-    this.root.addChild(this.black, this.rig.shadow, this.rig.root);
+    this.bolts.blendMode = "add";
+    this.root.addChild(this.black, this.rig.shadow, this.rig.root, this.bolts);
     host.layer.addChild(this.root);
     for (let i = 0; i < 7; i++) this.crackSeed.push(Math.random(), Math.random(), Math.random());
     const tl = this.tl;
@@ -481,6 +664,18 @@ export class BossDeath {
       cam.shake(0.35);
       this.moteUntil = DEATH.breakAt + 2;
     });
+    if (this.kind === "queen") {
+      // The queen folds into a point of void before it rings out.
+      tl.tween(DEATH.breakAt - 0.35, DEATH.breakAt, easeInCubic, (k) => (this.collapse = k));
+      tl.at(DEATH.breakAt, () => {
+        if (!tl.skipping) host.ring(x, y - this.rig.top * scale * 0.5, 4, vw * 0.9, 0.9, 0xb18cff, 4);
+      });
+    }
+    if (this.kind === "titan") {
+      tl.at(DEATH.breakAt, () => {
+        if (!tl.skipping) host.flash(0xd8e8ff, 0.18, 0.2);
+      });
+    }
     tl.tween(DEATH.breakAt, DEATH.breakAt + 0.18, null, (k) => (this.fade = 1 - k));
     tl.tween(DEATH.length - 0.6, DEATH.length, easeInOutSine, (k) => (cam.hold.weight = 1 - k));
   }
@@ -489,12 +684,14 @@ export class BossDeath {
     const o = this.emit;
     const s = this.s;
     const top = this.rig.top * s;
+    // A Sovereign's shards are its own: mirror glass and gilt, storm-blue iron, violet ink and gold.
+    const cols = this.kind === "mirror" ? [0xdfe6f5, 0xffffff, 0xe2c27a] : this.kind === "titan" ? [0x10202a, 0x6fa8ff, 0xeef6ff] : this.kind === "queen" ? [0x07040c, 0x9a6fe0, 0xc9a24f] : [0x15141a, this.glow, lighten(this.glow, 0.5)];
     for (let i = 0; i < 60; i++) {
       o.x = this.x + (Math.random() - 0.5) * top * 0.4;
       o.y = this.y - Math.random() * top * 0.7;
       o.count = 1;
       o.texture = shard();
-      o.color = i % 3 === 0 ? 0x15141a : i % 3 === 1 ? this.glow : lighten(this.glow, 0.5);
+      o.color = cols[i % 3]!;
       o.speed = [60, 220];
       o.angle = [-Math.PI * 0.85, -Math.PI * 0.15];
       o.life = [0.8, 1.6];
@@ -504,8 +701,34 @@ export class BossDeath {
       o.gravity = -40;
       o.drag = 0.94;
       o.spin = 6;
-      o.additive = i % 3 !== 0;
+      o.additive = this.kind === "mirror" ? i % 3 === 1 : i % 3 !== 0;
       this.host.particles.emit(o);
+    }
+  }
+
+  /** The titan's storm discharging into the ground as it breaks: bolts from above it, outward. */
+  private drawBolts(): void {
+    const g = this.bolts;
+    g.clear();
+    if (this.kind !== "titan" || this.t < 0.2 || this.t > DEATH.breakAt + 0.35) return;
+    const s = this.s;
+    const top = this.rig.top * s;
+    const n = this.t < DEATH.breakAt ? 1 : 4;
+    const seed = Math.floor(this.t * 14);
+    for (let b = 0; b < n; b++) {
+      const dir = b % 2 === 0 ? 1 : -1;
+      let px = this.x - dir * top * 0.15;
+      let py = this.y - top * 1.05;
+      const ex = this.x + dir * top * (0.3 + 0.25 * b);
+      const ey = this.y;
+      for (let i = 1; i <= 6; i++) {
+        const t = i / 6;
+        const nx = i === 6 ? ex : px + (ex - px) / (7 - i) + Math.sin(seed * 3.1 + b * 1.7 + i * 2.2) * 10 * s;
+        const ny = i === 6 ? ey : py + (ey - py) / (7 - i);
+        g.moveTo(px, py).lineTo(nx, ny).stroke({ width: 1.8 * s, color: 0xeef6ff, alpha: 0.95 * (1 - t * 0.3) });
+        px = nx;
+        py = ny;
+      }
     }
   }
 
@@ -523,7 +746,15 @@ export class BossDeath {
     this.rig.animate(this.t < DEATH.inverted ? "stagger" : "dead", 0.1, 0.2, this.seed, this.facing, false, 0, 0, dt);
     this.rig.root.alpha = this.fade;
     this.rig.shadow.alpha = this.fade;
+    if (this.collapse > 0) {
+      // Folding into a point at the chest.
+      const c = 1 - this.collapse * 0.92;
+      this.rig.root.scale.set(this.s * c, this.s * c);
+      this.rig.root.y = this.y - this.rig.top * this.s * 0.5 * this.collapse;
+      this.rig.root.tint = lighten(0x4a2a80, 1 - this.collapse);
+    }
     this.drawCracks();
+    this.drawBolts();
     if (this.t < this.moteUntil && dt > 0 && Math.random() < 0.5 && !this.host.isReduced()) {
       const o = this.emit;
       o.x = this.x + (Math.random() - 0.5) * 200 * this.s;

@@ -7,6 +7,8 @@ import { easeInCubic, easeInOutSine, easeOutBack, easeOutCubic } from "../anim/e
 import { RARITY_COLOR, lighten, mix } from "../colors";
 import type { Camera } from "../Camera";
 import type { EmitOptions, ParticleSystem } from "../Particles";
+import { isSovereign } from "../../data/sovereigns";
+import { SovereignRite } from "../sovereigns/rite";
 
 /**
  * BIND / ARISE: the shadow rises in the scene itself, staged by rarity in shape and staging, not
@@ -134,6 +136,8 @@ export class AriseCinematic {
   private ending = -1;
   private namedFired = false;
   private reducedT = -1;
+  /** A Rift Sovereign's own rite over the legendary staging (sovereigns/rite.ts). */
+  private rite: SovereignRite | null = null;
   disposed = false;
 
   constructor(host: AriseHost, o: AriseOptions) {
@@ -232,6 +236,17 @@ export class AriseCinematic {
     this.mote.tint = this.color;
     this.moteCore.tint = lighten(this.color, 0.6);
     this.stage.addChild(this.fx, this.eyeGlow, this.eyeCore);
+    if (this.staging === "legendary" && isSovereign(o.summonId)) {
+      const front = new Container();
+      this.stage.addChild(front);
+      const bx = this.bx;
+      const by = this.by;
+      const z0 = this.z0;
+      this.rite = new SovereignRite(o.summonId, this.back, front, this.figH, this.R, (x, y, out) => {
+        out.x = bx + x / z0;
+        out.y = by + y / z0;
+      }, host.particles, o.reduced);
+    }
     // The mote travels in base px (from the orb to the warrior's hand), so it sits outside the stage.
     this.root.addChild(this.mote, this.moteCore);
     this.mote.position.set(o.orbX, o.orbY);
@@ -239,6 +254,7 @@ export class AriseCinematic {
     host.layer.addChild(this.root);
     tl.onDispose(() => {
       for (const g of this.ghosts) g.destroy();
+      this.rite?.destroy();
       this.rig.destroy();
       cam.cine.zoom = 1;
       cam.cine.tilt = 0;
@@ -377,6 +393,7 @@ export class AriseCinematic {
         this.ringT = 0;
       } else {
         this.stop(0.2);
+        this.rite?.oath();
         this.breakRing();
         cam.shake(0.5);
         host.flash(GOLD, 0.07, 0.15);
@@ -491,6 +508,7 @@ export class AriseCinematic {
     else tl.update(dt);
     if (this.disposed) return;
     this.animateFigure(dt);
+    this.rite?.update(tl.t, this.hold > 0 ? 0 : dt);
     this.drawPool();
     this.drawFx(dt);
     this.drawRing();

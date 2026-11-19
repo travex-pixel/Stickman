@@ -1,6 +1,9 @@
 import { Container, Graphics, Sprite, Texture } from "pixi.js";
 import type { RegionDef } from "../data/regions";
+import type { SovereignArena } from "../data/sovereigns";
+import type { VisualQuality } from "../data/signatures";
 import { softCircle } from "./textures";
+import { ArenaLive } from "./sovereigns/arena";
 
 /**
  * Painted battlefield.
@@ -24,7 +27,7 @@ interface Scene {
   crack: string;
   fog: number;
   mote: number;
-  props: "ruins" | "drowned" | "crown";
+  props: "ruins" | "drowned" | "crown" | SovereignArena;
 }
 
 function mixRgb(a: number, b: number, t: number): number {
@@ -102,6 +105,65 @@ const SCENES: Record<string, Scene> = {
     fog: 0xe8c9a0,
     mote: 0xffd9a0,
     props: "crown",
+  },
+};
+
+/**
+ * The Sovereigns' arenas: each region's field staged for its Sovereign's fight only, in the
+ * region's palette pulled toward the arena's own light (DESIGN.md, "How the Sovereigns look and
+ * sound"). Painted once like any backdrop; what moves lives in sovereigns/arena.ts.
+ */
+const ARENAS: Record<SovereignArena, Partial<Scene>> = {
+  // The Ashen Verge's ash and gold, in a hall of mirrors: silver columns of glass, a polished floor.
+  mirror_hall: {
+    skyTop: "#1e2229",
+    skyMid: "#4c525c",
+    horizon: "#d8ccb0",
+    sun: "rgba(244, 236, 214, 0.32)",
+    far: "#7f8590",
+    mid: "#3c4048",
+    near: "#24262c",
+    groundFar: "#868b94",
+    groundNear: "#2a2c32",
+    pigment: ["rgba(220, 226, 236, 0.08)", "rgba(201, 162, 79, 0.07)", "rgba(40, 42, 50, 0.10)", "rgba(255, 250, 235, 0.05)"],
+    crack: "rgba(201, 162, 79, 0.45)",
+    fog: 0xdfe3ea,
+    mote: 0xf4f6ff,
+    props: "mirror_hall",
+  },
+  // The Drowned Hollow's green sea under the Titan's storm: a black sky, a running sea, wet stone.
+  storm_sea: {
+    skyTop: "#0a1015",
+    skyMid: "#1c2d33",
+    horizon: "#4d6b6c",
+    sun: "rgba(150, 196, 220, 0.14)",
+    far: "#22353a",
+    mid: "#152326",
+    near: "#0e181a",
+    groundFar: "#3b5556",
+    groundNear: "#11191c",
+    pigment: ["rgba(60, 110, 120, 0.12)", "rgba(20, 30, 36, 0.14)", "rgba(150, 200, 210, 0.06)", "rgba(10, 16, 20, 0.14)"],
+    crack: "rgba(8, 14, 16, 0.6)",
+    fog: 0x8fb5bf,
+    mote: 0xbfe9ff,
+    props: "storm_sea",
+  },
+  // The Shattered Crown's gilt ruin, gone to the Queen's dark: violet ink, a throne, a kneeling court.
+  void_throne: {
+    skyTop: "#100b16",
+    skyMid: "#281c30",
+    horizon: "#a3825a",
+    sun: "rgba(180, 140, 220, 0.18)",
+    far: "#3a2c3e",
+    mid: "#211827",
+    near: "#130e18",
+    groundFar: "#4a3b47",
+    groundNear: "#16101a",
+    pigment: ["rgba(120, 80, 180, 0.10)", "rgba(201, 162, 79, 0.06)", "rgba(20, 12, 28, 0.14)", "rgba(160, 120, 210, 0.06)"],
+    crack: "rgba(201, 162, 79, 0.42)",
+    fog: 0x9a7fc0,
+    mote: 0xd8c4ff,
+    props: "void_throne",
   },
 };
 
@@ -210,6 +272,12 @@ function paintSky(sc: Scene, w: number, h: number, groundTop: number, seed: numb
     const y = groundTop * (0.1 + r() * 0.65);
     blob(ctx, r() * w, y, w * (0.3 + r() * 0.4), groundTop * (0.05 + r() * 0.08), i % 2 ? "rgba(255,245,225,0.10)" : "rgba(20,24,32,0.10)");
   }
+  if (sc.props === "storm_sea") {
+    // The Titan's storm: heavy banks of cloud, darker below.
+    for (let i = 0; i < 12; i++) blob(ctx, r() * w, groundTop * (0.05 + r() * 0.6), w * (0.25 + r() * 0.3), groundTop * (0.08 + r() * 0.1), i % 3 === 0 ? "rgba(90, 120, 140, 0.12)" : "rgba(4, 8, 12, 0.28)");
+  } else if (sc.props === "void_throne") {
+    for (let i = 0; i < 6; i++) blob(ctx, r() * w, groundTop * (0.1 + r() * 0.6), w * (0.2 + r() * 0.3), groundTop * (0.08 + r() * 0.12), i % 2 ? "rgba(120, 80, 190, 0.12)" : "rgba(4, 2, 8, 0.25)");
+  }
   grain(ctx, w, groundTop, r, 0.05);
   return c;
 }
@@ -217,6 +285,15 @@ function paintSky(sc: Scene, w: number, h: number, groundTop: number, seed: numb
 function skyline(sc: Scene, w: number, h: number, baseY: number, color: string, scale: number, seed: number, alpha: number, kind: "far" | "mid"): HTMLCanvasElement {
   const [c, ctx] = canvas(w, h);
   const r = rng(seed);
+  if (sc.props === "mirror_hall" || sc.props === "storm_sea" || sc.props === "void_throne") {
+    arenaSkyline(ctx, sc, w, baseY, color, scale, alpha, kind, r);
+    const fade = ctx.createLinearGradient(0, baseY * 0.55, 0, baseY + 2);
+    fade.addColorStop(0, "rgba(0,0,0,0)");
+    fade.addColorStop(1, sc.horizon + (kind === "far" ? "aa" : "66"));
+    ctx.fillStyle = fade;
+    ctx.fillRect(0, 0, w, baseY + 2);
+    return c;
+  }
   const jitter = 2.2;
   let x = -20;
   while (x < w + 20) {
@@ -282,6 +359,120 @@ function skyline(sc: Scene, w: number, h: number, baseY: number, color: string, 
   ctx.fillStyle = fade;
   ctx.fillRect(0, 0, w, baseY + 2);
   return c;
+}
+
+/** An arena's far and middle layers. */
+function arenaSkyline(ctx: CanvasRenderingContext2D, sc: Scene, w: number, baseY: number, color: string, scale: number, alpha: number, kind: "far" | "mid", r: () => number): void {
+  if (sc.props === "mirror_hall") {
+    if (kind === "far") {
+      // A colonnade of tall mirrors in gilt frames, each catching a pale sheen.
+      const pw = 30 * scale;
+      const gap = 16 * scale;
+      for (let x = -10 * scale; x < w + pw; x += pw + gap) {
+        const ph = baseY * (0.72 + r() * 0.08);
+        const top = baseY - ph;
+        wash(ctx, [[x, baseY], [x, top + pw * 0.5], [x + pw * 0.5, top], [x + pw, top + pw * 0.5], [x + pw, baseY]], color, alpha, r, 1.2);
+        ctx.globalAlpha = 0.32;
+        ctx.fillStyle = "#dfe4ee";
+        ctx.beginPath();
+        ctx.moveTo(x + pw * 0.15, baseY);
+        ctx.lineTo(x + pw * 0.15, top + pw * 0.55);
+        ctx.lineTo(x + pw * 0.5, top + pw * 0.15);
+        ctx.lineTo(x + pw * 0.85, top + pw * 0.55);
+        ctx.lineTo(x + pw * 0.85, baseY);
+        ctx.closePath();
+        ctx.fill();
+        ctx.globalAlpha = 0.35;
+        ctx.strokeStyle = "#fff8e6";
+        ctx.lineWidth = 2 * scale;
+        ctx.beginPath();
+        ctx.moveTo(x + pw * 0.3, top + ph * 0.75);
+        ctx.lineTo(x + pw * 0.62, top + ph * 0.25);
+        ctx.stroke();
+        ctx.globalAlpha = 0.7;
+        ctx.strokeStyle = "#c9a24f";
+        ctx.lineWidth = 1.2 * scale;
+        ctx.strokeRect(x + pw * 0.15, top + pw * 0.55, pw * 0.7, ph - pw * 0.55);
+      }
+      ctx.globalAlpha = 1;
+      // Pale light pooled in the hall.
+      blob(ctx, w * 0.5, baseY * 0.7, w * 0.5, baseY * 0.4, "rgba(240, 236, 220, 0.12)");
+    } else {
+      // Pillars between the mirrors, and a low balustrade.
+      for (let x = 0; x < w + 40; x += (46 + r() * 30) * scale) {
+        const pw = 9 * scale;
+        wash(ctx, [[x, baseY], [x, baseY * 0.18], [x - pw * 0.4, baseY * 0.15], [x + pw * 1.4, baseY * 0.15], [x + pw, baseY * 0.18], [x + pw, baseY]], color, alpha, r, 1.2);
+      }
+      wash(ctx, [[0, baseY], [0, baseY - 16 * scale], [w, baseY - 16 * scale], [w, baseY]], color, alpha * 0.9, r, 1.5);
+    }
+    return;
+  }
+  if (sc.props === "storm_sea") {
+    if (kind === "far") {
+      // The open sea under the storm: a long swell line, and drowned spires of rock.
+      const pts: [number, number][] = [[0, baseY]];
+      for (let x = 0; x <= w; x += 12 * scale) pts.push([x, baseY - (10 + Math.sin(x * 0.03) * 5 + r() * 4) * scale]);
+      pts.push([w, baseY]);
+      wash(ctx, pts, color, alpha, r, 1.5);
+      for (let i = 0; i < 5; i++) {
+        const x = r() * w;
+        const ht = baseY * (0.25 + r() * 0.3);
+        const bw = (14 + r() * 16) * scale;
+        wash(ctx, [[x, baseY], [x + bw * 0.2, baseY - ht], [x + bw * 0.45, baseY - ht * 0.8], [x + bw, baseY]], color, alpha, r, 2);
+      }
+      landmark(ctx, { ...sc, props: "drowned" }, w, baseY, scale, r);
+    } else {
+      // Breaking crests, nearer and darker.
+      for (let x = -20; x < w + 40; x += (40 + r() * 40) * scale) {
+        const ht = (18 + r() * 22) * scale;
+        const bw = (40 + r() * 40) * scale;
+        wash(ctx, [[x, baseY], [x + bw * 0.35, baseY - ht], [x + bw * 0.55, baseY - ht * 0.75], [x + bw * 0.5, baseY - ht * 0.55], [x + bw, baseY]], color, alpha, r, 2);
+        ctx.globalAlpha = 0.35;
+        ctx.strokeStyle = "#cfe8ee";
+        ctx.lineWidth = 1.4 * scale;
+        ctx.beginPath();
+        ctx.moveTo(x + bw * 0.2, baseY - ht * 0.6);
+        ctx.quadraticCurveTo(x + bw * 0.35, baseY - ht * 1.05, x + bw * 0.55, baseY - ht * 0.75);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+    }
+    return;
+  }
+  // The void throne.
+  if (kind === "far") {
+    // Colossal broken pillars of the old Crown's hall.
+    for (let i = 0; i < 7; i++) {
+      const x = (i / 6) * w + (r() - 0.5) * 30 * scale;
+      if (Math.abs(x - w * 0.5) < w * 0.16) continue;
+      const pw = (16 + r() * 8) * scale;
+      const ht = baseY * (0.55 + r() * 0.35);
+      wash(ctx, [[x, baseY], [x, baseY - ht], [x + pw * 0.4, baseY - ht - 8 * scale], [x + pw, baseY - ht + 4 * scale], [x + pw, baseY]], color, alpha, r, 2);
+    }
+    // The throne on its dais at the hall's heart, under the Rift.
+    const cx = w * 0.5;
+    const s = scale;
+    wash(ctx, [[cx - 90 * s, baseY], [cx - 80 * s, baseY - 10 * s], [cx - 55 * s, baseY - 10 * s], [cx - 50 * s, baseY - 20 * s], [cx + 50 * s, baseY - 20 * s], [cx + 55 * s, baseY - 10 * s], [cx + 80 * s, baseY - 10 * s], [cx + 90 * s, baseY]], color, 0.95, r, 1.5);
+    const tb = baseY - 20 * s;
+    wash(ctx, [[cx - 26 * s, tb], [cx - 26 * s, tb - 34 * s], [cx - 30 * s, tb - 92 * s], [cx - 18 * s, tb - 78 * s], [cx - 10 * s, tb - 110 * s], [cx, tb - 86 * s], [cx + 10 * s, tb - 110 * s], [cx + 18 * s, tb - 78 * s], [cx + 30 * s, tb - 92 * s], [cx + 26 * s, tb - 34 * s], [cx + 26 * s, tb]], "#0c0810", 0.95, r, 1.2);
+    ctx.globalAlpha = 0.85;
+    ctx.strokeStyle = "#c9a24f";
+    ctx.lineWidth = 1.2 * s;
+    ctx.beginPath();
+    ctx.moveTo(cx - 26 * s, tb - 34 * s);
+    ctx.lineTo(cx + 26 * s, tb - 34 * s);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    blob(ctx, cx, tb - 50 * s, 120 * s, 90 * s, "rgba(150, 110, 220, 0.16)");
+  } else {
+    // The kneeling court in the dark, on both sides of the throne's line.
+    for (let i = 0; i < 8; i++) {
+      const side = i % 2 === 0 ? -1 : 1;
+      const x = w * 0.5 + side * (w * (0.16 + (i >> 1) * 0.1) + r() * 10 * scale);
+      const s = scale * (0.9 + r() * 0.3);
+      wash(ctx, [[x - 12 * s, baseY], [x - 10 * s, baseY - 16 * s], [x - 6 * s, baseY - 24 * s], [x, baseY - 30 * s], [x + 6 * s, baseY - 26 * s], [x + 9 * s, baseY - 14 * s], [x + 14 * s, baseY]], color, alpha, r, 1.2);
+    }
+  }
 }
 
 /** The place's signature silhouette, sitting under the Rift crack so the eye has somewhere to rest. */
@@ -412,6 +603,75 @@ function paintGround(sc: Scene, w: number, h: number, groundTop: number, seed: n
     ctx.ellipse(x - s * 0.2, y - s * 0.3, s * 0.9, s * 0.3, 0, 0, Math.PI * 2);
     ctx.fill();
   }
+  if (sc.props === "mirror_hall") {
+    // A polished floor: gilt inlay lines running to the hall's far end, long pale reflections.
+    const vx = w * 0.5;
+    ctx.strokeStyle = "rgba(201, 162, 79, 0.28)";
+    ctx.lineWidth = 1.2;
+    for (let i = -6; i <= 6; i++) {
+      ctx.beginPath();
+      ctx.moveTo(vx + i * w * 0.05, groundTop);
+      ctx.lineTo(vx + i * w * 0.32, h);
+      ctx.stroke();
+    }
+    for (let k = 1; k < 6; k++) {
+      const y = groundTop + (h - groundTop) * Math.pow(k / 6, 1.6);
+      ctx.strokeStyle = `rgba(201, 162, 79, ${0.1 + 0.04 * k})`;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(w, y);
+      ctx.stroke();
+    }
+    for (let i = 0; i < 9; i++) {
+      const x = r() * w;
+      blob(ctx, x, groundTop + (h - groundTop) * 0.4, 10 + r() * 16, (h - groundTop) * 0.5, "rgba(230, 236, 246, 0.07)");
+    }
+  }
+  if (sc.props === "storm_sea") {
+    // Wet stone in a shallow running sea: many pale strips, foam lines.
+    for (let i = 0; i < 16; i++) {
+      const y = groundTop + 8 + r() * (h - groundTop - 12);
+      const depth = (y - groundTop) / (h - groundTop);
+      blob(ctx, r() * w, y, (50 + r() * 110) * (0.6 + depth), 2.5 + depth * 4, "rgba(170, 214, 222, 0.12)");
+    }
+    ctx.strokeStyle = "rgba(220, 240, 244, 0.12)";
+    for (let i = 0; i < 10; i++) {
+      const y = groundTop + r() * (h - groundTop);
+      const x0 = r() * w;
+      ctx.lineWidth = 1 + r() * 1.5;
+      ctx.beginPath();
+      ctx.moveTo(x0, y);
+      ctx.quadraticCurveTo(x0 + 40, y - 3, x0 + 90, y + 1);
+      ctx.stroke();
+    }
+  }
+  if (sc.props === "void_throne") {
+    // The void at the centre of the hall: violet ink pooled in a ring, gilt cracks running from it.
+    const cx = w * 0.5;
+    const cy = groundTop + (h - groundTop) * 0.42;
+    blob(ctx, cx, cy, w * 0.34, (h - groundTop) * 0.22, "rgba(60, 30, 100, 0.35)");
+    blob(ctx, cx, cy, w * 0.16, (h - groundTop) * 0.1, "rgba(6, 3, 10, 0.55)");
+    ctx.strokeStyle = "rgba(160, 120, 220, 0.3)";
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, w * 0.22, (h - groundTop) * 0.13, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = sc.crack;
+    for (let i = 0; i < 6; i++) {
+      let x = cx;
+      let y = cy;
+      const a = (i / 6) * Math.PI * 2 + r() * 0.4;
+      ctx.lineWidth = 1.1;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      for (let k = 0; k < 5; k++) {
+        x += Math.cos(a) * (14 + r() * 20);
+        y += Math.sin(a) * (5 + r() * 6);
+        ctx.lineTo(x + (r() - 0.5) * 6, y);
+      }
+      ctx.stroke();
+    }
+  }
   if (sc.props === "drowned") {
     // Standing water: pale reflective strips.
     for (let i = 0; i < 9; i++) {
@@ -433,7 +693,7 @@ function paintVignette(sc: Scene, w: number, h: number, groundTop: number): HTML
   ctx.fillRect(0, 0, w, h);
   // Foreground ink: grass tufts and rubble silhouettes framing the bottom edge.
   const r = rng(91);
-  ctx.fillStyle = sc.props === "drowned" ? "rgba(12,22,24,0.85)" : sc.props === "crown" ? "rgba(24,16,10,0.85)" : "rgba(16,14,12,0.85)";
+  ctx.fillStyle = sc.props === "drowned" || sc.props === "storm_sea" ? "rgba(12,22,24,0.85)" : sc.props === "crown" ? "rgba(24,16,10,0.85)" : sc.props === "void_throne" ? "rgba(14,8,18,0.88)" : "rgba(16,14,12,0.85)";
   for (let i = 0; i < 18; i++) {
     const x = r() * w;
     const base = h + 2;
@@ -480,12 +740,20 @@ export class Background {
   private res = 1;
 
   readonly depth: number;
+  /** A Sovereign's arena (null: the region's own field). */
+  readonly arena: SovereignArena | null;
+  private live: ArenaLive | null = null;
 
-  /** `tint` washes the scene toward a Rift Depth's light (null on the first pass). */
-  constructor(region: RegionDef, depth = 1, tint: number | null = null) {
+  /**
+   * `tint` washes the scene toward a Rift Depth's light (null on the first pass); `arena` stages the
+   * field for a Sovereign's fight. `flash` asks the flash budget for the storm's distant lightning.
+   */
+  constructor(region: RegionDef, depth = 1, tint: number | null = null, arena: SovereignArena | null = null, flash: (alpha: number) => boolean = () => false) {
     this.region = region;
     this.depth = depth;
-    const base = SCENES[region.id] ?? (SCENES.ashen_verge as Scene);
+    this.arena = arena;
+    const regionScene = SCENES[region.id] ?? (SCENES.ashen_verge as Scene);
+    const base: Scene = arena ? { ...regionScene, ...ARENAS[arena] } : regionScene;
     this.scene = tint === null ? base : tintScene(base, tint, Math.min(0.42, 0.22 + 0.04 * (depth - 2)));
     this.container.addChild(this.sky, this.fissureGlow, this.fissure, this.far, this.mid);
     this.fissureGlow.blendMode = "add";
@@ -499,6 +767,15 @@ export class Background {
     }
     this.container.addChild(this.ground);
     this.foreground.addChild(this.vignette);
+    if (arena) {
+      this.live = new ArenaLive(arena, flash);
+      this.container.addChild(this.live.back);
+    }
+  }
+
+  /** The arena's moving pieces follow the visual quality (the backdrop itself is the same at all). */
+  setQuality(q: VisualQuality): void {
+    this.live?.setQuality(q);
   }
 
   get regionId(): string {
@@ -507,6 +784,7 @@ export class Background {
 
   setReduced(v: boolean): void {
     this.reduced = v;
+    this.live?.setReduced(v);
   }
 
   /** Parallax: x in [-1, 1], where the camera looks. Layers drift a few pixels, never enough to distract. */
@@ -563,6 +841,7 @@ export class Background {
     make(paintVignette(sc, width * vr, height * vr, groundTop * vr), this.vignette, width, 0, 0);
     this.vignette.height = height;
     this.paintFissure(width, groundTop);
+    this.live?.layout(width, height, groundTop);
     this.fogLayers.forEach((s, i) => {
       s.width = width * (0.9 + i * 0.25);
       s.height = (height - groundTop) * 0.5;
@@ -625,6 +904,7 @@ export class Background {
 
   update(dt: number): void {
     this.time += dt;
+    this.live?.update(dt);
     const breath = 0.5 + 0.5 * Math.sin(this.time * 0.9);
     this.fissureGlow.alpha = 0.55 + breath * 0.45;
     this.fissure.alpha = 0.75 + breath * 0.25;
@@ -685,6 +965,8 @@ export class Background {
   }
 
   destroy(): void {
+    this.live?.destroy();
+    this.live = null;
     for (const t of this.textures) t.destroy(true);
     this.textures = [];
     this.container.destroy({ children: true });

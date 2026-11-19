@@ -196,6 +196,20 @@ export class SignatureDirector {
     return this.focusOn;
   }
   private focusOwner: Stage | null = null;
+  /**
+   * Another presentation's key beat asking for the focus (a Sovereign shadow's ultimate): how much
+   * (0 lets go), whether the army not in it dims, and the bodies in it (never dimmed). Set each frame.
+   */
+  private readonly external = { k: 0, army: false, held: 0, ids: new Set<number>() };
+
+  /** Hold the focus for another presentation's moment this frame (see `external`). */
+  holdExternalFocus(k: number, army: boolean, ids: readonly number[]): void {
+    const x = this.external;
+    x.k = k;
+    x.army = army;
+    x.ids.clear();
+    if (k > 0) for (const id of ids) x.ids.add(id);
+  }
 
   constructor(
     readonly host: SigHost,
@@ -534,6 +548,18 @@ export class SignatureDirector {
       }
       if (s.focusArmy && k > wantA) wantA = k;
     }
+    // Another presentation's moment takes the focus by the same rules (rest, the longest hold).
+    const x = this.external;
+    if (x.k > 0) {
+      x.held += real;
+      if ((!resting || this.focusOn) && x.held <= FOCUS_MAX_HOLD) {
+        if (x.k > wantN) {
+          wantN = x.k;
+          owner = null;
+        }
+        if (x.army && x.k > wantA) wantA = x.k;
+      }
+    } else x.held = 0;
     if (wantN > 0) {
       this.focusOn = true;
       if (owner) this.focusOwner = owner;
@@ -560,6 +586,7 @@ export class SignatureDirector {
 
   /** Whether a body is part of a staged cast's show (the focus never dims it). */
   involved(id: number): boolean {
+    if (this.external.k > 0 && this.external.ids.has(id)) return true;
     for (const s of this.stages) if (s.involves(id)) return true;
     return false;
   }
