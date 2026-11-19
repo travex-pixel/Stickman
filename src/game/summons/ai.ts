@@ -6,6 +6,7 @@ import { addStatus } from "../combat/statuses";
 import { factionWithin, hostilesWithin, isHidden, lowestHpFraction, mostDangerous, nearestHostile } from "../combat/targeting";
 import { ARENA } from "../engine/World";
 import { priorityPart } from "../bosses/sovereigns";
+import { isSovereignShadow, sovereignShadowTurn } from "./sovereignShadows";
 
 /**
  * Summons are first-class combatants with their own AI per role and a shared command layer.
@@ -79,8 +80,10 @@ export function updateSummonAi(world: World, s: Combatant, dt: number): void {
   if (focus && sum.command !== "guard" && sum.role !== "sentinel") target = focus;
   s.targetId = target ? target.id : -1;
 
-  // Active abilities
-  if (target && sum.abilityCooldown <= 0 && tryActive(world, s, target, enemiesNearAnchor)) {
+  // Active abilities. A Sovereign shadow wields its own kit: two actives, its ultimate.
+  if (isSovereignShadow(s.defId) && !sum.temporary) {
+    if (target && sovereignShadowTurn(world, s, target, dt)) return;
+  } else if (target && sum.abilityCooldown <= 0 && tryActive(world, s, target, enemiesNearAnchor)) {
     sum.abilityCooldown = def.active.cooldown;
     return;
   }

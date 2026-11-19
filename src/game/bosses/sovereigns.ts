@@ -190,6 +190,25 @@ export function chooseSovereign(w: World, b: Combatant, target: Combatant, d: nu
   }
 }
 
+/**
+ * Begins `m` now, whatever the Sovereign's own choice would be (tests and the debug preview). The
+ * Sovereign must be the one whose mechanic it is.
+ */
+export function forceMechanic(w: World, b: Combatant, m: SovereignMechanic, target: Combatant = w.player): void {
+  const starts: Record<SovereignMechanic, () => void> = {
+    mirror_guard: () => startGuard(w, b, target),
+    mirror_echo: () => startEcho(w, b, target, w.lastArt ?? "arc_slash"),
+    mirror_split: () => startSplit(w, b, target),
+    storm_rods: () => startRods(w, b, target),
+    storm_chain: () => startChain(w, b),
+    storm_tide: () => startTide(w, b, target),
+    void_well: () => startWell(w, b),
+    void_court: () => startCourt(w, b),
+    void_eclipse: () => startEclipse(w, b, target),
+  };
+  starts[m]();
+}
+
 /** One tick of the mechanic in flight. */
 export function updateSovereignPattern(w: World, b: Combatant, target: Combatant, dt: number): void {
   const bs = b.boss!;

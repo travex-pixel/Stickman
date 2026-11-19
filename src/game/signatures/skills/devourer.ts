@@ -43,9 +43,12 @@ export const devourer: SkillImpl = {
 
 /** Where Gravity Feast would bend the dragon: a fresh singularity, or the trapped and Void Marked. */
 export function feastPoint(rt: SignatureRuntime): { pos: Vec2; targets: Combatant[] } | null {
-  if (!rt.entry("void_collapse") || !rt.entry("abyssal_devourer")) return null;
-  const held = rt.foes().filter((e) => hasStatus(e, "trapped") || hasStatus(e, "void_mark"));
+  if (!rt.entry("abyssal_devourer")) return null;
   const s = rt.singularity;
+  // A Void Queen shadow's well is a singularity too, whatever else is equipped.
+  const queen = !!s && !!s.queen && rt.world.time - s.at < 3;
+  if (!rt.entry("void_collapse") && !queen) return null;
+  const held = rt.foes().filter((e) => hasStatus(e, "trapped") || hasStatus(e, "void_mark"));
   if (s && rt.world.time - s.at < 3) return { pos: { ...s.pos }, targets: held };
   if (held.length < 2) return null;
   let x = 0;
@@ -55,6 +58,12 @@ export function feastPoint(rt: SignatureRuntime): { pos: Vec2; targets: Combatan
     y += e.pos.y;
   }
   return { pos: { x: x / held.length, y: y / held.length }, targets: held };
+}
+
+/** A foe held in a Void Queen shadow's well (Gravity Feast devours them as it does the trapped). */
+function inQueenWell(rt: SignatureRuntime, f: Combatant): boolean {
+  const s = rt.singularity;
+  return !!s && !!s.queen && rt.world.time - s.at < 4 && Math.hypot(f.pos.x - s.pos.x, f.pos.y - s.pos.y) <= s.radius;
 }
 
 function begin(rt: SignatureRuntime, c: Cast, via: Vec2): { windup: number; length: number } {
@@ -125,7 +134,7 @@ function begin(rt: SignatureRuntime, c: Cast, via: Vec2): { windup: number; leng
     });
     if (feast) {
       rt.at(c, tPass + D * 0.5, () => {
-        const there = rt.foes().filter((f) => (hasStatus(f, "trapped") || hasStatus(f, "void_mark")) && Math.hypot(f.pos.x - feast.pos.x, f.pos.y - feast.pos.y) <= 150);
+        const there = rt.foes().filter((f) => (hasStatus(f, "trapped") || hasStatus(f, "void_mark") || inQueenWell(rt, f)) && Math.hypot(f.pos.x - feast.pos.x, f.pos.y - feast.pos.y) <= 150);
         if (there.length === 0) return;
         if (!rt.synergy("gravity_feast", c.id, feast.pos, there.map((f) => f.id))) return;
         for (const f of there) biteFoe(f, 1.6 * rt.synergyMult);

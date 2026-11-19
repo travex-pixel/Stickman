@@ -18,7 +18,9 @@ export function armyStrength(profile: Profile, lineup: readonly SummonInstance[]
   let total = 0;
   for (const inst of lineup) {
     const s = summonStats(inst, m);
-    total += s.attack * s.attackSpeed * 5 + s.maxHp * 0.5 + s.defense * 6;
+    // A Sovereign's kit multiplies what its blows are worth (kitWorth; 1 for every other shadow).
+    const kit = summonDef(inst.defId).kitWorth ?? 1;
+    total += s.attack * s.attackSpeed * 5 * kit + s.maxHp * 0.5 + s.defense * 6;
   }
   return total;
 }

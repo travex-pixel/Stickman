@@ -23,6 +23,7 @@ import { updateEnemyAi } from "../enemies/ai";
 import { updateBossAi } from "../bosses/hollowWarden";
 import { dismissAllParts, guardUp, newSovereignState, onManualDash, onPartFell, priorityPart, sovereignIncoming } from "../bosses/sovereigns";
 import { isSovereign } from "../data/sovereigns";
+import { majesty, mirrorShadowIncoming, onFury, tickAllyWells, titanBlow } from "../summons/sovereignShadows";
 import { rankCooldownMult, rankPowerMult } from "../progression/abilityRanks";
 import { updateSummonAi } from "../summons/ai";
 import { castPlayerAbility, resolvePlayerAbility, playerDodge } from "../abilities/execute";
@@ -275,6 +276,25 @@ export class World {
   lastArt: AbilityId | null = null;
   /** Rift Sovereigns: ground the warrior's own feet leave (a Void Well's core) until `until`. */
   readonly sovZones: { pos: Vec2; radius: number; until: number }[] = [];
+  /**
+   * Sovereign shadows fielded (summons/sovereignShadows.ts), by species; all false without one, and
+   * then nothing below that serves them runs.
+   */
+  sovShadows = { mirror_knight: false, storm_titan: false, void_queen: false, any: false };
+  /** A Storm Titan shadow's planted rods (foes beside one count as marked for the signature skills). */
+  readonly allyRods: { pos: Vec2; radius: number; until: number }[] = [];
+  /** A Void Queen shadow's open wells. */
+  readonly allyWells: { pos: Vec2; until: number; next: number; ownerId: number }[] = [];
+  /** The warrior's last signature blow (a Mirror Knight shadow's echo carries a share of it). */
+  lastSigHit: { amount: number; at: number } | null = null;
+
+  private noteSovShadows(): void {
+    const ids = new Set(this.loadout.summons.map((s) => s.defId));
+    const k = ids.has("mirror_knight");
+    const t = ids.has("storm_titan");
+    const q = ids.has("void_queen");
+    this.sovShadows = { mirror_knight: k, storm_titan: t, void_queen: q, any: k || t || q };
+  }
 
   constructor(opts: WorldOptions) {
     this.stage = Math.max(1, opts.stage);
@@ -292,6 +312,7 @@ export class World {
     this.entities.set(this.player.id, this.player);
     this.events.push({ type: "spawn", id: this.player.id, kind: "player", defId: "ascendant", pos: { ...this.player.pos } });
     for (const s of opts.loadout.summons) this.deploySummon(s, true);
+    this.noteSovShadows();
     if (hasSignatures(opts.loadout.signatures)) this.sig = new SignatureRuntime(this);
   }
 
@@ -323,6 +344,7 @@ export class World {
       if (before !== after) this.cooldowns[after] = Math.max(this.cooldowns[after], this.cooldowns[before]);
     }
     this.loadout = loadout;
+    this.noteSovShadows();
     if (this.sig) this.sig.setLoadout();
     else if (hasSignatures(loadout.signatures)) this.sig = new SignatureRuntime(this);
     this.player.stats = { ...loadout.stats };
@@ -775,6 +797,7 @@ export class World {
     this.integrate(dt);
     this.updateProjectiles(dt);
     this.updateHazards(dt);
+    if (this.allyWells.length > 0) tickAllyWells(this, dt);
     this.updateOrbs(rawDt);
     this.updateTelegraphs(dt);
     this.cleanup(dt);
@@ -1446,6 +1469,7 @@ export class World {
       for (const o of factionWithin(target.pos, target.faction, this.entities.values(), 60)) if (o.id !== target.id) this.dealDamage(s, o, 0.4, "fire", false);
     }
     this.dealDamage(s, target, power, s.defId === "ember_acolyte" ? "fire" : "physical", false);
+    if (s.defId === "storm_titan") titanBlow(this, s, target);
     if (s.defId === "tidestalker" && !target.dead) addStatus(target, { kind: "slow", remaining: 1.5, value: 0.2, sourceId: s.id });
   }
 
@@ -1478,6 +1502,8 @@ export class World {
     // Court: the bound Crownless King lends the army 3% attack per other deployed shadow.
     if (source.faction === "ally" && this.courtBonus > 0) bonus *= 1 + this.courtBonus;
     if (source.faction === "ally") bonus *= 1 + 0.04 * this.shadeCount();
+    // Dark Majesty: a fielded Void Queen shadow's presence weighs on the foes near her.
+    if (this.sovShadows.void_queen && source.faction === "ally") bonus *= majesty(this, target);
     if (this.sig && source.faction === "ally") bonus *= this.sig.allyBonus(source, target);
     const block = this.blockFactor(target, blockFromX ?? source.pos.x, heavy);
     bonus *= block;
@@ -1544,7 +1570,7 @@ export class World {
   /** Living shades (a Rift Caller's Chorus counts them; Legion Awakening's soldiers are not shades). */
   shadeCount(): number {
     let n = 0;
-    for (const e of this.entities.values()) if (e.summon?.temporary && !e.dead && !(this.sig && this.sig.isSoldier(e))) n++;
+    for (const e of this.entities.values()) if (e.summon?.temporary && !e.dead && !(this.sig && this.sig.isSoldier(e)) && e.summon.sovOwnerId === undefined) n++;
     return n;
   }
 
@@ -1552,6 +1578,8 @@ export class World {
     if (target.dead || hasStatus(target, "submerged")) return;
     // A Sovereign's mirror or court spares it most of a blow (and the mirror flashes some back).
     if (target.boss?.sov && amount > 0) amount = Math.max(1, Math.round(sovereignIncoming(this, target, amount, sourceId)));
+    // A fielded Mirror Knight shadow: its mirror lightens the warrior's wounds and flashes a share back.
+    if (this.sovShadows.mirror_knight && target === this.player && amount > 0) amount = Math.max(1, Math.round(mirrorShadowIncoming(this, amount, sourceId)));
     // The Tyrant's clock starts when it does: no free score during its entrance.
     if (this.mode === "tyrant" && target.kind === "boss" && this.phase !== "boss") return;
     let remaining = amount;
@@ -1567,6 +1595,7 @@ export class World {
     if (target.kind === "player") this.cycleHurt += Math.max(0, remaining);
     target.hitFlash = 0.12;
     const sig = this.sig ? this.sig.tagFor(sourceId) : null;
+    if (sig && this.sovShadows.mirror_knight && sourceId === this.player.id && amount >= 1) this.lastSigHit = { amount, at: this.time };
     if (amount >= 1 && sourceId !== -1) {
       this.events.push({ type: "hit", targetId: target.id, sourceId, amount: Math.round(amount), crit, pos: { x: target.pos.x, y: target.pos.y }, element, faction: target.faction, targetKind: target.kind, heavy, ...apexTag, ...(sig ? { sig } : {}) });
     }
@@ -1928,6 +1957,8 @@ export class World {
     this.timeScale = 0.3;
     this.stopPlayerDrift();
     this.events.push({ type: "shake", strength: 6 });
+    // The Sovereign shadows on the field cast their ultimates with it.
+    if (this.sovShadows.any) onFury(this);
   }
 
   private stopPlayerDrift(): void {

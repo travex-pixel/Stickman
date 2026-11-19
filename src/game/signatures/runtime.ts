@@ -27,6 +27,7 @@ import {
 } from "../data/signatures";
 import { SKILL_IMPLS, type Plan } from "./skills/index";
 import { guardUp } from "../bosses/sovereigns";
+import { nearAllyRod } from "../summons/sovereignShadows";
 import { chooseCast } from "./ai";
 
 /**
@@ -109,7 +110,7 @@ export class SignatureRuntime {
   /** Sovereign Awakening's aura: world time it ends (-1: none). */
   auraUntil = -1;
   /** The last singularity (Gravity Feast bends the dragon through it). */
-  singularity: { pos: Vec2; at: number; radius: number } | null = null;
+  singularity: { pos: Vec2; at: number; radius: number; queen?: boolean } | null = null;
   private synergyAt = new Map<SynergyId, number>();
   private known: Set<SynergyId>;
   /** Time Fracture: foes held in a fracture, with the damage time is keeping for them. */
@@ -570,7 +571,9 @@ export class SignatureRuntime {
   }
 
   marked(e: Combatant): boolean {
-    return hasStatus(e, "void_mark") || hasStatus(e, "shadow_mark") || hasStatus(e, "mark");
+    if (hasStatus(e, "void_mark") || hasStatus(e, "shadow_mark") || hasStatus(e, "mark")) return true;
+    // A Storm Titan shadow's rod: the foes beside it count as marked.
+    return this.world.allyRods.length > 0 && nearAllyRod(this.world, e);
   }
 
   // -------------------------------------------------------------------------------------------

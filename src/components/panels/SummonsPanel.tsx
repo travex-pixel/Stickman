@@ -244,6 +244,11 @@ function ShadowDetail({ inst, slots, deployedCount, short }: { inst: Instance; s
           <p className="t-flavour text-t2 mt-2 shrink-0 line-clamp-2" title={def.active.description}>
             {def.active.name}: {def.active.description}
           </p>
+          {def.active2 && def.ultimate && (
+            <p className="t-label text-t2 mt-1 shrink-0 line-clamp-2" title={`${def.active2.description} ${def.passive.description} ${def.ultimate.description}`} data-testid="sovereign-kit">
+              <span className="text-t1">{def.active2.name}</span> · <span className="text-t1">{def.passive.name}</span>: {def.passive.description} <span className="text-gold">{def.ultimate.name}</span> with the Fury.
+            </p>
+          )}
           <div className="mt-4 grid grid-cols-3 gap-3 shrink-0">
             <Stat label="Health" value={stats.maxHp} />
             <Stat label="Attack" value={stats.attack} />

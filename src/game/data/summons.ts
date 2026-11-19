@@ -33,6 +33,14 @@ export interface SummonDef {
   growth: number;
   active: SummonAbilityDef;
   passive: SummonAbilityDef;
+  /** Sovereign shadows: a second active on its own cooldown, and the ultimate cast with the Fury. */
+  active2?: SummonAbilityDef;
+  ultimate?: SummonAbilityDef;
+  /**
+   * What its kit adds to its blows, for the Army panel's strength (Deploy best): its attack counts
+   * this many times over. Measured (docs/DESIGN.md, "Rift Sovereigns"); 1 when absent.
+   */
+  kitWorth?: number;
   evolution?: SummonEvolutionDef;
   evolvedFrom?: string;
   /** Oath Codex: a permanent bonus for ever having owned this shadow, deployed or not. */
@@ -239,6 +247,81 @@ export const SUMMONS: Record<string, SummonDef> = {
     scale: 1.25,
     aura: 30,
     owned: { stat: "attack", pct: 0.1 },
+  },
+  // The Rift Sovereigns' shadows (summons/sovereignShadows.ts): each wields its boss's mechanics.
+  mirror_knight: {
+    id: "mirror_knight",
+    name: "The Mirror Knight",
+    title: "Your Face in Silver",
+    role: "sovereign",
+    rarity: "legendary",
+    lore: "It showed every enemy its own face. Now it stands at your shoulder and shows them yours.",
+    base: { hp: 240, attack: 21, attackSpeed: 0.85, defense: 6, moveSpeed: 96, range: 64, radius: 21 },
+    growth: 0.14,
+    active: { name: "Mirror Guard", description: "Raises a mirror before the warrior for 3 s: his wounds land 40% lighter and 60% of each flashes back at whoever struck.", cooldown: 10 },
+    active2: { name: "Mirror Echo", description: "Throws a mirrored copy of the warrior's last art down a lane of foes (320% damage), carrying a quarter of his last signature blow.", cooldown: 7 },
+    passive: { name: "Silvered Oath", description: "A quarter of every blow the warrior takes flashes back at its striker.", cooldown: 0 },
+    ultimate: { name: "Mirror Split", description: "With the Ascendant Fury: two images of the Knight step out and fight for 8 s.", cooldown: 40 },
+    palette: { body: 0x4a5160, accent: 0xd8dde8, eye: 0xf4f6ff, glow: 0xe8ecf6 },
+    scale: 1.2,
+    aura: 30,
+    kitWorth: 1.5,
+    owned: { stat: "critDamage", pct: 0.15 },
+  },
+  storm_titan: {
+    id: "storm_titan",
+    name: "The Storm Titan",
+    title: "The Storm at Your Back",
+    role: "sovereign",
+    rarity: "legendary",
+    lore: "It found its lightning rod at last. It is you, and it has decided to share.",
+    base: { hp: 330, attack: 24, attackSpeed: 0.5, defense: 8, moveSpeed: 70, range: 80, radius: 26 },
+    growth: 0.14,
+    active: { name: "Storm Rods", description: "Plants three rods among the thickest foes; after a breath each calls lightning on all around it (260% damage). Foes by a rod count as marked.", cooldown: 11 },
+    active2: { name: "Chain Storm", description: "A bolt that leaps between foes standing close, up to seven (240% damage, a little less each leap).", cooldown: 7 },
+    passive: { name: "Thunderous", description: "Its blows crash on every foe around its target for half their strength.", cooldown: 0 },
+    ultimate: { name: "Storm Tide", description: "With the Ascendant Fury: a wave down the most crowded lane (450% damage, thrown back).", cooldown: 40 },
+    palette: { body: 0x4a5160, accent: 0x6fa8ff, eye: 0xe6f2ff, glow: 0x9cc4ff },
+    scale: 1.45,
+    aura: 34,
+    kitWorth: 2,
+    owned: { stat: "maxHp", pct: 0.12 },
+  },
+  void_queen: {
+    id: "void_queen",
+    name: "The Void Queen",
+    title: "A Court in Your Shadow",
+    role: "sovereign",
+    rarity: "legendary",
+    lore: "She held court in the dark for so long that the dark began to kneel. Now it kneels to you.",
+    base: { hp: 230, attack: 22, attackSpeed: 0.65, defense: 6, moveSpeed: 84, range: 70, radius: 21 },
+    growth: 0.14,
+    active: { name: "Void Well", description: "Opens a well among the thickest foes for 2.5 s: they are drawn together and its core tears at them. A singularity for Gravity Feast.", cooldown: 12 },
+    active2: { name: "Kneeling Court", description: "Two shadow courtiers rise and fight for 7 s at half her strength.", cooldown: 15 },
+    passive: { name: "Dark Majesty", description: "Foes near her take 12% more from the whole army.", cooldown: 0 },
+    ultimate: { name: "Eclipse", description: "With the Ascendant Fury: the field goes dark and every foe on it is struck (450% damage).", cooldown: 40 },
+    palette: { body: 0x4a5160, accent: 0x9a6fe0, eye: 0xf0e2ff, glow: 0xc4a8ff },
+    scale: 1.25,
+    aura: 30,
+    kitWorth: 1.65,
+    owned: { stat: "attack", pct: 0.1 },
+  },
+  shadow_courtier: {
+    id: "shadow_courtier",
+    name: "Shadow Courtier",
+    title: "Risen to Serve",
+    role: "vanguard",
+    rarity: "common",
+    lore: "The Queen's court, kneeling no longer.",
+    base: { hp: 120, attack: 11, attackSpeed: 0.8, defense: 3, moveSpeed: 110, range: 46, radius: 16 },
+    growth: 0.1,
+    active: { name: "-", description: "-", cooldown: 99 },
+    passive: { name: "-", description: "-", cooldown: 0 },
+    palette: { body: 0x4a5160, accent: 0x9a6fe0, eye: 0xf0e2ff, glow: 0xc4a8ff },
+    scale: 0.95,
+    aura: 0,
+    owned: { stat: "attack", pct: 0 },
+    hidden: true,
   },
   shade: {
     id: "shade",

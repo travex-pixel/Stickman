@@ -48,8 +48,10 @@ export interface SummonState {
   /** Shades called by a Rift Caller expire; permanent shadows have Infinity. */
   expiresAt: number;
   temporary: boolean;
+  /** A body a Sovereign shadow raised (a Mirror image, a shadow courtier): its raiser's id. Never a shade. */
+  sovOwnerId?: number;
   /** Sovereign shadows only (summons/sovereignShadows.ts): the kit's own clocks. */
-  sov?: { cd1: number; cd2: number; ult: number; guardUntil: number };
+  sov?: { cd1: number; cd2: number; ult: number; guardUntil: number; lastUlt: number };
 }
 
 export interface EnemyState {

@@ -72,6 +72,17 @@ function NewShadow({ modal, open }: { modal: RevealModal; open: boolean }) {
               <MomentItem className="short-hide">
                 <Row gutter={false} title={def.active.name} detail={<span className="whitespace-normal">{def.active.description}</span>} />
               </MomentItem>
+              {/* A Sovereign's full kit: its second art, and the ultimate it casts with the Fury. */}
+              {def.active2 && (
+                <MomentItem className="short-hide">
+                  <Row gutter={false} title={def.active2.name} detail={<span className="whitespace-normal">{def.active2.description}</span>} data-testid="reveal-active2" />
+                </MomentItem>
+              )}
+              {def.ultimate && (
+                <MomentItem className="short-hide">
+                  <Row gutter={false} title={def.ultimate.name} detail={<span className="whitespace-normal">{def.ultimate.description}</span>} data-testid="reveal-ultimate" />
+                </MomentItem>
+              )}
               <MomentItem>
                 <Row gutter={false} title="Codex" detail={<span className="whitespace-normal" data-testid="codex-gain">+{fmtCodex(def.owned)} for your warrior, permanently.</span>} />
               </MomentItem>

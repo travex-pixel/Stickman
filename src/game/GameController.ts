@@ -37,7 +37,7 @@ import { equipBestPlan } from "./progression/power";
 import { applyLineup, bestLineup, currentLineup, swapIn } from "./progression/army";
 import { canUpgradeStat } from "./progression/upgrades";
 import { claimEssence as doClaimEssence, setDeployed, type ClaimOutcome } from "./summons/recruitment";
-import { CODEX_STAR_STEP, extractionChance, resolveExtraction, speciesStars } from "./summons/extraction";
+import { CODEX_STAR_STEP, certainSovereignBind, extractionChance, resolveExtraction, speciesStars } from "./summons/extraction";
 import { SLOT_LABEL, STAT_LABEL } from "./data/equipment";
 import { bondCost, BOND_CAP, canStarUp, checkEvolution, evolveSummon, grantSummonXp, REFINE_SHARDS, refineShards as doRefineShards, starCost, starUp } from "./summons/progression";
 import { ENEMIES, enemyDef } from "./data/enemies";
@@ -64,6 +64,7 @@ import { describeReward, verifyCode } from "./economy/codes";
 import { generateItem } from "./economy/loot";
 import { ABILITIES } from "./data/abilities";
 import { bossForStage, isBossStage, regionForStage } from "./data/regions";
+import { huntOpen, sovereignHuntShards } from "./progression/hunts";
 import { TWISTS, depthForStage, romanDepth, twistForDepth, type TwistId } from "./data/depths";
 import { TYRANT_TIERS, fmtBars, recordTyrant, syncTyrantWeek, tierReward, tyrantForWeek, tyrantStage, tyrantUnlocked } from "./progression/tyrant";
 import { clampFarmStage, frontierStage, normalizeCampaign, resolveBossDefeat, resolveBossVictory, resolveCycle, resolveFarmingDefeat, surgeLeap } from "./progression/campaign";
@@ -681,7 +682,8 @@ export class GameController {
     for (const e of events) {
       switch (e.type) {
         case "death":
-          if (e.kind === "enemy" || e.kind === "boss") {
+          // A Sovereign's rod, courtier or image is no foe of its own: it counts for nothing.
+          if ((e.kind === "enemy" || e.kind === "boss") && !ENEMIES[e.defId]?.part) {
             kills += 1;
             if (e.elite) this.objectiveEvent("elites", 1);
             this.countForSignatures(e);
@@ -1372,7 +1374,7 @@ export class GameController {
     const p = this.profile;
     this.refreshKeys();
     const world = this.world;
-    const ok = isBossStage(stage) && stage <= p.progress.bestStage && p.progress.bestStage >= MODES.hunt.unlockAfterStage && p.modes.keys.hunt > 0 && !!world?.farming && !world.player.dead && !this.pending;
+    const ok = isBossStage(stage) && huntOpen(p, stage) && stage <= p.progress.bestStage && p.progress.bestStage >= MODES.hunt.unlockAfterStage && p.modes.keys.hunt > 0 && !!world?.farming && !world.player.dead && !this.pending;
     if (!ok) {
       this.sfx("error", { volume: 0.4 });
       this.toast(p.modes.keys.hunt <= 0 ? "Hunts refill tomorrow" : "Not available right now", "warn");
@@ -1402,6 +1404,9 @@ export class GameController {
     for (const it of late) this.addItem(it);
     this.objectiveEvent("bossWins", 1);
     const bossOrb = this.world?.orbs.find((o) => o.isBoss && !o.claimed);
+    // A bound Sovereign's shadow grows from each Hunt of its gate won.
+    const shards = sovereignHuntShards(p, stage);
+    if (shards) this.toast(`+${shards.shards} shards for ${ENEMIES[shards.defId]?.name ?? "your Sovereign"}`, "essence", 2);
     this.sfx("level_up", { volume: 0.9, rate: 0.9 });
     this.renderer?.flash(0xe9c97a, 0.3);
     this.enqueueModal({ kind: "boss_victory", stage, defId: bossForStage(stage), gold: gold + this.run.gold, xp, cores: 0, items: [...this.run.items, ...late], nextStage: p.progress.currentStage, unlocks: [], seconds: Math.round(this.world?.time ?? 0), firstWin: false, orbId: bossOrb?.id, hunt: true });
@@ -1594,9 +1599,11 @@ export class GameController {
     if (!peek) return;
     const p = this.profile;
     const first = !p.summons.firstSummonSeen;
+    // A Sovereign's essence swears true the first time: its first BIND (until it is bound) is certain.
+    const sovereignOath = certainSovereignBind(p, peek.summonId, peek.isBoss);
     p.summons.totalAttempts += 1;
     this.objectiveEvent("binds", 1);
-    const roll = first ? 0 : this.rng.next();
+    const roll = first || sovereignOath ? 0 : this.rng.next();
     const result = resolveExtraction(p, peek.summonId, roll, { elite: peek.elite, bonus: computeModifiers(p).extractionBonus });
     if (!result.success) {
       const left = world.failExtraction(orbId);

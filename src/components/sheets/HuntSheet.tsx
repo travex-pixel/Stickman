@@ -6,14 +6,14 @@ import { Sheet, SheetHeader } from "@/components/ui/Sheet";
 import { SummonPortrait } from "@/components/ui/Portrait";
 import { useController, useProfileRef } from "@/hooks/useGame";
 import { ENEMIES } from "@/game/data/enemies";
-import { bossForStage, isBossStage } from "@/game/data/regions";
-import { huntableStages } from "@/game/data/modes";
+import { bossForStage } from "@/game/data/regions";
+import { huntStages } from "@/game/progression/hunts";
 
 /** Boss Hunt: every boss already beaten, as rows. */
 export function HuntSheet({ open }: { open: boolean }) {
   const c = useController();
   const profile = useProfileRef();
-  const stages = huntableStages(profile.progress.bestStage, isBossStage);
+  const stages = huntStages(profile);
   const keys = profile.modes.keys.hunt;
   return (
     <Sheet open={open} onDismiss={() => c.closeModal()} testId="modal-hunt_pick" labelledBy="hunt-title">

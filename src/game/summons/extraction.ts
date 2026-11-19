@@ -38,6 +38,15 @@ export function extractionChance(profile: Profile, summonId: string, opts: { eli
   return Math.min(MAX_CHANCE, Math.max(0.02, chance));
 }
 
+/**
+ * A Rift Sovereign's essence swears true the first time: while its species is not yet bound, a
+ * BIND on a Sovereign's boss essence is certain (as the very first BIND of all is).
+ */
+export function certainSovereignBind(profile: Profile, summonId: string, isBoss: boolean): boolean {
+  return isBoss && SOVEREIGN_SHADOWS.includes(summonId) && !ownedSpecies(profile).includes(summonId);
+}
+const SOVEREIGN_SHADOWS: readonly string[] = ["mirror_knight", "storm_titan", "void_queen"];
+
 export interface ExtractionRoll {
   success: boolean;
   chance: number;
