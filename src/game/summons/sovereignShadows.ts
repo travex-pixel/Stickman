@@ -111,15 +111,23 @@ function kit(s: Combatant) {
 }
 
 /**
- * The Sovereign shadow's turn (summons/ai.ts calls it in place of the one-active `tryActive`).
- * Returns whether it acted (cast something) this tick.
+ * The kit's clocks, every tick the shadow is on the field (summons/ai.ts calls it before anything
+ * else): a shadow busy striking, casting or staggered still comes off cooldown.
  */
-export function sovereignShadowTurn(w: World, s: Combatant, target: Combatant, dt: number): boolean {
+export function tickSovereignKit(s: Combatant, dt: number): void {
   const k = kit(s);
   k.cd1 = Math.max(0, k.cd1 - dt);
   k.cd2 = Math.max(0, k.cd2 - dt);
   k.ult = Math.max(0, k.ult - dt);
   s.summon!.abilityCooldown = Math.min(k.cd1, k.cd2);
+}
+
+/**
+ * The Sovereign shadow's turn (summons/ai.ts calls it in place of the one-active `tryActive`).
+ * Returns whether it acted (cast something) this tick.
+ */
+export function sovereignShadowTurn(w: World, s: Combatant, target: Combatant): boolean {
+  const k = kit(s);
   const list = foes(w);
   if (list.length === 0) return false;
   // With AUTO off nothing casts the Fury for it: its ultimate keeps its own, long clock.

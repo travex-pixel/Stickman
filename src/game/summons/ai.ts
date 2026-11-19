@@ -6,7 +6,7 @@ import { addStatus } from "../combat/statuses";
 import { factionWithin, hostilesWithin, isHidden, lowestHpFraction, mostDangerous, nearestHostile } from "../combat/targeting";
 import { ARENA } from "../engine/World";
 import { PART_REACH, priorityPart } from "../bosses/sovereigns";
-import { isSovereignShadow, sovereignShadowTurn } from "./sovereignShadows";
+import { isSovereignShadow, sovereignShadowTurn, tickSovereignKit } from "./sovereignShadows";
 
 /**
  * Summons are first-class combatants with their own AI per role and a shared command layer.
@@ -19,6 +19,9 @@ export function updateSummonAi(world: World, s: Combatant, dt: number): void {
   if (!sum) return;
   const def = summonDef(s.defId);
   sum.abilityCooldown = Math.max(0, sum.abilityCooldown - dt);
+  // A Sovereign shadow's own clocks run whatever it is doing (striking, casting, staggered).
+  const sovereign = isSovereignShadow(s.defId) && !sum.temporary;
+  if (sovereign) tickSovereignKit(s, dt);
   if (s.state === "stagger" || s.state === "hit") {
     if (s.stateTime >= s.stateDuration) world.setState(s, "idle");
     return;
@@ -82,8 +85,8 @@ export function updateSummonAi(world: World, s: Combatant, dt: number): void {
   s.targetId = target ? target.id : -1;
 
   // Active abilities. A Sovereign shadow wields its own kit: two actives, its ultimate.
-  if (isSovereignShadow(s.defId) && !sum.temporary) {
-    if (target && sovereignShadowTurn(world, s, target, dt)) return;
+  if (sovereign) {
+    if (target && sovereignShadowTurn(world, s, target)) return;
   } else if (target && sum.abilityCooldown <= 0 && tryActive(world, s, target, enemiesNearAnchor)) {
     sum.abilityCooldown = def.active.cooldown;
     return;
