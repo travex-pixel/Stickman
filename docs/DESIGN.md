@@ -993,11 +993,14 @@ white-hot cores and gilt; Apex's spectrum stays Apex's.
 | Shadow Storm | violet-ink blades with white edges cut themselves out of the air (a white slit each) and orbit him on a tilted ring that shows (an ink band under a violet-white line), each with a light trail; the far ones pass behind him, the near ones over every body, so the army never hides them | one by one they leave the orbit and fly an arc to their foe, larger in flight, an ink wake and a white-hot line behind each | a short violet cut with a white edge; a Shadow Mark | — |
 | Sovereign Awakening | the field darkens; his army kneels | a column of violet ink rises round him, gold gathers, the crown draws itself spike by spike; the camera leans in | it settles on his brow: a ring, the flash | the reign: a slow violet ring at his feet, a small gilt crown floating over his head, a violet cape; at its end the crown breaks into gold dust |
 
-**Evolutions** each change what is seen, not only the numbers: Event Horizon locks a bright horizon
-ring on the ground and cages the trapped; Supernova throws white embers that burst into eight-ray
-stars (Master: six-ray chains); Consumption carries the fallen's souls orbiting the next core, which
-collapses larger. World Eater is a larger dragon sweeping the whole depth; Soul Feeder tears souls into
-the maw and lights a pulse running down the spine; Ancient Devourer climbs out of the frame and dives
+**Evolutions** each change what is seen, not only the numbers: Event Horizon rings the core in
+white-hot light from the moment it forms (an electric band outside it), marks the horizon faintly on
+the ground through the pull, then locks it bright and cages the trapped; Supernova's collapse goes off
+as a larger star inside a wide white shell, and throws white embers that burst into thick eight-ray
+stars with a white-hot heart (Master: six-ray chains); Consumption carries the fallen's souls orbiting
+the next core, which collapses larger. World Eater is a larger dragon sweeping the whole depth; Soul
+Feeder runs pale soul light down the spine from the start (two pulses, brighter with each soul fed)
+and tears thick souls into the maw; Ancient Devourer climbs out of the frame and dives
 from above onto its landing. Afterimage leaves a chain of copies behind every blink; Executioner gives
 the clones crimson eyes, reticles on the wounded and a guillotine stroke from above; Phantom King
 crowns the clones in gilt and their cuts throw violet sparks. Fallen Star sends smaller meteors with

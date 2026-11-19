@@ -29,6 +29,8 @@ import { SerpentPath, type Dragon } from "./dragon";
  * grows a full mane of fins; Grandmaster gilds horns, fins and whiskers; a crowned cast wears a crown.
  */
 const FLIGHT = 64;
+/** Soul Feeder's light: the pale violet-white of a soul torn into the maw. */
+const SOUL = 0xf0d8ff;
 /** Samples of the simulation's curve. */
 const SAMPLES = 90;
 
@@ -324,16 +326,17 @@ export class DevourerStage extends Stage {
     if (d) d.burn = Math.min(3, 1 + this.feeds * 0.5);
     const a = this.chestAt(from, this.q);
     const to = d && d.headPos.visible ? d.mouth : a;
-    this.kit.streak(a.x, a.y, to.x, to.y, 40 * this.u, 1.5, this.gilded ? GILT_HOT : 0xf0d8ff, 0.3);
+    const soul = this.evo === "soul_feeder";
+    this.kit.streak(a.x, a.y, to.x, to.y, 40 * this.u, soul ? 3.2 : 1.5, this.gilded ? GILT_HOT : SOUL, 0.3);
     const o = this.kit.o(a.x, a.y, softCircle(), 0xe6d2ff);
     o.target = { x: to.x, y: to.y, strength: 16 };
     o.speed[0] = 20;
     o.speed[1] = 70;
     o.life[0] = 0.35;
     o.life[1] = 0.6;
-    o.scale[0] = 0.12;
-    o.scale[1] = 0.26;
-    this.kit.emit(10);
+    o.scale[0] = soul ? 0.2 : 0.12;
+    o.scale[1] = soul ? 0.42 : 0.26;
+    this.kit.emit(soul ? 14 : 10);
     o.target = undefined;
   }
 
@@ -429,7 +432,11 @@ export class DevourerStage extends Stage {
     } else this.hero.r = 0;
     const fade = this.interrupted ? 1 - Math.min(1, this.sinceEnd / 0.4) : 1;
     d.layout(this.path, this.headS, this.time, fade, this.hero.x, this.hero.y, this.hero.r, this.sMin, this.sMax);
-    d.drawLines(this.path, this.headS, this.time, this.enhanced ? GILT : CRIMSON, this.enhanced ? 0.8 : this.feeds > 0 ? Math.min(1, 0.4 + this.feeds * 0.25) : this.gilded ? 0.4 : 0);
+    // Soul Feeder: the spine runs with pale soul light from the start, two pulses at once, brighter
+    // with every soul fed, so the evolved dragon is told apart before its first kill.
+    const souls = this.evo === "soul_feeder" && !this.enhanced;
+    const pulse = this.enhanced ? 0.8 : souls ? Math.min(1, 0.6 + this.feeds * 0.1) : this.feeds > 0 ? Math.min(1, 0.4 + this.feeds * 0.25) : this.gilded ? 0.4 : 0;
+    d.drawLines(this.path, this.headS, this.time, this.enhanced ? GILT : souls ? (this.gilded ? GILT_HOT : SOUL) : CRIMSON, pulse, souls ? 2 : 1);
     // Smoke off its back (and, Master, violet motes off the mane).
     if (!this.compact && dt > 0) {
       this.smokeT -= dt;

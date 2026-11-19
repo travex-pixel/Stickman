@@ -402,7 +402,7 @@ export class Dragon {
   }
 
   /** The whiskers trailing from the snout, and the light running down the spine (redrawn). */
-  drawLines(path: SerpentPath, headS: number, time: number, light: number, pulse: number): void {
+  drawLines(path: SerpentPath, headS: number, time: number, light: number, pulse: number, bands = 1): void {
     const g = this.lines;
     g.clear();
     if (!this.headPos.visible) return;
@@ -431,10 +431,13 @@ export class Dragon {
         const s = headS - (i + 0.6) * sp;
         if (s < 0 || s > path.total) continue;
         const k = i / this.segCount;
-        const glow = Math.max(0, 1 - Math.abs(k - at) * 6) * pulse;
+        let near = Math.abs(k - at);
+        // More than one band: the pulses are spaced evenly down the body.
+        for (let b = 1; b < bands; b++) near = Math.min(near, Math.abs(k - ((at + b / bands) % 1)));
+        const glow = Math.max(0, 1 - near * (bands > 1 ? 4 : 6)) * pulse;
         if (glow < 0.05) continue;
         path.at(s, tmp);
-        g.circle(tmp.x, tmp.y - this.radius(i) * 0.3, this.radius(i) * 0.45).fill({ color: light, alpha: glow * 0.5 });
+        g.circle(tmp.x, tmp.y - this.radius(i) * 0.3, this.radius(i) * 0.45).fill({ color: light, alpha: glow * (bands > 1 ? 0.7 : 0.5) });
       }
     }
   }
