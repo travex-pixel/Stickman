@@ -294,7 +294,7 @@ export class BossEntrance {
       }
       case "mirror": {
         // Steps out of the glass: from inside the pane, pale as a reflection until it is through.
-        rig.root.x += (1 - k) * 40 * p.scale * -p.facing;
+        rig.root.x += (1 - k) * 18 * p.scale * -p.facing;
         rig.root.alpha = k < 0.02 ? 0.25 : Math.min(1, 0.35 + k * 1.2);
         rig.root.tint = k < 1 ? lighten(0xc8d2e6, k) : 0xffffff;
         rig.shadow.alpha = k;
@@ -468,7 +468,7 @@ export class BossEntrance {
     if (this.paneGone || this.paneK <= 0.01) return;
     const h = this.rigTop * s * 1.12 * this.paneK;
     const w = this.rigTop * s * 0.42;
-    const cx = x - this.place.facing * 22 * s;
+    const cx = x - this.place.facing * 10 * s;
     g.roundRect(cx - w / 2 - 3, y - h - 3, w + 6, h + 3, w * 0.45).fill({ color: 0x14151a, alpha: 0.9 });
     g.roundRect(cx - w / 2, y - h, w, h, w * 0.42).fill({ color: 0xcfd6e4, alpha: 0.5 });
     g.roundRect(cx - w / 2, y - h, w, h, w * 0.42).stroke({ width: 2.4, color: 0xe2c27a, alpha: 1 });
@@ -481,7 +481,7 @@ export class BossEntrance {
     if (!this.placed) return;
     const p = this.place;
     const s = p.scale;
-    const cx = p.x - p.facing * 22 * s;
+    const cx = p.x - p.facing * 10 * s;
     const o = this.emit;
     o.x = cx;
     o.y = p.y - this.rigTop * s * 0.55;

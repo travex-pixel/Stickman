@@ -754,7 +754,9 @@ export class Background {
     this.arena = arena;
     const regionScene = SCENES[region.id] ?? (SCENES.ashen_verge as Scene);
     const base: Scene = arena ? { ...regionScene, ...ARENAS[arena] } : regionScene;
-    this.scene = tint === null ? base : tintScene(base, tint, Math.min(0.42, 0.22 + 0.04 * (depth - 2)));
+    // An arena keeps its own light: the depth's tint is laid over it at half strength.
+    const depthTint = Math.min(0.42, 0.22 + 0.04 * (depth - 2)) * (arena ? 0.5 : 1);
+    this.scene = tint === null ? base : tintScene(base, tint, depthTint);
     this.container.addChild(this.sky, this.fissureGlow, this.fissure, this.far, this.mid);
     this.fissureGlow.blendMode = "add";
     for (let i = 0; i < 3; i++) {

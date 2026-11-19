@@ -908,6 +908,8 @@ export class BattleRenderer implements ImpactHost {
     }
     // A signature cast aimed away from him (a singularity over a far knot of foes) is framed too.
     this.sig.frameInto(b);
+    // A Sovereign's rods, well and court are framed with the fight.
+    this.sov.frameInto(b);
     const pad = FRAME_PAD * u;
     b.minX -= pad;
     b.maxX += pad;
@@ -1587,6 +1589,18 @@ export class BattleRenderer implements ImpactHost {
           if (pass === 0) g.fill({ color, alpha: 0.07 + 0.18 * k });
           else g.stroke({ width: 1.5, color, alpha: 0.85 });
         }
+      }
+    }
+    // In an eclipse the field is dark, never its threats: every mark gets a bright rim over it.
+    const dark = this.sov.darkness;
+    if (dark > 0.05) {
+      for (const t of world.telegraphs) {
+        const m = this.telegraphMarks.get(t.id);
+        if (!m) continue;
+        const k = clamp(1 - t.remaining / t.total, 0, 1);
+        const lit = t.hostile ? 0xffd6dc : lighten(t.color, 0.6);
+        if (t.shape === "line") g.rect(m.x - m.rx, m.y - m.ry, m.rx * 2, m.ry * 2).stroke({ width: 2.5, color: lit, alpha: dark * (0.75 + 0.25 * k) });
+        else g.ellipse(m.x, m.y, Math.max(1, m.rx), Math.max(1, m.ry)).stroke({ width: 2.5, color: lit, alpha: dark * (0.75 + 0.25 * k) });
       }
     }
     // Telegraphs that resolved since last frame flash white once.

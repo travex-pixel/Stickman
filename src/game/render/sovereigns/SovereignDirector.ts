@@ -106,7 +106,18 @@ interface Mech {
   outro: number;
   /** A push-in this mechanic owns (released when it ends). */
   push: number;
+  /** Bodies it raised (a rod, images, courtiers), apart from those it strikes or chains. */
+  raised: number[];
+  /** A later step's whole reach (a well's pull), apart from the shape's own radius. */
+  reach: number;
+  /** An end that came with its strike, held until the strike has played (`HOLD_STRIKE`). */
+  endHeld: { pos: Vec2; countered: boolean } | null;
+  /** The mirror lit by a flash it threw (dying away). */
+  flash: number;
 }
+
+/** How long a strike plays before an end that came with it takes over (world seconds). */
+const HOLD_STRIKE: Partial<Record<SovereignMechanic, number>> = { mirror_echo: 0.32, storm_rods: 0.35, storm_chain: 0.4, storm_tide: 0.6, void_eclipse: 0.35 };
 
 /** Mechanics staged at once (more are dropped, oldest first). */
 export const MAX_MECHS = 24;
@@ -123,6 +134,8 @@ const OUTRO: Record<SovereignMechanic, number> = {
   void_eclipse: 0.9,
 };
 const ECLIPSE_INK = 0x07050c;
+/** Seconds before the queen's strike that its mark is set on the ground (the simulation's). */
+const ECLIPSE_MARK = 1.2;
 /** The eclipse's deepest dark (backdrop and the field's wash); reduced effects goes less deep, slower. */
 export const ECLIPSE_MAX = 0.82;
 const ECLIPSE_REDUCED = 0.6;
@@ -143,6 +156,8 @@ export class SovereignDirector {
   private now = 0;
   private shakeAt = -10;
   private readonly named = new Set<string>();
+  /** Images already broken into glass (the strike that says so and the death may both come). */
+  private readonly shattered = new Set<number>();
   private readonly focusIds: number[] = [];
   /** Diagnostics: mechanics staged, dropped, reflected flashes. */
   readonly counters = { mechs: 0, dropped: 0, reflects: 0, strikes: 0, together: 0 };
@@ -184,6 +199,40 @@ export class SovereignDirector {
     return this.mechs.length > 0 || this.dark > 0.01;
   }
 
+  /**
+   * Widen the camera's box (base px) to take in what a Sovereign's mechanic puts on the field away
+   * from the fight: its charging rods, its well, its kneeling court. What is coming must be seen.
+   */
+  frameInto(box: { minX: number; minY: number; maxX: number; maxY: number }): void {
+    const pr = this.host.sig.proj;
+    const take = (x: number, y: number, top: number): void => {
+      if (x < box.minX) box.minX = x;
+      if (x > box.maxX) box.maxX = x;
+      if (y > box.maxY) box.maxY = y;
+      if (y - top < box.minY) box.minY = y - top;
+    };
+    for (const m of this.mechs) {
+      if (m.ally || m.step === "end") continue;
+      if (m.mech === "storm_rods") take(pr.sx(m.pos.x), pr.sy(m.pos.y), 80 * pr.fs(m.pos.y));
+      else if (m.mech === "void_well") {
+        const r = m.radius * pr.unit();
+        take(pr.sx(m.pos.x) - r, pr.sy(m.pos.y), 0);
+        take(pr.sx(m.pos.x) + r, pr.sy(m.pos.y), 0);
+      } else if (m.mech === "void_court" || m.mech === "mirror_split") {
+        for (const id of m.raised) if (this.host.sig.body(id, this.b2)) take(this.b2.x, this.b2.y, this.b2.height);
+      }
+    }
+  }
+
+  /** A body it raised still stands (a courtier kneeling, an image fighting): it is not over. */
+  private anyStanding(m: Mech): boolean {
+    for (const id of m.raised) {
+      const e = this.host.entity(id);
+      if (e && !e.dead) return true;
+    }
+    return false;
+  }
+
   /** Whether a body is part of a staged mechanic (the focus never dims it). */
   involves(id: number): boolean {
     for (const m of this.mechs) if (m.id === id || m.targets.includes(id)) return true;
@@ -198,9 +247,6 @@ export class SovereignDirector {
         case "boss_mechanic":
           this.onMechanic(e);
           break;
-        case "hit":
-          if (e.amount > 0) this.onHit(e.targetId, e.sourceId);
-          break;
         case "death":
           this.onDeath(e.id, e.pos);
           break;
@@ -214,36 +260,111 @@ export class SovereignDirector {
     const sov = isSovereign(e.defId) ? e.defId : sovereignOf(e.mech);
     const caster = this.host.entity(e.id);
     const ally = caster ? caster.faction === "ally" : false;
+    // Repeated strikes inside one use: each blow the mirror flashes back, each image struck down.
+    if (e.step === "strike" && e.index > 0 && (e.mech === "mirror_guard" || e.mech === "mirror_split")) {
+      if (e.mech === "mirror_guard") this.reflect(e, ally);
+      else this.imageShattered(e, sov, ally);
+      return;
+    }
     const key = `${e.id}|${e.mech}|${e.index}`;
     let m: Mech | null = this.mechs.find((x) => x.key === key) ?? null;
     if (e.step === "warn" || !m) {
       if (m) this.drop(m);
       m = this.create(key, e, sov, ally);
     }
-    m.pos.x = e.pos.x;
-    m.pos.y = e.pos.y;
-    m.to.x = e.to.x;
-    m.to.y = e.to.y;
-    if (e.radius > 0) m.radius = e.radius;
-    if (e.targetIds.length > 0) m.targets = e.targetIds.slice();
+    if (e.step === "end" && m.step === "strike" && m.t < (HOLD_STRIKE[m.mech] ?? 0)) {
+      // An end in the same moment as its strike (an echo, a bolt, a wave): the strike plays out first.
+      m.endHeld = { pos: { x: e.pos.x, y: e.pos.y }, countered: e.countered === true };
+      return;
+    }
+    this.applyStep(m, e.step, e.pos, e.to, e.radius, e.duration, e.targetIds, e.countered === true);
+  }
+
+  private applyStep(m: Mech, step: MechanicStep, pos: Vec2, to: Vec2, radius: number, duration: number, targetIds: readonly number[], countered: boolean): void {
+    if (step !== "end" || m.mech !== "storm_tide") {
+      m.pos.x = pos.x;
+      m.pos.y = pos.y;
+    }
+    if (step !== "end") {
+      m.to.x = to.x;
+      m.to.y = to.y;
+    }
+    // The warning's reach is the shape's (a core, a lane's half width, a rod's circle); a later
+    // step's may be the pull's whole reach, kept apart.
+    if (radius > 0) {
+      if (step === "warn" || m.radius <= 0) m.radius = radius;
+      else if (step === "strike") m.reach = radius;
+    }
+    if (targetIds.length > 0) {
+      // Bodies it raised: the rod (named in its warning), the images and courtiers (in the strike).
+      if (m.mech === "storm_rods" && step === "warn") m.raised = targetIds.slice();
+      else if ((m.mech === "mirror_split" || m.mech === "void_court") && step === "strike") m.raised = targetIds.slice();
+      else m.targets = targetIds.slice();
+    }
     const prev = m.step;
     const prevT = m.t;
     const prevDur = m.dur;
-    m.step = e.step;
+    m.step = step;
     m.t = 0;
-    m.dur = Math.max(0, e.duration);
-    if (e.step === "warn") m.warn = Math.max(0.05, e.duration);
-    if (e.step === "strike") {
+    m.dur = Math.max(0, duration);
+    if (step === "warn") m.warn = Math.max(0.05, duration);
+    if (step === "strike") {
       m.struck = true;
       this.counters.strikes += 1;
       this.onStrike(m);
     }
-    if (e.step === "end") {
-      // Ended before its time: a warning that never struck, a guard broken while it stood.
-      m.early = prev === "warn" || (prev === "strike" && prevDur > 0 && prevT + 0.12 < prevDur);
+    if (step === "end") {
+      // Answered (the simulation says so), or ended before its time: a warning that never struck,
+      // a guard broken while it stood.
+      m.early = countered || prev === "warn" || (prev === "strike" && prevDur > 0 && prevT + 0.12 < prevDur && m.mech === "mirror_guard");
       this.onEnd(m);
     }
     this.dressTargets(m);
+  }
+
+  /** A blow flashed back off the mirror: a line of light from the glass to whoever struck. */
+  private reflect(e: MechEvent, ally: boolean): void {
+    const m = this.mechs.find((x) => x.id === e.id && x.mech === "mirror_guard" && x.step !== "end");
+    if (!m || m.coolA > 0) return;
+    const src = e.targetIds[0];
+    let sx: number;
+    let sy: number;
+    if (src !== undefined && this.host.sig.body(src, this.b2)) {
+      sx = this.b2.x;
+      sy = this.b2.y - this.b2.chestY;
+    } else {
+      sx = this.host.sig.proj.sx(e.to.x);
+      sy = this.host.sig.proj.sy(e.to.y) - 50 * this.host.sig.proj.fs(e.to.y);
+    }
+    if (!this.paneAt(m, this.pt)) return;
+    m.coolA = 0.1;
+    m.flash = 1;
+    this.counters.reflects += 1;
+    const kit = this.kit;
+    const u = this.host.sig.proj.unit();
+    kit.slash(this.pt.x, this.pt.y - (this.paneH(m) ?? 40) * 0.55, sx, sy, m.look.ink, m.look.hot, 2.6, 0.24);
+    kit.ring(sx, sy, 4, 26 * u, 0.25, -1, m.look.hot, 2, { ground: false, squash: 1 });
+    const o = kit.o(sx, sy, spark(), m.look.hot);
+    o.speed[0] = 60;
+    o.speed[1] = 200;
+    o.life[0] = 0.12;
+    o.life[1] = 0.25;
+    o.alignToVelocity = true;
+    kit.emit(6);
+    // The reflected flash: the pane lights always; the screen only through the budget, and only
+    // when the flash comes at the warrior or his army (the knight's), never for his own shadow's.
+    if (!ally) this.host.sig.flash(0xf4f6ff, 0.1, 0.12);
+  }
+
+  /** An image struck down: it breaks into glass where it stood. */
+  private imageShattered(e: MechEvent, sov: SovereignId, ally: boolean): void {
+    const pr = this.host.sig.proj;
+    const look = sovLook(sov, ally);
+    for (const id of e.targetIds) {
+      if (this.shattered.has(id)) continue;
+      this.shattered.add(id);
+      this.glassBurst(pr.sx(e.pos.x), pr.sy(e.pos.y) - 50 * pr.fs(e.pos.y), look, 16);
+    }
   }
 
   private create(key: string, e: MechEvent, sov: SovereignId, ally: boolean): Mech {
@@ -283,6 +404,10 @@ export class SovereignDirector {
       coolB: 0,
       outro: OUTRO[e.mech],
       push: 0,
+      raised: [],
+      reach: 0,
+      endHeld: null,
+      flash: 0,
     };
     this.mechs.push(m);
     this.onWarn(m);
@@ -301,7 +426,7 @@ export class SovereignDirector {
     const i = this.mechs.indexOf(m);
     if (i >= 0) this.mechs.splice(i, 1);
     // What it raised stays dressed while it stands (an image outlives its split's end only to shatter).
-    for (const id of m.targets) {
+    for (const id of m.raised) {
       const d = this.dressed.get(id);
       if (d && !this.host.entity(id)) this.dressed.delete(id);
     }
@@ -322,7 +447,7 @@ export class SovereignDirector {
       def = "void_courtier";
     }
     if (!kind) return;
-    for (const id of m.targets) {
+    for (const id of m.raised) {
       if (id < 0 || id === m.id || this.dressed.has(id)) continue;
       const ent = this.host.entity(id);
       if (ent && (ent.kind === "player" || ent.kind === "boss")) continue;
@@ -384,9 +509,9 @@ export class SovereignDirector {
         const y0 = pr.sy(m.pos.y);
         const x1 = pr.sx(m.to.x);
         const y1 = pr.sy(m.to.y);
-        const ch = 50 * pr.fs(m.to.y);
+        const ch = 50 * pr.fs(m.pos.y);
         kit.speedLines(x0, y0 - ch, x1, y1 - ch, kit.reduced ? 2 : 5, 30 * u, m.look.hot, 0.3);
-        this.echoArt(m, x1, y1, ch);
+        this.echoArt(m, x0 + (x1 >= x0 ? 1 : -1) * 40 * u, y0, ch);
         break;
       }
       case "mirror_split": {
@@ -405,7 +530,7 @@ export class SovereignDirector {
           o.additive = false;
           kit.emit(24);
         }
-        for (const id of m.targets) {
+        for (const id of m.raised) {
           if (!this.host.sig.body(id, this.b2)) continue;
           kit.ring(this.b2.x, this.b2.y, 4, 46 * u, 0.4, m.look.ink, m.look.hot, 2);
         }
@@ -453,18 +578,30 @@ export class SovereignDirector {
       case "void_well":
         break;
       case "void_court":
-        for (const id of m.targets) {
+        for (const id of m.raised) {
           if (!this.host.sig.body(id, this.b2)) continue;
           kit.ring(this.b2.x, this.b2.y, 30 * u, 4, 0.45, m.look.ink, m.look.main, 2, { inward: true });
         }
         break;
       case "void_eclipse": {
-        const x = pr.sx(m.to.x);
-        const y = pr.sy(m.to.y);
-        const r = Math.max(30, m.radius) * u;
         const sq = pr.dy() / u;
-        kit.ring(x, y, 6, r * 1.3, 0.5, m.look.ink, m.look.hot, 4, { squash: sq });
-        kit.cut(x, y - 30 * pr.fs(m.to.y), r * 0.9, -2.4, 1.9, m.look.ink, m.look.hot, 4, 0.35, { squash: 0.7 });
+        if (m.ally || m.radius > 300) {
+          // The shadow's eclipse: every foe it names is struck from the dark at once.
+          let n = 0;
+          for (const id of m.targets) {
+            if (n >= 12 || !this.host.sig.body(id, this.b2)) continue;
+            n += 1;
+            const b = this.b2;
+            kit.cut(b.x, b.y - b.chestY, b.height * 0.5, -2.2 + (n % 2) * 0.6, 1.8, m.look.ink, m.look.hot, 3, 0.3, { squash: 0.8, delay: n * 0.025 });
+            kit.ring(b.x, b.y, 4, 34 * u, 0.4, m.look.ink, m.look.trim, 2, { squash: sq, delay: n * 0.025 });
+          }
+        } else {
+          const x = pr.sx(m.to.x);
+          const y = pr.sy(m.to.y);
+          const r = Math.max(30, m.radius) * u;
+          kit.ring(x, y, 6, r * 1.3, 0.5, m.look.ink, m.look.hot, 4, { squash: sq });
+          kit.cut(x, y - 30 * pr.fs(m.to.y), r * 0.9, -2.4, 1.9, m.look.ink, m.look.hot, 4, 0.35, { squash: 0.7 });
+        }
         this.host.sig.flash(m.ally ? 0xfff1c9 : 0xe8dcff, 0.22, 0.2);
         this.shakeOnce(0.3);
         kit.stop(0.06, "sov-eclipse", 0.5);
@@ -490,7 +627,8 @@ export class SovereignDirector {
         if (m.rig && this.ghostAt(m, this.pt)) this.glassBurst(this.pt.x, this.pt.y, m.look, 10);
         break;
       case "mirror_split":
-        for (const id of m.targets) {
+        // The images that still stand when it ends shatter (those struck down already did).
+        for (const id of m.raised) {
           if (!this.host.sig.body(id, this.b2)) continue;
           this.glassBurst(this.b2.x, this.b2.y - this.b2.chestY, m.look, 12);
         }
@@ -525,33 +663,6 @@ export class SovereignDirector {
     }
   }
 
-  /** A blow on a body behind a standing mirror flashes back at whoever struck it. */
-  private onHit(targetId: number, sourceId: number): void {
-    for (const m of this.mechs) {
-      if (m.mech !== "mirror_guard" || m.step !== "strike" || m.coolA > 0) continue;
-      const guarded = m.ally ? (m.targets.length > 0 ? m.targets[0]! : this.host.sig.playerId()) : m.id;
-      if (targetId !== guarded || sourceId === guarded) continue;
-      if (!this.paneAt(m, this.pt) || !this.host.sig.body(sourceId, this.b2)) continue;
-      m.coolA = 0.14;
-      this.counters.reflects += 1;
-      const kit = this.kit;
-      const sx = this.b2.x;
-      const sy = this.b2.y - this.b2.chestY;
-      kit.slash(this.pt.x, this.pt.y - 20 * this.host.sig.proj.unit(), sx, sy, m.look.ink, m.look.hot, 2.4, 0.22);
-      kit.ring(sx, sy, 4, 26 * this.host.sig.proj.unit(), 0.25, -1, m.look.hot, 2, { ground: false, squash: 1 });
-      const o = kit.o(sx, sy, spark(), m.look.hot);
-      o.speed[0] = 60;
-      o.speed[1] = 200;
-      o.life[0] = 0.12;
-      o.life[1] = 0.25;
-      o.alignToVelocity = true;
-      kit.emit(6);
-      // The reflected flash: a small glint on the pane always; the screen only through the budget.
-      if (!m.ally) this.host.sig.flash(0xf4f6ff, 0.1, 0.12);
-      return;
-    }
-  }
-
   private onDeath(id: number, pos: Vec2): void {
     const d = this.dressed.get(id);
     if (!d) return;
@@ -559,7 +670,10 @@ export class SovereignDirector {
     const x = pr.sx(pos.x);
     const y = pr.sy(pos.y);
     const look = sovLook(d.sov, d.ally);
-    if (d.kind === "image") this.glassBurst(x, y - 50 * pr.fs(pos.y), look, 16);
+    if (d.kind === "image") {
+      if (!this.shattered.has(id)) this.glassBurst(x, y - 50 * pr.fs(pos.y), look, 16);
+      this.shattered.add(id);
+    }
     else if (d.kind === "rod") {
       const o = this.kit.o(x, y - 50 * pr.fs(pos.y), shard(), 0x3a4048);
       o.speed[0] = 60;
@@ -571,7 +685,7 @@ export class SovereignDirector {
     } else {
       this.kit.ring(x, y, 4, 40 * pr.unit(), 0.4, look.ink, look.main, 2);
     }
-    this.dressed.delete(id);
+    // It stays dressed while its body is drawn falling; it is forgotten once the body is gone.
   }
 
   /**
@@ -671,12 +785,18 @@ export class SovereignDirector {
       m.age += dt;
       m.coolA = Math.max(0, m.coolA - real);
       m.coolB = Math.max(0, m.coolB - real);
+      m.flash = Math.max(0, m.flash - real * 5);
+      if (m.endHeld && m.step === "strike" && m.t >= (HOLD_STRIKE[m.mech] ?? 0)) {
+        const h = m.endHeld;
+        m.endHeld = null;
+        this.applyStep(m, "end", h.pos, h.pos, 0, 0, [], h.countered);
+      }
       if (m.step === "end" && m.t >= m.outro) {
         this.drop(m);
         continue;
       }
       // A mechanic whose events stopped (a fight that ended mid-warning) lets go on its own.
-      if (m.step !== "end" && m.t > Math.max(m.dur, m.warn) + 4) {
+      if (m.step !== "end" && m.t > Math.max(m.dur, m.warn) + 4 && !this.anyStanding(m)) {
         this.drop(m);
         continue;
       }
@@ -754,11 +874,20 @@ export class SovereignDirector {
     const guarded = m.ally ? (m.targets.length > 0 ? m.targets[0]! : this.host.sig.playerId()) : m.id;
     const b = this.b;
     if (!this.host.sig.body(guarded, b)) return false;
-    const side = m.to.x !== 0 || m.to.y !== 0 ? (m.to.x >= b.wx ? 1 : -1) : b.facing;
-    out.x = b.x + side * Math.max(16, b.height * 0.22);
+    // Toward the threat: where the knight's warning points, else the way the guarded body faces.
+    const side = Math.abs(m.to.x - b.wx) > 1 ? (m.to.x >= b.wx ? 1 : -1) : b.facing;
+    out.x = b.x + side * Math.max(16, b.height * 0.24);
     out.y = b.y + 2;
     return b.height;
   }
+
+  /** The pane's height (base px), or null when its body is gone. */
+  private paneH(m: Mech): number | null {
+    const h = this.paneAt(m, this.pt2);
+    return h === false ? null : h * 0.95;
+  }
+
+  private readonly pt2 = { x: 0, y: 0 };
 
   private drawGuard(m: Mech): void {
     const h = this.paneAt(m, this.pt);
@@ -783,7 +912,7 @@ export class SovereignDirector {
     const g = m.f;
     // The frame: gilt, an ink edge so it reads on a pale floor.
     g.roundRect(x - pw / 2 - 2, top - 2, pw + 4, ph + 2, pw * 0.42).fill({ color: L.ink, alpha: 0.85 * alpha });
-    g.roundRect(x - pw / 2, top, pw, ph, pw * 0.4).fill({ color: L.main, alpha: 0.38 * alpha });
+    g.roundRect(x - pw / 2, top, pw, ph, pw * 0.4).fill({ color: L.main, alpha: (0.24 + 0.4 * m.flash) * alpha });
     g.roundRect(x - pw / 2, top, pw, ph, pw * 0.4).stroke({ width: 2.2, color: m.ally ? L.main : L.trim, alpha: 0.95 * alpha });
     // The glass: a sheen that sweeps across it while it stands.
     const fl = m.fl;
@@ -805,8 +934,11 @@ export class SovereignDirector {
     let k = 0;
     if (m.step === "strike") k = easeOutCubic(Math.min(1, m.t / 0.18));
     if (m.step === "end") k = 1;
-    const wx = m.pos.x + (m.to.x - m.pos.x) * k * 0.85;
-    const wy = m.pos.y + (m.to.y - m.pos.y) * k * 0.85;
+    // A lunge into the lane, not along all of it (the art flies on alone).
+    const len = Math.hypot(m.to.x - m.pos.x, m.to.y - m.pos.y) || 1;
+    const lunge = Math.min(1, 50 / len) * k;
+    const wx = m.pos.x + (m.to.x - m.pos.x) * lunge;
+    const wy = m.pos.y + (m.to.y - m.pos.y) * lunge;
     out.x = pr.sx(wx);
     out.y = pr.sy(wy);
     return true;
@@ -831,10 +963,23 @@ export class SovereignDirector {
         m.gl.moveTo(x0 + (x1 - x0) * a, y0 + (y1 - y0) * a).lineTo(x0 + (x1 - x0) * b, y0 + (y1 - y0) * b);
       }
       m.gl.stroke({ width: 2, color: L.hot, alpha: 0.55 * k });
-      const ch = 50 * pr.fs(m.to.y);
-      // Where it lands: the art's own glyph, pale, growing as the warning runs out.
+      // The art gathering in the ghost's hand: its own glyph, pale, growing as the warning runs out.
+      const ch = 50 * pr.fs(m.pos.y);
       const w = Math.min(1, m.t / m.warn);
-      this.artGlyph(m.fl, x1, y1, ch, w, L);
+      const dir = x1 >= x0 ? 1 : -1;
+      this.artGlyph(m.fl, x0 + dir * 26 * pr.unit(), y0, ch, w, L);
+    } else if (m.step === "strike") {
+      // The art flies down the lane: a pale crescent wave racing to its end.
+      const k2 = Math.min(1, m.t / 0.3);
+      const x = x0 + (x1 - x0) * easeOutCubic(k2);
+      const y = y0 + (y1 - y0) * k2;
+      const ch = 50 * pr.fs(m.pos.y);
+      const r = Math.max(14, m.radius) * pr.dy();
+      const dir = x1 >= x0 ? 1 : -1;
+      const a = 1 - k2 * 0.6;
+      m.f.moveTo(x - dir * 4, y - ch * 1.4).quadraticCurveTo(x + dir * r * 0.9, y - ch * 0.6, x - dir * 4, y + r * 0.2).stroke({ width: 7, color: L.ink, alpha: 0.6 * a });
+      m.fl.moveTo(x - dir * 4, y - ch * 1.4).quadraticCurveTo(x + dir * r * 0.9, y - ch * 0.6, x - dir * 4, y + r * 0.2).stroke({ width: 2.6, color: L.hot, alpha: a });
+      m.gl.moveTo(x0, y0).lineTo(x, y).stroke({ width: r * 0.8, color: L.hot, alpha: 0.12 * a });
     }
     // The ghost: the warrior's figure, mirrored, casting toward him.
     const rig = m.rig;
@@ -909,7 +1054,7 @@ export class SovereignDirector {
       }
     }
     // The images: cold glass rims at their feet.
-    for (const id of m.targets) {
+    for (const id of m.raised) {
       if (!sig.body(id, this.b2)) continue;
       const s = this.b2.scale;
       m.gl.ellipse(this.b2.x, this.b2.y, 20 * s, 6 * s).stroke({ width: 1.4, color: L.hot, alpha: 0.6 * k });
@@ -939,7 +1084,7 @@ export class SovereignDirector {
     const pr = this.host.sig.proj;
     const L = m.look;
     const u = pr.unit();
-    const rodId = m.targets[0];
+    const rodId = m.raised[0];
     // The rod stands where its body is (it may be shoved), else where it was planted.
     let x = pr.sx(m.pos.x);
     let y = pr.sy(m.pos.y);
@@ -1033,7 +1178,10 @@ export class SovereignDirector {
     if (k <= 0) return;
     // The path: from the caster (or where the bolt starts) through every chained body in order.
     const pts: number[] = [];
-    if (sig.body(m.id, this.b)) pts.push(this.b.x, this.b.y - this.b.chestY * 1.3);
+    if (m.step !== "warn" && m.pos.y < 0) {
+      // The boss's bolt falls from the sky onto the marked spot, then leaps.
+      pts.push(sig.proj.sx(m.to.x), sig.proj.top() - 10);
+    } else if (sig.body(m.id, this.b)) pts.push(this.b.x, this.b.y - this.b.chestY * 1.3);
     else pts.push(sig.proj.sx(m.pos.x), sig.proj.sy(m.pos.y) - 60);
     for (const id of m.targets) {
       if (!sig.body(id, this.b2)) continue;
@@ -1138,16 +1286,30 @@ export class SovereignDirector {
       rise = Math.max(0, 1 - m.t / (m.outro * 0.5));
     }
     if (rise <= 0.01) return;
-    const H = 120 * pr.fs(m.pos.y) * rise;
-    const W = 46 * u;
+    const H = 110 * pr.fs(m.pos.y) * rise;
+    const W = 110 * u;
     const top = yc - half;
     const bot = yc + half;
     const back = front - dir * W;
     const g = m.f;
-    g.poly([back, bot, back, top - H * 0.4, front - dir * W * 0.3, top - H, front + dir * W * 0.25, top - H * 0.82, front, top - H * 0.45, front, bot]).fill({ color: water, alpha: 0.9 * k });
-    g.poly([back, bot, back, top - H * 0.4, front - dir * W * 0.3, top - H, front + dir * W * 0.25, top - H * 0.82, front, top - H * 0.45, front, bot]).stroke({ width: 1.6, color: L.trim, alpha: 0.7 * k });
-    // Foam on the crest.
-    m.fl.moveTo(back, top - H * 0.42).quadraticCurveTo(front - dir * W * 0.4, top - H * 1.05, front + dir * W * 0.25, top - H * 0.82).stroke({ width: 3, color: foam, alpha: 0.85 * k });
+    // A breaking wave: a long back sloping up to a crest that curls forward over its face.
+    const body = [
+      back - dir * W * 0.6, bot,
+      back - dir * W * 0.4, top - H * 0.15,
+      back, top - H * 0.55,
+      front - dir * W * 0.35, top - H * 0.95,
+      front - dir * W * 0.05, top - H,
+      front + dir * W * 0.22, top - H * 0.86,
+      front + dir * W * 0.12, top - H * 0.66,
+      front - dir * W * 0.02, top - H * 0.72,
+      front, top - H * 0.4,
+      front + dir * W * 0.04, bot,
+    ];
+    g.poly(body).fill({ color: water, alpha: 0.88 * k });
+    g.poly(body).stroke({ width: 1.6, color: L.trim, alpha: 0.6 * k });
+    // Foam on the crest and running down its face.
+    m.fl.moveTo(back, top - H * 0.55).quadraticCurveTo(front - dir * W * 0.3, top - H * 1.1, front + dir * W * 0.22, top - H * 0.86).stroke({ width: 3.2, color: foam, alpha: 0.9 * k });
+    m.fl.moveTo(front + dir * W * 0.12, top - H * 0.66).lineTo(front, top - H * 0.4).lineTo(front + dir * W * 0.03, bot).stroke({ width: 2, color: foam, alpha: 0.55 * k });
     if (m.step === "strike" && dt > 0 && m.coolB <= 0) {
       m.coolB = 0.05;
       const o = this.kit.o(front, top - H * 0.8, softCircle(), foam);
@@ -1182,8 +1344,9 @@ export class SovereignDirector {
     m.g.ellipse(x, y, rx * open, ry * open).fill({ color: L.ink, alpha: 0.75 * k });
     m.gl.ellipse(x, y, rx * open, ry * open).stroke({ width: 2.5, color: L.main, alpha: 0.9 * k });
     m.gl.ellipse(x, y, rx * 0.35 * open, ry * 0.35 * open).fill({ color: L.hot, alpha: 0.25 * k });
-    // Spiral arms turning inward over the safe edge (the pull's reach, which does not hurt).
-    const reach = 2.6;
+    // Spiral arms turning inward over the safe edge (the pull, which does not hurt), to about where
+    // it reaches (the whole field for the queen's: drawn to a few cores out).
+    const reach = Math.min(2.4, Math.max(1.8, m.reach > 0 ? m.reach / Math.max(1, m.radius) : 2.2));
     const spin = m.age * (m.step === "strike" ? 2.4 : 1.2);
     for (let arm = 0; arm < 4; arm++) {
       const a0 = spin + (arm / 4) * Math.PI * 2;
@@ -1196,9 +1359,9 @@ export class SovereignDirector {
         if (i === 0) m.gl.moveTo(px, py);
         else m.gl.lineTo(px, py);
       }
-      m.gl.stroke({ width: 1.4, color: L.main, alpha: 0.4 * k });
+      m.gl.stroke({ width: 1.4, color: L.main, alpha: 0.3 * k });
     }
-    m.g.ellipse(x, y, rx * reach * open, ry * reach * open).stroke({ width: 1, color: L.main, alpha: 0.25 * k });
+    m.g.ellipse(x, y, rx * reach * open, ry * reach * open).stroke({ width: 1, color: L.main, alpha: 0.18 * k });
     if (m.step !== "strike") return;
     // The pull: debris spirals in, the light smears toward the core, bodies lean.
     const kit = this.kit;
@@ -1214,7 +1377,7 @@ export class SovereignDirector {
       const dx = m.pos.x - this.b2.wx;
       const dy = m.pos.y - this.b2.wy;
       const d = Math.hypot(dx, dy);
-      const R = m.radius * reach * 1.15;
+      const R = m.reach > 0 ? m.reach : m.radius * reach * 1.15;
       if (d > R || d < 1) return;
       const f = (1 - d / R) * Math.min(1, m.t / 0.3);
       this.addMod(id, (dx / d) * 5 * this.b2.scale * f, 0, 1, 0.35 * f);
@@ -1238,28 +1401,17 @@ export class SovereignDirector {
     const qy = this.b.y - this.b.chestY;
     let live = 0;
     if (m.step === "warn") {
-      // Where they will kneel: sigils open on the ground (at each courtier, or her chosen ground).
+      // She calls: a sigil opens under her and rings go out to where they will kneel (the
+      // simulation marks the spots on the ground).
       const w = Math.min(1, m.t / m.warn);
-      const spots = m.targets.length > 0 ? m.targets.length : 1;
-      for (let i = 0; i < spots; i++) {
-        let x: number;
-        let y: number;
-        let s: number;
-        if (m.targets[i] !== undefined && sig.body(m.targets[i]!, this.b2)) {
-          x = this.b2.x;
-          y = this.b2.y;
-          s = this.b2.scale;
-        } else {
-          x = sig.proj.sx(m.pos.x);
-          y = sig.proj.sy(m.pos.y);
-          s = sig.proj.fs(m.pos.y);
-        }
-        this.sigil(m.gl, x, y, 22 * s * w, L, k);
+      if (queen) {
+        this.sigil(m.gl, this.b.x, this.b.y, 40 * this.b.scale * (0.6 + 0.4 * w), L, k);
+        m.gl.ellipse(this.b.x, this.b.y, 70 * u * w, 22 * u * w).stroke({ width: 1.4, color: L.main, alpha: 0.6 * (1 - w) * k });
       }
       return;
     }
     // The tethers: a chain of void from each courtier to her, beads running toward her.
-    for (const id of m.targets) {
+    for (const id of m.raised) {
       if (!sig.body(id, this.b2) || !queen) continue;
       const e = this.host.entity(id);
       if (!e || e.dead) continue;
@@ -1309,23 +1461,23 @@ export class SovereignDirector {
     const pr = this.host.sig.proj;
     const L = m.look;
     const u = pr.unit();
-    if (m.step === "end") return;
-    // Where her strike lands: a bright marker drawn over the dark (with the telegraph above it).
-    const x = pr.sx(m.to.x);
-    const y = pr.sy(m.to.y);
-    const r = Math.max(24, m.radius) * u;
-    const ry = Math.max(24, m.radius) * pr.dy();
-    const pulse = 0.75 + 0.25 * Math.sin(m.age * 10);
-    if (m.step === "warn") {
-      const w = Math.min(1, m.t / m.warn);
-      m.gl.ellipse(x, y, r, ry).stroke({ width: 2.4, color: L.hot, alpha: 0.9 * pulse });
-      m.gl.ellipse(x, y, r * (1 - w), ry * (1 - w)).stroke({ width: 1.4, color: L.hot, alpha: 0.7 });
-      for (let i = 0; i < 4; i++) {
-        const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
-        m.gl.moveTo(x + Math.cos(a) * r * 1.08, y + Math.sin(a) * ry * 1.08).lineTo(x + Math.cos(a) * r * 1.3, y + Math.sin(a) * ry * 1.3);
-      }
-      m.gl.stroke({ width: 2, color: L.hot, alpha: 0.9 });
+    if (m.step !== "warn" || m.ally || m.radius > 300) return;
+    // Whom she hunts in the dark: a bright ring under them, until her strike's mark is set on the
+    // ground (the simulation's telegraph, drawn bright over the dark by the renderer).
+    const markAt = Math.max(0, m.warn - ECLIPSE_MARK);
+    if (m.t >= markAt) return;
+    const target = m.targets[0];
+    if (target === undefined || !this.host.sig.body(target, this.b2)) return;
+    const b = this.b2;
+    const r = 26 * b.scale;
+    const pulse = 0.7 + 0.3 * Math.sin(m.age * 9);
+    m.gl.ellipse(b.x, b.y, r, r * 0.32).stroke({ width: 2, color: L.hot, alpha: 0.85 * pulse });
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+      m.gl.moveTo(b.x + Math.cos(a) * r * 1.15, b.y + Math.sin(a) * r * 0.37).lineTo(b.x + Math.cos(a) * r * 1.45, b.y + Math.sin(a) * r * 0.46);
     }
+    m.gl.stroke({ width: 1.6, color: L.hot, alpha: 0.85 });
+    void u;
   }
 
   /** The eclipse: the backdrop sinks, the field's wash deepens, the black sun hangs over it. */
@@ -1382,9 +1534,18 @@ export class SovereignDirector {
     }
     for (const [id, dr] of this.dressed) {
       const e = this.host.entity(id);
-      if (!e || e.dead) continue;
-      if (dr.kind === "rod") this.addMod(id, 0, 0, 0, 0);
-      else if (dr.kind === "image") {
+      if (!e) {
+        this.dressed.delete(id);
+        this.shattered.delete(id);
+        continue;
+      }
+      if (dr.kind === "rod") {
+        // A rod is drawn as a rod (its figure never shows), standing or fallen.
+        this.addMod(id, 0, 0, 0, 0);
+        continue;
+      }
+      if (e.dead) continue;
+      if (dr.kind === "image") {
         const md = this.host.mod(id);
         md.tint = dr.ally ? 0xf3dc9a : 0xdfe8ff;
         md.tintK = Math.max(md.tintK, 0.5);
@@ -1466,6 +1627,7 @@ export class SovereignDirector {
     this.mechs.length = 0;
     this.restoreMods();
     this.dressed.clear();
+    this.shattered.clear();
     this.named.clear();
     this.dark = 0;
     this.darkG.clear();
