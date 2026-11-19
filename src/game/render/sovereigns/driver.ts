@@ -108,6 +108,8 @@ export function buildSovScript(o: SovScriptInput): Timed[] {
       break;
     case "void_eclipse":
       beats(0, o.caster.pos, first, 64, o.targets.slice(0, 1).map((t) => t.id));
+      // Halfway through the dark her strike's mark is set: a second warning (index 1) with the mark.
+      ev(tm.warn * 0.5, "warn", 1, o.caster.pos, first, 64, tm.warn * 0.5, o.targets.slice(0, 1).map((t) => t.id));
       break;
   }
   out.sort((a, b) => a.t - b.t);

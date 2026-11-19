@@ -243,6 +243,21 @@ describe("the Sovereign director", () => {
     }
   });
 
+  it("the eclipse's mark (its second warning, index 1) is set on the eclipse already staged, and the dark lifts after its strike", () => {
+    const f = field();
+    const at = { x: 330, y: 120 };
+    const ev = (step: "warn" | "strike" | "end", index: number, to: { x: number; y: number }, duration: number): GameEvent => ({ type: "boss_mechanic", id: 1, defId: "void_queen", mech: "void_eclipse", step, index, pos: { x: 500, y: 100 }, to, radius: 70, duration, targetIds: [2] });
+    f.sov.handle([ev("warn", 0, { x: 300, y: 100 }, 2.5)]);
+    for (let t = 0; t < 1.3; t += 1 / 30) f.step(1 / 30);
+    f.sov.handle([ev("warn", 1, at, 1.2)]);
+    expect(f.sov.live).toBe(1);
+    for (let t = 0; t < 1.2; t += 1 / 30) f.step(1 / 30);
+    f.sov.handle([ev("strike", 0, at, 0), ev("end", 0, at, 0)]);
+    for (let t = 0; t < 2; t += 1 / 30) f.step(1 / 30);
+    expect(f.sov.live).toBe(0);
+    expect(f.sov.darkness).toBe(0);
+  });
+
   it("every flash goes through the budget: never more than three a second, none with reduced effects", () => {
     for (const reduced of [false, true]) {
       const f = field(reduced);

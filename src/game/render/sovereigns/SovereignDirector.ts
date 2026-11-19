@@ -114,6 +114,8 @@ interface Mech {
   endHeld: { pos: Vec2; countered: boolean } | null;
   /** The mirror lit by a flash it threw (dying away). */
   flash: number;
+  /** The eclipse: her strike's mark is set (its second warning came; `to` is the mark). */
+  marked: boolean;
 }
 
 /** How long a strike plays before an end that came with it takes over (world seconds). */
@@ -134,8 +136,6 @@ const OUTRO: Record<SovereignMechanic, number> = {
   void_eclipse: 0.9,
 };
 const ECLIPSE_INK = 0x07050c;
-/** Seconds before the queen's strike that its mark is set on the ground (the simulation's). */
-const ECLIPSE_MARK = 1.2;
 /** The eclipse's deepest dark (backdrop and the field's wash); reduced effects goes less deep, slower. */
 export const ECLIPSE_MAX = 0.82;
 const ECLIPSE_REDUCED = 0.6;
@@ -266,6 +266,17 @@ export class SovereignDirector {
     if (e.step === "strike" && e.index > 0 && (e.mech === "mirror_guard" || e.mech === "mirror_split")) {
       if (e.mech === "mirror_guard") this.reflect(e, ally);
       else this.imageShattered(e, sov, ally);
+      return;
+    }
+    // The eclipse's second warning (index 1): her strike's mark is set. It belongs to the eclipse
+    // already staged; `to` is where the strike will fall.
+    if (e.mech === "void_eclipse" && e.step === "warn" && e.index > 0) {
+      const m = this.mechs.find((x) => x.id === e.id && x.mech === "void_eclipse" && x.step === "warn");
+      if (m) {
+        m.to.x = e.to.x;
+        m.to.y = e.to.y;
+        m.marked = true;
+      }
       return;
     }
     const key = `${e.id}|${e.mech}|${e.index}`;
@@ -410,6 +421,7 @@ export class SovereignDirector {
       reach: 0,
       endHeld: null,
       flash: 0,
+      marked: false,
     };
     this.mechs.push(m);
     this.onWarn(m);
@@ -1471,9 +1483,8 @@ export class SovereignDirector {
     const u = pr.unit();
     if (m.step !== "warn" || m.ally || m.radius > 300) return;
     // Whom she hunts in the dark: a bright ring under them, until her strike's mark is set on the
-    // ground (the simulation's telegraph, drawn bright over the dark by the renderer).
-    const markAt = Math.max(0, m.warn - ECLIPSE_MARK);
-    if (m.t >= markAt) return;
+    // ground (its second warning; the simulation's telegraph, drawn bright over the dark).
+    if (m.marked) return;
     const target = m.targets[0];
     if (target === undefined || !this.host.sig.body(target, this.b2)) return;
     const b = this.b2;
